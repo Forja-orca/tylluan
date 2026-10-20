@@ -8,6 +8,7 @@ import { NexusBridge } from '../lib/nexus-bridge';
 import { agentStyle } from '../lib/agent-meta';
 import { parseMarkdown } from '../lib/coloquio-markdown';
 
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
 
 interface VMLProps {
@@ -19,6 +20,8 @@ interface VMLProps {
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void;
+  jumpTurn?: number | null;
+  onJumpTurnDone?: () => void;
 }
 
 function VirtualMessageList({
@@ -30,42 +33,87 @@ function VirtualMessageList({
   hasMoreOlder,
   loadingOlder,
   onLoadOlder,
+  jumpTurn,
+  onJumpTurnDone,
 }: VMLProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
   const prevScrollHeightRef = useRef<number>(0);
+  const prevCountRef = useRef<number>(messages.length);
 
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 80,
+    overscan: 12,
+  });
+
+  // Preserve scroll position when loading older messages (prepending)
   useLayoutEffect(() => {
-    if (loadingOlder && ref.current) {
-      prevScrollHeightRef.current = ref.current.scrollHeight;
+    if (loadingOlder && parentRef.current) {
+      prevScrollHeightRef.current = parentRef.current.scrollHeight;
     }
   }, [loadingOlder]);
 
   useLayoutEffect(() => {
-    if (!loadingOlder && prevScrollHeightRef.current > 0 && ref.current) {
-      const diff = ref.current.scrollHeight - prevScrollHeightRef.current;
+    if (!loadingOlder && prevScrollHeightRef.current > 0 && parentRef.current) {
+      const diff = parentRef.current.scrollHeight - prevScrollHeightRef.current;
       if (diff > 0) {
-        ref.current.scrollTop += diff;
+        parentRef.current.scrollTop += diff;
       }
       prevScrollHeightRef.current = 0;
     }
   }, [messages, loadingOlder]);
 
+  // Scroll to bottom when explicitly requested
   useLayoutEffect(() => {
-    if (!scrollToBottom) return;
+    if (!scrollToBottom || messages.length === 0) return;
     requestAnimationFrame(() => {
-      if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+      if (parentRef.current) {
+        parentRef.current.scrollTop = parentRef.current.scrollHeight;
+      }
+      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
       onScrollToBottomDone();
     });
-  }, [scrollToBottom, onScrollToBottomDone]);
+  }, [scrollToBottom, messages.length, onScrollToBottomDone, virtualizer]);
 
+  // Handle jump to specific turn
+  useEffect(() => {
+    if (jumpTurn === undefined || jumpTurn === null) return;
+    const idx = messages.findIndex(m => m.turn === jumpTurn);
+    if (idx !== -1) {
+      virtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
+    }
+    onJumpTurnDone?.();
+  }, [jumpTurn, messages, virtualizer, onJumpTurnDone]);
+
+  // Track bottom position on scroll
   const onScroll = useCallback(() => {
-    const c = ref.current;
+    const c = parentRef.current;
     if (!c) return;
-    isAtBottom.current = c.scrollHeight - c.scrollTop - c.clientHeight < 100;
+    isAtBottom.current = c.scrollHeight - c.scrollTop - c.clientHeight < 120;
   }, [isAtBottom]);
 
+  // Auto-scroll on new incoming messages if already at bottom
+  useEffect(() => {
+    if (messages.length > prevCountRef.current && isAtBottom.current && parentRef.current) {
+      requestAnimationFrame(() => {
+        virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
+      });
+    }
+    prevCountRef.current = messages.length;
+  }, [messages.length, isAtBottom, virtualizer]);
+
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
-    <div ref={ref} onScroll={onScroll} className="flex-1 overflow-y-auto px-4 py-3">
+    <div
+      ref={parentRef}
+      onScroll={onScroll}
+      tabIndex={0}
+      role="region"
+      aria-label="Historial de mensajes de Coloquio"
+      className="flex-1 overflow-y-auto px-4 py-3 select-text focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:outline-none"
+    >
       {hasMoreOlder && (
         <div className="flex justify-center mb-4">
           <button
@@ -87,9 +135,38 @@ function VirtualMessageList({
           </button>
         </div>
       )}
-      {messages.map((msg, i) => (
-        <div key={msg.msg_id} id={`msg-turn-${msg.turn}`}>{renderItem(msg, i > 0 ? messages[i - 1] : null)}</div>
-      ))}
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualItems.map(virtualRow => {
+          const msg = messages[virtualRow.index];
+          if (!msg) return null;
+          const prev = virtualRow.index > 0 ? messages[virtualRow.index - 1] : null;
+          return (
+            <div
+              key={msg.msg_id}
+              ref={virtualizer.measureElement}
+              data-index={virtualRow.index}
+              id={`msg-turn-${msg.turn}`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+              aria-setsize={messages.length}
+              aria-posinset={virtualRow.index + 1}
+            >
+              {renderItem(msg, prev)}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -220,7 +297,7 @@ export function ColoquioMessagesPanel({
   }, [messages, activeStreams]);
 
   const filteredMessages = useMemo(() =>
-    msgSearch.trim() ? allMessages.filter(m => m.content.toLowerCase().includes(msgSearch.toLowerCase())) : allMessages,
+    (msgSearch || '').trim() ? allMessages.filter(m => m.content.toLowerCase().includes((msgSearch || '').toLowerCase())) : allMessages,
     [allMessages, msgSearch]);
 
   const handleCopy = (id: string, text: string) => {
@@ -234,13 +311,16 @@ export function ColoquioMessagesPanel({
     setDraft(p => `> @${author}: ${line}${content.includes('\n') ? '...' : ''}\n${p}`);
   };
 
+  const [jumpTurn, setJumpTurn] = useState<number | null>(null);
+
   const scrollToTurn = (turn: number) => {
+    setJumpTurn(turn);
     const el = document.getElementById(`msg-turn-${turn}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setHighlightedTurn(turn);
-      setTimeout(() => setHighlightedTurn(null), 2000);
     }
+    setHighlightedTurn(turn);
+    setTimeout(() => setHighlightedTurn(null), 2500);
   };
 
   const handleThreadClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -534,6 +614,8 @@ export function ColoquioMessagesPanel({
           hasMoreOlder={!msgSearch && hasMoreOlder}
           loadingOlder={loadingOlder}
           onLoadOlder={onLoadOlder}
+          jumpTurn={jumpTurn}
+          onJumpTurnDone={() => setJumpTurn(null)}
         />
       )}
       {Object.keys(typingStatuses).length > 0 && (

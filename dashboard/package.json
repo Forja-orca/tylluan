@@ -16,6 +16,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "3.14.21",
     "@tldraw/tldraw": "^5.2.4",
     "@tylluan/ui-core": "file:../packages/tylluan-ui-core",
     "clsx": "^2.1.1",

@@ -37,8 +37,8 @@ vi.mock('../DreamStatusWidget', () => ({
 vi.mock('../CanaryStatusWidget', () => ({
   CanaryStatusWidget: () => <div data-testid="mock-canary-widget">Canary</div>,
 }));
-vi.mock('../ui/MetricPrimitives', async () => {
-  const actual = await vi.importActual<Record<string, unknown>>('../ui/MetricPrimitives');
+vi.mock('../ui/MetricPrimitives', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../ui/MetricPrimitives')>();
   return {
     ...actual,
     MiniSparkline: () => <div data-testid="mock-mini-sparkline" />,
