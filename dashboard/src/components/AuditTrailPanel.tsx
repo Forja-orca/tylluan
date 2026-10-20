@@ -691,7 +691,12 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
 
       {/* Table Container */}
       <div className="bg-slate-900/40 rounded-2xl overflow-hidden border border-slate-800/80">
-        <div className="overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Tabla de registro de auditoría de intents"
+          className="overflow-x-auto focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+        >
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-900/60">

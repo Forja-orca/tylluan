@@ -257,7 +257,12 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
           {artifacts.length} artefacto{artifacts.length !== 1 ? 's' : ''} detectado{artifacts.length !== 1 ? 's' : ''}
         </button>
         {!collapsed && (
-          <div className="flex flex-col max-h-32 overflow-y-auto px-2 pb-2 gap-1">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Lista de fragmentos de código"
+            className="flex flex-col max-h-32 overflow-y-auto px-2 pb-2 gap-1 focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:outline-none"
+          >
             {artifacts.length === 0 && (
               <p className="text-[11px] text-slate-500 px-1 py-2">
                 No code snippets in channel. Paste code in chat and it will appear here.

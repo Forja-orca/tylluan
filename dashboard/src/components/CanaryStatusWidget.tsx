@@ -98,6 +98,7 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
           <button 
             onClick={fetchCanary}
             disabled={refreshing}
+            aria-label="Actualizar afirmaciones canario"
             className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
           >
             <RefreshCw className={cn("w-3 h-3", refreshing && "animate-spin")} />
@@ -124,7 +125,12 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
               <div className="text-[11px] text-slate-500 font-medium mb-1">
                 Security Invariants
               </div>
-              <div className="max-h-[170px] overflow-y-auto space-y-1.5 rounded-lg p-2 bg-slate-950/40">
+              <div 
+                tabIndex={0}
+                role="region"
+                aria-label="Lista de sondas de seguridad"
+                className="max-h-[170px] overflow-y-auto space-y-1.5 rounded-lg p-2 bg-slate-950/40 focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+              >
                 {canary.probes.map((probe) => (
                   <div key={probe.name} className="flex items-start gap-2 py-1 border-b border-slate-900 last:border-b-0">
                     {probe.pass ? (

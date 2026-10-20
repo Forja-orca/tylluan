@@ -184,7 +184,12 @@ export const TrustConsoleTab: React.FC = () => {
         {contracts.length === 0 ? (
           <div className="text-sm text-slate-500 py-4">{loading ? 'Loading guild contracts...' : 'No guilds registered'}</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Tabla de contratos de guilds"
+            className="overflow-x-auto focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
+          >
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400">

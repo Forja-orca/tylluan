@@ -734,7 +734,12 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               </div>
             ) : (
               <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md">
-                <div className="overflow-x-auto">
+                <div
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Tabla de pares DHT de la malla"
+                  className="overflow-x-auto focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+                >
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-800/80 text-[11px] text-slate-400 font-medium bg-slate-950/60">
@@ -806,7 +811,12 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               </div>
             ) : (
             <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md">
-              <div className="overflow-x-auto">
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label="Tabla de nodos pares configurados"
+                className="overflow-x-auto focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+              >
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800/80 text-[11px] text-slate-400 font-medium bg-slate-950/60">
@@ -1089,7 +1099,12 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
           </div>
         ) : (
           <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md shadow-xl">
-            <div className="overflow-x-auto max-h-[400px]">
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Tabla de nodos de memoria federada"
+              className="overflow-x-auto max-h-[400px] focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+            >
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800/80 text-[11px] text-slate-400 font-medium bg-slate-950/60 sticky top-0 z-10 backdrop-blur">
