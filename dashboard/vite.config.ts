@@ -17,13 +17,48 @@ export default defineConfig({
   build: {
     outDir: "../dashboard/dist",
     emptyOutDir: true,
+    modulePreload: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-force-graph': ['react-force-graph-2d'],
-          'vendor-tldraw': ['@tldraw/tldraw'],
-          'vendor-lucide': ['lucide-react'],
+        manualChunks(id) {
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/scheduler/')
+          ) {
+            return 'vendor-react';
+          }
+          if (
+            id.includes('node_modules/clsx/') ||
+            id.includes('node_modules/tailwind-merge/')
+          ) {
+            return 'vendor-utils';
+          }
+          if (
+            id.includes('@tldraw/editor') ||
+            id.includes('@tldraw/tlschema') ||
+            id.includes('@tldraw/store') ||
+            id.includes('@tldraw/state') ||
+            id.includes('@tldraw/utils') ||
+            id.includes('@tldraw/validate') ||
+            id.includes('@tldraw/driver')
+          ) {
+            return 'vendor-tldraw-engine';
+          }
+          if (id.includes('@tldraw/') || id.includes('/tldraw/')) {
+            return 'vendor-tldraw-ui';
+          }
+          if (
+            id.includes('node_modules/react-force-graph') ||
+            id.includes('node_modules/force-graph') ||
+            id.includes('node_modules/d3-') ||
+            id.includes('node_modules/kapsule')
+          ) {
+            return 'vendor-force-graph';
+          }
+          if (id.includes('node_modules/lucide-react/')) {
+            return 'vendor-lucide';
+          }
         },
       },
     },
@@ -61,6 +96,25 @@ export default defineConfig({
         changeOrigin: true,
         // WebSocket upgrade support (canvas /api/v1/canvas/ws) — Vite does not
         // enable ws proxying on custom proxy entries by default.
+        ws: true,
+      },
+      '/health': {
+        target: 'http://127.0.0.1:47004',
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    host: '127.0.0.1',
+    port: 5174,
+    proxy: {
+      '/api/v1/events': {
+        target: 'http://127.0.0.1:47004',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://127.0.0.1:47004',
+        changeOrigin: true,
         ws: true,
       },
       '/health': {
