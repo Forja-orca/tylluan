@@ -39,6 +39,8 @@ export function parseMarkdown(text: string): string {
   h = h.replace(/(?:^|\n)[-*]\s(.*)/g, (_, item) =>
     `<li class="list-disc ml-4 my-0.5 text-slate-700 dark:text-slate-300">${item}</li>`
   );
+  // Wrap contiguous <li> sequences in <ul> to satisfy WCAG listitem rule
+  h = h.replace(/((?:<li[^>]*>.*?<\/li>\s*)+)/g, '<ul class="my-1 list-none space-y-0.5">$1</ul>');
   h = h.replace(/(^|[\s,;().!?])#(\d{1,4})\b/g,
     '$1<span class="cursor-pointer text-amber-700 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 underline font-mono font-semibold" data-jump-turn="$2">#$2</span>'
   );

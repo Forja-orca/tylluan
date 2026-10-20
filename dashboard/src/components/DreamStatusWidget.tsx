@@ -195,7 +195,12 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
               <div className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">
                 Edges by Type
               </div>
-              <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-mono text-[11px] border border-slate-850 rounded-lg p-2 bg-slate-950/40">
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label="Grafo de consolidación: aristas por tipo"
+                className="max-h-24 overflow-y-auto space-y-1 pr-1 font-mono text-[11px] border border-slate-850 rounded-lg p-2 bg-slate-950/40 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
+              >
                 {Object.entries(dreamStatus.graph?.edges_by_type ?? {}).length > 0 ? (
                   Object.entries(dreamStatus.graph?.edges_by_type ?? {}).map(([type, count]) => (
                     <div key={type} className="flex justify-between items-center py-0.5 border-b border-slate-900 last:border-b-0 text-slate-300">

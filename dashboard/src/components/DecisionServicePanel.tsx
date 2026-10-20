@@ -471,7 +471,12 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
           </span>
         </div>
 
-        <div className="overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Tabla de registro de decisiones en sombra"
+          className="overflow-x-auto focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
+        >
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-900/70 font-mono text-slate-300">

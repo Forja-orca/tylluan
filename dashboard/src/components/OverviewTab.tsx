@@ -598,7 +598,12 @@ export function OverviewTab({
             )}
           </div>
 
-          <div className="max-h-96 overflow-y-auto divide-y divide-slate-800/30">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Registro de eventos recientes"
+            className="max-h-96 overflow-y-auto divide-y divide-slate-800/30 focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+          >
           {events
             .filter(e => ['tool_call', 'memory_added', 'memory_updated', 'heartbeat', 'log', 'maintenance_started', 'maintenance_finished'].includes(e.type))
             .filter(e => showHeartbeats || (e.type !== 'uptime' && !((e.data as Record<string, unknown>)?.uptime_secs !== undefined)))
@@ -651,7 +656,12 @@ export function OverviewTab({
             <span className="text-[11px] font-medium text-slate-400">Operational Guilds</span>
             <span className="text-[11px] text-slate-400">{activeGuilds} / {guilds?.length || 0} online</span>
           </div>
-          <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Lista de guilds operacionales"
+            className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+          >
             {guilds?.map((g) => (
               <div key={g.name} className={cn(
                 "flex items-center justify-between p-2 rounded border transition-all",

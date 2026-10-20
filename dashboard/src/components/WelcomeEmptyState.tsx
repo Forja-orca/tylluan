@@ -237,7 +237,12 @@ export function WelcomeEmptyState({
               </p>
 
               <div className="relative mt-2">
-                <pre className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 leading-normal overflow-x-auto select-all max-h-[85px]">
+                <pre
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Configuración MCP generada"
+                  className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 leading-normal overflow-x-auto select-all max-h-[85px] focus-visible:ring-1 focus-visible:ring-blue-400 focus-visible:outline-none"
+                >
                   {mcpConfigJson}
                 </pre>
                 <button
