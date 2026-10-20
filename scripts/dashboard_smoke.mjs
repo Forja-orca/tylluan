@@ -43,6 +43,8 @@ function parseArgs() {
     checkDockerBuild: false,
     checkDockerBuildOnly: false,
     tabFilter: null,
+    negativeTest: false,
+    testLeakDetection: false,
     help: false
   };
 
@@ -58,6 +60,10 @@ function parseArgs() {
       options.skipBuild = true;
     } else if (arg === '--tab' && args[i + 1]) {
       options.tabFilter = args[++i];
+    } else if (arg === '--negative-test' || arg === '--test-negative') {
+      options.negativeTest = true;
+    } else if (arg === '--test-leak-detection') {
+      options.testLeakDetection = true;
     } else if (arg === '--check-docker-build' || arg === '--docker-check') {
       options.checkDockerBuild = true;
     } else if (arg === '--check-docker-build-only') {
@@ -83,6 +89,8 @@ Opciones:
   --kernel <url>               URL base del kernel Tylluan (defecto: http://127.0.0.1:47004)
   --token <token>              Bearer token de autenticación (defecto: lee .tylluan-token)
   --tab <nombre>               Filtra para auditar únicamente la pestaña indicada (ej: Team)
+  --negative-test              Ejecuta la suite completa de pruebas negativas (fallo 500, Caso A y Caso B)
+  --test-leak-detection        Ejecuta específicamente los tests de discriminación de fugas JS (Caso A y B)
   --skip-build                 Omite el paso de build si el directorio ya existe
   --check-docker-build         Ejecuta una comprobación limpia estilo Dockerfile:25-27 (npm install && npm run build sin lockfile ni node_modules)
   --check-docker-build-only    Ejecuta únicamente la comprobación estilo Docker y finaliza
@@ -401,9 +409,415 @@ class ChromeCDPClient {
 }
 
 // -----------------------------------------------------------------------------
-// Definición de las 7 Vistas a Auditar
+// Especificaciones de Contenido Propio Descubierto por Componente (Lote AJ)
 // -----------------------------------------------------------------------------
 
+const VIEW_SPECS = {
+  // 1. Overview (3)
+  'Overview > SUMMARY COCKPIT': {
+    component: 'OverviewTab.tsx',
+    keywords: ['Sovereign Kernel Pulse', 'Golden Signals', 'Kernel Latency', 'Telemetry', 'Sovereign Substrate Telemetry']
+  },
+  'Overview > INTEROCEPTION': {
+    component: 'InteroceptionTab.tsx',
+    keywords: ['Cognitive Forest Status', 'Biological Signal Ambient', 'Forest Density', 'Homeostasis', 'Knowledge Hunger']
+  },
+  'Overview > SYSTEM CONFIG': {
+    component: 'SystemTab.tsx',
+    keywords: ['Doctor', 'Kernel Logs', 'Maintenance', 'Scopes', 'A2A']
+  },
+
+  // 2. Memory (3)
+  'Memory > KNOWLEDGE GRAPH': {
+    component: 'KnowledgeGraphTab.tsx',
+    keywords: ['Cortex Knowledge', 'SilvaDB visualizer', 'Search SilvaDB memories', 'Graph', 'Table']
+  },
+  'Memory > NODES': {
+    component: 'NodesTab.tsx',
+    keywords: ['Live Agent Registry', 'Register Dashboard Node', 'agent substrate nodes', 'Active Nodes']
+  },
+  'Memory > CONTRADICTIONS': {
+    component: 'ContradictionsPanel.tsx',
+    keywords: ['Conflicted Nodes', 'silva/conflicted', 'human_truth_conflict_pairs']
+  },
+
+  // 3. Team (9)
+  'Team > FLEET STATUS': {
+    component: 'FleetTab.tsx',
+    keywords: ['Fleet Status', 'Operational fleet', 'participated in mission', 'Fleet Telemetry']
+  },
+  'Team > LOOP HEALTH': {
+    component: 'FleetHealthPanel.tsx',
+    keywords: ['agent loops', 'Loop Health', 'Total Logs', 'Coloquio loop health']
+  },
+  'Team > WORK CONTRACTS': {
+    component: 'WorkContractsPanel.tsx',
+    keywords: ['Work Contract', 'Turn Budget', 'Consolidator', 'No Active Work Contract']
+  },
+  'Team > COMPETENCIES': {
+    component: 'AgentCompetencyPanel.tsx',
+    keywords: ['Sort by Calls', 'Sort by Competency Avg', 'Competency', 'Calls (Desc)']
+  },
+  'Team > CONFUSION': {
+    component: 'SchedulerConfusionPanel.tsx',
+    keywords: ['Highest Disagreement', 'Scheduler Confusion', 'Highest Agreement', 'Disagreement']
+  },
+  'Team > HEATMAP': {
+    component: 'StigmergyHeatmapPanel.tsx',
+    keywords: ['All Subsystems', 'Kernel (crates/kernel)', 'Stigmergy', 'Link & Mesh']
+  },
+  'Team > COLOQUIO CHAT': {
+    component: 'ColoquioTab.tsx',
+    keywords: ['frontier research group chat', 'Select a channel', 'Coloquio', 'Coloquio Canvas']
+  },
+  'Team > AGENT COLLECTIVE': {
+    component: 'CollectiveTab.tsx',
+    keywords: ['Connected Agents', 'MCP Protocol Bridge', 'Agent Profiles', 'No Agent Profiles Registered']
+  },
+  'Team > HITL DISPATCHES': {
+    component: 'DispatchesPanel.tsx',
+    keywords: ['Pending Dispatches', 'Dispatches', 'No Pending Dispatches', 'HITL Dispatches']
+  },
+
+  // 4. Guilds (5)
+  'Guilds > GUILDS': {
+    component: 'GuildsTab.tsx',
+    keywords: ['Sandbox Security Profile', 'Always-on', 'Calls / Latency', 'Active Guild Modules']
+  },
+  'Guilds > OUTPUTS LEDGER': {
+    component: 'OutputsLedgerPanel.tsx',
+    keywords: ['Outputs Ledger', 'Indexed Runs', 'Total Artifacts', 'data/outputs/']
+  },
+  'Guilds > CONNECTORS': {
+    component: 'ConnectorsTab.tsx',
+    keywords: ['Connectors & Discovery', 'Sovereign Contract (6 Tools)', 'Capabilities Catalog', 'Client Setup Guides']
+  },
+  'Guilds > MCP REGISTRY': {
+    component: 'McpRegistryPanel.tsx',
+    keywords: ['MCP External Registry', 'Model Context Protocol', 'external Model Context Protocol', 'Scanning external MCP']
+  },
+  'Guilds > FEDERATION': {
+    component: 'FederationTab.tsx',
+    keywords: ['Cognitive Federation Mesh', 'ChaCha20-Poly1305', 'Sharing Policy', 'Peer Nodes']
+  },
+
+  // 5. Laboratory (5)
+  'Laboratory > LABORATORY': {
+    component: 'LaboratoryTab.tsx',
+    keywords: ['Retrieval Latency', 'Recall @ 1', 'AutoResearch', 'Precision', 'Context']
+  },
+  'Laboratory > VISION': {
+    component: 'VisionTab.tsx',
+    keywords: ['Sovereign Visual Intelligence', 'Vision guild', 'Image Path', 'SmolVLM2']
+  },
+  'Laboratory > PLAN MODE': {
+    component: 'PlanModePanel.tsx',
+    keywords: ['Target Guild', 'claude-code', 'deep (DeepSeek', 'Execution Plan']
+  },
+  'Laboratory > PROJECT SKILLS': {
+    component: 'ProjectSkillsPanel.tsx',
+    keywords: ['Available Skills', 'Skill Name / Identifier', 'Content / Instructions', 'Project Skills']
+  },
+  'Laboratory > BACKGROUND JOBS': {
+    component: 'BackgroundJobsPanel.tsx',
+    keywords: ['Result Inspector', 'No job selected', 'Background Jobs', '@bg:']
+  },
+
+  // 6. Audit Trail (1)
+  'Audit Trail': {
+    component: 'AuditTrailPanel.tsx',
+    keywords: ['Decision Service', 'Trust Console', 'Audit Trail', 'Coherence Gate', 'Friction']
+  }
+};
+
+// -----------------------------------------------------------------------------
+// Prueba Negativa Automática (Simulación de Fallo HTTP 500)
+// -----------------------------------------------------------------------------
+
+async function runNegativeTest(options) {
+  console.log('\n🧪 [SUITE DE PRUEBAS NEGATIVAS AUTOMÁTICAS]');
+  console.log('   Verificando discriminación de fallos, tolerancia a texto libre y detección de fugas JS...');
+
+  const tempDistDir = options.outDir || fs.mkdtempSync(path.join(os.tmpdir(), 'tylluan-smoke-dist-'));
+
+  try {
+    if (!fs.existsSync(path.join(tempDistDir, 'index.html'))) {
+      console.log('       Compilando dashboard para las pruebas negativas...');
+      const uiCorePkgPath = path.resolve(REPO_ROOT, 'packages', 'tylluan-ui-core');
+      if (fs.existsSync(uiCorePkgPath)) {
+        try { execSync('npm run build', { cwd: uiCorePkgPath, stdio: 'ignore' }); } catch {}
+      }
+      execSync(`npx vite build --outDir "${tempDistDir}"`, {
+        cwd: DASHBOARD_DIR,
+        stdio: 'ignore'
+      });
+    }
+
+    const runSubprocess = (args) => {
+      return new Promise((resolve) => {
+        const childArgs = [
+          __filename,
+          '--skip-build',
+          '--outDir', tempDistDir,
+          ...args
+        ];
+        if (options.chrome) {
+          childArgs.push('--chrome', options.chrome);
+        }
+        const child = spawn(process.execPath, childArgs, {
+          cwd: REPO_ROOT,
+          env: { ...process.env, CI: 'true' }
+        });
+        let out = '';
+        let err = '';
+        child.stdout.on('data', d => out += d);
+        child.stderr.on('data', d => err += d);
+        child.on('close', (code) => resolve({ exitCode: code, stdout: out, stderr: err }));
+      });
+    };
+
+    const createMockServer = async (handler) => {
+      const port = await getFreePort();
+      const server = http.createServer((req, res) => {
+        const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+        const pathname = reqUrl.pathname;
+
+        if (pathname === '/api/v1/events') {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
+          });
+          res.write('data: {"type": "connected"}\n\n');
+          return;
+        }
+
+        res.setHeader('Content-Type', 'application/json');
+
+        if (pathname === '/health') {
+          res.writeHead(200);
+          res.end(JSON.stringify({ status: 'ok', version: '0.17.1-mock' }));
+          return;
+        }
+
+        if (pathname === '/api/v1/system/status') {
+          res.writeHead(200);
+          res.end(JSON.stringify({ version: '0.17.1', dev_mode: true }));
+          return;
+        }
+
+        if (pathname === '/api/v1/collective/pulse') {
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            active_agents: [],
+            active_count: 0,
+            broadcasts_last_hour: 0,
+            graph: { nodes: 0, edges: 0 }
+          }));
+          return;
+        }
+
+        if (pathname === '/api/v1/collective/timeline') {
+          res.writeHead(200);
+          res.end(JSON.stringify({ events: [] }));
+          return;
+        }
+
+        if (pathname === '/api/v1/collective/heatmap') {
+          res.writeHead(200);
+          res.end(JSON.stringify({ heatmap: [] }));
+          return;
+        }
+
+        if (pathname === '/api/v1/collective/reputation') {
+          res.writeHead(200);
+          res.end(JSON.stringify({ reputation: [] }));
+          return;
+        }
+
+        if (pathname === '/api/v1/agent-profiles' || pathname === '/api/v1/agents') {
+          res.writeHead(200);
+          res.end(JSON.stringify([]));
+          return;
+        }
+
+        if (pathname === '/api/v1/dispatches') {
+          res.writeHead(200);
+          res.end(JSON.stringify([]));
+          return;
+        }
+
+        if (handler(pathname, req, res)) return;
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ items: [], total: 0 }));
+      });
+
+      await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
+      return { server, port };
+    };
+
+    const onlyLeakTests = options.testLeakDetection && !options.negativeTest;
+
+    // -------------------------------------------------------------------------
+    // Subtest 1: Fallo HTTP 500 en endpoint de datos
+    // -------------------------------------------------------------------------
+    if (!onlyLeakTests) {
+      console.log('\n[1/3] Verificando detección de fallo HTTP 500 en /api/v1/guilds...');
+      const failingEndpoint = '/api/v1/guilds';
+      const mock500 = await createMockServer((p, req, res) => {
+        if (p === failingEndpoint) {
+          res.writeHead(500);
+          res.end(JSON.stringify({
+            error: 'Simulated Kernel 500 Internal Error (Negative Test Verification)',
+            code: 500,
+            route: failingEndpoint
+          }));
+          return true;
+        }
+        return false;
+      });
+
+      try {
+        const { exitCode, stdout, stderr } = await runSubprocess([
+          '--kernel', `http://127.0.0.1:${mock500.port}`,
+          '--tab', 'Guilds'
+        ]);
+
+        const mentionsFailingRoute = stdout.includes(failingEndpoint) || stderr.includes(failingEndpoint) || stdout.includes('500');
+        const hasFailStatus = stdout.includes('❌ FAIL');
+        const correctlyFailed = (exitCode === 1) && mentionsFailingRoute && hasFailStatus;
+
+        if (!correctlyFailed) {
+          console.error('❌ ERROR en Subtest 1: Fallo HTTP 500 no produjo el resultado esperado.');
+          console.error(`- Código de salida: ${exitCode} (esperado: 1)`);
+          console.error(`- Menciona ruta/500: ${mentionsFailingRoute}`);
+          console.error(`- Incluye ❌ FAIL: ${hasFailStatus}`);
+          process.exit(1);
+        }
+        console.log('       ✅ Subtest 1 superado: Código 1 y fallo 500 detectado.');
+      } finally {
+        await new Promise(r => mock500.server.close(r));
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Subtest 2 (Caso A): Inmunidad a Falso Positivo por Texto Libre en Chat
+    // -------------------------------------------------------------------------
+    console.log('\n[2/3] Verificando Caso A: Inmunidad a falso positivo por texto libre en Coloquio...');
+    const mockCaseA = await createMockServer((p, req, res) => {
+      if (p.startsWith('/api/v1/coloquio/channels/')) {
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          channel_id: 'general',
+          count: 1,
+          messages: [{
+            msg_id: 'mock-msg-leak-safe',
+            turn: 100,
+            role: 'agent',
+            author_id: 'mock-agent',
+            content: 'Texto legítimo que menciona deliberadamente undefined, NaN y [object Object] sin romper la UI.',
+            created_at: Math.floor(Date.now() / 1000),
+            metadata: '{}'
+          }]
+        }));
+        return true;
+      }
+      if (p.startsWith('/api/v1/coloquio/stats')) {
+        res.writeHead(200);
+        res.end(JSON.stringify({ total_turns: 100, active_channels: 1 }));
+        return true;
+      }
+      return false;
+    });
+
+    try {
+      const { exitCode, stdout, stderr } = await runSubprocess([
+        '--kernel', `http://127.0.0.1:${mockCaseA.port}`,
+        '--tab', 'Team'
+      ]);
+
+      const containsColoquioOk = stdout.includes('Team > COLOQUIO CHAT') && stdout.includes('✅ OK');
+      const hasLeakFlag = stdout.includes('Fuga JS');
+      const caseASuccess = (exitCode === 0) && containsColoquioOk && !hasLeakFlag;
+
+      if (!caseASuccess) {
+        console.error('❌ ERROR en Subtest 2 (Caso A): Falso positivo generado sobre texto libre.');
+        console.error(`- Código de salida: ${exitCode} (esperado: 0)`);
+        console.error(`- Coloquio Chat ✅ OK: ${containsColoquioOk}`);
+        console.error(`- Contiene Fuga JS: ${hasLeakFlag}`);
+        console.error('\nSalida del subproceso:\n', stdout);
+        if (stderr) console.error('\nStderr:\n', stderr);
+        process.exit(1);
+      }
+      console.log('       ✅ Subtest 2 superado: Código 0 y Coloquio Chat inmune a falsos positivos.');
+    } finally {
+      await new Promise(r => mockCaseA.server.close(r));
+    }
+
+    // -------------------------------------------------------------------------
+    // Subtest 3 (Caso B): Detección Estricta de Fuga Real JS en Cromo de UI
+    // -------------------------------------------------------------------------
+    console.log('\n[3/3] Verificando Caso B: Detección de fuga real JS (NaN) en cromo de interfaz...');
+    const mockCaseB = await createMockServer((p, req, res) => {
+      if (p.startsWith('/api/v1/decide/shadow')) {
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          total: 1,
+          rows: [],
+          summary: [{
+            contract: 'recall_gate',
+            n: 'NaN',
+            n_agreed: 'NaN',
+            n_disagreed: 0,
+            n_null: 0
+          }]
+        }));
+        return true;
+      }
+      return false;
+    });
+
+    try {
+      const { exitCode, stdout, stderr } = await runSubprocess([
+        '--kernel', `http://127.0.0.1:${mockCaseB.port}`,
+        '--tab', 'Audit Trail'
+      ]);
+
+      const mentionsLeak = stdout.includes('Fuga JS: NaN') || stderr.includes('Fuga JS: NaN');
+      const hasFail = stdout.includes('❌ FAIL');
+      const caseBSuccess = (exitCode === 1) && mentionsLeak && hasFail;
+
+      if (!caseBSuccess) {
+        console.error('❌ ERROR en Subtest 3 (Caso B): Fuga real JS en cromo no fue detectada.');
+        console.error(`- Código de salida: ${exitCode} (esperado: 1)`);
+        console.error(`- Menciona "Fuga JS: NaN": ${mentionsLeak}`);
+        console.error(`- Incluye ❌ FAIL: ${hasFail}`);
+        console.error('\nSalida del subproceso:\n', stdout);
+        if (stderr) console.error('\nStderr:\n', stderr);
+        process.exit(1);
+      }
+      console.log('       ✅ Subtest 3 superado: Código 1 y Fuga JS: NaN detectada y nombrada.');
+    } finally {
+      await new Promise(r => mockCaseB.server.close(r));
+    }
+
+    console.log('\n' + '='.repeat(85));
+    console.log('  ✅ SUITE COMPLETA DE PRUEBAS NEGATIVAS Y DISCRIMINACIÓN JS SUPERADA CON ÉXITO:');
+    if (!onlyLeakTests) {
+      console.log('  - Subtest 1: Fallo HTTP 500 detectado con salida 1 y estado ❌ FAIL.');
+    }
+    console.log('  - Subtest 2 (Caso A): Texto libre con undefined/NaN/[object Object] inmune a falsos positivos (salida 0).');
+    console.log('  - Subtest 3 (Caso B): Fuga JS en cromo estructural capturada con salida 1 y causa "Fuga JS: NaN".');
+    console.log('='.repeat(85) + '\n');
+    process.exit(0);
+
+  } finally {
+    if (!options.outDir) {
+      try { fs.rmSync(tempDistDir, { recursive: true, force: true }); } catch {}
+    }
+  }
+}
 // -----------------------------------------------------------------------------
 // Descubrimiento Dinámico de Pestañas y Subpestañas desde el DOM
 // -----------------------------------------------------------------------------
@@ -601,6 +1015,16 @@ async function main() {
     }
   }
 
+  if (options.negativeTest || options.testLeakDetection) {
+    try {
+      await runNegativeTest(options);
+      process.exit(0);
+    } catch (err) {
+      console.error('\n❌ Fallo en la ejecución de la prueba negativa:', err.message);
+      process.exit(1);
+    }
+  }
+
   const token = resolveToken(options.token);
   const chromePath = findChrome(options.chrome);
 
@@ -685,8 +1109,10 @@ async function main() {
     console.log(`       Conectado a Chrome CDP en puerto ${cdpPort}`);
 
     // Configurar listeners de consola y red
+    const bootApiErrors = [];
     const currentConsoleErrors = [];
     const currentFailedApi = [];
+    let isBootPhase = true;
 
     cdpClient.on('Runtime.consoleAPICalled', (params) => {
       if (params.type === 'error') {
@@ -698,7 +1124,11 @@ async function main() {
     cdpClient.on('Network.responseReceived', (params) => {
       const resp = params.response;
       if (resp.url.includes('/api/') && resp.status >= 400) {
-        currentFailedApi.push({ url: resp.url, status: resp.status, statusText: resp.statusText });
+        const entry = { url: resp.url, status: resp.status, statusText: resp.statusText };
+        currentFailedApi.push(entry);
+        if (isBootPhase) {
+          bootApiErrors.push(entry);
+        }
       }
     });
 
@@ -714,6 +1144,8 @@ async function main() {
       await new Promise(r => setTimeout(r, 1500));
     }
 
+    isBootPhase = false;
+
     // 5. Descubrimiento y auditoría dinámica de todas las pestañas y subpestañas
     const allViews = await discoverAllViews(cdpClient, options.tabFilter);
     console.log(`\n🧪 [4/4] Ejecutando auditoría sobre las ${allViews.length} vistas y subpestañas descubiertas...`);
@@ -722,6 +1154,9 @@ async function main() {
     for (const v of allViews) {
       currentConsoleErrors.length = 0;
       currentFailedApi.length = 0;
+      if (bootApiErrors.length > 0) {
+        currentFailedApi.push(...bootApiErrors);
+      }
 
       // 1. Navegar a la pestaña principal
       await cdpClient.send('Runtime.evaluate', {
@@ -735,7 +1170,9 @@ async function main() {
 
       await new Promise(r => setTimeout(r, 400));
 
-      // 2. Si tiene subpestaña, hacer clic en ella
+      // 2. Si tiene subpestaña, hacer clic en ella y verificar activación
+      let subTabActive = true;
+      let activeDetail = 'OK';
       if (v.subTabName) {
         await cdpClient.send('Runtime.evaluate', {
           expression: `(() => {
@@ -766,38 +1203,160 @@ async function main() {
             }
           })()`
         });
+
         await new Promise(r => setTimeout(r, 700));
+
+        // Verificar que la subpestaña quedó efectivamente activa tras el clic
+        const activeEval = await cdpClient.send('Runtime.evaluate', {
+          expression: `(() => {
+            const main = document.querySelector('main');
+            if (!main) return { active: false, reason: 'sin main' };
+            const tabRoot = main.firstElementChild;
+            if (!tabRoot) return { active: false, reason: 'sin tabRoot' };
+
+            const containers = Array.from(tabRoot.querySelectorAll('div[role="group"], div[class*="border-b"][class*="pb-2"], div[class*="border-b"]'));
+            for (const c of containers) {
+              let depth = 0;
+              let curr = c;
+              while (curr && curr !== tabRoot) {
+                depth++;
+                curr = curr.parentElement;
+              }
+              if (depth > 2) continue;
+
+              const btns = Array.from(c.querySelectorAll('button')).filter(b => {
+                const t = (b.innerText || b.textContent || '').trim();
+                return t.length > 0 && !b.disabled;
+              });
+              if (btns.length >= 2) {
+                const target = btns.find(b => (b.innerText || b.textContent || '').trim().startsWith(${JSON.stringify(v.subTabName)})) || btns[${v.subTabIndex}];
+                if (target) {
+                  const ariaPressed = target.getAttribute('aria-pressed');
+                  const ariaSelected = target.getAttribute('aria-selected');
+                  const cls = target.className || '';
+                  const hasActiveClass = cls.includes('bg-emerald-500/10') ||
+                                         cls.includes('bg-amber-500/10') ||
+                                         cls.includes('bg-rose-500/15') ||
+                                         cls.includes('text-emerald-400') ||
+                                         cls.includes('text-amber-400') ||
+                                         cls.includes('text-rose-300') ||
+                                         cls.includes('bg-slate-800');
+                  const isActive = (ariaPressed === 'true') || (ariaSelected === 'true') || hasActiveClass;
+                  return { active: isActive, ariaPressed, ariaSelected };
+                }
+              }
+            }
+            return { active: false, reason: 'botón no encontrado' };
+          })()`,
+          returnByValue: true
+        });
+
+        subTabActive = !!activeEval?.result?.value?.active;
+        activeDetail = subTabActive ? 'OK' : 'Inactiva';
       } else {
         await new Promise(r => setTimeout(r, 700));
+        // Para vistas de nivel superior sin subpestaña (ej: Audit Trail): verificar que la pestaña de nivel superior esté activa
+        const topActiveEval = await cdpClient.send('Runtime.evaluate', {
+          expression: `(() => {
+            const aside = document.querySelector('aside[aria-label="Primary Navigation"]') || document.querySelector('aside');
+            if (!aside) return { active: false };
+            const buttons = Array.from(aside.querySelectorAll('button'));
+            const b = buttons[${v.tabIndex}];
+            if (!b) return { active: false };
+            const isActive = b.getAttribute('aria-current') === 'page' || b.className.includes('text-emerald-400');
+            return { active: isActive };
+          })()`,
+          returnByValue: true
+        });
+        subTabActive = !!topActiveEval?.result?.value?.active;
+        activeDetail = subTabActive ? 'OK (Top)' : 'Inactiva';
       }
 
-      // 3. Verificación de renderizado y texto en DOM
+      // 3. Verificación de renderizado y detección estricta de pantallas de error DENTRO de <main>
       const evalResult = await cdpClient.send('Runtime.evaluate', {
         expression: `(() => {
-          const text = document.body.innerText || '';
           const hasRoot = !!document.getElementById('root');
           const hasHeader = !!document.querySelector('header');
-          const hasMain = !!document.querySelector('main');
-          return { text, hasRoot, hasHeader, hasMain };
+          const main = document.querySelector('main');
+          if (!main) {
+            return { hasRoot, hasHeader, hasMain: false, mainText: '', errorDetected: 'Elemento <main> ausente' };
+          }
+
+          const mainText = main.innerText || '';
+
+          // Detección estricta de pantallas de error, ErrorBoundary y anomalías en <main>
+          const errorStrings = [];
+
+          // 1. Error boundary de React o banner crítico
+          const hasErrorBoundary = Array.from(main.querySelectorAll('h3, h4, div')).some(el => {
+            const t = (el.textContent || '').trim();
+            return t === 'Tab Error' || t === 'Communication Error' || t === 'An error occurred';
+          }) || !!main.querySelector('div[class*="bg-red-950/30"]');
+          if (hasErrorBoundary) errorStrings.push('React ErrorBoundary');
+
+          // 2. Pantallas de error explícitas
+          const hasExplicitErrorScreen = Array.from(main.querySelectorAll('h1, h2, h3, h4, p')).some(el => {
+            if (el.children.length > 0) return false;
+            const t = (el.textContent || '').trim().toLowerCase();
+            return t.startsWith('something went wrong') || t.startsWith('an error occurred');
+          });
+          if (hasExplicitErrorScreen) errorStrings.push('Something went wrong');
+
+          // 3. Fuga de valores JS sin procesar en el cromo estructural de la UI
+          // Se excluyen explícitamente los contenedores de texto libre de usuario (mensajes de chat, contenido markdown,
+          // bloques preformateados, logs y filas de tablas de datos) para evitar falsos positivos por texto legítimo.
+          const rawLeaks = Array.from(main.querySelectorAll('*')).filter(el => {
+            if (el.children.length > 0) return false;
+            if (el.closest('.break-words, .whitespace-pre-wrap, pre, code, mark, [data-user-content], .prose, details > div')) {
+              return false;
+            }
+            const t = (el.textContent || '').trim();
+            return t === 'undefined' || t === 'NaN' || t === '[object Object]';
+          });
+          if (rawLeaks.length > 0) {
+            const leakNames = Array.from(new Set(rawLeaks.map(l => l.textContent.trim()))).join(', ');
+            errorStrings.push('Fuga JS: ' + leakNames);
+          }
+
+          // 4. Banners de error en paneles (alertas rojas con 'Failed to...' o 'Error...')
+          const errorBanners = Array.from(main.querySelectorAll('div[class*="bg-red-950"], div[class*="border-red-500"], p[class*="text-red-400"], div[class*="text-red-400"]')).filter(el => {
+            if (el.children.length > 0) return false;
+            const t = (el.textContent || '').trim();
+            return t.startsWith('Failed to') || t.startsWith('Error al cargar') || t.startsWith('Error:');
+          });
+          if (errorBanners.length > 0) {
+            errorStrings.push('Banner error: ' + errorBanners[0].textContent.trim().slice(0, 45));
+          }
+
+          return {
+            hasRoot,
+            hasHeader,
+            hasMain: true,
+            mainText,
+            errorDetected: errorStrings.length > 0 ? errorStrings.join('; ') : null
+          };
         })()`,
         returnByValue: true
       });
 
-      const bodyData = evalResult?.result?.value || {};
-      const bodyText = bodyData.text || '';
-      const shellRendered = !!(bodyData.hasRoot && bodyData.hasHeader);
+      const mainData = evalResult?.result?.value || {};
+      const shellRendered = !!(mainData.hasRoot && mainData.hasHeader && mainData.hasMain);
+      const mainText = mainData.mainText || '';
+      const detectedError = mainData.errorDetected;
 
-      const cleanTab = v.tabName.toLowerCase();
-      const cleanSub = v.subTabName ? v.subTabName.toLowerCase() : '';
-      const lowerBody = bodyText.toLowerCase();
+      // 4. Verificación de contenido específico descubierto de su componente DENTRO de <main>
+      const spec = VIEW_SPECS[v.displayName] || { keywords: [v.tabName.toLowerCase()] };
+      const lowerMain = mainText.toLowerCase();
+      let matchedContent = false;
+      let matchedKeyword = '';
 
-      const matchedAny = bodyText.length > 30 && (
-        lowerBody.includes(cleanTab) ||
-        (cleanSub && lowerBody.includes(cleanSub)) ||
-        lowerBody.includes('tylluan') ||
-        lowerBody.includes('cortex') ||
-        lowerBody.includes('active')
-      );
+      for (const kw of spec.keywords) {
+        if (lowerMain.includes(kw.toLowerCase())) {
+          matchedContent = true;
+          matchedKeyword = kw;
+          break;
+        }
+      }
 
       // Captura de pantalla PNG
       const shotResult = await cdpClient.send('Page.captureScreenshot', { format: 'png' });
@@ -805,58 +1364,79 @@ async function main() {
       const shotFilePath = path.join(screenshotsDir, shotFileName);
       fs.writeFileSync(shotFilePath, Buffer.from(shotResult.data, 'base64'));
 
-      const isOk = shellRendered && (currentConsoleErrors.length === 0) && (currentFailedApi.length === 0) && matchedAny;
+      const isOk = shellRendered &&
+                   subTabActive &&
+                   (currentConsoleErrors.length === 0) &&
+                   (currentFailedApi.length === 0) &&
+                   (!detectedError) &&
+                   matchedContent;
+
       let failureReason = '';
-      if (!shellRendered) failureReason = 'Shell no renderizado';
-      else if (currentConsoleErrors.length > 0) failureReason = `${currentConsoleErrors.length} err consola: ${currentConsoleErrors[0].slice(0, 50)}`;
+      if (!shellRendered) failureReason = 'Shell o <main> ausente';
+      else if (!subTabActive) failureReason = 'Subpestaña no activa tras clic';
+      else if (detectedError) {
+        const excerptStr = (mainData.excerpts && mainData.excerpts.length > 0) ? ` [${mainData.excerpts[0].slice(0, 70)}]` : '';
+        failureReason = `Pantalla error: ${detectedError}${excerptStr}`;
+      }
+      else if (currentConsoleErrors.length > 0) failureReason = `${currentConsoleErrors.length} err consola: ${currentConsoleErrors[0].slice(0, 45)}`;
       else if (currentFailedApi.length > 0) failureReason = `${currentFailedApi.map(e => `${e.status} ${e.url.replace(/^.*\/api\//, '/api/')}`).join(', ')}`;
-      else if (!matchedAny) failureReason = 'Texto insuficiente o vacío';
+      else if (!matchedContent) failureReason = `Contenido propio no encontrado en <main> (esperado: ${spec.keywords[0]})`;
 
       results.push({
         name: v.displayName,
         ok: isOk,
         shellRendered,
+        subTabActive,
+        activeDetail,
+        errorDetected: detectedError,
         consoleErrors: [...currentConsoleErrors],
         failedApi: [...currentFailedApi],
-        matchedText: matchedAny,
+        matchedContent,
+        matchedKeyword,
         screenshot: shotFilePath,
         reason: failureReason
       });
     }
 
     // 6. Imprimir tabla de resultados
-    console.log('\n' + '='.repeat(95));
-    console.log('  📊 RESUMEN DE RESULTADOS: AUDITORÍA DE TODAS LAS VISTAS Y SUBPESTAÑAS');
-    console.log('='.repeat(95));
+    console.log('\n' + '='.repeat(110));
+    console.log('  📊 RESUMEN DE RESULTADOS: AUDITORÍA ENDURECIDA DE TODAS LAS VISTAS Y SUBPESTAÑAS');
+    console.log('='.repeat(110));
     console.log(
       'Vista'.padEnd(35) +
       'Estado'.padEnd(10) +
-      'Consola'.padEnd(12) +
-      'API Errs'.padEnd(12) +
-      'Texto'.padEnd(10) +
+      'Activa'.padEnd(10) +
+      'Errs Main'.padEnd(14) +
+      'Consola'.padEnd(10) +
+      'API Errs'.padEnd(10) +
+      'Contenido'.padEnd(12) +
       'Motivo'
     );
-    console.log('-'.repeat(95));
+    console.log('-'.repeat(110));
 
     let anyFailed = false;
     for (const r of results) {
       if (!r.ok) anyFailed = true;
       const statusStr = r.ok ? '✅ OK' : '❌ FAIL';
+      const activeStr = r.subTabActive ? 'OK' : 'Inactiva';
+      const mainErrStr = r.errorDetected ? r.errorDetected.slice(0, 12) : '0';
       const consoleStr = r.consoleErrors.length === 0 ? '0' : `${r.consoleErrors.length} err`;
       const apiStr = r.failedApi.length === 0 ? '0' : `${r.failedApi.length} err`;
-      const textStr = r.matchedText ? 'OK' : 'Falta';
+      const contentStr = r.matchedContent ? 'OK' : 'Falta';
       const reasonStr = r.reason || '—';
 
       console.log(
         r.name.padEnd(35) +
         statusStr.padEnd(10) +
-        consoleStr.padEnd(12) +
-        apiStr.padEnd(12) +
-        textStr.padEnd(10) +
+        activeStr.padEnd(10) +
+        mainErrStr.padEnd(14) +
+        consoleStr.padEnd(10) +
+        apiStr.padEnd(10) +
+        contentStr.padEnd(12) +
         reasonStr
       );
     }
-    console.log('='.repeat(95));
+    console.log('='.repeat(110));
     console.log(`\n📁 ${results.length} Capturas PNG almacenadas en: ${screenshotsDir}`);
 
     if (anyFailed) {
