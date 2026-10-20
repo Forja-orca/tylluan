@@ -28,6 +28,16 @@ SAFE = ordinary content: facts, notes, lessons, decisions, code, conversation ex
 \n\
 Text to classify:\n";
 
+/// Is the judge's one-word verdict "SUSPICIOUS"? The grammar only allows SAFE or
+/// SUSPICIOUS, so a verdict that is a (three-letter or longer) prefix of
+/// SUSPICIOUS can only be that word cut short by a token limit; treating it as
+/// SAFE would silently disable the quarantine (the B-4 finding). "SAFE" is never
+/// a prefix of "SUSPICIOUS", so this cannot flag a safe verdict.
+fn is_suspicious_verdict(verdict: &str) -> bool {
+    let v = verdict.trim();
+    v.len() >= 3 && "SUSPICIOUS".starts_with(v)
+}
+
 /// Spawns the async judge for `content` against `node_id`. Fire-and-forget --
 /// callers should not `.await` this from the request path; call it and move on.
 /// Errors (LLM unreachable, bad response, DB write failure) are logged and
@@ -49,7 +59,7 @@ pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: Str
             }
         };
 
-        if verdict != "SUSPICIOUS" {
+        if !is_suspicious_verdict(&verdict) {
             return;
         }
 
@@ -89,6 +99,23 @@ mod tests {
     fn write_gate_grammar_is_binary() {
         assert!(WRITE_GATE_GRAMMAR.contains("SAFE"));
         assert!(WRITE_GATE_GRAMMAR.contains("SUSPICIOUS"));
+    }
+
+    #[test]
+    fn truncated_suspicious_verdict_still_counts_as_suspicious() {
+        for v in ["SUSPICIOUS", "SUSPIC", "SUSP", "SUS"] {
+            assert!(is_suspicious_verdict(v), "{v}");
+        }
+        for v in ["SAFE", "SA", "", "S", "SU", "UNSAFE", "SUSPICIOUSLY", "OK"] {
+            assert!(!is_suspicious_verdict(v), "{v}");
+        }
+    }
+
+    #[test]
+    fn judge_token_budget_fits_the_longest_verdict() {
+        // "SUSPICIOUS" is 10 characters; any tokenizer needs fewer tokens than
+        // characters, but never fewer than 3 (the old, broken budget).
+        assert!(crate::security::coherence_gate::JUDGE_MAX_TOKENS >= 10);
     }
 
     #[test]
