@@ -1,0 +1,39 @@
+# B-2 (H2) — Parsers de URI y host hechos a mano en `crates/tylluan-kernel/src`
+
+- **Autora:** Buffy · **Fecha:** 2026-10-19 · **Árbol:** `E:\tylluan-wt-buffy`, detached en `origin/main` = `17465b9`
+- **Clase buscada:** parseo de host con `split(':')` / `split('@')` / `starts_with("http")` / `contains("localhost")` — la misma familia que el bug real de OAuth `redirect_uri` con userinfo (C2b, ya cerrado en `1a2b6a0`).
+- **Alcance:** solo inventario y análisis. **Ningún código se ha cambiado** (la cola lo prohíbe explícitamente). Cada fila incluye la entrada que lo explota y el arreglo propuesto para quien lo arregle.
+
+## Tabla de hallazgos (ordenado por severidad)
+
+| # | Sitio | Riesgo | Entrada que lo explota | Arreglo propuesto |
+|---|---|---|---|---|
+| 1 | `api_ingest.rs:17-52` (`validate_url_for_ssrf`) + fetch en `:204-208` — `POST /api/v1/ingest` con `{"url": …}` | **MEDIO-ALTO** — el guard resuelve el host y comprueba rangos privados, pero (a) el `reqwest::Client` se construye **sin política de redirects** (`:204`), así que sigue hasta 10 redirects del servidor remoto y la validación solo cubre la URL original; (b) es **fail-open en error de DNS**: `if let Ok(addrs) = …` (`:24`) — si la resolución falla en el momento del chequeo, la URL se acepta y el fetch posterior puede resolverla hacia dentro; (c) en IPv6 solo se bloquea loopback (`:44-48`), sin `fc00::/7` (ULA) ni `fe80::/10` (link-local). **Superficie no-operadora** (clase Agente/Par "a-decidir", `auth.rs:963`), reachable con JWT OAuth | `{"url":"http://attacker.example/r"}` cuyo servidor responde `302 Location: http://169.254.169.254/latest/meta-data/`; o `{"url":"http://[fe80::1]/"}`; o un hostname cuyo DNS falle en el chequeo y resuelva internamente en el fetch (DNS rebinding) | `redirect(reqwest::redirect::Policy::none())` en el cliente de ingest (o re-validar cada hop); en error de DNS → rechazar (fail-closed); añadir chequeo V6 `is_unique_local`/link-local; ideal: conectar contra la IP ya validada (pinning) en vez de re-resolver |
+| 2 | `config.rs:951-992` (`check_external_provider`, guardia SSRF de `[external_providers]`) | **MEDIO** — parsea el host a mano (`base.split("://").nth(1).split('/').next().split(':').next()`, `:959-962`) y **no rechaza userinfo**: `http://foo@169.254.169.254/` produce host `foo@169.254.169.254`, que no matchea ninguna regla de denegación, no parsea como IP y cae al `Ok(())` final (`:990`) → clasificado "hostname público" y aceptado, mientras el cliente real (reqwest) sí conecta a `169.254.169.254`. Mismo patrón exacto que el bug C2b de OAuth ya corregido. Además: brackets IPv6 mal tratados (`[fd00::1]` → tras `split(':').next()` queda `[` y tras trim, cadena vacía → allow) y sin chequeo de rangos V6 privados. **Input = `tylluan.toml`** (gitignored, local), así que el impacto real es defensa-en-profundidad contra un usuario engañado o un config importado, no remoto directo | `base_url = "http://x@169.254.169.254/latest/meta-data/"` (o `"http://x@10.0.0.5/"`, `"http://[fd00::1]:8080/"`) dentro de `[[external_providers]]` — la guardia existe precisamente para bloquear eso y no lo bloquea | Parsear con `reqwest::Url::parse` + `host_str()` — el patrón **ya usado y con tests** en `systemone_http.rs:39-53` (`is_loopback_endpoint`); rechazar authority que contenga `@`; añadir denegación de ULA/link-local V6 |
+| 3 | `api_a2a_agents.rs:53` (`validate_url` de registro de agentes externos) + `a2a_client.rs:309-313` (builder sin redirects) | **BAJO** — solo valida el prefijo de esquema (`starts_with("http://") \|\| starts_with("https://")`); cero validación de host, y el cliente sigue redirects por defecto (el fetch de `agent-card.json`, `:316`, y el JSON-RPC POST con el bearer del agente pueden terminar en hosts internos vía 302). **Mitigación:** el endpoint es clase Operador (`auth.rs:261`, requiere token maestro) — solo un operador puede registrar el agente | `POST /api/v1/a2a/agents {"url":"http://169.254.169.254/latest"}` o una card que redirija | Reusar la validación fuerte del hallazgo 1/2; `redirect(Policy::none())` en `A2aClient::new` |
+| 4 | `utils.rs:78-87` (`extract_url_from_intent`) | **BAJO / informativo** — extrae la primera palabra que empieza por `http://`/`https://`/`stdio://` del intent en lenguaje natural y la devuelve como `server_url` del bridge MCP, sin validar. La capa aguas abajo (`registry/proxy.rs:626-637` y `:943-951`) sí usa `Url::parse` y bloquea cleartext a hosts no-loopback, así que el peor caso degrada a un intento de conexión rechazado en el proxy | intent que contenga `http://169.254.169.254/` como primera URL | No urgente. Si se toca el archivo, validar con `Url::parse` en el punto de extracción |
+| 5 | `tunnel/mod.rs:160` (`detect_windows_lan_ip` sobre salida de `ipconfig`), `background_jobs.rs:140,255` (acortar job_id), `handler_recall.rs:293,487` (channel_id / timestamp de episode_id), `skill.rs:39` (rsplit de skill id), `matcher.rs:692` (`starts_with("http")` en el override de file-analysis) | **INFORMATIVO** — todos hacen `split(':')` sobre salidas o IDs **controlados por el propio kernel**, no por un atacante; no son de la clase C2b. El de `matcher.rs:692` solo causa un fallo de enrutado trivial (una palabra como `httpclient.py` se ignora en el override) | — | Sin acción. Anotados para que el inventario quede completo |
+
+## Implementaciones de referencia ya endurecidas (no tocar)
+
+- `oauth.rs:173-191` `is_loopback_redirect_uri` — rechaza `@` y `\` explícitamente tras el fix `1a2b6a0`; tests en `:407-412`.
+- `systemone_http.rs:39-53` `is_loopback_endpoint` — `reqwest::Url::parse` + `host_str()` + `is_loopback()`; cliente con `redirect(Policy::none())` (`:92`); tests en `:625-637`. **Es el patrón a copiar en los hallazgos 1-3.**
+- `registry/proxy.rs:626-637 / 943-951` — guardia de cleartext con `Url::parse` (fail-closed ante host no reconocible).
+- `maintenance.rs:369` — test que exige `https://` en las URLs del registry de modelos (test-only).
+
+## Conclusión
+
+Una sola causa raíz produce los hallazgos 1-3: **validar el host con splits de cadena en vez de con un parser de URLs (o hacerlo bien pero sin cerrar redirects y con fail-open en DNS)**. El arreglo de referencia ya existe en el repo (`systemone_http.rs`), así que la propuesta unificada es: extraer una utilidad `parse_host_strict(url) -> Result<Host, …>` basada en `reqwest::Url`, reusarla en los 3 sitios, `Policy::none()` en los clientes que hablan con hosts no verificados y fail-closed en error de DNS. **No aplicado: la cola prohíbe arreglar; esto es la lista.**
+
+## Impact (ADR-013)
+
+- **Zonas tocadas:** solo este informe (`docs/internal/IMPL_b2_parsers_uri_buffy_2026-10.md`). Cero cambios en `src/`.
+- **Efecto en despliegue/nucleo:** ninguno. Todo el análisis es lectura sobre el worktree propio; no se contactó con el kernel de producción (los datos de superficie vienen del código y de `auth.rs`).
+- **Riesgo:** los hallazgos 1-2 son brechas reales de guardias defensivas existentes; el 1 es además reachable por agentes (no solo operador). Ninguno es explotable hoy de forma remota sin que un usuario/operador provea la URL o el config. Queda en manos del TL decidir si abre carril de fix.
+- **No verificado:** no ejecuté un PoC vivo de los hallazgos (la cola prohíbe arrancar kernels de prueba para este ítem y modificar código); la explotación de cada fila está deducida del código citado con `archivo:línea`, no de una petición real.
+
+## Checks ejecutados
+
+- Búsqueda con `code_search` de `split(':')`, `split('@')`, `starts_with("http`, `contains("localhost")`, `Url::parse`, `is_loopback` en todo `crates/tylluan-kernel/src`.
+- Lectura del contexto de cada coincidencia (ventanas de código citadas) y de la clasificación de rutas en `auth.rs` para determinar qué superficie es operadora.
+- `bash scripts/check_docs_reality.sh` y `python scripts/check_doc_links.py` tras escribir el informe.
