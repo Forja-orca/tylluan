@@ -13,7 +13,18 @@
 //! `quarantined` at the same time, they answer different questions.
 
 use crate::memory::silva::SilvaDB;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+/// D-9/H2: cuántas veces se ha invocado el juez (el `tokio::spawn`), sin contar
+/// el veredicto. Sirve para poder afirmar en un test que la capa 2 corre también
+/// en la ruta anónima sin depender de que el LLM esté disponible: es una
+/// propiedad de la invocación, no del resultado.
+static JUDGE_SPAWNS: AtomicU64 = AtomicU64::new(0);
+
+pub fn judge_spawn_count() -> u64 {
+    JUDGE_SPAWNS.load(Ordering::Relaxed)
+}
 
 const WRITE_GATE_GRAMMAR: &str = "root ::= verdict\nverdict ::= \"SAFE\" | \"SUSPICIOUS\"";
 
@@ -44,6 +55,7 @@ fn is_suspicious_verdict(verdict: &str) -> bool {
 /// swallowed, matching the observation-first posture of every other
 /// fire-and-forget classifier in this codebase (recall Layer 4, DCR reinforcement).
 pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: String) {
+    JUDGE_SPAWNS.fetch_add(1, Ordering::Relaxed);
     tokio::spawn(async move {
         let prompt = format!("{WRITE_GATE_PROMPT_PREFIX}{}", content.chars().take(2000).collect::<String>());
         let verdict = match crate::security::coherence_gate::call_reasoning_backend_with_grammar(

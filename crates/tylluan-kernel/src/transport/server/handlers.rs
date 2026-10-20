@@ -582,6 +582,33 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn anonymous_remember_reaches_layer2_judge() {
+        // D-9/H2 (B-4 H2): the Layer 2 judge used to be spawned inside the
+        // `if let Some(agent_id)` branch of handler_remember, so an anonymous
+        // write (no agent_id) was stored with no judge at all. The counter is
+        // incremented at spawn time, so this asserts the invocation exists
+        // without needing a live LLM or a particular verdict.
+        let server = test_server().await;
+        let before = crate::security::write_gate::judge_spawn_count();
+
+        let mut args = serde_json::Map::new();
+        args.insert(
+            "content".to_string(),
+            serde_json::json!("D-9/H2 probe: an anonymous write must still reach the Layer 2 judge"),
+        );
+        let result = server
+            .handle_kernel_tool("tylluan_remember", Some(args))
+            .await
+            .expect("anonymous remember must not error at the transport level");
+        assert_ne!(result.is_error, Some(true), "anonymous remember must succeed");
+
+        assert!(
+            crate::security::write_gate::judge_spawn_count() > before,
+            "a write WITHOUT agent_id must still spawn the Layer 2 judge (H2)"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_doctor_diagnose_returns_report() {
         let server = test_server().await;
         let result = server.handle_kernel_tool("doctor_diagnose", None).await;
