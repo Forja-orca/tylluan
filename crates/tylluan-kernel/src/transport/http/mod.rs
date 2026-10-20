@@ -515,7 +515,13 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         ip_rate_limiter: Arc::new(crate::security::rate_limiter::RateLimiter::new(Some(300))),
         config: crate::config::TylluanConfig::load_cached().unwrap_or_else(|_| Arc::new(RwLock::new(crate::config::TylluanConfig::default()))),
         tunnel_wsl_url,
-        oauth: std::sync::Arc::new(oauth::OAuthState::new(base_url).with_dev_mode(dev_mode)),
+        oauth: std::sync::Arc::new(
+            oauth::OAuthState::new(base_url)
+                .with_dev_mode(dev_mode)
+                .with_persisted_secret(&std::path::PathBuf::from(
+                    std::env::var("TYLLUAN_DATA_DIR").unwrap_or_else(|_| "data".to_string()),
+                )),
+        ),
         metrics_ring: metrics_ring.clone(),
         jobs: jobs.clone(),
         cancel_token,

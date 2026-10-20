@@ -78,6 +78,32 @@ impl OAuthState {
         self
     }
 
+    /// Usa un secreto de firma de JWT que sobrevive a los reinicios.
+    ///
+    /// Sin esto el secreto es aleatorio en cada arranque y cada reinicio
+    /// invalida los tokens OAuth que los clientes tienen guardados (se ven
+    /// obligados a reautenticarse; algunos no lo consiguen). Lee o crea
+    /// `oauth_jwt_secret` en `dir`. Nunca hace fallar el arranque: si el
+    /// fichero no se puede leer ni escribir se queda con el secreto aleatorio
+    /// del proceso. No afecta al token maestro (credencial aparte), así que
+    /// un fichero corrupto o borrado no deja a nadie sin acceso.
+    pub fn with_persisted_secret(mut self, dir: &std::path::Path) -> Self {
+        match load_or_create_jwt_secret(dir) {
+            Ok(secret) => {
+                self.inner = Arc::new(OAuthInner {
+                    secret,
+                    codes: Mutex::new(HashMap::new()),
+                    revoked: Mutex::new(HashSet::new()),
+                });
+            }
+            Err(e) => tracing::warn!(
+                "oauth: no se pudo persistir el secreto JWT en {} ({e}); se usa uno efímero y los tokens OAuth no sobrevivirán a un reinicio",
+                dir.display()
+            ),
+        }
+        self
+    }
+
     pub fn dev_mode(&self) -> bool {
         self.dev_mode
     }
@@ -198,6 +224,44 @@ struct TokenResponse {
     access_token: String,
     token_type: &'static str,
     expires_in: i64,
+}
+
+const JWT_SECRET_FILE: &str = "oauth_jwt_secret";
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn hex_decode_32(text: &str) -> Option<Vec<u8>> {
+    let t = text.trim();
+    if t.len() != 64 || !t.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    (0..32)
+        .map(|i| u8::from_str_radix(&t[i * 2..i * 2 + 2], 16).ok())
+        .collect()
+}
+
+/// Lee `oauth_jwt_secret` (64 caracteres hexadecimales = 32 bytes) o lo crea.
+/// Un fichero ilegible o con otro formato se reemplaza por uno nuevo: solo
+/// invalida los JWT, nunca el token maestro.
+fn load_or_create_jwt_secret(dir: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    let path = dir.join(JWT_SECRET_FILE);
+    if let Ok(text) = std::fs::read_to_string(&path)
+        && let Some(secret) = hex_decode_32(&text)
+    {
+        return Ok(secret);
+    }
+    std::fs::create_dir_all(dir)?;
+    let secret: Vec<u8> = rand::random::<[u8; 32]>().to_vec();
+    std::fs::write(&path, hex_encode(&secret))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+    tracing::info!("oauth: secreto JWT persistente creado en {}", path.display());
+    Ok(secret)
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -922,5 +986,65 @@ mod fase2_tests {
         assert!(resp.status().is_redirection(), "status {}", resp.status());
         let loc = resp.headers().get(LOCATION).and_then(|v| v.to_str().ok()).unwrap_or("");
         assert!(loc.contains("iss=http%3A%2F%2F127.0.0.1%3A3030"), "location: {loc}");
+    }
+}
+
+/// El secreto de firma sobrevive a un reinicio (dos instancias, mismo directorio).
+#[cfg(test)]
+mod persisted_secret_tests {
+    use super::*;
+
+    fn tmp(label: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "tylluan_oauth_{label}_{}_{}",
+            std::process::id(),
+            rand::random::<u32>()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        d
+    }
+
+    #[test]
+    fn jwt_signed_before_a_restart_validates_after_it() {
+        let dir = tmp("restart");
+        let a = OAuthState::new("http://localhost:3030".into()).with_persisted_secret(&dir);
+        let token = a.sign_jwt("jti-restart", 60);
+        let b = OAuthState::new("http://localhost:3030".into()).with_persisted_secret(&dir);
+        assert!(b.validate_bearer(&token), "a restart must not invalidate OAuth JWTs");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn without_persistence_each_instance_has_its_own_secret() {
+        let a = OAuthState::new("http://localhost:3030".into());
+        let b = OAuthState::new("http://localhost:3030".into());
+        assert!(!b.validate_bearer(&a.sign_jwt("jti-eph", 60)));
+    }
+
+    #[test]
+    fn corrupt_secret_file_is_replaced_not_fatal() {
+        let dir = tmp("corrupt");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(JWT_SECRET_FILE), "not hex at all").unwrap();
+        let a = OAuthState::new("http://localhost:3030".into()).with_persisted_secret(&dir);
+        let token = a.sign_jwt("jti-corrupt", 60);
+        let b = OAuthState::new("http://localhost:3030".into()).with_persisted_secret(&dir);
+        assert!(b.validate_bearer(&token), "the replaced file must persist");
+        let text = std::fs::read_to_string(dir.join(JWT_SECRET_FILE)).unwrap();
+        assert_eq!(text.trim().len(), 64);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unwritable_location_falls_back_to_an_ephemeral_secret() {
+        // A path under a regular file cannot be created as a directory.
+        let dir = tmp("blocked");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a_file");
+        std::fs::write(&file, "x").unwrap();
+        let state = OAuthState::new("http://localhost:3030".into())
+            .with_persisted_secret(&file.join("sub"));
+        assert!(state.validate_bearer(&state.sign_jwt("jti-fallback", 60)));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
