@@ -23,7 +23,13 @@ pub fn audit_db_path() -> std::path::PathBuf {
 /// making tampering detectable. Called fire-and-forget — errors are non-fatal.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &str, success: bool, preview: &str, latency_ms: u64, human_intervention: bool) -> Result<(), String> {
-    let conn = crate::config::open_db(&audit_db_path()).map_err(|e| format!("audit open: {e}"))?;
+    let path = audit_db_path();
+    // A fresh checkout (CI, first run) has no `./data`: without this the open
+    // failed and the audit row was silently lost.
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|e| format!("audit dir: {e}"))?;
+    }
+    let conn = crate::config::open_db(&path).map_err(|e| format!("audit open: {e}"))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS guild_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
