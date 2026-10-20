@@ -40,7 +40,7 @@ const KEY_STATS = [
   { label: 'Retrieval Paths', value: '3+1', detail: 'BM25 · mxbai-embed-large (1024d) · PageRank (Penalty) · FSRS Decay · (research) SPLADE' },
   { label: 'Deployment Profiles', value: '3', detail: 'portable (Pi 4) · clinic (local server) · server (full mesh)' },
   { label: 'Benchmark', value: 'R@5 82%', detail: 'LongMemEval — validated' },
-  { label: 'Tests', value: '1,161', detail: '1074 kernel + 75 tylluan-link + 12 FSRS — all passing' },
+  { label: 'Tests', value: '1,196', detail: '1109 kernel + 75 tylluan-link + 12 FSRS — all passing' },
   { label: 'Cloud Dependency', value: 'Zero', detail: 'All models local · ONNX runtime · Pi 4 compatible' },
 ];
 

@@ -200,6 +200,50 @@ pub struct TylluanConfig {
     /// MD-6; ver `docs/architecture/MEASUREMENT_DEBT_REGISTER.md`).
     #[serde(default)]
     pub observability: ObservabilityConfig,
+
+    #[serde(default)]
+    pub logging: LoggingConfig,
+}
+
+/// D-4: `[logging]` — rotación de `logs/kernel.log` por tamaño.
+///
+/// Sin esta sección el kernel rota igual con los valores por defecto (50 MiB,
+/// 5 ficheros): el fichero había llegado a 1,3 GB sin límite. `max_file_size_mb
+/// = 0` desactiva la rotación y recupera el comportamiento histórico.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    /// Tamaño máximo del fichero vivo antes de rotar, en MiB.
+    #[serde(default = "default_log_max_size_mb")]
+    pub max_file_size_mb: u64,
+
+    /// Ficheros conservados en total, contando el vivo (`kernel.log` + `.1`…).
+    /// El writer aplica un mínimo de 1.
+    #[serde(default = "default_log_max_files")]
+    pub max_files: usize,
+}
+
+fn default_log_max_size_mb() -> u64 {
+    50
+}
+
+fn default_log_max_files() -> usize {
+    5
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            max_file_size_mb: default_log_max_size_mb(),
+            max_files: default_log_max_files(),
+        }
+    }
+}
+
+impl LoggingConfig {
+    /// Límite efectivo en bytes. `0` significa "sin rotación".
+    pub fn max_file_size_bytes(&self) -> u64 {
+        self.max_file_size_mb.saturating_mul(1024 * 1024)
+    }
 }
 
 /// TC-03: `[observability]` — umbrales de observabilidad configurables.
@@ -2257,6 +2301,27 @@ pub fn persist_federation_peers(config: &TylluanConfig, config_path: &std::path:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// D-4: sin `[logging]` la rotación está activa con defaults seguros
+    /// (50 MiB × 5); `0` la desactiva explícitamente.
+    #[test]
+    fn logging_defaults_are_safe_and_configurable() {
+        let omitted: TylluanConfig = toml::from_str("").expect("empty config parses");
+        assert_eq!(omitted.logging.max_file_size_mb, 50);
+        assert_eq!(omitted.logging.max_files, 5);
+        assert_eq!(omitted.logging.max_file_size_bytes(), 50 * 1024 * 1024);
+
+        let explicit: TylluanConfig = toml::from_str(
+            "[logging]\nmax_file_size_mb = 1\nmax_files = 2\n",
+        )
+        .expect("explicit [logging] parses");
+        assert_eq!(explicit.logging.max_file_size_bytes(), 1024 * 1024);
+        assert_eq!(explicit.logging.max_files, 2);
+
+        let disabled: TylluanConfig = toml::from_str("[logging]\nmax_file_size_mb = 0\n")
+            .expect("zero parses");
+        assert_eq!(disabled.logging.max_file_size_bytes(), 0, "0 disables rotation");
+    }
 
     #[test]
     fn test_default_config() {
