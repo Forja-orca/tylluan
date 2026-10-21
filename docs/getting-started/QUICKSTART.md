@@ -116,7 +116,7 @@ Add the following entry to your `claude_desktop_config.json` or agent MCP config
 
 ## 6. Sovereign Tools (CONTRACT-01)
 
-The kernel exposes exactly six sovereign tools:
+The kernel exposes exactly 6 sovereign tools:
 
 1. **`tylluan_remember`**: Store episodic or semantic facts in the Silva memory graph with automatic decay (duplicate merging runs later in the DreamCycle consolidation, not on the write path).
 2. **`tylluan_recall`**: Hybrid retrieval combining BM25, vector embeddings, and Personalized PageRank graph exploration.

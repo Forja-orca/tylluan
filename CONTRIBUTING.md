@@ -4,7 +4,7 @@ Thank you for your interest in contributing. Tylluan is built by humans and AI a
 
 ## Prerequisites
 
-- Rust 1.88+ (`rustup` recommended — see `rust-toolchain.toml`)
+- Rust 1.88+ minimum (`rust-toolchain.toml` pins 1.99.1; `rustup` recommended)
 - Python 3.12+ with pip
 - Node.js 20+ (for dashboard development only)
 - Git

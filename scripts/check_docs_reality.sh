@@ -428,7 +428,7 @@ if [ -d guilds ] && [ -f crates/tylluan-kernel/src/router/catalog.rs ]; then
     guild_excluded=$(grep -E '^[[:space:]]*const EXCLUDED_GUILDS' crates/tylluan-kernel/src/router/catalog.rs \
         | grep -oE '"[a-z0-9_]+"' | wc -l | tr -d ' ')
     guild_real=$((guild_files - guild_excluded))
-    for gdoc in README.md README.es.md STATUS.md docs/assets/architecture.svg; do
+    for gdoc in README.md README.es.md STATUS.md docs/assets/architecture.svg docs/getting-started/QUICKSTART.md; do
         [ -f "$gdoc" ] || continue
         while IFS=: read -r gline gclaim; do
             [ -n "$gclaim" ] || continue
@@ -443,9 +443,32 @@ if [ -d guilds ] && [ -f crates/tylluan-kernel/src/router/catalog.rs ]; then
             if [ "$gdoc" = "STATUS.md" ]; then
                 grep -noE '^- (\*\*)?[0-9]+ guilds' "$gdoc" || true
             else
-                grep -noE '[0-9]+ (Python )?[Gg]uilds( de Python)?|\([0-9]+ (tools|herramientas)\)' "$gdoc" || true
+                # T-DSH-20: QUICKSTART phrases it as "45 default routable guilds";
+                # README/README.es use "45 guilds" / "(6 tools)" parentheticals.
+                grep -noE '[0-9]+ (Python )?[Gg]uilds( de Python)?|\([0-9]+ (tools|herramientas)\)|[0-9]+ default routable guilds' "$gdoc" || true
             fi
         )
+    done
+fi
+
+# ── 7. Sovereign tool-count claims (T-DSH-20) ─────────────────────────────
+# Misma clase de deriva que el recuento de guilds: QUICKSTART/STATUS/architecture.svg
+# dicen "6 sovereign tools". La fuente de verdad es `sovereign_tool_names()` en
+# `transport/server/tools.rs` (CONTRACT-01 fija exactamente 6, ADR-021). Solo se
+# juzgan las formas con dígito; la prosa ("exactly six tools") queda al lector.
+if [ -f crates/tylluan-kernel/src/transport/server/tools.rs ]; then
+    tools_real=$(awk '/pub fn sovereign_tool_names/{f=1;next} f&&/^[[:space:]]*\]/{exit} f&&/"tylluan_/{c++} END{print c+0}' \
+        crates/tylluan-kernel/src/transport/server/tools.rs)
+    for tdoc in docs/getting-started/QUICKSTART.md STATUS.md README.zh.md; do
+        [ -f "$tdoc" ] || continue
+        while IFS=: read -r tline tclaim; do
+            [ -n "$tclaim" ] || continue
+            tnum=$(echo "$tclaim" | grep -oE '[0-9]+' | head -1)
+            if [ -n "$tnum" ] && [ "$tnum" != "$tools_real" ]; then
+                echo "❌ $tdoc:$tline: dice '$tclaim' pero CONTRACT-01 fija $tools_real herramientas soberanas (sovereign_tool_names en tools.rs)"
+                problems=1
+            fi
+        done < <(grep -noE '[0-9]+ (Sovereign|sovereign) (MCP )?[Tt]ools' "$tdoc" || true)
     done
 fi
 
