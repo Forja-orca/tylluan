@@ -373,13 +373,28 @@ pub async fn handle_tylluan_do(
         let is_doctor_repair = is_short && (
             lower.contains("doctor_repair") || lower.contains("doctor repair")
             || lower.contains("reparar kernel") || lower.contains("repair kernel"));
+        // D-16: la instrucción que el PROPIO kernel emite en modo plan
+        // (`tylluan_do(intent='approve action for plan <id>')`) no tenía ruta
+        // determinista: caía en el router semántico y moría con NO_GUILD_MATCH,
+        // así que la aprobación por intent era imposible y la compuerta de
+        // D-13 sólo existía en `approve_action`. Se enruta a esa misma
+        // herramienta - la compuerta y el audit son UNO, no dos copias.
+        let approve_plan_id = if is_short {
+            plan_id_from_approve_intent(&lower)
+        } else {
+            None
+        };
         if is_list_guilds || is_bootstrap || is_undo || is_health || is_list_pending
-            || is_doctor_diagnose || is_doctor_repair {
+            || is_doctor_diagnose || is_doctor_repair || approve_plan_id.is_some() {
             let mut kernel_args = arguments.clone().unwrap_or_default();
             if let Some(aid) = &agent_id {
                 kernel_args.entry("agent_id".to_string()).or_insert_with(|| serde_json::Value::String(aid.clone()));
             }
-            let tool_name = if is_bootstrap {
+            let tool_name = if let Some(plan_id) = &approve_plan_id {
+                kernel_args.insert("requestId".to_string(), serde_json::Value::String(plan_id.clone()));
+                kernel_args.insert("approved".to_string(), serde_json::Value::Bool(true));
+                "approve_action"
+            } else if is_bootstrap {
                 "agent_bootstrap"
             } else if is_undo {
                 "undo_last_action"
@@ -702,6 +717,23 @@ fn penalize_lesson_fn(intent: &str, silva: std::sync::Arc<crate::memory::silva::
             let _ = silva.touch_node(&lesson_key, "system", "rejected").await;
         }
     });
+}
+/// D-16: extrae el `plan_id` de la instrucción que el modo plan emite al
+/// cliente. La única forma documentada es
+/// `approve action for plan <id>`; se acepta la variante corta `approve plan <id>`
+/// y nada más; la frase debe EMPEZAR así (un `approve plan x` incrustado en
+/// otra frase no aprueba nada y cae al router semántico como siempre).
+fn plan_id_from_approve_intent(lower_intent: &str) -> Option<String> {
+    const PREFIXES: [&str; 2] = ["approve action for plan ", "approve plan "];
+    let rest = PREFIXES
+        .iter()
+        .find_map(|prefix| lower_intent.trim_start().strip_prefix(prefix))?;
+    let id: String = rest
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    (!id.is_empty()).then_some(id)
 }
 
 /// Stage 1: resolve guild, apply ACL/rate-limit, select tool, build call params.
@@ -1499,6 +1531,21 @@ pub(crate) async fn base_test_server(silva: std::sync::Arc<crate::memory::silva:
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn d16_approve_intent_matches_only_when_the_phrase_starts_the_intent() {
+        assert_eq!(
+            plan_id_from_approve_intent("approve action for plan 0123456789ab").as_deref(),
+            Some("0123456789ab")
+        );
+        assert_eq!(
+            plan_id_from_approve_intent("  approve plan abc-1_2").as_deref(),
+            Some("abc-1_2")
+        );
+        // Incrustada en otra frase: no aprueba nada.
+        assert_eq!(plan_id_from_approve_intent("please do not approve plan abc"), None);
+        assert_eq!(plan_id_from_approve_intent("approve plan "), None);
+    }
+
     use super::*;
     use std::sync::Arc;
     use tokio::sync::RwLock;
