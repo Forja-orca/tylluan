@@ -6,7 +6,7 @@ This guide gets you up and running with **Tylluan**, the sovereign local-first m
 
 ## 1. Prerequisites
 
-- **Rust:** 1.88+ (pinned in `rust-toolchain.toml`) if building from source.
+- **Rust:** 1.99.1 (pinned in `rust-toolchain.toml`) if building from source.
 - **Git:** for repository operations.
 - **Python:** 3.12+ (optional; required only if running Python guilds).
 - **Node.js & pnpm:** (optional; required only if running the React dashboard in `dashboard/`).
@@ -118,12 +118,12 @@ Add the following entry to your `claude_desktop_config.json` or agent MCP config
 
 The kernel exposes exactly six sovereign tools:
 
-1. **`tylluan_remember`**: Store episodic or semantic facts in the Silva memory graph with automatic decay and deduplication.
+1. **`tylluan_remember`**: Store episodic or semantic facts in the Silva memory graph with automatic decay (duplicate merging runs later in the DreamCycle consolidation, not on the write path).
 2. **`tylluan_recall`**: Hybrid retrieval combining BM25, vector embeddings, and Personalized PageRank graph exploration.
 3. **`tylluan_think`**: Structured internal reasoning and multi-hop hypothesis testing.
 4. **`tylluan_graph`**: Direct topology queries, neighbor traversal, and semantic relationship discovery.
 5. **`tylluan_do`**: Dispatch tasks to routable Python guilds (vision, scraping, system diagnostics, audio).
-6. **`tylluan_decide`**: High-speed typed decision evaluation (Choice, Score, Noul) backed by deterministic rules and shadow ML models.
+6. **`tylluan_decide`**: High-speed typed decision evaluation (Choice, Score, Boolean) backed by deterministic rules and shadow ML models.
 
 ---
 
@@ -169,5 +169,5 @@ tylluan-cli audit
 
 ## 10. Next Steps
 
-- Overview and the three-step binary install: [README](../../README.md).
+- Overview and the binary Quick Start (4 steps): [README](../../README.md).
 - Security model and reporting: [SECURITY](../../SECURITY.md) and [concepts/SECURITY](../concepts/SECURITY.md).
