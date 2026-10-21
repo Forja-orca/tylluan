@@ -13,7 +13,9 @@
 //! **exactamente una** fila con el aprobador REAL en `agent_id` y
 //! `human_intervention = 1` solo si aprobó el operador (una aprobación de otro
 //! agente deja `human_intervention = 0`: la fila dice lo que pasó, no que
-//! intervino un humano).
+//! intervino un humano). D-26: una aprobaci?n del operador sin `agent_id`
+//! declarado se registra como `operator`, no como `anonymous` (la compuerta
+//! y qui?n puede aprobar no cambian).
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test approve_audit_matrix
@@ -30,6 +32,7 @@ const MASTER: &str = "master-t21-token";
 const AUTHOR: &str = "t21-author";
 const OTHER: &str = "t21-other";
 const ANON: &str = "anonymous";
+const OPERATOR: &str = "operator";
 
 fn audit_db_path(tag: &str) -> std::path::PathBuf {
     let p = std::env::temp_dir().join(format!("tylluan_t21_{tag}_{}.db", std::process::id()));
@@ -195,7 +198,9 @@ async fn approval_routes_leave_exactly_one_honest_audit_row() {
                 author: AUTHOR,
                 approver: None,
                 operator: true,
-                expect: Expect::Approved { approver: ANON, human: 1 },
+                // D-26: el operador sin `agent_id` declarado se materializa
+                // como 'operator' en el audit (antes 'anonymous').
+                expect: Expect::Approved { approver: OPERATOR, human: 1 },
             },
             Case {
                 name: "anonimo-plan-ajeno",

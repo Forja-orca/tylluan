@@ -275,7 +275,21 @@ impl TylluanServer {
                     // was the only id recorded before, so the log attributed the
                     // action to whoever wrote the plan. The author is kept in the
                     // preview so the trail is not lost.
-                    let audit_agent = agent_id.clone();
+                    //
+                    // D-26 (O1 de T-DSH-21): si aprueba el operador y el cliente no
+                    // declaró `agent_id`, la fila decía `anonymous` con
+                    // `human_intervention=1`: el `agent_id` no explicaba nada y el
+                    // operador no aparecía por ningún lado. Se materializa
+                    // `operator` SOLO en el audit: quién puede aprobar y la
+                    // compuerta de autoaprobación no cambian. Un `agent_id`
+                    // declarado (aunque sea con el token maestro) se respeta tal
+                    // cual, que es lo que ya verifica
+                    // `approve_action_audit_names_the_approver_and_human_only_for_operator`.
+                    let audit_agent = if operator && is_anonymous(&agent_id) {
+                        "operator".to_string()
+                    } else {
+                        agent_id.clone()
+                    };
                     let audit_preview = if plan.agent_id != audit_agent {
                         format!("[plan author: {}] {preview}", plan.agent_id)
                     } else {
