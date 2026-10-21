@@ -22,6 +22,37 @@ use tracing::{info, error, warn, debug};
 use std::sync::Arc;
 use rusqlite::{Connection, params};
 
+/// **Fuente única de verdad** de las guilds de inferencia CPU (ONNX / LLM
+/// local). Antes había DOS listas mantenidas a mano —esta, como const asociada
+/// del registry, y otra local en `main.rs`— con el riesgo de divergir: `main.rs`
+/// les pone `tool_timeout = None` (paciencia ilimitada en el wrapper de guild) y
+/// este registry les da el `tool_call_secs` plano en vez del techo de su
+/// categoría (proxy). Si una lista cambiaba y la otra no, una de las dos capas
+/// recortaba la guild a 60/180 s igualmente. D-19 declaró la deuda; T-DSH-16 la
+/// cierra con esta const y un test anti-deriva.
+///
+/// Historia que justifica los miembros (no tocar sin leer):
+/// - `deep_analysis` y compañía se documentan en este proyecto como 10+ minutos
+///   en CPU; el `heavy_guild_ms` por defecto (180 s) las habría cortado.
+/// - `llama_backend` se añadió en D-19: no estaba y caía en "analysis" (60 s)
+///   mientras el actor registraba "CPU inference mode, no timeout" — los 30
+///   fallos del juez de B-6 eran exactamente ese timeout.
+pub(crate) const CPU_INFERENCE_GUILDS: &[&str] = &[
+    "vision",
+    "deep_analysis",
+    "knowledge",
+    "comfy_ui",
+    "n8n_bridge",
+    "llama_backend",
+];
+
+/// Acceso de solo lectura para el binario. `main.rs` es otro crate target del
+/// mismo package, así que no puede ver un `pub(crate)`; expone la MISMA lista a
+/// través de esta función para que siga habiendo una sola fuente.
+pub fn cpu_inference_guilds() -> &'static [&'static str] {
+    CPU_INFERENCE_GUILDS
+}
+
 /// Possible ways to launch a guild.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GuildLauncher {
@@ -950,46 +981,20 @@ impl GuildRegistry {
         }
     }
 
-    /// Guilds main.rs already treats as needing genuinely UNLIMITED patience
-    /// (CPU-bound ONNX/local-LLM inference, killing which mid-run wastes all
-    /// prior computation -- see main.rs's own `cpu_inference_guilds` list and
-    /// its comment). Real bug caught before shipping (2026-08-23, reviewing
-    /// this same commit for doc drift): the Heavy category's 180s
-    /// (heavy_guild_ms default) would have UNDERCUT that existing design --
-    /// deep_analysis alone is documented elsewhere in this project as taking
-    /// 10+ minutes on CPU, and main.rs's `tool_timeout = None` override only
-    /// skips the OUTER guild-level wrapper (guild_process.rs's call_tool) --
-    /// it does nothing about the INNER proxy-level timeout this function
-    /// feeds (proxy.rs's own `tokio::time::timeout`), which would have fired
-    /// regardless and silently cut these guilds down from their previous,
-    /// safe 3600s (the old flat tool_call_secs) to 180s. This list must stay
-    /// in sync with main.rs's cpu_inference_guilds by hand -- there is no
-    /// single source of truth for it yet (a real, separate, smaller finding
-    /// than the one this function exists to fix).
-    const UNLIMITED_PATIENCE_GUILDS: &'static [&'static str] =
-        &["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge",
-          // D-19 (log de B-6, 30 fallos del juez): `llama_backend` no estaba
-          // en esta lista, así que caía en "analysis" y el proxy le imponía un
-          // techo de 60 s (analysis_guild_ms) mientras el actor registraba
-          // "CPU inference mode, no timeout" -- la promesa del log era falsa.
-          // Los 30 fallos son exactamente ese timeout (nunca otro error) y la
-          // inferencia en CPU los supera con regularidad. Debe seguir en
-          // sintonía con main.rs's `cpu_inference_guilds`.
-          "llama_backend"];
 
     /// Effective tool-call timeout (seconds) for a specific guild: the
     /// category-specific value from `guild_timeouts` if it's been wired via
     /// `with_guild_timeouts()`, otherwise falls back to the flat
     /// `timeouts.tool_call_secs` (this registry's pre-existing behavior,
     /// preserved exactly for anyone who hasn't opted in yet). Guilds in
-    /// `UNLIMITED_PATIENCE_GUILDS` always get the flat value regardless of
+    /// `CPU_INFERENCE_GUILDS` always get the flat value regardless of
     /// category, matching their pre-existing "wait as long as it takes"
     /// contract with main.rs.
     fn effective_tool_call_secs(&self, guild_name: &str) -> u64 {
         let Some(gt) = &self.guild_timeouts else {
             return self.timeouts.tool_call_secs;
         };
-        if Self::UNLIMITED_PATIENCE_GUILDS.contains(&guild_name) {
+        if CPU_INFERENCE_GUILDS.contains(&guild_name) {
             return self.timeouts.tool_call_secs;
         }
         match Self::guild_timeout_category(guild_name) {
@@ -1666,6 +1671,45 @@ mod tests {
             "llama_backend runs CPU inference; the 15s system window must never apply"
         );
         assert_eq!(registry.effective_tool_call_secs("llama_backend"), 3600);
+    }
+
+    /// T-DSH-16: la lista de guilds de inferencia CPU tiene **una sola fuente
+    /// de verdad** (`CPU_INFERENCE_GUILDS` + `cpu_inference_guilds()`).
+    ///
+    /// Este test es el guardia anti-deriva: falla si alguien reintroduce una
+    /// lista local en `main.rs` (la deuda que declaró D-19: dos listas a mano,
+    /// una en cada capa, que podían divergir y recortar a 60/180 s una guild
+    /// que la otra capa trataba como paciencia ilimitada) o si la const cita
+    /// una guild que no existe en el catálogo real.
+    #[test]
+    fn cpu_inference_guilds_list_has_a_single_source_of_truth() {
+        let main_src = include_str!("../main.rs");
+        assert!(
+            !main_src.contains("let cpu_inference_guilds = [\""),
+            "main.rs ha vuelto a declarar su propia lista de guilds de inferencia CPU; \
+             debe consumir registry::guild_process::cpu_inference_guilds() (T-DSH-16)"
+        );
+        // Mismo guardia aunque la lista reaparezca con otro nombre de variable.
+        assert!(
+            !main_src.contains("[\"vision\", \"deep_analysis\""),
+            "main.rs contiene un array literal de guilds de inferencia CPU; la lista \
+             solo puede vivir en registry::guild_process::CPU_INFERENCE_GUILDS (T-DSH-16)"
+        );
+        assert!(
+            main_src.contains("cpu_inference_guilds()"),
+            "main.rs debe consumir la fuente única cpu_inference_guilds() (T-DSH-16)"
+        );
+        // El acceso público devuelve exactamente la const que usa el registry.
+        assert_eq!(cpu_inference_guilds(), CPU_INFERENCE_GUILDS);
+        // Todos los nombres existen en el catálogo real: un typo o una guild
+        // retirada rompen aquí, no silenciosamente en producción.
+        let catalog = crate::router::catalog::builtin_catalog();
+        for name in CPU_INFERENCE_GUILDS {
+            assert!(
+                catalog.iter().any(|g| g.name == *name),
+                "guild de inferencia CPU '{name}' no existe en el catálogo real"
+            );
+        }
     }
 
     #[test]
