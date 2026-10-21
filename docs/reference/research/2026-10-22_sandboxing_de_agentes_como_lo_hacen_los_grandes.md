@@ -11,11 +11,12 @@
 | **OpenAI Codex (nube)** | Un contenedor por tarea | «Codex creates a container and checks out your repo» | Fase de preparación con red; fase del agente «blocks internet access during the agent phase» por defecto | Resultado como «answer and a diff of any files it changed» |
 | **Claude, API (herramienta de ejecución de código)** | Contenedor Linux alojado por Anthropic | Linux x86_64, 5 GiB de RAM, 5 GiB de disco, 1 CPU | «Internet access: Completely disabled»; solo bibliotecas preinstaladas | Contenedor reutilizable por ID; caduca a los 30 días; tras unos 5 minutos de inactividad se guarda un punto de control |
 | **Claude Code (local y nube)** | Escalera de seis niveles (abajo) | Desde un sandbox por comando hasta una VM completa | Allowlist de dominios; en la nube, proxy con lista por defecto | `--dangerously-skip-permissions` solo dentro de contenedor, VM o runtime de sandbox |
-| **xAI Grok Build** | Sin documento oficial de xAI sobre un sandbox propio | El aislamiento lo pone la plataforma que lo aloja (Docker Sandboxes, E2B, Railway) | Depende del anfitrión: E2B deja internet abierto por defecto | — |
+| **xAI Grok Build** | En tu máquina; sandbox oficial, **desactivado por defecto** | Landlock (Linux) y Seatbelt (macOS); cuatro perfiles: `workspace`, `read-only`, `strict` (repositorios no confiables) y `devbox` | El bloqueo de red de los procesos hijos se aplica «Enforced on Linux only»; en macOS no hace nada en `read-only` ni `strict` | «Permissions gate whether a tool call runs; the sandbox limits what an approved call can do»; los perfiles base no protegen `~/.ssh`: hace falta una lista `deny` propia |
+| **Perplexity SPACE (código abierto)** | Plataforma de sandboxes para agentes | «running code in isolated Firecracker microVMs», Apache-2.0, escrita en Rust, runtimes enchufables, instantáneas, colas de sandboxes ya arrancados en Kubernetes | Control de salida de red y credenciales fuera del sandbox: **no figuran en el README** (solo prensa) | — |
 | **Z.ai / AutoGLM** | Nube de Zhipu | Índice del MIT: «Sandboxed cloud computers GUI with Internet access» | Con internet | «Human users can take over the cloud computer GUI»; el índice apunta «Sandboxing and containment approaches: None found» |
 | **ChatGPT (modo agente)** | Un ordenador virtual alojado | Solo fuentes secundarias | — | **No verificado**: la tarjeta del sistema devolvió 403 |
 
-Fuentes: https://learn.chatgpt.com/docs/agent-approvals-security · https://learn.chatgpt.com/docs/cloud/internet-access · https://learn.chatgpt.com/docs/environments/cloud-environment · https://platform.claude.com/docs/en/agents-and-tools/tool-use/code-execution-tool · https://code.claude.com/docs/en/sandbox-environments.md · https://hub.docker.com/r/sbx/grok-kit · https://aiagentindex.mit.edu/2025/autoglm
+Fuentes: https://docs.x.ai/build/features/sandbox · https://github.com/perplexityai/SPACE · https://learn.chatgpt.com/docs/agent-approvals-security · https://learn.chatgpt.com/docs/cloud/internet-access · https://learn.chatgpt.com/docs/environments/cloud-environment · https://platform.claude.com/docs/en/agents-and-tools/tool-use/code-execution-tool · https://code.claude.com/docs/en/sandbox-environments.md · https://hub.docker.com/r/sbx/grok-kit · https://aiagentindex.mit.edu/2025/autoglm
 
 ## 2. La escalera de Claude Code (lo más transferible)
 
@@ -38,6 +39,8 @@ Frases que conviene tener a la vista:
 5. **Un contenedor efímero por tarea**, con caché acotada (Codex: hasta 12 horas) y resultado como diff.
 6. **Aislamiento con primitivas del sistema en local** (Seatbelt, `bwrap`) y **VM o contenedor en la nube**. Nadie usa una distro completa dentro del proceso del agente.
 7. **Toma de control humana** cuando el agente maneja un ordenador gráfico (AutoGLM).
+8. **Aprobaciones y aislamiento como dos ejes** lo dicen ya dos fabricantes con casi las mismas palabras (Anthropic y xAI).
+9. **El valor por defecto es una decisión de producto:** Codex trae el sandbox activado y Grok Build desactivado. Cada perfil tiene un coste de fricción distinto.
 
 ## 4. Cómo lo adaptaría Tylluan (propuestas para el ADR-022, no decisiones)
 
@@ -53,12 +56,17 @@ Frases que conviene tener a la vista:
 | A8 | **Los servidores MCP externos arrancan envueltos** por nuestro lanzador | La advertencia de Anthropic: sin eso corren sin restricción en el anfitrión |
 | A9 | **Entorno efímero por tarea con caducidad**, arranque perezoso y punto de control por inactividad | Referencia: Codex 12 horas; API de Claude 30 días y ~5 minutos de inactividad. En «tostadora» interesa arrancar solo si se pide |
 
+| A10 | **Para el nivel de microVM, estudiar SPACE antes de escribir algo propio:** Apache-2.0 (compatible con nuestra MIT), Rust y con runtimes enchufables | Filosofía de aprovechar lo existente; requisitos del anfitrión (KVM, Linux) sin verificar |
+| A11 | **Lista `deny` propia además de los perfiles:** los perfiles base de Grok no protegen `~/.ssh` | Los nuestros deben nombrar de serie el directorio de datos, el token y las claves de federación |
+
 **Lo que no copiaría:** una VM gestionada por nosotros en la nube (exige infraestructura y no es soberana), ni el ordenador gráfico con toma de control (no hay caso de uso nuestro que lo pida hoy).
 
 ## 5. No verificado
 
 - La tarjeta del sistema de ChatGPT (modo agente): 403; solo hay fuentes secundarias sobre su arquitectura.
-- Grok Build: no encontré documentación oficial de xAI sobre un sandbox propio; lo descrito es de Docker, E2B y Railway.
+- Grok Build: en la primera versión de esta nota dije que no había documentación oficial; **era un error mío**: existe y la leí después (https://docs.x.ai/build/features/sandbox).
+- Perplexity SPACE: la licencia, el lenguaje y Firecracker están en el README; la latencia de unos 60 ms, las credenciales fuera del sandbox, el control de salida de red y la prueba de 108 intentos de fuga solo figuran en prensa.
+- Imágenes de Docker de Anthropic para el uso de ordenador, «Sandbox Mode» de ChatGPT Work y los proveedores del SDK de OpenAI (E2B, Modal, Daytona): citados en un texto que pegó José, sin comprobar.
 - AutoGLM: el índice del MIT dice «None found» sobre contención; no hay documento del desarrollador.
 - Qué significa «MXC» en Windows para Codex: solo la cita de la página.
 - Google Gemini, Manus y otros no se han leído en esta nota.
