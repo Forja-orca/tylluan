@@ -5,6 +5,7 @@
 
 pub mod auth;
 pub mod oauth;
+pub mod oauth_consent;
 pub mod sse;
 pub mod api_v1;
 pub mod a2a;
@@ -484,6 +485,15 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     // HttpState, but the subscriber (spawned after server init) needs it too.
     let dispatch_contract = Arc::clone(&agents_contract);
 
+    // Fase 2 (D-15): el consentimiento compara la credencial del operador
+    // (token maestro) y persiste los consentimientos en el mismo directorio
+    // de datos que el secreto JWT. La credencial NO se guarda: solo se
+    // compara en memoria (ver `docs/internal/PLAN_oauth_f2_*`).
+    let oauth_operator = auth_token.clone();
+    let oauth_data_dir = std::path::PathBuf::from(
+        std::env::var("TYLLUAN_DATA_DIR").unwrap_or_else(|_| "data".to_string()),
+    );
+
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth_token,
@@ -518,9 +528,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         oauth: std::sync::Arc::new(
             oauth::OAuthState::new(base_url)
                 .with_dev_mode(dev_mode)
-                .with_persisted_secret(&std::path::PathBuf::from(
-                    std::env::var("TYLLUAN_DATA_DIR").unwrap_or_else(|_| "data".to_string()),
-                )),
+                .with_persisted_secret(&oauth_data_dir)
+                .with_operator_credential(oauth_operator)
+                .with_consent_dir(&oauth_data_dir),
         ),
         metrics_ring: metrics_ring.clone(),
         jobs: jobs.clone(),
@@ -1179,7 +1189,10 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
             "/.well-known/oauth-protected-resource",
             get(oauth::protected_resource_handler),
         )
-        .route("/oauth/authorize", get(oauth::authorize_handler))
+        .route(
+            "/oauth/authorize",
+            get(oauth::authorize_handler).post(oauth::authorize_decision_handler),
+        )
         .route("/oauth/token", post(oauth::token_handler))
         .route("/oauth/revoke", post(oauth::revoke_handler))
         .with_state(oauth_state);

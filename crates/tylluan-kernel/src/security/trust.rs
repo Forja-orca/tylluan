@@ -100,6 +100,67 @@ pub fn origin_of(metadata: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// D-18/T-DSH-13 (C2) — herencia retroactiva.
+///
+/// D-18 marcaba los resúmenes en su CREACIÓN (si alguna fuente estaba marcada).
+/// Si el flag llega DESPUÉS (federación, A2A, ingesta, juez post-escritura), el
+/// resumen conservaba el texto verbatim de sus fuentes y viajaba sin marca por
+/// bootstrap y por el contexto de sesión del recall. Esta pasada re-marca los
+/// `agent_summary`/`session_digest` cuyo contenido incluye el preview que copió
+/// la consolidación (80 chars, el mismo recorte que `agent_memory`).
+///
+/// Idempotente; no crea nodos, no toca contenido y no decide nada (solo marca).
+/// Devuelve cuántos resúmenes re-marcó.
+pub async fn propagate_untrusted_to_summaries(
+    silva: &crate::memory::silva::SilvaDB,
+    node_id: &str,
+) -> usize {
+    let Ok(Some(node)) = silva.get_node(node_id).await else {
+        return 0;
+    };
+    if !node_is_untrusted(&node) {
+        return 0;
+    }
+    // Mismo recorte que usa la consolidación (`agent_memory.rs`: 80 chars).
+    let preview: String = node.content.chars().take(80).collect();
+    if preview.trim().is_empty() {
+        return 0;
+    }
+    let origin = origin_of(&node.metadata, "fuente marcada");
+    let conn_arc = silva.conn_lock();
+    let conn = conn_arc.lock().await;
+    let rows: Vec<(String, String)> = {
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT id, metadata FROM nodes
+             WHERE type IN ('agent_summary','session_digest') AND instr(content, ?1) > 0",
+        ) else {
+            return 0;
+        };
+        stmt.query_map([preview.as_str()], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })
+        .map(|it| it.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    };
+    let mut marked = 0usize;
+    for (id, meta) in rows {
+        if is_untrusted_metadata(&meta) {
+            continue;
+        }
+        let mut value: serde_json::Value =
+            serde_json::from_str(&meta).unwrap_or_else(|_| serde_json::json!({}));
+        mark_untrusted(&mut value, &format!("inherited(retro): {origin}"));
+        let updated = conn.execute(
+            "UPDATE nodes SET metadata = ?1 WHERE id = ?2",
+            rusqlite::params![value.to_string(), id],
+        );
+        if updated.is_ok() {
+            marked += 1;
+        }
+    }
+    marked
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

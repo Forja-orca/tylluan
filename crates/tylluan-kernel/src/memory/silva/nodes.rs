@@ -256,6 +256,22 @@ impl super::SilvaDB {
             tx.commit()?;
             Ok::<(), anyhow::Error>(())
         })?;
+        // D-18/T-DSH-13 (C2): si esta escritura deja el nodo marcado como
+        // `untrusted_content`, los resúmenes que YA citaban su contenido
+        // (creados antes de la marca) deben heredar la desconfianza: la
+        // herencia de D-18 solo cubría el momento de la consolidación, así que
+        // un flag posterior dejaba el texto verbatim en el resumen sin marca.
+        if crate::security::trust::is_untrusted_metadata(metadata) {
+            let marked =
+                crate::security::trust::propagate_untrusted_to_summaries(self, id).await;
+            if marked > 0 {
+                tracing::info!(
+                    "🔒 untrusted_content: {} resumen(es) re-marcado(s) tras marcar '{}'",
+                    marked,
+                    id
+                );
+            }
+        }
         Ok(())
     }
 
