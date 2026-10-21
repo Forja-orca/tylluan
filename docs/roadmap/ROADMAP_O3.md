@@ -133,7 +133,8 @@ Fuentes, ambas **no vinculantes** y contrastadas con el código antes de aceptar
 
 **Abierto — trabajo asignado**
 - [ ] D-27 (el motivo de `untrusted_reason` lo fija el kernel), D-28 (el `agent_id` vacío pasa a `anonymous`), D-29 (un fichero de consentimientos ilegible no se sobrescribe), D-22b y D-22c (seguir troceando `handler_do/mod.rs`): cola 4 de Deep.
-- [ ] Sondas de continuidad sin LLM (identidad, tarea abierta, memoria, hora) tras un reinicio simulado: T-DSH-25.
+- [x] Sondas de continuidad sin LLM tras un reinicio simulado (T-DSH-25): 4 pasan. **Hallazgo abierto:** los planes pendientes de aprobación se pierden en un reinicio (`PLAN_STORE` en memoria de proceso). Asignado como D-30 a Deep, con diseño primero.
+- [ ] D-30: persistir los planes pendientes de aprobación y quitar el `#[ignore]` de la sonda real de reinicio.
 - [ ] Cerrar la lista de fuentes no verificadas (OWASP agéntico, Ley de Ciberresiliencia, SLMJury, Reglamento 2017/745): H-1 de Hermes.
 
 **Plan a v1.0 — criterios medibles (de las 13 preguntas)**
