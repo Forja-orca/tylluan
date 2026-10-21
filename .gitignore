@@ -248,3 +248,6 @@ benchmarks/datasets/*.db
 
 # Latency campaign outputs (back BASELINE_REPORT.md; regenerable with benchmarks/latency/cpu_baseline.py)
 benchmarks/latency/results_*.json
+
+# Modelos locales: nunca al repo (decenas de GB; ver incidente de ficheros .gguf en la raiz, 22-oct)
+*.gguf
