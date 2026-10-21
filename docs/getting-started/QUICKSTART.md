@@ -1,201 +1,173 @@
-# Tylluan Advanced Setup Guide
+# Tylluan Quickstart Guide
 
-**Prerequisites:** Rust 1.88 (pinned in `rust-toolchain.toml`), Git, and Python 3.12+ if you want the Python guilds.
-**Alternative to:** The 3-step binary install in [README.md](../../README.md)
-
----
-
-## Build from Source
-
-```bash
-git clone https://github.com/Forja-orca/tylluan.git && cd tylluan
-cargo build --release -p tylluan-kernel
-python -m venv .venv
-source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r guilds/requirements.txt
-```
-
-The binary is at `target/release/tylluan-nexus` (or `target/release/tylluan-nexus.exe` on Windows).
+This guide gets you up and running with **Tylluan**, the sovereign local-first memory and multi-agent coordination kernel.
 
 ---
 
-## Start
+## 1. Prerequisites
 
-```bash
-# Via CLI, run from the repository root (it looks for tylluan-nexus next to itself,
-# in ~/.tylluan/bin, on PATH, then in ., target/release and target/debug)
-cargo run -p tylluan-cli -- start
-
-# Or the binary directly
-target/release/tylluan-nexus
-```
-
-**Never start a second kernel from the same working directory as a running one.** If the configured port is busy, the kernel binds the next free port, records it in `data/active_port.json` and tells the previous kernel (the port recorded there) to shut down; it replaces the running kernel instead of coexisting with it (`crates/tylluan-kernel/src/transport/http/mod.rs`, `start_http_server`; read from the code, not exercised here). Test instances need their own directory, config, data directory (`TYLLUAN_DATA_DIR`) and `--port`.
-
-A `tylluan.toml` is optional: without one the kernel starts with built-in defaults. Those defaults serve **http** and **sse** only. The **stdio** transport is opt-in (`--stdio`, or `transport = ["stdio", "http"]` in `tylluan.toml`), because a kernel started without a terminal (a service, `nohup`, CI) exits as soon as stdio reads end-of-input. Create a config with either:
-
-```bash
-# Generate one for a profile (also starts the kernel; --dir picks the target directory)
-tylluan-cli install --profile server
-
-# Or copy the template (edit before first boot)
-cp tylluan.example.toml tylluan.toml
-```
-
-Minimal working config:
-
-```toml
-[nexus]
-host = "127.0.0.1"
-port = 47004
-dev_mode = false
-transport = ["http", "sse"]   # no stdio: safe to run detached from a terminal
-```
+- **Rust:** 1.88+ (pinned in `rust-toolchain.toml`) if building from source.
+- **Git:** for repository operations.
+- **Python:** 3.12+ (optional; required only if running Python guilds).
+- **Node.js & pnpm:** (optional; required only if running the React dashboard in `dashboard/`).
 
 ---
 
-## Installation Profiles
+## 2. Quick Installation
 
-Pick a profile depending on your hardware. These are the exact descriptions printed by `tylluan-cli install --help`:
+### Option A: Automated Binary Installer (Recommended)
 
-| Profile | Embeddings | Use case |
-|---------|------------|----------|
-| `portable` | none (BM25-only), no model downloads | Smallest footprint; zero downloads |
-| `clinic` | BGE-Small (67 MB, 384-dim) | Light semantic search; the CLI sizes it for ~200K docs on 8 GB RAM |
-| `server` | `mxbai-embed-large` (1024-dim) | Full semantic search, production grade |
-
-```bash
-tylluan-cli install --profile portable
-tylluan-cli install --profile clinic
-tylluan-cli install --profile server
-```
-
-Profiles can be changed later in `tylluan.toml` by setting `embedding_model` (and the matching `vector_dimensions`) to one of `"none"`, `"mxbai-embed-large"`, `"mxbai-q"`, `"bge-m3"`, `"bge-small"`, `"minilm"`, `"nomic-embed-text"`, `"snowflake-arctic-embed-l"` or `"multilingual-e5-large"` (the list the kernel prints when it rejects an unknown value). Dimensions: mxbai, bge-m3, arctic and e5 are 1024, nomic is 768, bge-small and minilm are 384.
-
-For reference, a measured data point on the `portable` profile (published v0.17.1 Linux x86_64 binary, empty database, WSL2 with 6 CPUs and 8 GB RAM): healthy in 0.9–3.7 s and about 34 MB resident at idle. Other profiles were not measured.
-
----
-
-## Auth
-
-On first boot, a bearer token is written to `.tylluan-token` in the kernel's working directory.
-
-| Mode | Auth required | Use case |
-|------|---------------|----------|
-| `dev_mode = true` | None | Local development only |
-| `dev_mode = false` (default) | Bearer token | Single-user production |
-| External network | Bearer token + HTTPS reverse proxy | Multi-user / LAN |
-
-Pass the token as `?token=...` on the SSE URL or as an `Authorization: Bearer ...` header.
-
-```json
-{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:47004/sse?token=YOUR_TOKEN" } } }
-```
-
----
-
-## Python Guilds
-
-The kernel auto-discovers guilds in `guilds/` on startup (45 are routable by default; `sandbox` is experimental). Install dependencies:
+Run the automated installer for your platform:
 
 ```bash
 # Linux / macOS
-python -m venv .venv
-source .venv/bin/activate
+curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh | sh
 
 # Windows (PowerShell)
-# python -m venv .venv
-# .venv\Scripts\activate
+irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
+```
 
+The installer downloads the pre-built release binaries (`tylluan-nexus` and `tylluan-cli`) into `~/.tylluan/bin/`, adds them to your PATH, writes a `tylluan.toml` with the `portable` profile and starts the kernel. Open a new terminal afterwards so the PATH change takes effect.
+
+### Option B: Build from Source
+
+```bash
+git clone https://github.com/Forja-orca/tylluan.git
+cd tylluan
+
+# Build kernel binary
+cargo build --release -p tylluan-kernel
+
+# (Optional) Set up Python virtual environment for guilds
+python -m venv .venv
+source .venv/bin/activate    # On Windows: .venv\Scripts\activate
 pip install -r guilds/requirements.txt
 ```
 
-Then restart with `tylluan-cli start` (or `cargo run -p tylluan-cli -- start` from source). Guilds appear as tools under `tylluan_do`.
+The compiled binary will be located at `target/release/tylluan-nexus` (or `target/release/tylluan-nexus.exe` on Windows).
 
 ---
 
-## CLI Reference
+## 3. Starting the Kernel
 
-The commands printed by `tylluan-cli --help`:
+Launch via the CLI tool or run the binary directly:
 
-```text
-tylluan-cli
-  start            Start the TylluanNexus kernel
-  stop             Stop the kernel (resolves the exact instance via its PID file)
-  status           Check the status of the hub
-  doctor           Full diagnostic scan (guilds, storage, system resources, config)
-  logs             Stream kernel logs
-  download-models  Download missing models
-  connect          Connect to a remote Tylluan instance via SSE endpoint
-  audit            Audit chain verification (tamper detection)
-  install          Generate a tylluan.toml for an installation profile
-  update           Check for updates and auto-update the Tylluan binary
-  backup           Hot-consistent backup of the hub databases (kernel may keep running)
-  restore          Restore from a `backup` directory (refuses to run while the kernel is up)
-  new              Create a new guild or other scaffold
-  sandbox          Manage the sandbox capability policy
-  resume           Retrieve the last session summary from memory
-  eval             Run benchmarks or list past results
-  export-examples  Export CoherenceGate decision examples to JSONL
+```bash
+# Via tylluan-cli (locates the binary automatically)
+cargo run -p tylluan-cli -- start
+
+# Or directly via compiled binary
+./target/release/tylluan-nexus
+```
+
+### Process Isolation Rule
+**Never start a second kernel from the same working directory as an active running kernel.**
+If the default port (`47004`) is occupied, the kernel detects `data/active_port.json` and manages port binding. For multiple instances or isolated testing environments, assign an independent directory, distinct config (`tylluan.toml`), explicit `TYLLUAN_DATA_DIR`, and dedicated `--port`.
+
+---
+
+## 4. Installation Profiles
+
+Select a profile tailored to your hardware and deployment target:
+
+| Profile | Semantic Embeddings | Memory Footprint | Recommended Use Case |
+|---|---|---|---|
+| **`portable`** | None (BM25 lexical search only) | ~34 MB resident idle | Zero-dependency, Raspberry Pi, lightweight containers |
+| **`clinic`** | BGE-Small (384-dim, 67 MB) | Low RAM footprint | Edge devices, offline clinic workstations (~200k docs on 8 GB RAM) |
+| **`server`** | `mxbai-embed-large` (1024-dim) | Standard production | Full hybrid semantic search (BM25 + vector RRF + Silva graph) |
+
+Initialize a specific profile using `tylluan-cli`:
+
+```bash
+tylluan-cli install --profile portable
+# or:
+tylluan-cli install --profile server
 ```
 
 ---
 
-## Troubleshooting
+## 5. Connecting via MCP (Model Context Protocol)
 
-### "Connection refused"
+Tylluan natively speaks MCP over HTTP Server-Sent Events (`/sse`) and Streamable HTTP (`/messages`).
 
-1. Is the kernel running? `curl http://127.0.0.1:47004/health`
-2. Did it exit right after starting? A kernel started without a terminal and with the stdio transport in its config shuts down on end-of-input; set `transport = ["http", "sse"]`.
-3. Is the port correct? Default is 47004. Check `tylluan.toml` if you changed it.
-4. Is the URL correct? SSE clients need `/sse`, HTTP Streamable needs `/messages`.
+### Authentication
+With `dev_mode = false` (the default), the kernel generates a random bearer token on first boot if none is set and writes it to `.tylluan-token` in the kernel directory:
 
-### "Unauthorized"
+```bash
+cat .tylluan-token
+```
 
-1. `dev_mode = false` requires a bearer token.
-2. Find it: `cat .tylluan-token` (file in the kernel working directory).
-3. Append `?token=...` to the SSE URL, or set the `Authorization: Bearer ...` header.
+### Client Configuration (Claude Desktop, OpenCode, Cursor)
 
-### Embedding model download fails
+Add the following entry to your `claude_desktop_config.json` or agent MCP configuration:
 
-- The first boot with a semantic profile downloads the model, so it needs a stable internet connection; `portable` downloads nothing.
-- To fetch models ahead of time: `tylluan-cli download-models`.
-- Models are cached in the Hugging Face cache (`~/.cache/huggingface/hub`, or `$HF_HOME`) and in a `.fastembed_cache` directory relative to the kernel's working directory.
-
-### Guild not responding
-
-1. Are the guild dependencies installed? Check with `pip list | grep fastmcp`.
-2. Is the guild enabled in `tylluan.toml`? Search for `enabled = false`.
-3. Restart the kernel — guilds are detected at startup only.
-4. Run `tylluan-cli doctor` for a diagnostic of guilds, storage and config.
-
-### High CPU / memory
-
-- Disable unused guilds in `tylluan.toml`.
-- Run `tylluan-cli doctor`.
-- Look at recent friction events: `sqlite3 data/audit.db "SELECT id, event_type, timestamp, description FROM friction_events ORDER BY id DESC LIMIT 10;"`
+```json
+{
+  "mcpServers": {
+    "tylluan": {
+      "type": "sse",
+      "url": "http://127.0.0.1:47004/sse?token=YOUR_BEARER_TOKEN"
+    }
+  }
+}
+```
 
 ---
 
-## Quick Reference
+## 6. Sovereign Tools (CONTRACT-01)
 
-| Command | Purpose |
-|---------|---------|
-| `curl http://127.0.0.1:47004/health` | Health check (`warming_up` for a few seconds, then `ok`) |
-| `curl http://127.0.0.1:47004/api/v1/silva/stats` | Memory graph stats |
-| `tylluan-cli logs` | Stream kernel logs |
-| `tylluan-cli doctor` | Full diagnostic scan |
-| `sqlite3 data/audit.db ".tables"` | List the tables of the friction/audit database |
-| `cargo test -p tylluan-kernel --lib` | Run kernel unit tests |
-| `cargo test -p tylluan-link --lib` | Run tylluan-link unit tests |
+The kernel exposes exactly six sovereign tools:
+
+1. **`tylluan_remember`**: Store episodic or semantic facts in the Silva memory graph with automatic decay and deduplication.
+2. **`tylluan_recall`**: Hybrid retrieval combining BM25, vector embeddings, and Personalized PageRank graph exploration.
+3. **`tylluan_think`**: Structured internal reasoning and multi-hop hypothesis testing.
+4. **`tylluan_graph`**: Direct topology queries, neighbor traversal, and semantic relationship discovery.
+5. **`tylluan_do`**: Dispatch tasks to routable Python guilds (vision, scraping, system diagnostics, audio).
+6. **`tylluan_decide`**: High-speed typed decision evaluation (Choice, Score, Noul) backed by deterministic rules and shadow ML models.
 
 ---
 
-## Security
+## 7. Python Guilds
 
-- `host = "127.0.0.1"` — localhost only. Default. Safe.
-- `dev_mode = true` — disables auth. Never on a shared network.
-- **Never** combine `host = "0.0.0.0"` + `dev_mode = true` (LAN RCE).
-- Federation peers authenticate with a bearer `auth_token`, and payloads are encrypted with Noise NK once the peer's public key is known (ChaCha20-Poly1305 keyed by the shared secret otherwise). Protect the token and the secret like passwords.
+Guilds extend Tylluan's execution capabilities. Guild scripts in `guilds/` are auto-discovered on boot (45 default routable guilds):
 
-See [SECURITY.md](../../SECURITY.md) and [docs/concepts/SECURITY.md](../concepts/SECURITY.md) for the full threat model.
+```bash
+# Set up guild environment
+python -m venv .venv
+source .venv/bin/activate
+pip install -r guilds/requirements.txt
+
+# Verify guild status
+tylluan-cli doctor
+```
+
+---
+
+## 8. Essential Verification Commands
+
+```bash
+# Health check (returns JSON with status, version, and active commit)
+curl http://127.0.0.1:47004/health
+
+# Silva memory graph statistics
+curl -H "Authorization: Bearer $(cat .tylluan-token)" http://127.0.0.1:47004/api/v1/silva/stats
+
+# Diagnostics and self-audit
+tylluan-cli doctor
+tylluan-cli audit
+```
+
+---
+
+## 9. Security Principles
+
+- **Localhost Default:** The kernel binds to `127.0.0.1` by default. Never bind `0.0.0.0` with `dev_mode = true` enabled.
+- **Fail-Closed Permissions:** with `dev_mode = false` (the default) every mutating operation requires explicit bearer token authentication; `dev_mode = true` is for local development only.
+- **Untracked Tokens:** `.tylluan-token` is strictly git-ignored; never commit secret keys to version control.
+
+---
+
+## 10. Next Steps
+
+- Overview and the three-step binary install: [README](../../README.md).
+- Security model and reporting: [SECURITY](../../SECURITY.md) and [concepts/SECURITY](../concepts/SECURITY.md).
