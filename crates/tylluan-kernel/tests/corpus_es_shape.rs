@@ -1,4 +1,4 @@
-﻿//! T-DSH-27 â€” forma y linea base de los corpus ES (benigno + inyeccion).
+//! T-DSH-27 â€” forma y linea base de los corpus ES (benigno + inyeccion).
 //!
 //! Valida esquema y recuentos de `benchmarks/benign_corpus_es_v1.json` y
 //! `benchmarks/injection_corpus_es_v1.json`, y mide la LINEA BASE de la capa 1
