@@ -1253,3 +1253,64 @@ async fn md3_rate_limit_error_is_rate_limited() {
         "cuerpo del mensaje debe preservarse, got: {text}"
     );
 }
+
+// D-28 (2026-10-22): una llamada de `tylluan_do` SIN `agent_id` debe dejar
+// `anonymous` en el audit, no una cadena vacia (hasta ahora la fila salia con
+// `agent_id=''`, invisible para cualquier consulta por agente). No se
+// canonicaliza nada mas: la unificacion deep/Deep y la migracion de filas
+// historicas quedan para Jose.
+//
+// Se ejerce `post_process_outcome`, que es la funcion que `handle_tylluan_do`
+// llama como Stage 3 y la unica que escribe la fila de audit. Una llamada
+// end-to-end real en este harness no sirve para el assert: con el registry de
+// test ningun guild arranca, el fallo ocurre en Stage 1 y Stage 1 devuelve
+// antes de post-procesar (no hay fila de audit que mirar, ni con ni sin
+// agent_id). El `agent_id` que se le pasa aqui es `None`, que es exactamente
+// lo que produce un `tylluan_do` sin ese argumento.
+//
+// La fila se localiza por un intent unico en vez de por id: el insert del
+// audit es fire-and-forget (`spawn_blocking`) y el fichero es compartido por
+// toda la suite, asi que se sondea hasta que aparece.
+#[tokio::test(flavor = "multi_thread")]
+async fn d28_tylluan_do_without_agent_id_audits_anonymous_not_empty() {
+    let server = test_server().await;
+    let unique = format!(
+        "d28 probe sin agent id {} {}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let result = CallToolResult {
+        content: vec![Content::text("d28 ok")],
+        is_error: Some(false),
+    };
+    let _ = post_process_outcome(
+        &server, &unique, "d28_guild", "d28_tool", &None, false, None, result, 1,
+    )
+    .await;
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut audited: Option<String> = None;
+    while std::time::Instant::now() < deadline {
+        if let Ok(conn) = crate::config::open_db(&audit_db_path()) {
+            let row = conn.query_row(
+                "SELECT agent_id FROM guild_audit_log WHERE intent = ?1 LIMIT 1",
+                rusqlite::params![unique],
+                |r| r.get::<_, String>(0),
+            );
+            if let Ok(agent) = row {
+                audited = Some(agent);
+                break;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+
+    let agent = audited.expect("la llamada debe dejar una fila de audit localizable por su intent");
+    assert_eq!(
+        agent, "anonymous",
+        "sin agent_id el audit debe registrar 'anonymous', nunca cadena vacia (got {agent:?})"
+    );
+}
