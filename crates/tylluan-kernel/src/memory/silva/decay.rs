@@ -201,14 +201,14 @@ impl super::SilvaDB {
             };
 
             // Step 3: Prune dead memories
-            let pruned = conn.execute(
-                &format!("DELETE FROM nodes
-                 WHERE type NOT IN {DURABLE_SUMMARY_EXCLUSION}
+            let pruned = super::fts::delete_nodes_where(
+                &conn,
+                &format!("type NOT IN {DURABLE_SUMMARY_EXCLUSION}
                    AND protected = 0
                    AND weight < 0.15
                    AND julianday('now') - julianday(updated_at) > 30
                    AND fsrs_stability < 7.0"),
-                [],
+                &[],
             )?;
 
             // Step 4: Clean orphaned edges after node deletion
@@ -749,7 +749,16 @@ impl super::SilvaDB {
             };
             let count = ids.len();
             if count > 0 {
+                // D-23: el índice FTS va por rowid; se limpia en la misma
+                // transacción para no dejar docids huérfanos si algo falla.
+                let rowids: Vec<i64> = {
+                    let mut stmt = conn.prepare("SELECT rowid FROM nodes WHERE id = ?1")?;
+                    ids.iter()
+                        .filter_map(|id| stmt.query_row(params![id], |r| r.get::<_, i64>(0)).ok())
+                        .collect()
+                };
                 let tx = conn.transaction()?;
+                super::fts::fts_delete_rowids(&tx, &rowids)?;
                 for id in &ids {
                     tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![id])?;
                     tx.execute("DELETE FROM node_traces WHERE node_id = ?1", params![id])?;
@@ -793,7 +802,15 @@ impl super::SilvaDB {
             
             let count = ids.len();
             if count > 0 {
+                // D-23: índice FTS por rowid, en la misma transacción.
+                let rowids: Vec<i64> = {
+                    let mut stmt = conn.prepare("SELECT rowid FROM nodes WHERE id = ?1")?;
+                    ids.iter()
+                        .filter_map(|id| stmt.query_row(params![id], |r| r.get::<_, i64>(0)).ok())
+                        .collect()
+                };
                 let tx = conn.transaction()?;
+                super::fts::fts_delete_rowids(&tx, &rowids)?;
                 // Delete edges associated with these nodes
                 for id in &ids {
                     tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![id])?;

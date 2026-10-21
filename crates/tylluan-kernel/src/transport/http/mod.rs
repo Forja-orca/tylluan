@@ -1416,6 +1416,11 @@ async fn health_handler(
         let sovereign_tool_count =
             crate::transport::server::TylluanServer::sovereign_tool_names().len();
 
+        // D-23: desajuste del índice FTS (`nodes_fts_docsize` vs `nodes`).
+        // Contar filas del índice con `SELECT COUNT(*) FROM nodes_fts` lee la
+        // tabla de contenido y por eso mentía: siempre coincidía.
+        let fts = state.silva.fts_desync().await.unwrap_or_default();
+
         let overall = if !ready { "warming_up" }
             else if embeddings_loaded && active_guilds > 0 { "healthy" }
             else if embeddings_loaded || active_guilds > 0 { "degraded" }
@@ -1437,6 +1442,13 @@ async fn health_handler(
                 "sovereign_tools": {
                     "ok": sovereign_tool_count == 6,
                     "count": sovereign_tool_count,
+                },
+                // D-23: el índice FTS es `ok` solo si nodos e índice coinciden.
+                "silva_index": {
+                    "ok": fts.total() == 0,
+                    "fts_desync": fts.total(),
+                    "fts_orphans": fts.orphan,
+                    "fts_missing": fts.missing,
                 },
                 // D-5: uso real del recall (llamadas, vacías, latencia). En
                 // memoria del proceso: se reinicia con el kernel, por diseño.

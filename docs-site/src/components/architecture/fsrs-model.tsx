@@ -238,7 +238,7 @@ export function FsrsModel() {
                 <div className="text-[10px] text-muted-foreground">líneas de Rust (algo)</div>
               </div>
               <div className="text-center p-2 rounded-lg bg-surface/50">
-                <div className="text-lg font-mono font-bold text-teal-400">1,239</div>
+                <div className="text-lg font-mono font-bold text-teal-400">1,255</div>
                 <div className="text-[10px] text-muted-foreground">tests passing (1067+75+12)</div>
               </div>
             </div>

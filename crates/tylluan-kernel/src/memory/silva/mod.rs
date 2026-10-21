@@ -21,6 +21,7 @@ use crate::security::circuit_breaker::CircuitBreaker;
 
 pub mod decay;
 pub mod edges;
+pub(crate) mod fts;
 pub mod graph;
 pub mod nodes;
 pub mod recall_contract;

@@ -913,6 +913,14 @@ impl super::SilvaDB {
             tx.execute("DELETE FROM edges WHERE source = target", params![])?;
             tx.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![src])?;
             tx.execute("DELETE FROM node_sparse_embeddings WHERE node_id = ?1", params![src])?;
+            // D-23: el índice FTS va por rowid y tiene que limpiarse antes de
+            // borrar la fila de `nodes` (es una tabla de contenido externo).
+            let fts_rowid: Option<i64> = tx
+                .query_row("SELECT rowid FROM nodes WHERE id = ?1", params![src], |r| r.get(0))
+                .ok();
+            if let Some(rid) = fts_rowid {
+                super::fts::fts_delete_rowids(&tx, &[rid])?;
+            }
             tx.execute("DELETE FROM nodes WHERE id = ?1", params![src])?;
             tx.commit()?;
             Ok::<(), anyhow::Error>(())
@@ -1064,6 +1072,11 @@ impl super::SilvaDB {
             let fts_rowids: Vec<i64> = matches.iter().map(|(_, rowid)| *rowid).collect();
 
             let tx = conn.unchecked_transaction()?;
+            // D-23: `nodes_fts` es de contenido externo, así que su borrado tiene
+            // que ocurrir MIENTRAS las filas de `nodes` todavía existen: si se
+            // hace después, FTS5 no encuentra el contenido del docid y la
+            // sentencia no hace nada (así se acumularon los huérfanos).
+            super::fts::fts_delete_rowids(&tx, &fts_rowids)?;
             let edges_deleted = tx.execute(
                 "DELETE FROM edges WHERE source LIKE ?1 OR target LIKE ?1",
                 params![NESTED_PATTERN],
@@ -1092,13 +1105,6 @@ impl super::SilvaDB {
                 params![NESTED_PATTERN],
             )?;
             tx.commit()?;
-
-            // nodes_fts joins by rowid, not id (search.rs), so it must be cleaned
-            // up outside the transaction by captured rowid, same non-fatal
-            // best-effort pattern as delete_node().
-            for rowid in fts_rowids {
-                conn.execute("DELETE FROM nodes_fts WHERE rowid = ?1", params![rowid]).ok();
-            }
 
             info!(
                 "🧹 SilvaDB: purged {} legacy nested graphrag_summary nodes, {} edges, {} cluster_summaries rows",
@@ -1140,11 +1146,14 @@ impl super::SilvaDB {
             tx.execute("DELETE FROM node_traces WHERE node_id = ?1", params![id])?;
             tx.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![id])?;
             tx.execute("DELETE FROM node_sparse_embeddings WHERE node_id = ?1", params![id])?;
+            // D-23: el índice FTS se limpia dentro de la misma transacción. Si
+            // fallara, preferimos abortar el borrado entero a dejar un docid
+            // huérfano (antes era best-effort y se lo tragaba en silencio).
+            if let Some(rid) = fts_rowid {
+                super::fts::fts_delete_rowids(&tx, &[rid])?;
+            }
             let deleted = tx.execute("DELETE FROM nodes WHERE id = ?1", params![id])?;
             tx.commit()?;
-            if let Some(rid) = fts_rowid {
-                conn.execute("DELETE FROM nodes_fts WHERE rowid = ?1", params![rid]).ok();
-            }
             Ok(deleted > 0)
         })
     }
@@ -1388,14 +1397,14 @@ impl super::SilvaDB {
     pub async fn forget_agent(&self, agent_id: &str) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let deleted = conn.execute(
-                "DELETE FROM nodes WHERE metadata LIKE ?",
-                params![format!("%\"agent\":\"{}\"%", agent_id)],
-            )?;
-            conn.execute(
+            let pattern = format!("%\"agent\":\"{}\"%", agent_id);
+            let tx = conn.unchecked_transaction()?;
+            let deleted = super::fts::delete_nodes_where(&tx, "metadata LIKE ?", &[&pattern])?;
+            tx.execute(
                 "DELETE FROM edges WHERE source NOT IN (SELECT id FROM nodes) OR target NOT IN (SELECT id FROM nodes)",
                 [],
             )?;
+            tx.commit()?;
             info!("SilvaDB: Right to be forgotten. Agent '{}' removed {} nodes.", agent_id, deleted);
             Ok(deleted)
         })
@@ -1481,12 +1490,13 @@ impl super::SilvaDB {
     pub async fn prune_superseded(&self, node_type: &str, min_age_days: u32) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let deleted = conn.execute(
-                "DELETE FROM nodes \
-                 WHERE type = ?1 \
+            let age = format!("-{min_age_days} days");
+            let deleted = super::fts::delete_nodes_where(
+                &conn,
+                "type = ?1 \
                    AND json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NOT NULL \
                    AND updated_at < datetime('now', ?2)",
-                params![node_type, format!("-{min_age_days} days")],
+                &[&node_type, &age],
             )?;
             if deleted > 0 {
                 tracing::info!("🌲 SilvaDB: pruned {deleted} superseded '{node_type}' nodes older than {min_age_days} days");
