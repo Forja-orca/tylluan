@@ -55,7 +55,7 @@ TYLLUAN_DATA_DIR="$PWD/data-test" ./target/release/tylluan-nexus --port 47099 &
 # §5: leer el token generado
 cat .tylluan-token
 # §8: verificar
-curl -s http://127.0.0.1:47099/health
+curl -s http://127.0.0.1:<puerto-de-prueba>/health
 ```
 
 El paso que falta de verdad es el **tiempo hasta el primer `tylluan_recall`**, que requiere un
