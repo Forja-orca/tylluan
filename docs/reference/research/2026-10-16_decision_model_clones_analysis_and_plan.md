@@ -19,8 +19,8 @@ API común: `POST /v1/systemone` con `state` y `questions{id:{type, instructions
 |---|---|---|---|---|---|---|
 | **Jev** | TypeSafe | No publicada (arquitectura, datos y parámetros: no encontrado). Solo se declara RLCD | — | servicio `api.typesafe.ai/v1/systemone`, 64k contexto, 32k por pregunta | solo nube | servicio de pago |
 | **Laya** | Convai Innovations (no TypeSafe) [VERIFICADO] | ModernBERT-large (395M) + cabeza de decisión de 2 capas; cada opción se puntúa en su propio token `[MASK]` | 421M (322M multilingüe) | logit por opción; sale sobreconfiado, se recalibra con temperatura por (tipo, nº opciones): ECE 0,466 a 0,081 [INFORME] | ONNX fp32 ~1,7 GB, contexto 512 [VERIFICADO] | código MIT, pesos Apache-2.0 |
-| **Clef / Clef-Flash** | Cloudflare | backbone Qwen congelado + LoRA rank 256 + cabeza de esquema conjunto; un prefill sin decodificar | 27,36B / 9,41B BF16 (~19 GB Flash) [VERIFICADO por búsqueda] | logit por opción, softmax por pregunta | ≥41 GB VRAM (Flash) [INFORME]; multimodal | Apache-2.0 |
-| **Decima-small** | amyrmahdy (1 estrella, 18 commits, último 2026-10-10) [VERIFICADO] | e5-small multilingüe + scorer de late interaction de 4,7M con media enmascarada | 122M, int8 127 MB, 2 grafos ONNX | una temperatura global por golden-section (T=0,936) | onnxruntime+numpy, ~20 ms en 1 core x86 [INFORME] | Apache-2.0; licencia de algunos datos de entrenamiento NO verificada |
+| **Clef / Clef-Flash** | Cloudflare | backbone Qwen congelado + LoRA rank 256 + cabeza de esquema conjunto; un prefill sin decodificar | 27,36B / 9,41B BF16 (~19 GB Flash) [VERIFICADO por búsqueda] | logit por opción, softmax por pregunta | ≥41 GB VRAM (Flash) [INFORME]; multimodal | **Apache-2.0** `[VERIFICADO]` — fuente: <https://huggingface.co/Cloudflare/clef-flash/raw/main/README.md> · cita: `license: apache-2.0` |
+| **Decima-small** | amyrmahdy (1 estrella, 18 commits, último 2026-10-10) [VERIFICADO] | e5-small multilingüe + scorer de late interaction de 4,7M con media enmascarada | 122M, int8 127 MB, 2 grafos ONNX | una temperatura global por golden-section (T=0,936) | onnxruntime+numpy, ~20 ms en 1 core x86 [INFORME] | **Apache-2.0** en pesos/código `[VERIFICADO]` (fuente: <https://huggingface.co/amyrmahdy/decima-small/raw/main/README.md> · cita: `license: apache-2.0`); datos de entrenamiento contienen NC (`ANLI`, `XNLI`, `26lang-2mil7`) `[VERIFICADO]` (fuente: <https://raw.githubusercontent.com/amyrmahdy/decima/main/release/LICENSING.md> · cita: `Decima-small (v1i) was trained on ANLI, XNLI and 26lang-2mil7 (all CC BY-NC or containing it)`) |
 | **Von 1.3** | wfzyx (914 estrellas, 218 commits) [VERIFICADO] | ModernBERT-large con un `[MASK]` por opción, atención independiente por opción (invariante al orden) | 395M | `von calibrate` recalibra en CPU con etiquetas propias | OpenVINO, sin ONNX [VERIFICADO]; 96 ms p50 en 4 vCPU [VERIFICADO] | Apache-2.0 |
 | **kev** | jaredpalmer (9,2k estrellas) [VERIFICADO] | LoRA r16 + pointer head sobre Qwen3.5 | 0,8B a 27B | temperatura por checkpoint | endpoints `/v1/systemone`, `/permute`, `/separate`; 0,8B: 0,65 a 0,70 en fuentes nuevas; 4B: 0,82 a 0,84 [VERIFICADO] | Apache-2.0 |
 | **Strands Decider 2B** | AWS | Qwen3.5-2B + LoRA + cabeza de lectura | 2B | ECE 0,064 (autoevaluado) | GPU | Apache-2.0 |
@@ -69,13 +69,13 @@ Reglas: diseño primero, TDD, MCP + REST siempre, modos `off/shadow/advisory/gat
 | **4. Calibración propia** | Temperature scaling por contrato con los datos del registro en sombra; ECE y Brier medidos en vivo | ECE publicado por contrato; si Decima no calibra, probar Von con `von calibrate` |
 | **5. Evaluación pareada y adopción** | Test pareado (McNemar) sobre el registro en sombra; subir a `advisory` solo el contrato que gane | Sube de modo un contrato por decisión explícita de José; si no gana, NO-GO anotado |
 
-Bloqueos antes de la fase 3: verificar la licencia de los datos de entrenamiento de Decima (marcada como posible NC por el informe B, sin comprobar) y congelar los pesos con hash, porque el proyecto tiene 1 estrella y puede desaparecer.
+Bloqueos antes de la fase 3: verificar la licencia de los datos de entrenamiento de Decima (`[VERIFICADO 2026-10-16]`: confirmada presencia de NC en ANLI/XNLI/26lang-2mil7 según `LICENSING.md` del autor, ver `docs/internal/INVESTIGACION_decima_clef_hermes.md`) y congelar los pesos con hash, porque el proyecto tiene 1 estrella y puede desaparecer.
 
 ## 7. Lagunas que quedan abiertas
 
 1. Forma de `refusal` y de la respuesta de Workers AI.
 2. Si SGLang/vLLM exponen `/v1/systemone` para Clef o solo chat.
-3. Licencia de datos de Decima (ANLI, XNLI).
+3. Licencia de datos de Decima (ANLI, XNLI) — `[CERRADO / VERIFICADO 2026-10-16]`: resuelto en `docs/internal/INVESTIGACION_decima_clef_hermes.md` con cita de `release/LICENSING.md` confirmando CC BY-NC 4.0.
 4. Cuantización int8 de Decima (§9 de su informe técnico) no leída completa.
 5. Todas las métricas de ECE y precisión son autoevaluadas; no hay verificación independiente.
 6. Los WebFetch de los investigadores devolvieron resúmenes; las cifras críticas que usé están marcadas como verificadas solo cuando las leí yo.
