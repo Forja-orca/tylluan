@@ -1048,7 +1048,7 @@ async fn main() -> anyhow::Result<()> {
     // CPU inference guilds (vision, deep_analysis): tool_timeout = None → wait indefinitely.
     // Killing ONNX inference mid-run wastes all prior computation. Patience is correct on CPU.
     // Network/fast guilds: tool_timeout = None falls back to 120s default in guild_process.rs.
-    let cpu_inference_guilds = ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge"];
+    let cpu_inference_guilds = ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge", "llama_backend"];
     for (name, legacy_module, _) in LAZY_GUILDS.iter().copied() {
         if !registry_raw.guilds.contains_key(name) {
             // Hallazgo MD-3 (2026-09-30): resolver el module path desde el

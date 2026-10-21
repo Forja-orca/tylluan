@@ -1576,11 +1576,24 @@ mod embedding_fingerprint_index_tests {
 
     /// Cost probe for the added bounded lookup. Run with:
     ///   cargo test -p tylluan-kernel --lib fingerprint_gate_cost -- --nocapture
+    ///
+    /// D-20: la aserción era `p95 < 50ms` en ABSOLUTO y fallaba una de cada
+    /// tres pasadas completas de la lib en paralelo, porque bajo carga el p95
+    /// refleja la contención de la máquina y no el coste de la puerta. Se mide
+    /// ahora en RELATIVO contra la resolución por candidato que ya existía en
+    /// los bucles HNSW/IVF (`get_node_sync` × 300), midiendo ambas de forma
+    /// intercalada: la contención afecta a las dos por igual y el cociente
+    /// sigue teniendo sentido; el margen y el suelo están explícitos.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn fingerprint_gate_cost() {
         const ROWS: usize = 1000;
         const CANDIDATES: usize = 300; // HNSW window at limit=100 (limit * 3)
         const ITERS: usize = 100;
+        /// Margen explícito: la puerta puede costar hasta 4× la referencia.
+        const MARGIN: u64 = 4;
+        /// Suelo: si la referencia es diminuta (máquina ociosa), 2 ms es de
+        /// sobra para 300 candidatos y evita un cociente sobre ruido de reloj.
+        const FLOOR_US: u64 = 2_000;
 
         let db = SilvaDB::in_memory().await.unwrap();
         for i in 0..ROWS {
@@ -1593,7 +1606,10 @@ mod embedding_fingerprint_index_tests {
         db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
         let candidate_ids: Vec<String> = (0..CANDIDATES).map(|i| format!("row_{i:05}")).collect();
 
+        // Intercalado a propósito: la puerta y su referencia ven la misma
+        // carga en cada iteración (ver D-20 en el doc de arriba).
         let mut samples = Vec::with_capacity(ITERS);
+        let mut baseline = Vec::with_capacity(ITERS);
         tokio::task::block_in_place(|| {
             let conn = db.conn_timed();
             for _ in 0..ITERS {
@@ -1601,36 +1617,36 @@ mod embedding_fingerprint_index_tests {
                 let dropped = db.fingerprint_dropped_ids(&conn, &candidate_ids, 16);
                 samples.push(t0.elapsed().as_micros() as u64);
                 assert!(dropped.is_empty(), "all candidates share the declared engine");
-            }
-        });
-        samples.sort_unstable();
-        let p50 = samples[ITERS / 2];
-        let p95 = samples[ITERS * 95 / 100];
 
-        // Reference point: the pre-existing per-candidate resolution the gate
-        // sits next to in the HNSW/IVF loops.
-        let mut baseline = Vec::with_capacity(ITERS);
-        tokio::task::block_in_place(|| {
-            let conn = db.conn_timed();
-            for _ in 0..ITERS {
-                let t0 = std::time::Instant::now();
+                // Referencia: la resolución por candidato que ya existía en
+                // los bucles HNSW/IVF antes de la puerta.
+                let t1 = std::time::Instant::now();
                 for id in &candidate_ids {
                     let _ = db.get_node_sync(id, &conn);
                 }
-                baseline.push(t0.elapsed().as_micros() as u64);
+                baseline.push(t1.elapsed().as_micros() as u64);
             }
         });
+        samples.sort_unstable();
         baseline.sort_unstable();
+        let p50 = samples[ITERS / 2];
+        let p95 = samples[ITERS * 95 / 100];
         let base_p50 = baseline[ITERS / 2];
+        let budget = (base_p50 * MARGIN).max(FLOOR_US);
 
         println!(
             "T1277-E fingerprint_gate_cost: rows={ROWS} candidates={CANDIDATES} iters={ITERS} \
              gate_p50={p50}us gate_p95={p95}us (min={}us max={}us) — \
-             reference get_node_sync loop p50={base_p50}us",
+             reference get_node_sync loop p50={base_p50}us, budget={budget}us \
+             ({MARGIN}x, floor {FLOOR_US}us)",
             samples[0],
             samples[ITERS - 1]
         );
-        assert!(p95 < 50_000, "bounded candidate lookup should stay sub-50ms (got {p95}us)");
+        assert!(
+            p95 <= budget,
+            "bounded candidate lookup should stay within {MARGIN}x of the per-candidate \
+             reference (gate p95={p95}us, reference p50={base_p50}us, budget={budget}us)"
+        );
     }
 }
 
