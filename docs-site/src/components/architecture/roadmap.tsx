@@ -229,7 +229,7 @@ export function Roadmap() {
         <div className="text-xs text-muted-foreground space-y-1">
           <p>• <strong className="text-emerald-400">Activos</strong>: Decision Service (ADR-021, 6ª tool soberana `tylluan_decide` + modo sombra v29) · Cognitive Scheduler · CoherenceGate L1-L4 &amp; Signal Loop (ADR-011) · Stigmergy &amp; Wake-Up con escritor de producción (ADR-015 §4.1) · FSRS-5 · Noise NK/XK P2P Mesh.</p>
           <p>• <strong className="text-amber-400">Medido y cerrado (NO-GO)</strong>: Decision Fabric variantes B (SystemOne/clef-flash, falla latencia 27x) y C (Laya-ONNX) — solo D sigue viva. <strong className="text-amber-400">En curso</strong>: Sparse Vectors (SPLADE) · Postcard zero-copy Serde.</p>
-          <p>• <strong className="text-slate-300">1,238 tests</strong> · 1151 kernel + 75 tylluan-link + 12 FSRS · 0 cloud dependencies.</p>
+          <p>• <strong className="text-slate-300">1,239 tests</strong> · 1152 kernel + 75 tylluan-link + 12 FSRS · 0 cloud dependencies.</p>
         </div>
       </div>
 
