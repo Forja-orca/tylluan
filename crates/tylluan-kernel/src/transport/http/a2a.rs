@@ -538,6 +538,11 @@ async fn execute_intent_and_store(
                     "source": "a2a",
                     "task_id": task_id,
                     "client_agent_id": agent_id,
+                    // D-18: el resultado lo produce un agente EXTERNO (contrato
+                    // A2A). Queda marcado para que ninguna ruta de contexto lo
+                    // trate como memoria propia y confiable.
+                    "untrusted_content": true,
+                    "untrusted_reason": format!("a2a external agent: {agent_id}"),
                 }).to_string();
                 let opts = crate::memory::silva::nodes::NodeWriteOptions::new("guild_output")
                     .owner_scope(Some(&owner_scope));

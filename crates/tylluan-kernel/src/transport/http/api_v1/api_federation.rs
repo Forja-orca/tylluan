@@ -141,6 +141,12 @@ pub async fn ingest_from_peer(
     if let serde_json::Value::Object(ref mut map) = meta {
         map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
     }
+    // D-18/H5 (B-8: "cero escritores del flag en Rust"): todo lo que entra por
+    // un peer federado es contenido externo que no podemos verificar. Se marca
+    // explícitamente en el metadata, que es lo que leen el gate y las rutas de
+    // contexto (bootstrap/@inbox) — antes la desconfianza dependía de leer
+    // `provenance == "federation_peer"` en cada consumidor, y casi ninguno lo hacía.
+    crate::security::trust::mark_untrusted(&mut meta, &format!("federation_peer:{}", peer.name));
     let meta_str = serde_json::to_string(&meta).unwrap_or_default();
 
     let remote_hash = envelope.node.get("content_hash").and_then(|v| v.as_str()).unwrap_or("");

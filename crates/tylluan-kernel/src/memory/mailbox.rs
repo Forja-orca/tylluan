@@ -45,6 +45,11 @@ pub struct BlackboardMessage {
     /// Priority 0-10 (10 = critical)
     #[serde(default = "default_priority")]
     pub priority: u8,
+    /// D-18: contenido de un AGENTE EXTERNO (sin identidad local), marcado por
+    /// el escritor. Viaja con el mensaje para que `@inbox` lo muestre como no
+    /// confiable; payloads antiguos sin la clave siguen parseando (`default`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untrusted: bool,
 }
 
 fn default_priority() -> u8 { 5 }
@@ -58,6 +63,7 @@ impl BlackboardMessage {
             from: from.into(),
             thread_id: None,
             priority: 5,
+            untrusted: false,
         }
     }
 
@@ -69,6 +75,7 @@ impl BlackboardMessage {
             from: from.into(),
             thread_id,
             priority: 5,
+            untrusted: false,
         }
     }
 
@@ -80,6 +87,7 @@ impl BlackboardMessage {
             from: from.into(),
             thread_id: None,
             priority: 3,
+            untrusted: false,
         }
     }
 
@@ -91,6 +99,7 @@ impl BlackboardMessage {
             from: from.into(),
             thread_id: None,
             priority: 5,
+            untrusted: false,
         }
     }
 

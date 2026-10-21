@@ -20,6 +20,7 @@ pub mod friction_log;
 pub mod llm_examples;
 pub mod write_gate;
 pub mod judge_telemetry;
+pub mod trust;
 
 #[cfg(test)]
 mod integration_tests;

@@ -273,6 +273,7 @@ pub(super) async fn run_agent_handshake(server: &TylluanServer, aid: &str) {
         from: "kernel".into(),
         thread_id: None,
         priority: 3,
+        untrusted: false,
     };
     let _ = server.mailbox.send_mail("kernel", aid, &msg.to_payload()).await;
 }
