@@ -1607,6 +1607,10 @@ pub async fn maintenance_purge_handler(State(state): State<Arc<HttpState>>) -> i
     let conn = Arc::clone(&state.silva.conn_lock());
     let result = tokio::task::spawn_blocking(move || {
         let conn = conn.blocking_lock();
+        // D-23: vaciar el índice FTS antes que los nodos (`delete-all` es el
+        // comando canónico de FTS5 para tablas de contenido externo). Sin esto
+        // el purge dejaba el índice entero apuntando a filas inexistentes.
+        crate::memory::silva::fts::fts_clear_all(&conn)?;
         conn.execute_batch("DELETE FROM edges; DELETE FROM nodes;")?;
         Ok::<_, anyhow::Error>(())
     }).await;

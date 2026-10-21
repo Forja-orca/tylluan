@@ -380,8 +380,14 @@ impl super::SilvaDB {
                 conn.query_row("SELECT COUNT(*) FROM node_embeddings", [], |r| r.get(0)).unwrap_or(0);
             let sparse_count: i64 =
                 conn.query_row("SELECT COUNT(*) FROM node_sparse_embeddings", [], |r| r.get(0)).unwrap_or(0);
-            let fts_count: i64 =
-                conn.query_row("SELECT COUNT(*) FROM nodes_fts", [], |r| r.get(0)).unwrap_or(0);
+            // D-23: `SELECT COUNT(*) FROM nodes_fts` sobre una tabla de contenido
+            // externo lee `nodes`, así que siempre "cuadraba" aunque el índice
+            // tuviera un 55 % de docids huérfanos. El número real de documentos
+            // indexados está en `nodes_fts_docsize` (una fila por docid).
+            let fts_count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM nodes_fts_docsize", [], |r| r.get(0))
+                .unwrap_or(0);
+            let fts_desync = super::fts::fts_desync_counts(&conn).unwrap_or_default();
 
             // last_build: most recent centroid creation time (SQLite rowid as proxy, or created_at if available)
             let last_build: Option<i64> = conn.query_row(
@@ -404,7 +410,12 @@ impl super::SilvaDB {
                 "index_freshness": {
                     "dense_rows": dense_count,
                     "sparse_rows": sparse_count,
-                    "fts_rows": fts_count
+                    "fts_rows": fts_count,
+                    // D-23: desajuste real del índice FTS (docids huérfanos +
+                    // nodos sin indexar). 0 = índice al día.
+                    "fts_desync": fts_desync.total(),
+                    "fts_orphans": fts_desync.orphan,
+                    "fts_missing": fts_desync.missing
                 }
             }))
 
@@ -416,12 +427,12 @@ impl super::SilvaDB {
             // Delete nodes that are below threshold and NOT marked as protected/identity.
             // Durable summaries (agent_summary, session_digest, consolidated_summary) and archived
             // nodes are intentionally excluded from automatic cleanup.
-            let deleted = conn.execute(
-                &format!("DELETE FROM nodes
-                 WHERE weight < ?1
+            let deleted = super::fts::delete_nodes_where(
+                &conn,
+                &format!("weight < ?1
                    AND protected = 0
                    AND type NOT IN {DURABLE_SUMMARY_EXCLUSION}"),
-                [threshold],
+                &[&threshold],
             )?;
             
             // Cleanup orphan edges that point to non-existent nodes
@@ -459,12 +470,12 @@ impl super::SilvaDB {
     pub async fn prune_dead_nodes(&self, min_weight: f32) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let deleted = conn.execute(
-                &format!("DELETE FROM nodes
-                 WHERE weight < ?1
+            let deleted = super::fts::delete_nodes_where(
+                &conn,
+                &format!("weight < ?1
                    AND protected = 0
                    AND type NOT IN {DURABLE_SUMMARY_EXCLUSION}"),
-                [min_weight],
+                &[&min_weight],
             )?;
             let _ = conn.execute(
                 "DELETE FROM edges WHERE source NOT IN (SELECT id FROM nodes) OR target NOT IN (SELECT id FROM nodes)",
@@ -487,14 +498,14 @@ impl super::SilvaDB {
     pub async fn purge_deprecated_lessons(&self) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let deleted = conn.execute(
-                "DELETE FROM nodes
-                 WHERE type = ?1
+            let deleted = super::fts::delete_nodes_where(
+                &conn,
+                "type = ?1
                    AND id LIKE ?2
                    AND weight < ?3
                    AND protected = 0
                    AND type NOT IN ('agent_summary', 'session_digest', 'consolidated_summary')",
-                params!["lesson", "lesson:intent:%", 0.15f32],
+                &[&"lesson", &"lesson:intent:%", &0.15f32],
             )?;
             let _ = conn.execute(
                 "DELETE FROM edges WHERE source NOT IN (SELECT id FROM nodes) OR target NOT IN (SELECT id FROM nodes)",
@@ -707,14 +718,14 @@ impl super::SilvaDB {
     pub async fn cleanup_orphan_nodes(&self) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let deleted = conn.execute(
-                "DELETE FROM nodes 
-                 WHERE id NOT IN (SELECT DISTINCT source FROM edges) 
+            let deleted = super::fts::delete_nodes_where(
+                &conn,
+                "id NOT IN (SELECT DISTINCT source FROM edges)
                    AND id NOT IN (SELECT DISTINCT target FROM edges)
-                   AND protected = 0 
-                   AND type != 'identity' 
+                   AND protected = 0
+                   AND type != 'identity'
                    AND type != 'agent_summary'",
-                [],
+                &[],
             )?;
             
             // Clean up their embeddings
