@@ -95,7 +95,7 @@ abajo es sobre esa base**, no sobre la anterior:
 **P1 en navegador** (Playwright/Chromium, `setContent` con el HTML real servido y viewport 1280×720):
 `scrollHeight = 720 = innerHeight`, `scrollWidth = 1280` → **sin scroll**; un único `input[type=password]`;
 botones `Aprobar` / `Denegar`; `<label for=credential>` = "Credencial de operador"; destino del código
-(`http://127.0.0.1:9999`) en 18 px; `Tab` desde el documento enfoca la credencial y se puede escribir.
+(`http://127.0.0.1:<puerto-del-cliente>`) en 18 px; `Tab` desde el documento enfoca la credencial y se puede escribir.
 Captura: `E:\tylluan-wt-deep\target\d15_p1_final_1280x720.png`.
 
 ## 7. Límites honestos (no verificado)
@@ -106,7 +106,7 @@ Captura: `E:\tylluan-wt-deep\target\d15_p1_final_1280x720.png`.
    pero no hay evidencia de un `authorize` → `token` → `tools/call` end-to-end en vivo.
    Pasos equivalentes para el TL (curl, con cookie porque el POST la exige):
    ```bash
-   curl -i "http://127.0.0.1:47004/oauth/authorize?response_type=code&client_id=prueba-deep&redirect_uri=http://127.0.0.1:9999/cb&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256" -c cj.txt
+   curl -i "http://127.0.0.1:47004/oauth/authorize?response_type=code&client_id=prueba-deep&redirect_uri=http://127.0.0.1:<puerto-del-cliente>/cb&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256" -c cj.txt
    # copiar consent_id del HTML; luego:
    curl -i -X POST http://127.0.0.1:47004/oauth/authorize -b cj.txt \
      -d "consent_id=<id>&csrf=<csrf>&decision=approve&credential=$(cat .tylluan-token)"
