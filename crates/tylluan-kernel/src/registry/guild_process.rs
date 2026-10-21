@@ -967,7 +967,15 @@ impl GuildRegistry {
     /// single source of truth for it yet (a real, separate, smaller finding
     /// than the one this function exists to fix).
     const UNLIMITED_PATIENCE_GUILDS: &'static [&'static str] =
-        &["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge"];
+        &["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge",
+          // D-19 (log de B-6, 30 fallos del juez): `llama_backend` no estaba
+          // en esta lista, así que caía en "analysis" y el proxy le imponía un
+          // techo de 60 s (analysis_guild_ms) mientras el actor registraba
+          // "CPU inference mode, no timeout" -- la promesa del log era falsa.
+          // Los 30 fallos son exactamente ese timeout (nunca otro error) y la
+          // inferencia en CPU los supera con regularidad. Debe seguir en
+          // sintonía con main.rs's `cpu_inference_guilds`.
+          "llama_backend"];
 
     /// Effective tool-call timeout (seconds) for a specific guild: the
     /// category-specific value from `guild_timeouts` if it's been wired via
@@ -1619,7 +1627,7 @@ mod tests {
             mcp_client_heartbeat_ms: 8_000,
         });
 
-        for name in ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge"] {
+        for name in ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge", "llama_backend"] {
             assert_eq!(
                 registry.effective_tool_call_secs(name), 3600,
                 "'{name}' must keep the flat 3600s ceiling, not the 180s heavy category"
@@ -1632,6 +1640,32 @@ mod tests {
         assert_eq!(registry.effective_tool_call_secs("docker"), 180);
         // A system guild gets its own, shorter category value.
         assert_eq!(registry.effective_tool_call_secs("bash"), 15);
+    }
+
+    #[test]
+    fn llama_backend_keeps_flat_timeout_despite_analysis_category() {
+        // D-19 (regresión con nombre propio): el log de B-6 muestra 30 fallos
+        // del juez, TODOS con el mismo texto ("timed out after 60s"), mientras
+        // el actor registraba "CPU inference mode, no timeout". Causa: el
+        // proxy aplicaba `analysis_guild_ms` (60s) a una guild de inferencia
+        // en CPU. Si alguien la saca de la lista de paciencia ilimitada, la
+        // categoría "analysis" vuelve a recortarla a 60 s y esto lo detecta.
+        let registry = GuildRegistry::new(
+            PathBuf::from("."), 300,
+            TimeoutsConfig { handshake_secs: 120, tool_call_secs: 3600 },
+            3,
+        ).with_guild_timeouts(GuildTimeoutsConfig {
+            system_guild_ms: 15_000,
+            analysis_guild_ms: 60_000,
+            heavy_guild_ms: 180_000,
+            mcp_client_heartbeat_ms: 8_000,
+        });
+
+        assert!(
+            !matches!(GuildRegistry::guild_timeout_category("llama_backend"), GuildTimeoutCategory::System),
+            "llama_backend runs CPU inference; the 15s system window must never apply"
+        );
+        assert_eq!(registry.effective_tool_call_secs("llama_backend"), 3600);
     }
 
     #[test]

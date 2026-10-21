@@ -85,7 +85,7 @@ pub async fn handle_tylluan_think(
             if !critiques.is_empty() {
                 synthesis.push_str("### Tu experiencia previa relevante\n");
                 for c in &critiques {
-                    synthesis.push_str(&format!("- {}\n", c.content));
+                    synthesis.push_str(&format!("- {}\n", trust_text(c, &c.content)));
                 }
                 synthesis.push('\n');
             }
@@ -105,12 +105,17 @@ pub async fn handle_tylluan_think(
                         _ => String::new(),
                     }
                 } else { String::new() };
+                let body = if node.content.chars().count() > 150 {
+                    format!("{}...", node.content.chars().take(150).collect::<String>())
+                } else {
+                    node.content.clone()
+                };
                 synthesis.push_str(&format!(
                     "- **{}** (peso: {:.1}){}: {}\n",
                     node.id,
                     node.weight,
                     heat_suffix,
-                    if node.content.chars().count() > 150 { format!("{}...", node.content.chars().take(150).collect::<String>()) } else { node.content.clone() }
+                    trust_text(node, &body)
                 ));
             }
         }
@@ -133,7 +138,8 @@ pub async fn handle_tylluan_think(
                     if !expanded.is_empty() {
                         synthesis.push_str(&format!("- Desde **{}**:\n", node.id));
                         for exp in expanded {
-                            synthesis.push_str(&format!("  -> *{}*: {}\n", exp.id, exp.content.chars().take(80).collect::<String>()));
+                            let exp_text: String = exp.content.chars().take(80).collect();
+                            synthesis.push_str(&format!("  -> *{}*: {}\n", exp.id, trust_text(&exp, &exp_text)));
                             seen_expanded.insert(exp.id.clone());
                             chains_found += 1;
                         }
@@ -203,7 +209,8 @@ pub async fn handle_tylluan_think(
                     if let Ok(ctx) = server.silva.get_context(member_id, 1).await {
                         for neighbor in &ctx {
                             if neighbor.node_type == "summary" || neighbor.id.starts_with("summary:") {
-                                summary_text = neighbor.content.chars().take(300).collect();
+                                let raw: String = neighbor.content.chars().take(300).collect();
+                                summary_text = trust_text(neighbor, &raw);
                                 break;
                             }
                         }
@@ -370,6 +377,22 @@ pub async fn handle_tylluan_think(
         content: vec![Content::text(synthesis)],
         is_error: Some(false),
     })
+}
+
+/// T-DSH-11 (F2 de T-DSH-10): `tylluan_think` no pasa por el `CoherenceGate`,
+/// así que el contenido marcado `untrusted_content` llegaba al modelo sin
+/// ninguna señal. Se aplica el contrato único de `security::trust` (banner
+/// delante del texto) igual que en bootstrap, `@inbox` y el contexto de sesión
+/// del recall: mismo idioma, sin inventar claves ni formatos nuevos.
+fn trust_text(node: &GraphNode, text: &str) -> String {
+    if crate::security::trust::node_is_untrusted(node) {
+        crate::security::trust::mark_text(
+            text,
+            &crate::security::trust::origin_of(&node.metadata, "memoria marcada"),
+        )
+    } else {
+        text.to_string()
+    }
 }
 
 fn find_connected_components(node_ids: &[String], edges: &[(String, String)]) -> Vec<Vec<String>> {
