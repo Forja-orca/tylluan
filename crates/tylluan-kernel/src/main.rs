@@ -1048,7 +1048,11 @@ async fn main() -> anyhow::Result<()> {
     // CPU inference guilds (vision, deep_analysis): tool_timeout = None → wait indefinitely.
     // Killing ONNX inference mid-run wastes all prior computation. Patience is correct on CPU.
     // Network/fast guilds: tool_timeout = None falls back to 120s default in guild_process.rs.
-    let cpu_inference_guilds = ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge", "llama_backend"];
+    // T-DSH-16: fuente única de verdad — la lista vive en
+    // `registry::guild_process::CPU_INFERENCE_GUILDS` y este crate (binario) la
+    // consume por el acceso público; antes había una copia local que podía
+    // divergir del registry (deuda declarada en D-19).
+    let cpu_inference_guilds = tylluan_kernel::registry::guild_process::cpu_inference_guilds();
     for (name, legacy_module, _) in LAZY_GUILDS.iter().copied() {
         if !registry_raw.guilds.contains_key(name) {
             // Hallazgo MD-3 (2026-09-30): resolver el module path desde el
