@@ -59,9 +59,9 @@ Evidencia medida en el entorno vivo:
 
 ```
 $ curl .../api/v1/guilds/llama_backend/tools/backend_health
-{"status":"stopped", "port":9000, "external_backend":"http://127.0.0.1:1234/v1", ...}
+{"status":"stopped", "port":<puerto>, "external_backend":"http://127.0.0.1:<puerto>/v1", ...}
 
-$ curl -X POST 127.0.0.1:1234/v1/chat/completions   # LM Studio, payload sin "model"
+$ curl -X POST 127.0.0.1:<puerto>/v1/chat/completions   # LM Studio, payload sin "model"
 {"error": {"message": "Multiple models are loaded. Please specify a model by
  providing a 'model' field.", "type": "invalid_request_error", "param": "model"}}
 ```
@@ -74,7 +74,7 @@ Cadena completa: LM Studio está detectado como backend externo → el guild man
 
 ### a.2 Medición de la capacidad del juez
 
-Medido contra el backend **local** en `127.0.0.1:9000` (verificado que responde), replicando el prompt exacto `WRITE_GATE_PROMPT_PREFIX`, el anchor `DPC_SYSTEM_ANCHOR` del guild, el `grammar` GBNF, `max_tokens=16`, `temperature=0.0` y `is_suspicious_verdict`. Corpo: los mismos corpus del repo.
+Medido contra el backend **local** en `127.0.0.1:<puerto>` (verificado que responde), replicando el prompt exacto `WRITE_GATE_PROMPT_PREFIX`, el anchor `DPC_SYSTEM_ANCHOR` del guild, el `grammar` GBNF, `max_tokens=16`, `temperature=0.0` y `is_suspicious_verdict`. Corpo: los mismos corpus del repo.
 
 | Métrica | Resultado |
 |---|---|
@@ -189,7 +189,7 @@ Dos mitades medidas:
 
 **No verificado:**
 
-- La medición del juez (a.2) es sobre la **capacidad del modelo** contra el backend local `127.0.0.1:9000`, replicando prompt/anchor/grammar/token-budget — **no** es una ejecución end-to-end del código del kernel, porque ese camino es el que devuelve 400 (a.1). Un modelo distinto del default podría dar otros números.
+- La medición del juez (a.2) es sobre la **capacidad del modelo** contra el backend local `127.0.0.1:<puerto>`, replicando prompt/anchor/grammar/token-budget — **no** es una ejecución end-to-end del código del kernel, porque ese camino es el que devuelve 400 (a.1). Un modelo distinto del default podría dar otros números.
 - El 400 del a.1 se midió contra **LM Studio concretamente** (varios modelos cargados). Con un único modelo cargado, o sin backend externo, puede no reproducirse.
 - **Vía 6 parcialmente:** `record_experience` no se pudo medir end-to-end (limitación del harness). El sub-mecanismo medido es `@skill:save`.
 - No se midió si el veneno de las vías 3-6 termina **modificando el comportamiento** de un agente — solo que llega a memoria sin banner, que es el criterio de éxito acordado.
