@@ -11,6 +11,8 @@
 //!      `tylluan_think` (federación y A2A, verificadas); bootstrap y `@inbox` no
 //!      llevan estos tipos de nodo (se documenta con asserts de ausencia);
 //!   4. un peer no puede enviar `untrusted_content=false` para saltarse la marca.
+//!   5. (D-27) si el peer manda `true` con un `untrusted_reason` inventado, el
+//!      motivo lo fija el kernel: un peer no puede hacerse pasar por otro origen.
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test untrusted_writers_integration
@@ -269,10 +271,8 @@ async fn untrusted_writers_federation_and_a2a() {
         "| federation ingest | peer envia untrusted_content=false | forzado a true + reason del kernel | status={st3} mark={bypass_mark} reason_reescrito={bypass_reason} |"
     ));
 
-    // ── F4 (observacion): si el peer ya envía true + reason falso, el reason
-    // se conserva (mark_untrusted no pisa un reason existente). El FLAG no se
-    // puede saltar; el motivo sí es falsificable. Se documenta.
-    let _ = receive(
+    // -- F4 (D-27): peer envia true + motivo falso -> el motivo lo fija el kernel --
+    let (st4, body4) = receive(
         &app,
         &[fed_node(
             "t22-fed-forged",
@@ -282,12 +282,22 @@ async fn untrusted_writers_federation_and_a2a() {
     )
     .await;
     let meta4 = node_meta(&state, "t22-fed-forged").await;
+    let forged_mark = meta4
+        .as_ref()
+        .map(|m| m["untrusted_content"] == true)
+        .unwrap_or(false);
     let forged_reason = meta4
         .as_ref()
         .and_then(|m| m["untrusted_reason"].as_str())
         .unwrap_or("");
+    let kernel_reason = format!("federation_peer:{PEER}");
+    if st4 != StatusCode::OK || !forged_mark || forged_reason != kernel_reason {
+        failures.push(format!(
+            "F4 motivo forjado (D-27): status={st4} body={body4} mark={forged_mark} reason='{forged_reason}' esperado='{kernel_reason}' meta={meta4:?}"
+        ));
+    }
     table.push(format!(
-        "| federation ingest | peer envia true + reason falso | flag=true (motivo queda el del peer: observacion) | reason='{forged_reason}' |"
+        "| federation ingest | peer envia true + motivo falso | flag=true y motivo del kernel (D-27) | status={st4} reason='{forged_reason}' |"
     ));
 
     // ── F5: banner en tylluan_think ─────────────────────────────────────────
