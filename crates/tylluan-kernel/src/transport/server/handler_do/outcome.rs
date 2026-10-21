@@ -179,7 +179,9 @@ pub(super) async fn post_process_outcome(
     let audit_intent = intent.to_string();
     let audit_guild = guild_name.to_string();
     let audit_tool = tool_name.to_string();
-    let audit_agent = agent_id.clone().unwrap_or_default();
+    // D-28: una llamada sin `agent_id` deja `anonymous` en el audit (igual que
+    // las demas rutas de entrada), no una cadena vacia. Sin canonicalizar nada.
+    let audit_agent = agent_id.clone().unwrap_or_else(|| "anonymous".to_string());
     let audit_success = is_success;
     let audit_preview = result_text.chars().take(200).collect::<String>();
     // Autonomous Success Rate prerequisite: full intent->result cycle latency
