@@ -888,20 +888,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[cfg(unix)]
+    // El test existe en todos los SO (el recuento de tests de la lib debe ser
+    // el mismo en Windows y en Linux: el gate de CI cuenta en Linux y el hook
+    // pre-push en Windows); solo la comprobacion de permisos POSIX es de Unix.
     #[test]
     fn consents_file_is_created_with_0600() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("tylluan_consent_mode_{}", random_token()));
         std::fs::create_dir_all(&dir).unwrap();
         let store = ConsentStore::with_file(&dir);
         store.record_consent("c1", "Cliente", "http://127.0.0.1:9999/cb", &["mcp".into()]);
-        let mode = std::fs::metadata(dir.join(CONSENTS_FILE))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o600, "consents.json solo para el usuario del kernel");
+        assert!(dir.join(CONSENTS_FILE).exists(), "consents.json debe crearse");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.join(CONSENTS_FILE))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600, "consents.json solo para el usuario del kernel");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
