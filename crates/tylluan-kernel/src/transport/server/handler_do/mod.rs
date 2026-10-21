@@ -720,11 +720,11 @@ fn penalize_lesson_fn(intent: &str, silva: std::sync::Arc<crate::memory::silva::
 }
 /// D-16: extrae el `plan_id` de la instrucción que el modo plan emite al
 /// cliente. La única forma documentada es
-/// `approve action for plan <id>`; se acepta la variante corta `approve plan <id>`
-/// y nada más; la frase debe EMPEZAR así (un `approve plan x` incrustado en
+/// `approve action for plan <id>` y nada más (T-DSH-9 F3: la variante corta
+/// `approve plan <id>` se retiró, el kernel solo documenta la larga); la frase debe EMPEZAR así (un `approve plan x` incrustado en
 /// otra frase no aprueba nada y cae al router semántico como siempre).
 fn plan_id_from_approve_intent(lower_intent: &str) -> Option<String> {
-    const PREFIXES: [&str; 2] = ["approve action for plan ", "approve plan "];
+    const PREFIXES: [&str; 1] = ["approve action for plan "];
     let rest = PREFIXES
         .iter()
         .find_map(|prefix| lower_intent.trim_start().strip_prefix(prefix))?;
@@ -1538,9 +1538,11 @@ mod tests {
             Some("0123456789ab")
         );
         assert_eq!(
-            plan_id_from_approve_intent("  approve plan abc-1_2").as_deref(),
+            plan_id_from_approve_intent("  approve action for plan abc-1_2").as_deref(),
             Some("abc-1_2")
         );
+        // T-DSH-9 F3: la variante corta ya no enruta.
+        assert_eq!(plan_id_from_approve_intent("approve plan abc"), None);
         // Incrustada en otra frase: no aprueba nada.
         assert_eq!(plan_id_from_approve_intent("please do not approve plan abc"), None);
         assert_eq!(plan_id_from_approve_intent("approve plan "), None);

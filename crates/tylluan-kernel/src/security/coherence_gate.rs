@@ -91,10 +91,8 @@ fn tokenize_query(query: &str) -> Vec<String> {
 /// metadata ilegible o sin la clave no penaliza; nunca panic en la ruta
 /// caliente de recall.
 fn metadata_untrusted(node: &GraphNode) -> bool {
-    serde_json::from_str::<serde_json::Value>(&node.metadata)
-        .ok()
-        .and_then(|m| m.get("untrusted_content").and_then(|v| v.as_bool()))
-        .unwrap_or(false)
+    // D-18: una sola implementación del contrato, en `security::trust`.
+    crate::security::trust::is_untrusted_metadata(&node.metadata)
 }
 
 /// Production-judge-only helper (the Layer 4 body is `cfg(not(test))`).

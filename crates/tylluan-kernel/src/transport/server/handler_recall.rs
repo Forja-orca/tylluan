@@ -192,7 +192,12 @@ async fn handle_tylluan_recall_inner(
     let session_context: Option<String> = if let Some(ref aid) = rec_agent_id {
         if let Some(ref amm) = server.agent_memory {
             amm.get_summary(aid).await.map(|node| {
-                let header = if node.provenance == "federation_peer" {
+                let header = if crate::security::trust::node_is_untrusted(&node) {
+                    // D-18: el flag ya no es solo ranking; si el resumen está
+                    // marcado, el texto lo dice (esta cabecera se prepende en
+                    // cada recall con `agent_id`).
+                    "### Contexto de sesiones anteriores (CONTENIDO NO CONFIABLE: una o mas fuentes estan marcadas)"
+                } else if node.provenance == "federation_peer" {
                     "### Contexto de sesiones anteriores (fuente: peer federado, sin verificar)"
                 } else {
                     "### Contexto de sesiones anteriores"
@@ -218,10 +223,23 @@ async fn handle_tylluan_recall_inner(
             }),
             Ok(msgs) => {
                 let text = msgs.iter().map(|m| {
-                    let body = BlackboardMessage::from_payload(&m.payload)
-                        .map(|bm| format!("[{}] {}", bm.msg_type.to_uppercase(), bm.body))
-                        .unwrap_or_else(|| m.payload.chars().take(200).collect());
-                    format!("[{} FROM {}] {}", m.status, m.sender_id, body)
+                    let (body, untrusted) = match BlackboardMessage::from_payload(&m.payload) {
+                        Some(bm) => (format!("[{}] {}", bm.msg_type.to_uppercase(), bm.body), bm.untrusted),
+                        None => (m.payload.chars().take(200).collect::<String>(), false),
+                    };
+                    if untrusted {
+                        // D-18: este modo devuelve los mensajes VERBATIM antes del
+                        // gate; el banner es la unica senal de desconfianza que ve
+                        // el modelo.
+                        format!(
+                            "[{} FROM {}] {}",
+                            m.status,
+                            m.sender_id,
+                            crate::security::trust::mark_text(&body, &format!("mensaje de agente externo: {}", m.sender_id))
+                        )
+                    } else {
+                        format!("[{} FROM {}] {}", m.status, m.sender_id, body)
+                    }
                 }).collect::<Vec<_>>().join("\n");
                 Ok(CallToolResult { content: vec![Content::text(text)], is_error: Some(false) })
             },

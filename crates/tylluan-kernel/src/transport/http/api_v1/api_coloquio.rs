@@ -310,6 +310,7 @@ pub async fn coloquio_post_message(
                     from: msg.author_id.clone(),
                     thread_id: Some(format!("coloquio:{id}")),
                     priority: 4,
+                    untrusted: false,
                 };
                 if state.mailbox.send_mail_with_ttl(&msg.author_id, mention, &bm.to_payload(), 86400).await.is_ok() {
                     notified.push(mention.clone());

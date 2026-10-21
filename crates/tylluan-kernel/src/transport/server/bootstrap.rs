@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::memory::agent_memory::AgentMemoryManager;
 use crate::memory::identity::IdentityManager;
-use crate::memory::silva::SilvaDB;
+use crate::memory::silva::{GraphNode, SilvaDB};
 use crate::security::grants;
 use crate::transport::http::api_v1::api_journal::{JournalDb, is_stale};
 
@@ -32,6 +32,28 @@ pub async fn build_agent_bootstrap(silva: Arc<SilvaDB>, agent_id: &str) -> serde
     let mem_mgr = AgentMemoryManager::new(silva, RECENT_MEMORIES_LIMIT);
     let summary = mem_mgr.get_summary(agent_id).await;
     let recent_memories = mem_mgr.get_memories(agent_id, RECENT_MEMORIES_LIMIT).await;
+
+    // D-18: bootstrap es la ruta de mayor volumen hacia el contexto de un turno
+    // (se inyecta en cada tool call con `agent_id`) y no pasa por el gate. El
+    // contenido marcado se devuelve con un banner EXPLÍCITO delante del texto:
+    // el flag deja de ser solo un multiplicador de ranking y se vuelve visible
+    // al modelo. La forma del JSON no cambia (mismos campos), solo `content`.
+    let summarize_node = |node: GraphNode| -> serde_json::Value {
+        let mut value = serde_json::to_value(&node).unwrap_or(serde_json::Value::Null);
+        if crate::security::trust::node_is_untrusted(&node)
+            && let Some(obj) = value.as_object_mut()
+        {
+            let origin = crate::security::trust::origin_of(&node.metadata, "memoria marcada");
+            obj.insert(
+                "content".to_string(),
+                serde_json::Value::String(crate::security::trust::mark_text(&node.content, &origin)),
+            );
+        }
+        value
+    };
+    let summary_json = summary.map(summarize_node);
+    let recent_memories_json: Vec<serde_json::Value> =
+        recent_memories.into_iter().map(summarize_node).collect();
 
     let all_pending = grants::list_pending().await;
     let my_pending: Vec<&serde_json::Value> = all_pending
@@ -90,8 +112,8 @@ pub async fn build_agent_bootstrap(silva: Arc<SilvaDB>, agent_id: &str) -> serde
             "needs_real_bio": needs_real_bio,
             "context": bio_context,
         },
-        "last_session_summary": summary,
-        "recent_memories": recent_memories,
+        "last_session_summary": summary_json,
+        "recent_memories": recent_memories_json,
         "pending_actions_for_me": my_pending,
         "project_knowledge": repo_map_summary,
         "executable_capabilities": executable_capabilities,

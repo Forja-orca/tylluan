@@ -153,7 +153,18 @@ async fn mailbox_send_handler(
     State(state): State<Arc<HttpState>>,
     Json(req): Json<MailboxSendRequest>,
 ) -> impl IntoResponse {
-    let payload_str = if let Some(bm) = BlackboardMessage::from_payload(&req.body) {
+    // D-18: un remitente sin identidad registrada en ESTE kernel es un agente
+    // externo; su mensaje entra en el buzón marcado para que `@inbox` no lo
+    // presente como palabra propia del colectivo. Los agentes locales (incluidos
+    // los que aún tienen la biografía de plantilla) quedan sin marca.
+    let sender_is_local = crate::memory::identity::IdentityManager::new(state.silva.clone())
+        .get_identity(&req.from)
+        .await
+        .is_some();
+    let payload_str = if let Some(mut bm) = BlackboardMessage::from_payload(&req.body) {
+        if !sender_is_local {
+            bm.untrusted = true;
+        }
         bm.to_payload()
     } else {
         let bm = BlackboardMessage {
@@ -163,6 +174,7 @@ async fn mailbox_send_handler(
             from: req.from.clone(),
             thread_id: req.thread_id.clone(),
             priority: req.priority.unwrap_or(5) as u8,
+            untrusted: !sender_is_local,
         };
         bm.to_payload()
     };

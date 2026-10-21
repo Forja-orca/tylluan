@@ -374,11 +374,25 @@ impl AgentMemoryManager {
         );
 
         let summary_id = format!("agent_summary:{}:{}", agent_id, chrono::Utc::now().timestamp());
-        let summary_meta = serde_json::json!({
+        // D-18/H5: herencia de desconfianza. Un resumen es un nodo NUEVO y hasta
+        // ahora nacía siempre "limpio": si una de sus fuentes estaba marcada
+        // `untrusted_content`, el flag se perdía al resumir y el texto viajaba
+        // por bootstrap y por el contexto de sesión sin ninguna degradación.
+        let inherited_untrusted = to_summarize
+            .iter()
+            .any(|n| crate::security::trust::node_is_untrusted(n));
+        let mut summary_meta_value = serde_json::json!({
             "agent_id": agent_id,
             "consolidated": true,
             "source_count": to_summarize.len(),
-        }).to_string();
+        });
+        if inherited_untrusted {
+            crate::security::trust::mark_untrusted(
+                &mut summary_meta_value,
+                "inherited: at least one consolidated source memory was flagged untrusted",
+            );
+        }
+        let summary_meta = summary_meta_value.to_string();
 
         let _ = self.silva.upsert_node_with_validity(&summary_id, "agent_summary", &summary, &summary_meta, NodeWriteOptions::new("agent_generated").drift_allowed(true)).await;
 
@@ -443,12 +457,25 @@ impl AgentMemoryManager {
                 .collect::<Vec<_>>().join("\n")
         );
         let digest_id = format!("session_digest:{}:{}", agent_id, chrono::Utc::now().timestamp());
-        let meta = serde_json::json!({
+        // D-18: misma herencia que en `consolidate_if_needed` — `get_summary`
+        // devuelve tanto `agent_summary` como `session_digest`, así que dejar
+        // este sin marca reabriría el mismo agujero por la puerta de al lado.
+        let inherited_untrusted = top
+            .iter()
+            .any(|n| crate::security::trust::node_is_untrusted(n));
+        let mut meta_value = serde_json::json!({
             "agent_id": agent_id,
             "session_id": session_id,
             "digest": true,
             "episode_count": meaningful.len(),
-        }).to_string();
+        });
+        if inherited_untrusted {
+            crate::security::trust::mark_untrusted(
+                &mut meta_value,
+                "inherited: at least one digested episode was flagged untrusted",
+            );
+        }
+        let meta = meta_value.to_string();
         let _ = self.silva.upsert_node_with_provenance(&digest_id, "session_digest", &digest, &meta, "agent_generated").await;
         // ADR-012 D3: mark previous digests/summaries of this agent as superseded.
         let _ = self.silva.supersede_agent_summaries(agent_id, &digest_id).await;
@@ -530,6 +557,81 @@ mod tests {
             "benign memories must still be summarized: {}",
             summary.content
         );
+    }
+
+    /// D-18: el resumen hereda `untrusted_content` de cualquiera de sus fuentes.
+    /// Sin esto el flag se perdía al consolidar (nodo nuevo, metadata nueva) y el
+    /// texto viajaba por bootstrap y contexto de sesión sin ninguna degradación.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn consolidation_inherits_untrusted_flag_from_any_source() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva.clone(), 3);
+        let agent_id = "test-agent-d18";
+
+        for i in 0..3 {
+            mgr.record_memory(agent_id, &format!("leccion limpia {i}"), 1.0).await;
+        }
+        let flagged_id = mgr
+            .record_memory(agent_id, "leccion marcada por un peer", 1.0)
+            .await;
+        {
+            let conn = silva.conn_lock();
+            let c = conn.lock().await;
+            c.execute(
+                "UPDATE nodes SET metadata = json_set(metadata, '$.untrusted_content', json('true'), '$.untrusted_reason', 'federation_peer:atlas') WHERE id = ?1",
+                rusqlite::params![flagged_id],
+            )
+            .unwrap();
+        }
+
+        mgr.consolidate_if_needed(agent_id).await;
+
+        let summary = mgr.get_summary(agent_id).await.expect("summary created");
+        assert!(
+            crate::security::trust::node_is_untrusted(&summary),
+            "summary must inherit the flag: {}",
+            summary.metadata
+        );
+        assert!(
+            summary.metadata.contains("inherited"),
+            "reason should say it was inherited: {}",
+            summary.metadata
+        );
+
+        // Control negativo: sin fuentes marcadas, el resumen nace limpio.
+        let clean_agent = "test-agent-d18-clean";
+        for i in 0..3 {
+            mgr.record_memory(clean_agent, &format!("todo limpio {i}"), 1.0).await;
+        }
+        mgr.consolidate_if_needed(clean_agent).await;
+        let clean_summary = mgr.get_summary(clean_agent).await.expect("summary created");
+        assert!(!crate::security::trust::node_is_untrusted(&clean_summary));
+    }
+
+    /// D-18: mismo contrato para `session_digest` (get_summary devuelve los dos).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_digest_inherits_untrusted_flag() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva.clone(), 1000);
+        let agent_id = "test-agent-d18-digest";
+
+        mgr.record_memory(agent_id, "episodio normal", 0.6).await;
+        let flagged_id = mgr.record_memory(agent_id, "episodio de un agente externo", 0.6).await;
+        {
+            let conn = silva.conn_lock();
+            let c = conn.lock().await;
+            c.execute(
+                "UPDATE nodes SET metadata = json_set(metadata, '$.untrusted_content', json('true')) WHERE id = ?1",
+                rusqlite::params![flagged_id],
+            )
+            .unwrap();
+        }
+
+        mgr.create_session_digest(agent_id, "session-d18").await;
+
+        let digest = mgr.get_summary(agent_id).await.expect("digest created");
+        assert_eq!(digest.node_type, "session_digest");
+        assert!(crate::security::trust::node_is_untrusted(&digest), "{}", digest.metadata);
     }
 
     /// create_session_digest with no recorded memories must not create an empty
