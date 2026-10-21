@@ -96,6 +96,11 @@ pub async fn test_state_custom(identity_tag: &str, auth_token: Option<String>, d
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
 
+    // Fase 2 (D-15): en tests la credencial de operador es el mismo token
+    // maestro que ya lleva el estado; el store de consentimientos es efímero
+    // (los tests que necesitan fichero montan su propio `ConsentStore`).
+    let oauth_operator = auth_token.clone();
+
     Arc::new(HttpState {
         task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().unwrap()),
         version: "test".to_string(),
@@ -119,7 +124,7 @@ pub async fn test_state_custom(identity_tag: &str, auth_token: Option<String>, d
         }),
         matcher,
         tunnel_wsl_url: None,
-        oauth: Arc::new(tylluan_kernel::transport::http::oauth::OAuthState::new("http://localhost:3030".to_string()).with_dev_mode(dev_mode)),
+        oauth: Arc::new(tylluan_kernel::transport::http::oauth::OAuthState::new("http://localhost:3030".to_string()).with_dev_mode(dev_mode).with_operator_credential(oauth_operator)),
         metrics_ring: Arc::new(RwLock::new(tylluan_kernel::metrics_ring::MetricsRingBuffer::new())),
         jobs: Arc::new(tylluan_kernel::memory::jobs::JobQueue::open(std::path::Path::new(":memory:")).unwrap()),
         agents_contract: Arc::new(tylluan_kernel::security::agents_contract::AgentsContract::empty()),

@@ -2,12 +2,15 @@
 // Desktop apps (local MCP clients) require OAuth as a protocol ritual even
 // when connecting to localhost.
 //
-// ADR-019/OAuth Fase 1 (2026-10-15, docs/internal/DESIGN_oauth_operator_2026-10.md):
-// the authorization endpoint auto-approves ONLY when dev_mode=true (local
-// development). With dev_mode=false it refuses (403) until the operator-consent
-// flow of Fase 2 exists — this closes the LAN "JWT dispenser" hole where any
-// LAN host could self-issue an admin-role token. redirect_uri is restricted to
-// loopback. PKCE + JWT validation always run.
+// ADR-019/OAuth Fase 1 (2026-10-15) + Fase 2 (D-15, 2026-10-21),
+// docs/internal/DESIGN_oauth_operator_2026-10.md y
+// docs/internal/PLAN_oauth_f2_consentimiento_deep_2026-10.md:
+//   * dev_mode=true  -> auto-aprobacion (R12, desarrollo local, sin cambios).
+//   * dev_mode=false -> consentimiento del operador: P1 (pagina HTML
+//     autocontenida, `oauth_consent.rs`) + credencial tecleada por el humano
+//     + `consents.json` (30 dias deslizantes, revocable editando el fichero).
+//     Sin credencial correcta no se emite ningun code (invariante T1).
+// redirect_uri is restricted to loopback. PKCE + JWT validation always run.
 
 use axum::{
     Form, Json,
@@ -41,6 +44,12 @@ pub struct OAuthState {
     /// default (`false`): callers that want dev behavior opt in explicitly
     /// via `with_dev_mode(true)`.
     dev_mode: bool,
+    /// Fase 2 (D-15): credencial del operador (el token maestro). `None` = el
+    /// kernel no tiene credencial configurada, así que el consentimiento no
+    /// puede aprobarse (fail-closed) y la página no se muestra aprobable.
+    operator_credential: Option<String>,
+    /// Fase 2 (D-15): consentimientos recordados + peticiones vivas.
+    consents: Arc<super::oauth_consent::ConsentStore>,
 }
 
 struct OAuthInner {
@@ -69,6 +78,8 @@ impl OAuthState {
                 revoked: Mutex::new(HashSet::new()),
             }),
             dev_mode: false,
+            operator_credential: None,
+            consents: Arc::new(super::oauth_consent::ConsentStore::in_memory()),
         }
     }
 
@@ -76,6 +87,27 @@ impl OAuthState {
     pub fn with_dev_mode(mut self, dev_mode: bool) -> Self {
         self.dev_mode = dev_mode;
         self
+    }
+
+    /// Fase 2 (D-15): credencial que el humano teclea en la página de
+    /// consentimiento. Es el token maestro; NUNCA se guarda (ni aquí ni en
+    /// `consents.json`), solo se compara en memoria.
+    pub fn with_operator_credential(mut self, credential: Option<String>) -> Self {
+        self.operator_credential = credential.filter(|c| !c.is_empty());
+        self
+    }
+
+    /// Fase 2 (D-15): persiste los consentimientos en `dir/consents.json`
+    /// (30 días deslizantes, revocables editando el fichero).
+    pub fn with_consent_dir(mut self, dir: &std::path::Path) -> Self {
+        self.consents = Arc::new(super::oauth_consent::ConsentStore::with_file(dir));
+        self
+    }
+
+    /// Fase 2 (D-15): store de consentimientos (lo usan los handlers y los
+    /// tests de la suite adversarial para preparar estado).
+    pub fn consents(&self) -> &super::oauth_consent::ConsentStore {
+        &self.consents
     }
 
     /// Usa un secreto de firma de JWT que sobrevive a los reinicios.
@@ -200,7 +232,14 @@ pub struct AuthorizeQuery {
     /// Fase 2 (D-2, RFC 8707): recurso al que el cliente quiere acceder. Se
     /// valida contra la URI canónica de este servidor.
     pub resource: Option<String>,
-    // response_type, client_id accepted but not validated (public client)
+    /// Fase 2 (D-15): obligatorio para el consentimiento (RFC 6749 §4.1.1).
+    /// Sin él no hay a quién mostrar en P1 ni a quién recordar 30 días, así
+    /// que la petición muere en 403 `access_denied` sin emitir nada.
+    pub client_id: Option<String>,
+    /// Fase 2 (D-15): espacio de scopes pedido. Solo `mcp` es concebible;
+    /// `operator` se rechaza SIEMPRE con `invalid_scope` (R11).
+    pub scope: Option<String>,
+    // response_type accepted but not validated (public client)
 }
 
 #[derive(Deserialize)]
@@ -217,6 +256,17 @@ pub struct TokenForm {
 #[derive(Deserialize)]
 pub struct RevokeForm {
     pub token: String,
+}
+
+/// Fase 2 (D-15): formulario de P1. `decision` viaja como valor del botón
+/// (`approve` / `deny`); la credencial es lo único que el humano teclea.
+#[derive(Deserialize)]
+pub struct ConsentDecisionForm {
+    pub consent_id: String,
+    pub csrf: String,
+    pub decision: String,
+    #[serde(default)]
+    pub credential: String,
 }
 
 #[derive(Serialize)]
@@ -399,47 +449,88 @@ fn is_loopback_redirect_uri(uri: &str) -> bool {
     matches!(host, "127.0.0.1" | "localhost" | "::1")
 }
 
-/// GET /oauth/authorize  — auto-approves (dev_mode only), redirects with auth code
-pub async fn authorize_handler(
-    State(oauth): State<Arc<OAuthState>>,
-    headers: HeaderMap,
-    Query(params): Query<AuthorizeQuery>,
-) -> Response {
-    // Fase 1-a: auto-approval is dev_mode-only. With dev_mode=false this is
-    // refused until the operator-consent flow (Fase 2) exists.
-    if !oauth.dev_mode {
-        info!("[OAuth] Authorize refused: dev_mode=false and operator consent (Fase 2) is not implemented");
-        return (
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({
-                "error": "access_denied",
-                "error_description": "OAuth auto-approval is disabled outside dev_mode. \
-                    Operator consent lands in Fase 2; meanwhile use a static Bearer token \
-                    (Authorization header)."
-            })),
-        )
-            .into_response();
-    }
+// ── Fase 2 (D-15): petición de autorización normalizada ─────────────────────
 
+/// Resultado de validar `/oauth/authorize` (F1-c + D-2 + D-15). Se construye
+/// una sola vez para que el camino `dev_mode` y el de consentimiento no
+/// diverjan en sus comprobaciones.
+struct PreparedAuth {
+    redirect_uri: String,
+    code_challenge: String,
+    state: Option<String>,
+    resource: Option<String>,
+    client_id: Option<String>,
+    scopes: Vec<String>,
+}
+
+fn oauth_error(status: StatusCode, error: &str, description: impl Into<String>) -> Response {
+    (
+        status,
+        Json(serde_json::json!({
+            "error": error,
+            "error_description": description.into()
+        })),
+    )
+        .into_response()
+}
+
+/// Fase 2 (D-15, R11): scopes. `mcp` es el único concedible; `operator` se
+/// rechaza SIEMPRE (la clase operador solo existe por el token maestro).
+fn parse_scopes(raw: Option<&str>) -> Result<Vec<String>, Box<Response>> {
+    let Some(raw) = raw else {
+        return Ok(vec![SCOPE_MCP.to_string()]);
+    };
+    let mut out: Vec<String> = Vec::new();
+    for scope in raw.split_whitespace() {
+        match scope {
+            SCOPE_MCP => {
+                if !out.iter().any(|s| s == SCOPE_MCP) {
+                    out.push(SCOPE_MCP.to_string());
+                }
+            }
+            SCOPE_OPERATOR => {
+                return Err(Box::new(oauth_error(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_scope",
+                    "scope=operator is never granted: the operator class requires the master token, \
+                     not an OAuth client",
+                )));
+            }
+            other => {
+                return Err(Box::new(oauth_error(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_scope",
+                    format!("unknown scope '{other}'; this server grants only '{SCOPE_MCP}'"),
+                )));
+            }
+        }
+    }
+    if out.is_empty() {
+        out.push(SCOPE_MCP.to_string());
+    }
+    Ok(out)
+}
+
+fn validate_authorization(
+    oauth: &OAuthState,
+    params: &AuthorizeQuery,
+) -> Result<PreparedAuth, Box<Response>> {
     // Fase 1-c: loopback-only redirect_uri (defense in depth).
     if !is_loopback_redirect_uri(&params.redirect_uri) {
-        return (
+        return Err(Box::new(oauth_error(
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": "invalid_request",
-                "error_description": "redirect_uri must use a loopback host (127.0.0.1, localhost or ::1)"
-            })),
-        )
-            .into_response();
+            "invalid_request",
+            "redirect_uri must use a loopback host (127.0.0.1, localhost or ::1)",
+        )));
     }
 
     // Only S256 supported
     if params.code_challenge_method.as_deref().unwrap_or("S256") != "S256" {
-        return (
+        return Err(Box::new(oauth_error(
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error":"invalid_request","error_description":"only S256 supported"})),
-        )
-            .into_response();
+            "invalid_request",
+            "only S256 supported",
+        )));
     }
 
     // Fase 2 (D-2, RFC 8707): el cliente declara para qué recurso pide el
@@ -449,25 +540,27 @@ pub async fn authorize_handler(
     if let Some(resource) = params.resource.as_deref()
         && !resource_matches_canonical(resource, &oauth.canonical_resource())
     {
-        return (
+        return Err(Box::new(oauth_error(
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": "invalid_target",
-                "error_description": format!(
-                    "resource must be this server ({})",
-                    oauth.canonical_resource()
-                )
-            })),
-        )
-            .into_response();
+            "invalid_target",
+            format!("resource must be this server ({})", oauth.canonical_resource()),
+        )));
     }
 
-    info!("[OAuth] Authorize request: client_id={}, redirect_uri={}, state={:?}", 
-        params.redirect_uri, // temporary placeholder for logging
-        params.redirect_uri, 
-        params.state
-    );
+    let scopes = parse_scopes(params.scope.as_deref())?;
 
+    Ok(PreparedAuth {
+        redirect_uri: params.redirect_uri.clone(),
+        code_challenge: params.code_challenge.clone(),
+        state: params.state.clone(),
+        resource: params.resource.clone(),
+        client_id: params.client_id.clone().filter(|c| !c.is_empty()),
+        scopes,
+    })
+}
+
+/// Emite un code (60 s, un solo uso) y redirige con `state` + `iss`.
+fn issue_code(oauth: &OAuthState, headers: &HeaderMap, prepared: &PreparedAuth) -> Response {
     let code = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 16]>());
 
     {
@@ -475,15 +568,15 @@ pub async fn authorize_handler(
         codes.insert(
             code.clone(),
             PendingCode {
-                code_challenge: params.code_challenge.clone(),
-                redirect_uri: params.redirect_uri.clone(),
+                code_challenge: prepared.code_challenge.clone(),
+                redirect_uri: prepared.redirect_uri.clone(),
                 expires_at: chrono::Utc::now().timestamp() + 60,
-                resource: params.resource.clone(),
+                resource: prepared.resource.clone(),
             },
         );
     }
 
-    let state_part = params
+    let state_part = prepared
         .state
         .as_deref()
         .map(|s| format!("&state={}", urlencoding::encode(s)))
@@ -493,22 +586,334 @@ pub async fn authorize_handler(
     // respuesta de autorización (defensa contra mix-up).
     let iss_part = format!(
         "&iss={}",
-        urlencoding::encode(&request_origin(&oauth, &headers))
+        urlencoding::encode(&request_origin(oauth, headers))
     );
 
-    let separator = if params.redirect_uri.contains('?') { "&" } else { "?" };
+    let separator = if prepared.redirect_uri.contains('?') { "&" } else { "?" };
     let location = format!(
         "{}{}code={}{}{}",
-        params.redirect_uri,
+        prepared.redirect_uri,
         separator,
         urlencoding::encode(&code),
         state_part,
         iss_part
     );
 
-    info!("[OAuth] Authorize OK -> {}", params.redirect_uri);
-    Redirect::temporary(&location).into_response()
+    info!("[OAuth] Authorize OK -> {}", prepared.redirect_uri);
+    let mut response = Redirect::temporary(&location).into_response();
+    // El consent_id ya se consumió: la cookie no sirve para nada más.
+    if let Ok(v) = axum::http::HeaderValue::from_str(
+        "tylluan_oauth_consent=; HttpOnly; SameSite=Lax; Path=/oauth; Max-Age=0",
+    ) {
+        response
+            .headers_mut()
+            .insert(axum::http::header::SET_COOKIE, v);
+    }
+    response
 }
+
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    use subtle::ConstantTimeEq;
+    a.as_bytes().ct_eq(b.as_bytes()).into()
+}
+
+fn consent_cookie(headers: &HeaderMap) -> Option<String> {
+    let raw = headers
+        .get(axum::http::header::COOKIE)?
+        .to_str()
+        .ok()?;
+    raw.split(';').find_map(|part| {
+        let (k, v) = part.trim().split_once('=')?;
+        (k == "tylluan_oauth_consent").then(|| v.to_string())
+    })
+}
+
+/// P1: página de consentimiento autocontenida (sin JS, sin build del
+/// dashboard, sin recursos externos). `error` re-renderiza tras una credencial
+/// incorrecta.
+fn consent_page_response(
+    oauth: &OAuthState,
+    headers: &HeaderMap,
+    pending: &super::oauth_consent::PendingConsent,
+    error: Option<&str>,
+    status: StatusCode,
+) -> Response {
+    use super::oauth_consent::{ConsentPage, PENDING_TTL_SECS, render_consent_page};
+
+    let nonce = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 16]>());
+    let origin = request_origin(oauth, headers);
+    let body = render_consent_page(&ConsentPage {
+        client_id: &pending.client_id,
+        client_name: &pending.client_name,
+        redirect_host: &pending.redirect_host,
+        kernel_origin: &origin,
+        consent_id: &pending.consent_id,
+        csrf: &pending.csrf,
+        nonce: &nonce,
+        error,
+    });
+
+    let mut response = (status, body).into_response();
+    let h = response.headers_mut();
+    h.insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    h.insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    h.insert(
+        axum::http::header::X_FRAME_OPTIONS,
+        axum::http::HeaderValue::from_static("DENY"),
+    );
+    h.insert(
+        axum::http::header::REFERRER_POLICY,
+        axum::http::HeaderValue::from_static("no-referrer"),
+    );
+    if let Ok(csp) = axum::http::HeaderValue::from_str(&format!(
+        "default-src 'none'; style-src 'nonce-{nonce}'; img-src 'none'; \
+         base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    )) {
+        h.insert(axum::http::header::CONTENT_SECURITY_POLICY, csp);
+    }
+    if let Ok(cookie) = axum::http::HeaderValue::from_str(&format!(
+        "tylluan_oauth_consent={}; HttpOnly; SameSite=Lax; Path=/oauth; Max-Age={PENDING_TTL_SECS}",
+        pending.consent_id
+    )) {
+        h.insert(axum::http::header::SET_COOKIE, cookie);
+    }
+    response
+}
+
+/// GET /oauth/authorize
+///
+/// `dev_mode=true` sigue auto-aprobando (R12, sin cambios). Con
+/// `dev_mode=false` (D-15): si hay consentimiento vigente para
+/// cliente+redirect_uri se emite el code con 0 acciones humanas; si no, se
+/// sirve P1 y NO se emite nada hasta que el operador teclee su credencial.
+pub async fn authorize_handler(
+    State(oauth): State<Arc<OAuthState>>,
+    headers: HeaderMap,
+    Query(params): Query<AuthorizeQuery>,
+) -> Response {
+    let prepared = match validate_authorization(&oauth, &params) {
+        Ok(p) => p,
+        Err(resp) => return *resp,
+    };
+
+    if oauth.dev_mode {
+        return issue_code(&oauth, &headers, &prepared);
+    }
+
+    // Sin client_id no hay a quién mostrar ni recordar (RFC 6749 §4.1.1 lo
+    // exige). Fail-closed: 403 sin redirect.
+    let Some(client_id) = prepared.client_id.clone() else {
+        info!("[OAuth] Authorize refused: missing client_id (operator consent cannot be requested)");
+        return oauth_error(
+            StatusCode::FORBIDDEN,
+            "access_denied",
+            "authorization request is missing client_id; nothing was issued",
+        );
+    };
+
+    if oauth
+        .consents()
+        .valid_consent(&client_id, &prepared.redirect_uri)
+        .is_some()
+    {
+        info!(
+            "[OAuth] Consent remembered for client {client_id} (redirect {}, scopes {:?})",
+            prepared.redirect_uri, prepared.scopes
+        );
+        return issue_code(&oauth, &headers, &prepared);
+    }
+
+    let client_name = oauth
+        .consents()
+        .display_name(&client_id, &prepared.redirect_uri)
+        .unwrap_or_else(|| client_id.clone());
+    let pending = oauth
+        .consents()
+        .create_pending(super::oauth_consent::PendingConsent {
+            consent_id: String::new(),
+            csrf: String::new(),
+            client_id: client_id.clone(),
+            client_name,
+            redirect_host: super::oauth_consent::redirect_host(&prepared.redirect_uri),
+            redirect_uri: prepared.redirect_uri.clone(),
+            code_challenge: prepared.code_challenge.clone(),
+            state: prepared.state.clone(),
+            resource: prepared.resource.clone(),
+            scopes: prepared.scopes.clone(),
+            created_at: 0,
+            expires_at: 0,
+        });
+    info!(
+        target: "oauth_consent",
+        "decision=pending client_id={client_id} redirect={} scopes={}",
+        pending.redirect_uri,
+        pending.scopes.join(",")
+    );
+    consent_page_response(&oauth, &headers, &pending, None, StatusCode::OK)
+}
+
+/// POST /oauth/authorize — decisión del operador sobre P1 (D-15).
+///
+/// Nunca emite sin credencial correcta (C1) y nunca emite si el operador
+/// deniega. Éxito → 302 con code; fallo → 403 sin `Location` (E2).
+pub async fn authorize_decision_handler(
+    State(oauth): State<Arc<OAuthState>>,
+    parts: axum::http::request::Parts,
+    Form(form): Form<ConsentDecisionForm>,
+) -> Response {
+    let headers = &parts.headers;
+    if oauth.dev_mode {
+        return oauth_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "operator consent is disabled in dev_mode",
+        );
+    }
+
+    // IP del socket si el router se sirvió con `into_make_service_with_connect_info`
+    // (producción). En tests in-process no hay extensión: bucket "unknown".
+    let ip = parts
+        .extensions
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|c| c.0.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if oauth.consents().is_locked(&ip) {
+        let retry = oauth.consents().retry_after_secs(&ip).max(60);
+        let mut response = oauth_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "temporarily_unavailable",
+            "too many failed credential attempts; wait before retrying",
+        );
+        if let Ok(v) = axum::http::HeaderValue::from_str(&retry.to_string()) {
+            response.headers_mut().insert(axum::http::header::RETRY_AFTER, v);
+        }
+        info!(target: "oauth_consent", "decision=rate_limited ip={ip} retry_after={retry}");
+        return response;
+    }
+
+    // CSRF: cookie HttpOnly emitida con P1 + nonce del formulario.
+    match consent_cookie(headers) {
+        Some(cookie) if constant_time_eq(&cookie, &form.consent_id) => {}
+        _ => {
+            oauth.consents().record_failure(&ip);
+            return oauth_error(
+                StatusCode::FORBIDDEN,
+                "access_denied",
+                "consent request does not match this browser session",
+            );
+        }
+    }
+
+    let Some(pending) = oauth.consents().peek_pending(&form.consent_id) else {
+        return oauth_error(
+            StatusCode::FORBIDDEN,
+            "access_denied",
+            "consent request expired or unknown",
+        );
+    };
+
+    if !constant_time_eq(&form.csrf, &pending.csrf) {
+        oauth.consents().record_failure(&ip);
+        return oauth_error(
+            StatusCode::FORBIDDEN,
+            "access_denied",
+            "invalid consent token",
+        );
+    }
+
+    match form.decision.as_str() {
+        "deny" => {
+            oauth.consents().drop_pending(&pending.consent_id);
+            info!(
+                target: "oauth_consent",
+                "decision=denied client_id={} redirect={} ip={ip}",
+                pending.client_id, pending.redirect_uri
+            );
+            oauth_error(
+                StatusCode::FORBIDDEN,
+                "access_denied",
+                "the operator denied this authorization request",
+            )
+        }
+        "approve" => {
+            let Some(expected) = oauth.operator_credential.as_deref() else {
+                info!(
+                    target: "oauth_consent",
+                    "decision=refused_no_operator_credential client_id={}",
+                    pending.client_id
+                );
+                return oauth_error(
+                    StatusCode::FORBIDDEN,
+                    "access_denied",
+                    "this kernel has no operator credential configured; use a static Bearer token",
+                );
+            };
+
+            if !constant_time_eq(&form.credential, expected) {
+                oauth.consents().record_failure(&ip);
+                // Un intento fallido no pierde la petición: se rota el CSRF y
+                // se vuelve a mostrar P1 con el error.
+                let refreshed = match oauth.consents().refresh_csrf(&pending.consent_id) {
+                    Some(csrf) => super::oauth_consent::PendingConsent { csrf, ..pending },
+                    None => {
+                        return oauth_error(
+                            StatusCode::FORBIDDEN,
+                            "access_denied",
+                            "consent request expired or unknown",
+                        );
+                    }
+                };
+                return consent_page_response(
+                    &oauth,
+                    headers,
+                    &refreshed,
+                    Some("Credencial incorrecta. Inténtalo de nuevo."),
+                    StatusCode::FORBIDDEN,
+                );
+            }
+
+            oauth.consents().clear_failures(&ip);
+            let Some(granted) = oauth.consents().take_pending(&pending.consent_id) else {
+                return oauth_error(
+                    StatusCode::FORBIDDEN,
+                    "access_denied",
+                    "consent request expired or unknown",
+                );
+            };
+            oauth.consents().record_consent(
+                &granted.client_id,
+                &granted.client_name,
+                &granted.redirect_uri,
+                &granted.scopes,
+            );
+            let prepared = PreparedAuth {
+                redirect_uri: granted.redirect_uri,
+                code_challenge: granted.code_challenge,
+                state: granted.state,
+                resource: granted.resource,
+                client_id: Some(granted.client_id),
+                scopes: granted.scopes,
+            };
+            issue_code(&oauth, headers, &prepared)
+        }
+        _ => oauth_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "decision must be 'approve' or 'deny'",
+        ),
+    }
+}
+
 
 /// POST /oauth/token  — validates PKCE, returns signed JWT
 pub async fn token_handler(
@@ -625,6 +1030,8 @@ mod fase1_tests {
             code_challenge_method: Some("S256".to_string()),
             state: None,
             resource: None,
+            client_id: None,
+            scope: None,
         }
     }
 
@@ -693,6 +1100,8 @@ mod fase2_tests {
             code_challenge_method: Some("S256".to_string()),
             state: None,
             resource: resource.map(str::to_string),
+            client_id: None,
+            scope: None,
         }
     }
 
@@ -849,6 +1258,8 @@ mod fase2_tests {
                 code_challenge_method: Some("S256".to_string()),
                 state: None,
                 resource: Some(format!("{BASE}/mcp")),
+                client_id: None,
+                scope: None,
             }),
         )
         .await;

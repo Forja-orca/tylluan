@@ -6,28 +6,24 @@
 //! R*) y al código F1 verificado hoy (`transport/http/oauth.rs`,
 //! `transport/http/auth.rs`).
 //!
-//! ACTIVACIÓN (B-5, 2026-10-20, tras las fases A y B de F2 en `d88512d`):
-//!   ACTIVOS (corren en la corrida normal de cada CI): C2b, C3, C4a, C4b, C5.
-//!   C3 se activó porque los claims de scope YA existen (`sign_jwt` lleva
-//!   `scope: mcp` desde `d88512d`); C4a/C4b/C5 porque su condición declarada
-//!   era "comportamiento F1 que F2 debe preservar" y F2 ya existe.
-//!   Siguen `#[ignore]` porque su condición NO se ha cumplido:
-//!     C1, C2a — "activar cuando el contrato de consentimiento esté
-//!               congelado": el plan (`docs/internal/
-//!               PLAN_oauth_f2_consentimiento_deep_2026-10.md`) se commitó
-//!               en `d88512d` SIN IMPLEMENTAR (5 decisiones de José pendientes).
-//!     C2c     — "el registro de clientes llega con el diseño de
-//!               consentimiento": el registro aún no existe.
+//! ACTIVACION (B-5, 2026-10-20 + D-15, 2026-10-21): los 8 casos corren en
+//! la corrida normal de cada CI. C2b, C3, C4a, C4b y C5 se activaron en B-5
+//! con las fases A/B de F2 (`d88512d`). C1, C2a y C2c se activan aqui porque
+//! el contrato de consentimiento ya esta congelado E IMPLEMENTADO
+//! (`transport/http/oauth_consent.rs`, P1 + `consents.json`, D-15).
 //!
-//!   Los ignorados se ejecutan a mano con:
+//! Nota de D-15 sobre C1 y C2c: su peticion viaja SIN `client_id`, que RFC
+//! 6749 4.1.1 exige en toda authorization request. Sin el no hay a quien
+//! mostrar en P1 ni a quien recordar, asi que mueren en 403 `access_denied`
+//! antes de renderizar: la asercion (403, sin Location, sin code canjeable)
+//! se cumple por la puerta correcta. El invariante de fondo -sin credencial
+//! del operador no hay code, y sin consentimiento previo tampoco- se prueba
+//! CON `client_id` en `tests/oauth_f2_consent.rs` (D-15).
 //!
-//!   cargo test -p tylluan-kernel --test oauth_f2_adversarial_spec -- --ignored --nocapture
+//! Estado verificado el 2026-10-21 (D-15): 8 passed, 0 failed, 0 ignored.
 //!
-//! Estado verificado EN VIVO el 2026-10-20 (exit capturado, sin pipe):
-//!   corrida normal → 5 passed, 0 failed, 3 ignored (EXIT 0);
-//!   `--ignored` → 3 passed, 0 failed (EXIT 0).
-//!   Historial: al escribir la suite (2026-10-19) solo C2b FALLABA — hallazgo
-//!   real en `is_loopback_redirect_uri` (ver doc del caso), cerrado en `1a2b6a0`.
+//! Historial: al escribir la suite (2026-10-19) solo C2b FALLABA - hallazgo
+//! real en `is_loopback_redirect_uri` (ver doc del caso), cerrado en `1a2b6a0`.
 //!
 //! Lo que YA está cubierto por F1 y NO se duplica aquí: R12/R13/R14/R15 y E1
 //! (token maestro por query no satisface la clase operador) viven en
@@ -162,8 +158,13 @@ async fn put_operator(app: &axum::Router, authorization: Option<&str>) -> Status
 /// HOY (F1): ya cumple — `oauth.rs` rehúsa con 403 cuando `dev_mode=false`
 /// (`fase1_tests::r13` es el test unitario; aquí se afirma además que no se
 /// filtra Location ni code intercambiable).
+///
+/// ACTIVO desde D-15 (2026-10-21), con el contrato ya implementado: esta
+/// peticion no lleva `client_id` (RFC 6749 4.1.1 lo exige), asi que muere
+/// en 403 antes de renderizar P1. El mismo invariante CON `client_id`
+/// -pagina sin credencial = ningun code- se prueba en
+/// `tests/oauth_f2_consent.rs`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "spec F2 (T1281): activar cuando el contrato de consentimiento esté congelado"]
 async fn c1_authorize_without_operator_credential_issues_no_code() {
     let state = support::test_state_custom("f2_c1", Some(MASTER.to_string()), false).await;
     let app = build_router(state);
@@ -203,7 +204,6 @@ async fn c1_authorize_without_operator_credential_issues_no_code() {
 /// HOY (F1): pasa — `is_loopback_redirect_uri` rehúsa todos estos vectores
 /// (`fase1_tests::r15` cubre el lookalike básico).
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "spec F2 (T1281): activar cuando el contrato esté congelado"]
 async fn c2a_hostile_redirect_uris_rejected() {
     let state = support::test_state("f2_c2a").await; // dev_mode=true
     let app = build_router(state);
@@ -289,8 +289,12 @@ async fn c2b_userinfo_redirect_uri_rejected() {
 ///
 /// HOY (F1): pasa — con `dev_mode=false` la única respuesta es 403, no
 /// existe emisión que registrar.
+///
+/// ACTIVO desde D-15 (2026-10-21): P1 exige `client_id` + consentimiento
+/// previo; esta peticion (sin `client_id`) no emite nada. La variante CON
+/// `client_id` y sin consentimiento -pagina servida, cero emision- vive en
+/// `tests/oauth_f2_consent.rs`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "spec F2 (T1281): el registro de clientes llega con el diseño de consentimiento"]
 async fn c2c_unregistered_redirect_without_consent_issues_nothing() {
     let state = support::test_state_custom("f2_c2c", Some(MASTER.to_string()), false).await;
     let app = build_router(state);
