@@ -91,11 +91,12 @@ fn v1_corrupt_file_at_startup_never_crashes_nor_grants_consent() {
 }
 
 #[test]
-fn v1_corrupt_file_on_mtime_reload_keeps_previous_state() {
-    // Caso observado y documentado: la recarga corrompida NO cae, pero tampoco
-    // revoca lo que ya estaba en memoria (revocar corrompiendo el fichero falla
-    // abierto). El vector pide "no caer ni conceder por defecto": el fichero
-    // corrupto no CONCEDE nada nuevo; lo que hace es no retirar lo viejo.
+fn v1_corrupt_file_on_mtime_reload_revokes_previous_state() {
+    // D-25 / F3 (T-DSH-18): fail-closed. Antes, un JSON inválido en la recarga
+    // mantenía el estado en memoria: revocar editando el fichero fallaba
+    // ABIERTO si el edit dejaba el JSON roto. Ahora la corrupción revoca todo
+    // hasta que el fichero vuelva a ser válido (el peor caso es volver a pedir
+    // consentimiento, nunca dejar fuera a quien aprobó).
     let dir = fresh_dir("reload_corrupt");
     let store = ConsentStore::with_file(&dir);
     store.record_consent("c1", "c1", R1, &["mcp".to_string()]);
@@ -103,14 +104,15 @@ fn v1_corrupt_file_on_mtime_reload_keeps_previous_state() {
 
     std::thread::sleep(std::time::Duration::from_millis(20));
     write_raw(&dir, "{\"version\":1,\"consents\":[ B R O K E N");
-    // La recarga (mtime distinto) parsea mal: mantiene el estado anterior.
+    // La recarga (mtime distinto) parsea mal: todo queda revocado.
     assert!(
-        store.valid_consent("c1", R1).is_some(),
-        "documentado: corrupción en recarga mantiene el consentimiento anterior \
-         (la revocación por edición de fichero falla abierta si el JSON es inválido)"
+        store.valid_consent("c1", R1).is_none(),
+        "un fichero inválido en recarga debe tratar los consentimientos como revocados"
     );
-    // Y una aprobación nueva repara el fichero.
+    // Y una aprobación nueva repara el fichero sin resucitar lo anterior.
     store.record_consent("c2", "c2", R2, &["mcp".to_string()]);
+    assert!(store.valid_consent("c2", R2).is_some());
+    assert!(store.valid_consent("c1", R1).is_none(), "c1 sigue revocado");
     assert!(!file_consents(&dir).is_empty(), "el fichero debe quedar válido");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -158,13 +160,23 @@ fn v2_hostile_expiry_and_revocation_values() {
         store.valid_consent("lejano", R1).is_some(),
         "documentado: version desconocida se acepta (no se valida el campo version)"
     );
-    // `version` con tipo inválido -> parse error -> no se cargan entradas nuevas
-    // (estado en memoria intacto), y sigue sin paniquear.
+    // `version` con tipo inválido → parse error → fail-closed (D-25/F3): el
+    // fichero inválido revoca todo hasta que vuelva a ser válido.
     std::thread::sleep(std::time::Duration::from_millis(20));
     write_raw(&dir, "{\"version\":-1,\"consents\":[]}");
     assert!(
-        store.valid_consent("lejano", R1).is_some(),
-        "version inválida: parse error -> mantiene estado en memoria"
+        store.valid_consent("lejano", R1).is_none(),
+        "version inválida: fichero inválido → consentimientos revocados"
+    );
+    // Un fichero válido posterior vuelve a habilitar lo que contiene.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    write_raw(
+        &dir,
+        &json!({ "version": 1, "consents": [record("de-nuevo", R1)] }).to_string(),
+    );
+    assert!(
+        store.valid_consent("de-nuevo", R1).is_some(),
+        "un fichero válido vuelve a habilitar sus entradas"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -172,7 +184,6 @@ fn v2_hostile_expiry_and_revocation_values() {
 // ── V3: separador `|` en client_id → colisión de claves ─────────────────────
 
 #[test]
-#[ignore = "hallazgo T-DSH-18: la clave interna `client_id|redirect_uri` no escapa el separador, así que dos pares distintos comparten entrada en el store (oauth_consent.rs:151-153 y 177-181). Por HTTP no es explotable hoy (oauth.rs valida redirect loopback antes de tocar el store), pero la API del store es insegura por construcción."]
 fn v3_pipe_in_client_id_collides_internal_keys() {
     // (a) Vía API pública en memoria: el par (a|b, c) y el par (a, b|c)
     // producen la MISMA clave "a|b|c".
@@ -186,7 +197,21 @@ fn v3_pipe_in_client_id_collides_internal_keys() {
         confused.map(|c| (c.client_id, c.redirect_uri))
     );
 
-    // (b) Vía fichero: dos entradas que colisionan, solo sobrevive una.
+    // (a) Vía API pública en memoria: el par (a|b, c) y el par (a, b|c) son
+    // entradas distintas y no se heredan la una a la otra (F1, cerrado en D-25:
+    // la clave interna pasó a `len(client_id):client_idredirect_uri`).
+    let store = tylluan_kernel::transport::http::oauth_consent::ConsentStore::in_memory();
+    store.record_consent("a|b", "a|b", "c", &["mcp".to_string()]);
+    let confused = store.valid_consent("a", "b|c");
+    assert!(
+        confused.is_none(),
+        "esperado: el par (a, b|c) no hereda el consentimiento de (a|b, c); \
+         real: Some({:?})",
+        confused.map(|c| (c.client_id, c.redirect_uri))
+    );
+    assert!(store.valid_consent("a|b", "c").is_some());
+
+    // (b) Vía fichero: las dos entradas coexisten como pares distintos.
     let dir = fresh_dir("pipe_collision");
     let two = file_doc(vec![
         record("a|b", "c"),
@@ -194,14 +219,19 @@ fn v3_pipe_in_client_id_collides_internal_keys() {
     ]);
     write_raw(&dir, &two);
     let file_store = ConsentStore::with_file(&dir);
-    let left = file_store.valid_consent("a|b", "c");
-    let right = file_store.valid_consent("a", "b|c");
-    assert!(
-        left.is_none() || right.is_none(),
-        "esperado: las dos entradas coexisten como pares distintos; real: ambas \
-         resuelven a la misma clave (izq={:?}, der={:?})",
-        left.map(|c| c.client_id),
-        right.map(|c| c.client_id)
+    let left = file_store
+        .valid_consent("a|b", "c")
+        .expect("(a|b, c) debe seguir vigente");
+    let right = file_store
+        .valid_consent("a", "b|c")
+        .expect("(a, b|c) debe seguir vigente");
+    assert_eq!(
+        (left.client_id.as_str(), left.redirect_uri.as_str()),
+        ("a|b", "c")
+    );
+    assert_eq!(
+        (right.client_id.as_str(), right.redirect_uri.as_str()),
+        ("a", "b|c")
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
