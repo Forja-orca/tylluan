@@ -24,4 +24,6 @@ La auditoría externa afirma que `tests/e2e/harness.py` fija una ruta de Windows
 ## B-14 — Verificar el quickstart de Hermes (cuando exista)
 Cuando Hermes entregue (reescritura del quickstart existente, decisión del TL; Antigravity sin cuota) `docs/getting-started/QUICKSTART.md`, síguelo paso a paso en un clon limpio con un kernel de prueba en puerto propio, sin saltarte ninguno, y entrega tabla `paso -> comando -> resultado real -> ¿funciona?`, con el tiempo total hasta el primer `tylluan_recall`. Lo que no se pueda ejecutar queda marcado, no supuesto.
 
+**Regla dura tras el incidente del 2026-10-21 (dos caídas de producción por `Stop-Process` filtrado por nombre):** los kernels de prueba se paran SOLO por el PID que tú arrancaste y verificando su `ExecutablePath` bajo tu worktree; jamás `taskkill`/`Stop-Process` por nombre de imagen. Reactivar `TylluanBuffyColoquioLoop` es decisión de José.
+
 **Exclusiones:** no tocar `src/`; no bajar umbrales de los gates; no `--no-verify`; no escribir en el checkout compartido.
