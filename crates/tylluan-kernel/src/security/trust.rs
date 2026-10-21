@@ -58,13 +58,36 @@ where
 /// Idempotente y no destructivo: si el productor remoto ya la puso, se respeta
 /// su valor y **no** se pisa su motivo. Si el objeto no es un mapa JSON, no hace
 /// nada (no se inventa estructura).
+///
+/// Para metadata que viene de FUERA (federación, A2A) usa
+/// [`mark_untrusted_authoritative`]: ahí el motivo lo fija siempre el kernel
+/// (D-27). Esta variante es para escritores cuyo metadata construye el propio
+/// kernel (ingesta, correo de agentes, herencia de resúmenes), donde no hay
+/// motivo ajeno que conservar.
 pub fn mark_untrusted(meta: &mut serde_json::Value, origin: &str) {
+    write_mark(meta, origin, false);
+}
+
+/// Como [`mark_untrusted`], pero el motivo es SIEMPRE el que calcula el kernel:
+/// pisa cualquier `untrusted_reason` que venga dentro del contenido.
+///
+/// D-27 (O1 de T-DSH-22): `untrusted_reason` no es decorativo — [`origin_of`] lo
+/// mete en el [`banner`] que se antepone al contenido cuando llega al modelo sin
+/// pasar por el gate, así que un peer federado o un agente A2A podía mandar
+/// `untrusted_content: true` con un motivo inventado y hacerse pasar por otro
+/// origen (otro peer, la ingesta, el propio kernel). El flag ya era intocable
+/// (`false` remoto queda en `true`); ahora el motivo también.
+pub fn mark_untrusted_authoritative(meta: &mut serde_json::Value, origin: &str) {
+    write_mark(meta, origin, true);
+}
+
+fn write_mark(meta: &mut serde_json::Value, origin: &str, force_reason: bool) {
     let Some(map) = meta.as_object_mut() else {
         return;
     };
     let already = map.get(UNTRUSTED_KEY).and_then(|v| v.as_bool()) == Some(true);
     map.insert(UNTRUSTED_KEY.to_string(), serde_json::Value::Bool(true));
-    if !already {
+    if force_reason || !already {
         map.insert(
             UNTRUSTED_REASON_KEY.to_string(),
             serde_json::Value::String(origin.to_string()),
@@ -217,6 +240,39 @@ mod tests {
         });
         mark_untrusted(&mut meta, "federation_peer:atlas");
         assert_eq!(meta[UNTRUSTED_REASON_KEY], serde_json::json!("peer-declared"));
+    }
+
+    #[test]
+    fn authoritative_mark_overrides_a_forged_reason() {
+        // D-27: peer que ya viene marcado y se declara OTRO origen.
+        let mut meta = serde_json::json!({
+            "untrusted_content": true,
+            "untrusted_reason": "federation_peer:atlas"
+        });
+        mark_untrusted_authoritative(&mut meta, "federation_peer:orion");
+        assert_eq!(meta[UNTRUSTED_KEY], serde_json::json!(true));
+        assert_eq!(
+            meta[UNTRUSTED_REASON_KEY],
+            serde_json::json!("federation_peer:orion")
+        );
+        // El banner que ve el modelo sale de `origin_of`: no puede citar al peer suplantado.
+        assert_eq!(origin_of(&meta.to_string(), "x"), "federation_peer:orion");
+    }
+
+    #[test]
+    fn authoritative_mark_forces_flag_and_reason_over_a_false_claim() {
+        // F3 de T-DSH-22 + D-27: `false` remoto queda en `true` y el motivo del
+        // kernel gana al inventado.
+        let mut meta = serde_json::json!({
+            "untrusted_content": false,
+            "untrusted_reason": "fake"
+        });
+        mark_untrusted_authoritative(&mut meta, "federation_peer:orion");
+        assert_eq!(meta[UNTRUSTED_KEY], serde_json::json!(true));
+        assert_eq!(
+            meta[UNTRUSTED_REASON_KEY],
+            serde_json::json!("federation_peer:orion")
+        );
     }
 
     #[test]

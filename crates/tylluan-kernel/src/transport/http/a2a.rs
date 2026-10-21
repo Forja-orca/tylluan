@@ -533,17 +533,23 @@ async fn execute_intent_and_store(
             if let Some(srv) = state.server.as_ref() {
                 let silva = srv.read().await.silva.clone();
                 let node_id = format!("a2a:{task_id}:result");
-                let meta = serde_json::json!({
+                let mut meta_value = serde_json::json!({
                     "owner_scope": owner_scope,
                     "source": "a2a",
                     "task_id": task_id,
                     "client_agent_id": agent_id,
-                    // D-18: el resultado lo produce un agente EXTERNO (contrato
-                    // A2A). Queda marcado para que ninguna ruta de contexto lo
-                    // trate como memoria propia y confiable.
-                    "untrusted_content": true,
-                    "untrusted_reason": format!("a2a external agent: {agent_id}"),
-                }).to_string();
+                });
+                // D-18: el resultado lo produce un agente EXTERNO (contrato
+                // A2A). Queda marcado para que ninguna ruta de contexto lo
+                // trate como memoria propia y confiable.
+                // D-27: marca y motivo los fija el kernel con la misma funcion
+                // que usa la federacion; el motivo nunca sale de datos del
+                // cliente porque `origin_of` lo muestra en el banner al modelo.
+                crate::security::trust::mark_untrusted_authoritative(
+                    &mut meta_value,
+                    &format!("a2a external agent: {agent_id}"),
+                );
+                let meta = meta_value.to_string();
                 let opts = crate::memory::silva::nodes::NodeWriteOptions::new("guild_output")
                     .owner_scope(Some(&owner_scope));
                 let _ = silva.upsert_node_with_validity(&node_id, "a2a_result", &text, &meta, opts).await;

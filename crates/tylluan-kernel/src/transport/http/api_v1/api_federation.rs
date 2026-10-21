@@ -146,7 +146,12 @@ pub async fn ingest_from_peer(
     // explícitamente en el metadata, que es lo que leen el gate y las rutas de
     // contexto (bootstrap/@inbox) — antes la desconfianza dependía de leer
     // `provenance == "federation_peer"` en cada consumidor, y casi ninguno lo hacía.
-    crate::security::trust::mark_untrusted(&mut meta, &format!("federation_peer:{}", peer.name));
+    // D-27: la variante authoritative pisa el `untrusted_reason` que traiga el
+    // peer. Conservarlo permitía que un peer se declarara `federation_peer:otro`.
+    crate::security::trust::mark_untrusted_authoritative(
+        &mut meta,
+        &format!("federation_peer:{}", peer.name),
+    );
     let meta_str = serde_json::to_string(&meta).unwrap_or_default();
 
     let remote_hash = envelope.node.get("content_hash").and_then(|v| v.as_str()).unwrap_or("");
