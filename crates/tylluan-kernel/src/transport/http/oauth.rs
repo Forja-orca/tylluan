@@ -788,7 +788,9 @@ pub async fn authorize_decision_handler(
         .unwrap_or_else(|| "unknown".to_string());
 
     if oauth.consents().is_locked(&ip) {
-        let retry = oauth.consents().retry_after_secs(&ip).max(60);
+        // D-25: el bloqueo escala (30 s → 300 s), así que el `Retry-After` es el
+        // real. El suelo de 60 s anterior contradecía el primer escalón.
+        let retry = oauth.consents().retry_after_secs(&ip).max(1);
         let mut response = oauth_error(
             StatusCode::TOO_MANY_REQUESTS,
             "temporarily_unavailable",

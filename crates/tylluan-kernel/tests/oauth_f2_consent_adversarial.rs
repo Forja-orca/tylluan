@@ -706,10 +706,10 @@ async fn v7_forwarded_for_does_not_bypass_the_rate_limit() {
         "la IP A queda bloqueada aunque cambie X-Forwarded-For"
     );
 
-    // (c) El techo GLOBAL (20 fallos) existe y bloquea también a una IP nueva:
-    // un atacante puede dejar la pantalla de consentimiento inutilizable 300 s
-    // para todos (riesgo de disponibilidad, comportamiento documentado en el
-    // código como "techo agregado").
+    // (c) D-25: el techo global solo FRENA el ritmo; ya no bloquea a una IP que
+    // no ha fallado. 20 fallos desde 20 IPs distintas (un tercero) no pueden
+    // dejar la pantalla inservible para el operador: antes, esos 20 POSTs
+    // bastaban para 300 s de 429 para todo el mundo.
     let app3 = app_for("t14_v7c").await;
     let page3 = get(&app3, &uri, None).await;
     let session3 = cookie(&page3);
@@ -717,7 +717,7 @@ async fn v7_forwarded_for_does_not_bypass_the_rate_limit() {
     let mut csrf3 = hidden(&page3.body, "csrf");
     for i in 0..20 {
         // IP de socket DISTINTA en cada iteración (el puerto no cambia la IP):
-        // así se acumulan 20 fallos globales sin tocar el cupo por-IP.
+        // cada una acumula un solo fallo propio.
         let ip: SocketAddr = format!("127.0.0.{}:40000", 10 + i).parse().unwrap();
         let reply = post_form(
             &app3,
@@ -732,9 +732,11 @@ async fn v7_forwarded_for_does_not_bypass_the_rate_limit() {
             None,
         )
         .await;
-        if reply.status == StatusCode::TOO_MANY_REQUESTS {
-            break; // el global ya saltó
-        }
+        assert_eq!(
+            reply.status,
+            StatusCode::FORBIDDEN,
+            "IP {ip}: primer fallo propio, no puede estar bloqueada"
+        );
         csrf3 = hidden(&reply.body, "csrf");
     }
     let fresh_ip: SocketAddr = "127.0.0.3:43000".parse().unwrap();
@@ -753,7 +755,8 @@ async fn v7_forwarded_for_does_not_bypass_the_rate_limit() {
     .await;
     assert_eq!(
         global.status,
-        StatusCode::TOO_MANY_REQUESTS,
-        "el techo global bloquea incluso a una IP nueva (riesgo de disponibilidad)"
+        StatusCode::TEMPORARY_REDIRECT,
+        "el techo global no puede bloquear a una IP sin fallos propios"
     );
+    assert!(has_code(&global), "la aprobación legítima debe completarse");
 }

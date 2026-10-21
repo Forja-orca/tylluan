@@ -27,16 +27,38 @@ pub const CONSENT_TTL_DAYS: i64 = 30;
 /// Vida de la petición de consentimiento en pantalla (P1). Si el humano no
 /// decide en 5 minutos, la página ya no sirve: se vuelve a pedir.
 pub const PENDING_TTL_SECS: i64 = 300;
-/// Intentos de credencial por IP antes de bloquear (P6).
+/// Intentos de credencial por IP antes del primer bloqueo (P6).
 pub const MAX_FAILURES: usize = 5;
-/// Ventana del bloqueo por IP, en segundos.
+/// Ventana en la que se cuentan los fallos por IP, en segundos.
 pub const FAILURE_WINDOW_SECS: i64 = 300;
-/// Tope global de fallos en la ventana: una sola IP no es el único vector
-/// (decenas de loopbacks/proxies locales), así que además del cupo por IP hay
-/// un techo agregado.
+/// Tope global de fallos en la ventana. Ya NO bloquea por sí mismo: solo suma
+/// `GLOBAL_THROTTLE_EXTRA_SECS` a la espera de las IP que ya fallaron. Antes
+/// bloqueaba también a IPs sin fallos propios, y eso convertía 20 POSTs de un
+/// tercero en 300 s de pantalla inutilizable para el operador (V7c).
 pub const GLOBAL_MAX_FAILURES: usize = 20;
+/// Espera extra que se añade al bloqueo de una IP que ya falló cuando el techo
+/// global está saturado: frena el ritmo agregado sin castigar a quien no ha
+/// fallado.
+pub const GLOBAL_THROTTLE_EXTRA_SECS: i64 = 2;
+/// Peticiones de consentimiento vivas a la vez (riesgo 3 de T-DSH-18). Al
+/// superar el tope se descarta la más antigua: acota la memoria que puede
+/// consumir un flood de `/oauth/authorize`.
+pub const MAX_PENDING: usize = 128;
 /// Fichero de consentimientos (mismo directorio que `oauth_jwt_secret`).
 pub const CONSENTS_FILE: &str = "consents.json";
+
+/// Escalado del bloqueo por IP según fallos acumulados en la ventana (P6):
+/// 5-6 → 30 s, 7-8 → 60 s, 9 → 120 s, 10+ → 300 s. Cumplida la espera la IP
+/// puede reintentar; cada fallo nuevo sube un escalón.
+pub fn lockout_secs(failures: usize) -> i64 {
+    match failures {
+        0..=4 => 0,
+        5..=6 => 30,
+        7..=8 => 60,
+        9 => 120,
+        _ => FAILURE_WINDOW_SECS,
+    }
+}
 
 fn now_unix() -> i64 {
     chrono::Utc::now().timestamp()
@@ -95,10 +117,37 @@ fn default_version() -> u32 {
     1
 }
 
+/// Escribe el fichero de consentimientos. En Unix con `0600` desde la creación
+/// (F4 de T-DSH-18): `consents.json` solo debe leerlo el usuario del kernel.
+/// No lleva credenciales, pero sí qué clientes tienen acceso.
+#[cfg(unix)]
+fn write_private(path: &Path, body: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    file.write_all(body.as_bytes())?;
+    // `mode` solo aplica al crear: si el tmp ya existía, se fuerza igualmente.
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn write_private(path: &Path, body: &str) -> std::io::Result<()> {
+    std::fs::write(path, body)
+}
+
 #[derive(Default)]
 struct StoreState {
     consents: HashMap<String, ConsentRecord>,
     pending: HashMap<String, PendingConsent>,
+    /// Orden de inserción de cada pending, para poder desalojar la más antigua.
+    pending_seq: HashMap<String, u64>,
+    next_pending_seq: u64,
     failures: HashMap<String, Vec<i64>>,
     global_failures: Vec<i64>,
 }
@@ -108,6 +157,9 @@ pub struct ConsentStore {
     path: Option<PathBuf>,
     state: Mutex<StoreState>,
     loaded_mtime: Mutex<Option<SystemTime>>,
+    /// Serializa `persist` (F5 de T-DSH-18): dos escrituras concurrentes
+    /// compartían el `.json.tmp` y podían perderse o mezclarse.
+    persist_lock: Mutex<()>,
 }
 
 impl std::fmt::Debug for ConsentStore {
@@ -125,6 +177,7 @@ impl ConsentStore {
             path: None,
             state: Mutex::new(StoreState::default()),
             loaded_mtime: Mutex::new(None),
+            persist_lock: Mutex::new(()),
         }
     }
 
@@ -136,6 +189,7 @@ impl ConsentStore {
             path: Some(dir.join(CONSENTS_FILE)),
             state: Mutex::new(StoreState::default()),
             loaded_mtime: Mutex::new(None),
+            persist_lock: Mutex::new(()),
         };
         if let Err(e) = std::fs::create_dir_all(dir) {
             tracing::warn!("oauth consent: no se pudo crear {} ({e})", dir.display());
@@ -148,8 +202,13 @@ impl ConsentStore {
         self.path.as_deref()
     }
 
+    /// Clave interna sin colisión: `len(client_id):client_idredirect_uri`.
+    /// La longitud prefijada fija dónde acaba `client_id`, así que dos pares
+    /// distintos no pueden compartir clave aunque `client_id` o `redirect_uri`
+    /// contengan separadores (F1 de T-DSH-18; antes `a|b`+`c` y `a`+`b|c`
+    /// colisionaban en `a|b|c`).
     fn key(client_id: &str, redirect_uri: &str) -> String {
-        format!("{client_id}|{redirect_uri}")
+        format!("{}:{client_id}{redirect_uri}", client_id.len())
     }
 
     /// Relee el fichero si cambió en disco (revocación editando el JSON).
@@ -169,10 +228,10 @@ impl ConsentStore {
             *loaded = mtime;
         }
         let parsed = std::fs::read_to_string(path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<ConsentFile>(&raw).ok());
+            .map_err(|e| e.to_string())
+            .and_then(|raw| serde_json::from_str::<ConsentFile>(&raw).map_err(|e| e.to_string()));
         match parsed {
-            Some(file) => {
+            Ok(file) => {
                 let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
                 st.consents = file
                     .consents
@@ -180,10 +239,19 @@ impl ConsentStore {
                     .map(|c| (Self::key(&c.client_id, &c.redirect_uri), c))
                     .collect();
             }
-            None => tracing::warn!(
-                "oauth consent: {} no se pudo parsear; se mantiene el estado en memoria",
-                path.display()
-            ),
+            Err(e) => {
+                // F3 de T-DSH-18: fail-closed. Antes se mantenía el estado en
+                // memoria, así que una revocación manual con el JSON roto (o un
+                // fichero corrupto escrito por otro proceso) seguía concediendo
+                // acceso. Ahora todo queda revocado hasta que el fichero vuelva
+                // a ser válido; el peor caso es volver a pedir consentimiento.
+                let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                st.consents.clear();
+                tracing::error!(
+                    "oauth consent: {} ilegible o inválido ({e}); consentimientos tratados como revocados hasta que el fichero sea válido",
+                    path.display()
+                );
+            }
         }
     }
 
@@ -191,6 +259,7 @@ impl ConsentStore {
         let Some(path) = self.path.as_deref() else {
             return;
         };
+        let _serialized = self.persist_lock.lock().unwrap_or_else(|e| e.into_inner());
         let file = {
             let st = self.state.lock().unwrap_or_else(|e| e.into_inner());
             ConsentFile {
@@ -206,7 +275,7 @@ impl ConsentStore {
             }
         };
         let tmp = path.with_extension("json.tmp");
-        let write = std::fs::write(&tmp, body).and_then(|_| std::fs::rename(&tmp, path));
+        let write = write_private(&tmp, &body).and_then(|_| std::fs::rename(&tmp, path));
         match write {
             Ok(()) => {
                 if let Ok(meta) = std::fs::metadata(path)
@@ -322,9 +391,48 @@ impl ConsentStore {
         p.expires_at = now + PENDING_TTL_SECS;
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
         // Barrido perezoso: sin temporizadores propios (headless-first).
-        st.pending.retain(|_, v| v.expires_at > now);
+        let expired: Vec<String> = st
+            .pending
+            .iter()
+            .filter(|(_, v)| v.expires_at <= now)
+            .map(|(k, _)| k.clone())
+            .collect();
+        for id in expired {
+            st.pending.remove(&id);
+            st.pending_seq.remove(&id);
+        }
+        // Tope anti-flood (riesgo 3 de T-DSH-18): al llegar al tope se desaloja
+        // la petición más antigua; el cliente afectado reintenta.
+        while st.pending.len() >= MAX_PENDING {
+            let victim = st
+                .pending_seq
+                .iter()
+                .min_by_key(|(_, seq)| **seq)
+                .map(|(id, _)| id.clone());
+            let Some(victim) = victim else {
+                break;
+            };
+            st.pending_seq.remove(&victim);
+            if st.pending.remove(&victim).is_some() {
+                tracing::warn!(
+                    target: "oauth_consent",
+                    "decision=pending_evicted reason=cap cap={MAX_PENDING}"
+                );
+            }
+        }
+        st.next_pending_seq += 1;
+        let seq = st.next_pending_seq;
+        st.pending_seq.insert(p.consent_id.clone(), seq);
         st.pending.insert(p.consent_id.clone(), p.clone());
         p
+    }
+
+    /// Peticiones de consentimiento vivas (introspección; también la usa el
+    /// test del tope anti-flood).
+    pub fn pending_count(&self) -> usize {
+        let now = now_unix();
+        let st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        st.pending.values().filter(|p| p.expires_at > now).count()
     }
 
     pub fn peek_pending(&self, consent_id: &str) -> Option<PendingConsent> {
@@ -339,6 +447,7 @@ impl ConsentStore {
     pub fn take_pending(&self, consent_id: &str) -> Option<PendingConsent> {
         let now = now_unix();
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        st.pending_seq.remove(consent_id);
         match st.pending.remove(consent_id) {
             Some(p) if p.expires_at > now => Some(p),
             _ => None,
@@ -359,41 +468,66 @@ impl ConsentStore {
     pub fn drop_pending(&self, consent_id: &str) {
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
         st.pending.remove(consent_id);
+        st.pending_seq.remove(consent_id);
     }
 
-    fn prune_failures(&self, ip: &str, now: i64) -> bool {
+    /// Instante hasta el que la IP está bloqueada, ya con el escalado y con el
+    /// extra global aplicados. `None` = menos de `MAX_FAILURES` fallos **propios**
+    /// en la ventana: el techo global nunca bloquea a una IP que no ha fallado.
+    fn lock_until(&self, ip: &str, now: i64) -> Option<i64> {
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
         st.global_failures
             .retain(|t| now - *t < FAILURE_WINDOW_SECS);
-        let entry = st.failures.entry(ip.to_string()).or_default();
+        let extra = if st.global_failures.len() >= GLOBAL_MAX_FAILURES {
+            GLOBAL_THROTTLE_EXTRA_SECS
+        } else {
+            0
+        };
+        let entry = st.failures.get_mut(ip)?;
         entry.retain(|t| now - *t < FAILURE_WINDOW_SECS);
-        entry.len() >= MAX_FAILURES || st.global_failures.len() >= GLOBAL_MAX_FAILURES
+        if entry.len() < MAX_FAILURES {
+            return None;
+        }
+        let last = *entry.last()?;
+        Some(last + lockout_secs(entry.len()) + extra)
     }
 
     pub fn is_locked(&self, ip: &str) -> bool {
-        self.prune_failures(ip, now_unix())
+        let now = now_unix();
+        self.lock_until(ip, now).is_some_and(|until| now < until)
     }
 
+    /// Segundos que faltan para reintentar (0 si la IP no está bloqueada).
     pub fn retry_after_secs(&self, ip: &str) -> i64 {
         let now = now_unix();
-        let st = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let oldest = st
-            .failures
-            .get(ip)
-            .and_then(|v| v.first().copied())
-            .or_else(|| st.global_failures.first().copied());
-        oldest.map(|t| (t + FAILURE_WINDOW_SECS - now).max(0)).unwrap_or(0)
+        self.lock_until(ip, now)
+            .map_or(0, |until| (until - now).max(0))
     }
 
     pub fn record_failure(&self, ip: &str) {
         let now = now_unix();
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        st.failures.entry(ip.to_string()).or_default().push(now);
+        st.global_failures
+            .retain(|t| now - *t < FAILURE_WINDOW_SECS);
         st.global_failures.push(now);
+        let entry = st.failures.entry(ip.to_string()).or_default();
+        entry.retain(|t| now - *t < FAILURE_WINDOW_SECS);
+        entry.push(now);
+        let failures = entry.len();
+        let extra = if st.global_failures.len() >= GLOBAL_MAX_FAILURES {
+            GLOBAL_THROTTLE_EXTRA_SECS
+        } else {
+            0
+        };
+        let lockout = if failures >= MAX_FAILURES {
+            lockout_secs(failures) + extra
+        } else {
+            0
+        };
+        drop(st);
         tracing::warn!(
             target: "oauth_consent",
-            "decision=credential_rejected ip={ip} failures={}",
-            st.failures.get(ip).map(|v| v.len()).unwrap_or(0)
+            "decision=credential_rejected ip={ip} failures={failures} lockout_secs={lockout}"
         );
     }
 
@@ -659,6 +793,128 @@ mod tests {
         assert!(store.retry_after_secs("127.0.0.1") > 0);
         store.clear_failures("127.0.0.1");
         assert!(!store.is_locked("127.0.0.1"));
+    }
+
+    #[test]
+    fn lockout_escalates_and_the_global_ceiling_never_blocks_a_clean_ip() {
+        let store = ConsentStore::in_memory();
+        // 20 fallos de IPs distintas (un tercero) saturan el techo global.
+        for i in 0..GLOBAL_MAX_FAILURES {
+            store.record_failure(&format!("10.0.0.{i}"));
+        }
+        // Garantía de V7c: una IP sin fallos propios NO queda bloqueada.
+        assert!(!store.is_locked("127.0.0.1"));
+        assert_eq!(store.retry_after_secs("127.0.0.1"), 0);
+        for _ in 0..MAX_FAILURES {
+            store.record_failure("127.0.0.1");
+        }
+        assert!(store.is_locked("127.0.0.1"));
+        let first = store.retry_after_secs("127.0.0.1");
+        assert!(
+            first > 0 && first <= 30 + GLOBAL_THROTTLE_EXTRA_SECS,
+            "primer bloqueo: 30 s (+2 s del techo global): {first}"
+        );
+        // El escalón sube al llegar a 7 fallos (5-6 comparten 30 s), aunque el
+        // primero no haya expirado.
+        store.record_failure("127.0.0.1");
+        let sixth = store.retry_after_secs("127.0.0.1");
+        assert_eq!(sixth, first, "5-6 fallos comparten el primer escalón");
+        store.record_failure("127.0.0.1");
+        let seventh = store.retry_after_secs("127.0.0.1");
+        assert!(seventh > sixth, "el bloqueo debe escalar: {sixth} → {seventh}");
+        assert!(seventh <= 60 + GLOBAL_THROTTLE_EXTRA_SECS);
+        // Una aprobación válida devuelve el cupo.
+        store.clear_failures("127.0.0.1");
+        assert!(!store.is_locked("127.0.0.1"));
+    }
+
+    #[test]
+    fn pending_requests_are_capped_evicting_the_oldest() {
+        let store = ConsentStore::in_memory();
+        let mut ids = Vec::new();
+        for i in 0..MAX_PENDING {
+            ids.push(pending(&store, &format!("c{i}")).consent_id);
+        }
+        assert_eq!(store.pending_count(), MAX_PENDING);
+        let newest = pending(&store, "nuevo");
+        assert_eq!(store.pending_count(), MAX_PENDING, "el tope no se supera");
+        assert!(
+            store.peek_pending(&ids[0]).is_none(),
+            "la petición más antigua se desaloja"
+        );
+        assert!(store.peek_pending(&ids[1]).is_some());
+        assert!(store.peek_pending(&newest.consent_id).is_some());
+    }
+
+    #[test]
+    fn invalid_json_on_reload_revokes_instead_of_failing_open() {
+        let dir = std::env::temp_dir().join(format!("tylluan_consent_bad_{}", random_token()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = ConsentStore::with_file(&dir);
+        store.record_consent("c1", "Cliente", "http://127.0.0.1:9999/cb", &["mcp".into()]);
+        assert!(store.valid_consent("c1", "http://127.0.0.1:9999/cb").is_some());
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(dir.join(CONSENTS_FILE), "{ roto").unwrap();
+        assert!(
+            store.valid_consent("c1", "http://127.0.0.1:9999/cb").is_none(),
+            "un fichero inválido debe revocar, no mantener el consentimiento"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_persists_do_not_lose_records() {
+        let dir = std::env::temp_dir().join(format!("tylluan_consent_conc_{}", random_token()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = std::sync::Arc::new(ConsentStore::with_file(&dir));
+        let mut handles = Vec::new();
+        for i in 0..8 {
+            let store = store.clone();
+            handles.push(std::thread::spawn(move || {
+                store.record_consent(
+                    &format!("c{i}"),
+                    "Cliente",
+                    &format!("http://127.0.0.1:1{i}000/cb"),
+                    &["mcp".into()],
+                );
+            }));
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        let raw = std::fs::read_to_string(dir.join(CONSENTS_FILE)).unwrap();
+        let doc: ConsentFile = serde_json::from_str(&raw).expect("JSON válido");
+        assert_eq!(doc.consents.len(), 8, "ninguna escritura se pierde");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn consents_file_is_created_with_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("tylluan_consent_mode_{}", random_token()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = ConsentStore::with_file(&dir);
+        store.record_consent("c1", "Cliente", "http://127.0.0.1:9999/cb", &["mcp".into()]);
+        let mode = std::fs::metadata(dir.join(CONSENTS_FILE))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "consents.json solo para el usuario del kernel");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn key_is_unambiguous_with_separator_in_values() {
+        assert_ne!(
+            ConsentStore::key("a|b", "c"),
+            ConsentStore::key("a", "b|c")
+        );
+        assert_eq!(
+            ConsentStore::key("a|b", "c"),
+            ConsentStore::key("a|b", "c")
+        );
     }
 
     #[test]
