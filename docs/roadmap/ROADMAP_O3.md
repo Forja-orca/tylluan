@@ -98,10 +98,10 @@ Compilado a petición explícita de José tras dos ciclos de auditoría en el mi
 Fuentes, ambas **no vinculantes** y contrastadas con el código antes de aceptar nada: una auditoría externa de `Forja-orca/tylluan` sobre `0f323e4` (compilación y 1110 tests de la lib reproducidos por el auditor; el resto estático) y un análisis sobre si las guilds deberían sustituirse por Skills o Plugins. Lo que el código desmiente queda aquí también, para no repetirlo.
 
 **Aceptado como trabajo (pendiente, sin asignar salvo indicación)**
-- [ ] **Carril de CI programado y no bloqueante** (semanal más disparo manual) para los tests ignorados: inferencia real (`test_real_inference_bge_m3`, `test_real_inference_minilm`), prueba de escala `t1277f_scale_*` y el benchmark de PageRank. Hoy las afirmaciones más fuertes (calidad de embeddings, rendimiento a escala) no corren de forma continua.
-- [ ] **Quickstart en inglés**, destilado de la documentación de gobierno ya existente: es la crítica más barata de corregir y mejora la adopción externa.
+- [x] **Carril de CI programado y no bloqueante** `[CERRADO 2026-10-21 — lote AM de Antigravity, revisado por Deep]` (semanal más disparo manual) para los tests ignorados: inferencia real (`test_real_inference_bge_m3`, `test_real_inference_minilm`), prueba de escala `t1277f_scale_*` y el benchmark de PageRank. Hoy las afirmaciones más fuertes (calidad de embeddings, rendimiento a escala) no corren de forma continua.
+- [x] **Quickstart en inglés** `[CERRADO 2026-10-21 — reescrito por el TL a partir del trabajo de Hermes y auditado por DSH: 46 afirmaciones, 4 falsas corregidas]`, destilado de la documentación de gobierno ya existente: es la crítica más barata de corregir y mejora la adopción externa.
 - [ ] **Portabilidad del e2e:** el auditor dice que `tests/e2e/harness.py` fija una ruta de Windows; en el HEAD actual no se reproduce (sin rutas absolutas). Que Buffy lo ejecute desde otro directorio y lo confirme.
-- [ ] **Trocear los ficheros monolíticos** por sus costuras implícitas: `handler_do/mod.rs` (2.734 líneas), `config.rs` (2.847), `api_v1/mod.rs` (2.009), `api_admin.rs` (1.969), `silva/nodes.rs` (1.985), `silva/search.rs` (1.858). Techo blando de la casa: 800.
+- [~] **Trocear los ficheros monolíticos** `[EN CURSO — D-22a bajó handler_do/mod.rs de 2.783 a 1.531 líneas; D-22b y D-22c en la cola de Deep]` por sus costuras implícitas: `handler_do/mod.rs` (2.734 líneas), `config.rs` (2.847), `api_v1/mod.rs` (2.009), `api_admin.rs` (1.969), `silva/nodes.rs` (1.985), `silva/search.rs` (1.858). Techo blando de la casa: 800.
 - [ ] **Auditar cada bloque `[agents.<id>.wake]`**: dejar `auto_approve` desactivado donde la ejecución sin supervisión no sea aceptable (recomendación operativa; la función es *fail-closed* por defecto).
 - [ ] **Spike MCP + Skills** (tamaño pequeño, no una arquitectura nueva): importador de ficheros de skill del estándar abierto Agent Skills (carpetas con un SKILL.md) hacia `@skill:` con la misma puerta de escritura que `tylluan_remember`, probado con dos skills reales. Una skill es texto que se inyecta en el contexto de un agente, es decir, contenido no confiable: no se cargan skills de terceros sin pasar por la capa 1 y el juez de ASI06.
 - [ ] **Pulir el consumo de servidores MCP externos** sobre la API que ya existe (`/api/v1/mcp/external`: alta, baja, edición, descubrimiento): descubrimiento, autenticación y políticas de permisos.
@@ -117,6 +117,38 @@ Fuentes, ambas **no vinculantes** y contrastadas con el código antes de aceptar
 - Las excepciones RUSTSEC de `deny.toml` son ahora **nueve** (se añadió RUSTSEC-2026-0381 con su motivo escrito el 2026-10-21).
 - Ya existen el consumo de MCP externos y las skills a nivel de proyecto (`@skill:`), que el análisis de Skills da por construir.
 - Se confirman y ya estaban documentados: autor único visible, guilds con allowlist y no con sandbox del sistema operativo, vínculo de agente opcional, y que OAuth de `mcp-remote` / Claude Desktop no funciona fuera de `dev_mode` hasta F2.
+
+### 🟢 CICLO 2026-10-21 — Confianza de la memoria, consentimiento OAuth y plan a v1.0
+
+> Resumen completo y trazable: `docs/internal/RESUMEN_investigaciones_y_auditorias_2026-10-21.md`. Plan de preguntas y criterios medibles: `docs/reference/research/2026-10-21_preguntas_correctas_camino_a_v1.md`. Leyenda: **[x]** verificado de forma independiente (git, tests o CI); **[ ]** abierto; **[~]** parcial. Nada de lo cerrado aquí está activo en el kernel de José hasta que él reinicie (producción en `5e49bf8`).
+
+**Cerrado y verificado (en `main`, CI verde en `514058e`)**
+- [x] **Aprobación de planes:** D-13 (autoaprobación), D-16 (ruta por intención de `tylluan_do`), D-26 (el audit nombra `operator`); matriz de audit de 13 filas sin mentiras (T-DSH-21).
+- [x] **Cadena de memoria no confiable (ASI06):** capa 1 en `ingest` y `memory/write` (D-17), `untrusted_content` con banner en bootstrap, `@inbox` (también con payload antiguo) y `tylluan_think`, herencia retroactiva a resúmenes, escritores de federación y A2A con flag intocable (D-18, T-DSH-10 a T-DSH-13 y T-DSH-22).
+- [x] **OAuth fase 2 implementada:** página de consentimiento sin JS, CSRF, consentimiento recordado 30 días y revocable (D-15); techo de fallos por IP con escalado, tope de pendientes y fail-closed ante fichero ilegible (D-25); auditada con 0 bypass (T-DSH-14, T-DSH-18, T-DSH-24). **Inactiva** hasta `dev_mode=false`.
+- [x] **Juez ASI06:** la causa real de los 30 fallos era el techo de 60 s del proxy sobre `llama_backend`, no un segundo servidor (D-19); fuente única `CPU_INFERENCE_GUILDS` con test anti-deriva; 13 casos adversariales sin fallo (T-DSH-16 y T-DSH-17).
+- [x] **Índice FTS:** un solo punto de borrado, contador real de desincronía en `/health?verbose=true` y rebuild disponible sin ejecutar (D-23).
+- [x] **Documentación verificada:** MSRV real 1.88 (con el pin 1.99.1), el gate vigila las cifras de guilds y tools del quickstart, cuatro afirmaciones falsas corregidas.
+- [x] **Q9 (modelos pequeños en `hitl_resolve`):** NO-GO con dato (+2,04 puntos, McNemar exacto p = 0,640; criterio fijado de antemano). Limitación: el conjunto de 245 casos tiene 244 positivos y 1 negativo.
+
+**Abierto — trabajo asignado**
+- [ ] D-27 (el motivo de `untrusted_reason` lo fija el kernel), D-28 (el `agent_id` vacío pasa a `anonymous`), D-29 (un fichero de consentimientos ilegible no se sobrescribe), D-22b y D-22c (seguir troceando `handler_do/mod.rs`): cola 4 de Deep.
+- [ ] Sondas de continuidad sin LLM (identidad, tarea abierta, memoria, hora) tras un reinicio simulado: T-DSH-25.
+- [ ] Cerrar la lista de fuentes no verificadas (OWASP agéntico, Ley de Ciberresiliencia, SLMJury, Reglamento 2017/745): H-1 de Hermes.
+
+**Plan a v1.0 — criterios medibles (de las 13 preguntas)**
+- [ ] **Q1/Q3:** Test de Continuidad publicado y reproducible, y medición «con frente a sin Tylluan» con prueba pareada (arneses nocturnos de Deep y Buffy).
+- [ ] **Q2:** caso ancla demostrado en ARM físico (Raspberry Pi 4/5 de 16 GB) o retirar la afirmación; hoy el README declara que no se ha ejecutado en ARM real.
+- [ ] **Q5/Q6:** identidad con binding (roster más token a `agent_id`), X1 y B2 cerrados con sus tests ignorados en verde; red-team de envenenamiento tipo AgentPoison propio.
+- [ ] **Q7:** ADR de la red de equipo aprobado y los tres escenarios en CI; destino del descubrimiento global decidido sin borrar nada antes.
+- [ ] **Q8:** niveles explícitos (Nivel 0 binario con memoria, Nivel 1 guilds opcionales) y tabla de uso real de las guilds antes de migrar ninguna.
+- [ ] **Q10:** un PR externo fusionado y factor camión medido ≥ 2; documento de continuidad (claves, firma de releases).
+- [ ] **Q11:** prueba de supresión de extremo a extremo (nodo, índice de texto, vectores, audit sin contenido personal), aviso «no es producto sanitario» y revisión por un jurista antes de v1.0.
+- [ ] **Q12:** tabla de Wh por 1000 recuperaciones en cada perfil, con método y máquina.
+- [ ] `rust-version = "1.88"` en el `Cargo.toml` del workspace (recomendación de T-DSH-20).
+
+**Decisiones de José (no se toman sin él)**
+- [ ] Aceptar el NO-GO de Q9 · reconstruir el FTS de producción (13.497 huérfanos) tras reiniciar · las cinco decisiones de identidad de D-24 · eximir o no el loopback en el consentimiento OAuth · exigir operador en toda aprobación de plan · binding token a `agent_id` · licencia (MIT frente a AGPL) · hardware ARM · ADR de la red de equipo · reinicio de producción y, tras OAuth fase 2, `dev_mode=false`.
 
 ### ADR-017 — resultado real de la Fase 1 (2026-10-04)
 
