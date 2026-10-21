@@ -222,25 +222,48 @@ async fn handle_tylluan_recall_inner(
                 is_error: Some(false),
             }),
             Ok(msgs) => {
-                let text = msgs.iter().map(|m| {
-                    let (body, untrusted) = match BlackboardMessage::from_payload(&m.payload) {
-                        Some(bm) => (format!("[{}] {}", bm.msg_type.to_uppercase(), bm.body), bm.untrusted),
-                        None => (m.payload.chars().take(200).collect::<String>(), false),
+                // D-18/T-DSH-12: un payload anterior a D-18 no trae la clave
+                // `untrusted` (el `#[serde(default)]` del struct lo deja en
+                // `false`) y se mostraba verbatim sin banner aunque el remitente
+                // fuese externo. Criterio de LECTURA defensivo: si el payload no
+                // declara el flag y el remitente no tiene identidad local en este
+                // kernel, se trata como no confiable. Si el payload SÍ declara el
+                // flag, se respeta tal cual (el caso A3 de la matriz no cambia).
+                let mut lines: Vec<String> = Vec::with_capacity(msgs.len());
+                for m in &msgs {
+                    let body = match BlackboardMessage::from_payload(&m.payload) {
+                        Some(bm) => format!("[{}] {}", bm.msg_type.to_uppercase(), bm.body),
+                        None => m.payload.chars().take(200).collect::<String>(),
+                    };
+                    let declared = serde_json::from_str::<serde_json::Value>(&m.payload)
+                        .ok()
+                        .and_then(|v| v.get("untrusted").and_then(|u| u.as_bool()));
+                    let untrusted = match declared {
+                        Some(flag) => flag,
+                        None => {
+                            let local =
+                                crate::memory::identity::IdentityManager::new(server.silva.clone())
+                                    .get_identity(&m.sender_id)
+                                    .await
+                                    .is_some();
+                            !local
+                        }
                     };
                     if untrusted {
                         // D-18: este modo devuelve los mensajes VERBATIM antes del
                         // gate; el banner es la unica senal de desconfianza que ve
                         // el modelo.
-                        format!(
+                        lines.push(format!(
                             "[{} FROM {}] {}",
                             m.status,
                             m.sender_id,
                             crate::security::trust::mark_text(&body, &format!("mensaje de agente externo: {}", m.sender_id))
-                        )
+                        ));
                     } else {
-                        format!("[{} FROM {}] {}", m.status, m.sender_id, body)
+                        lines.push(format!("[{} FROM {}] {}", m.status, m.sender_id, body));
                     }
-                }).collect::<Vec<_>>().join("\n");
+                }
+                let text = lines.join("\n");
                 Ok(CallToolResult { content: vec![Content::text(text)], is_error: Some(false) })
             },
             Err(e) => Ok(error_result(&format!("Inbox retrieval failed: {e}"))),
