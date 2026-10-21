@@ -1,0 +1,82 @@
+name: Scheduled Heavy Tests
+
+on:
+  schedule:
+    # Runs weekly on Monday at 03:17 UTC (minute != 0 and != 30 to prevent runner stampedes)
+    - cron: '17 3 * * 1'
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  FASTEMBED_CACHE_DIR: ${{ github.workspace }}/.fastembed_cache
+  HF_HOME: ${{ github.workspace }}/.cache/huggingface
+
+permissions:
+  contents: read
+
+jobs:
+  heavy-tests:
+    name: Heavy Ignored Tests (Inference, Scale & PageRank)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          toolchain: 1.99.1
+
+      - name: Install ONNX Runtime shared library
+        run: |
+          curl -L -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz"
+          tar -zxf /tmp/onnxruntime.tgz -C /tmp
+          sudo mv /tmp/onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so* /usr/lib/
+          rm -rf /tmp/onnxruntime*
+          sudo ldconfig
+
+      - name: Cache Embedding Models
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4
+        with:
+          path: |
+            ${{ github.workspace }}/.fastembed_cache
+            ${{ github.workspace }}/.cache/huggingface
+          key: embedding-models-bge-m3-v1
+          restore-keys: |
+            embedding-models-
+
+      - name: Run Ignored Heavy Tests
+        id: run_tests
+        run: |
+          mkdir -p logs
+          set -o pipefail
+          cargo test -p tylluan-kernel --lib -- --ignored --nocapture 2>&1 | tee logs/ignored_tests.log
+
+      - name: Generate Job Summary
+        if: always()
+        run: |
+          echo "## Scheduled Heavy Tests Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f logs/ignored_tests.log ]; then
+            PASSED=$(grep -oE '[0-9]+ passed' logs/ignored_tests.log | tail -1 || echo "unknown")
+            FAILED=$(grep -oE '[0-9]+ failed' logs/ignored_tests.log | tail -1 || echo "0 failed")
+            IGNORED=$(grep -oE '[0-9]+ ignored' logs/ignored_tests.log | tail -1 || echo "0 ignored")
+            echo "- **Result:** $PASSED; $FAILED; $IGNORED" >> $GITHUB_STEP_SUMMARY
+            echo "- **Command:** \`cargo test -p tylluan-kernel --lib -- --ignored\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            tail -n 30 logs/ignored_tests.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No test log found." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Test Logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: heavy-tests-logs
+          path: logs/
+          if-no-files-found: ignore
