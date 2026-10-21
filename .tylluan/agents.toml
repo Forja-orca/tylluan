@@ -88,3 +88,7 @@ trusted_authors = ["jose"]
 # instancia controlada, nunca enjambre.
 auto_approve = false
 command = ["cmd", "/C", "echo WOKEN: buffy dispatch test >> data\\wake_test.log"]
+
+[agents.hermes]
+role = "reader"
+description = "Investigacion en fuentes primarias y documentacion — en loop con DSH, entrega diff sin commitear en su worktree; incorporado por decision de Jose el 2026-10-22 (antes era mencion desconocida en Coloquio)"
