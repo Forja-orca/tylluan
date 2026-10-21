@@ -388,17 +388,34 @@ pub async fn ingest_handler(
 
     let node_id: String = format!("{}__{}", node_type.clone(), uuid::Uuid::new_v4().simple());
 
-    let metadata = serde_json::json!({
+    // D-17/H5: `ingest` guarda DOCUMENTOS, y un documento legítimo puede hablar
+    // de inyección de prompts (un paper, un cheat-sheet, este mismo informe) —
+    // rechazarlo daría falsos positivos. La decisión del TL es marcarlo: la capa 1
+    // deja `untrusted_content: true` en el metadata y el juez decide después.
+    // Antes de esto, B-9 midió 8/8 muestras de inyección guardadas SIN marca.
+    let layer1_flagged = crate::security::poison_patterns::matches_injection_pattern(&content);
+    if layer1_flagged {
+        tracing::warn!("ingest: content matches a known injection pattern (ASI06 Layer 1) - stored MARKED as untrusted, not rejected");
+    }
+    let mut metadata_value = serde_json::json!({
         "source": "ingest_pipeline",
         "filename": file_name,
         "content_type": content_type,
         "tags": tags_owned,
         "context": q.context,
-    }).to_string();
+    });
+    if layer1_flagged && let Some(obj) = metadata_value.as_object_mut() {
+        obj.insert("untrusted_content".to_string(), serde_json::Value::Bool(true));
+        obj.insert("untrusted_reason".to_string(), serde_json::Value::String(
+            "ASI06 Layer 1: content matches a known prompt-injection pattern".to_string()
+        ));
+    }
+    let metadata = metadata_value.to_string();
 
     let upsert_result = silva.upsert_node(&node_id, &node_type_owned, &content, &metadata).await;
 
     let node_id_final = node_id.clone();
+    let wrote_ok = upsert_result.is_ok();
     let final_status: &str = match upsert_result {
         Ok(()) => "ok",
         Err(e) => {
@@ -406,6 +423,15 @@ pub async fn ingest_handler(
             "degraded"
         }
     };
+
+    // D-17: capa 2 en la ruta de ingesta (fire-and-forget, post-escritura).
+    if wrote_ok {
+        crate::security::write_gate::spawn_write_gate_judge(
+            silva.clone(),
+            node_id_final.clone(),
+            content.clone(),
+        );
+    }
 
     let mut triples_extracted: usize = 0;
 

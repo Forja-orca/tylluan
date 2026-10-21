@@ -14,6 +14,20 @@ pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req)
         Some(c) => c,
         None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "missing content" }))).into_response(),
     };
+    // D-17/H5: esta ruta es una escritura de AGENTE, igual que
+    // `tylluan_remember`, pero hasta ahora escribía sin capa 1 ni juez: B-9
+    // midió 8/8 muestras de inyección aceptadas aquí sin ninguna marca. Misma
+    // severidad que `remember`: rechazo duro, antes de tocar la BD.
+    if crate::security::poison_patterns::matches_injection_pattern(content) {
+        tracing::warn!("memory/write rejected: content matches a known injection pattern (ASI06 Layer 1)");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "ACCESS_DENIED",
+                "reason": "content matches a known prompt-injection pattern and was rejected before being written to memory."
+            })),
+        ).into_response();
+    }
     // Previously hardcoded to node_id "manual" -- every single call to this
     // endpoint (e.g. guilds/core/coloquio_digest.py's _store()) silently
     // overwrote the same node instead of creating a new one, losing all
@@ -33,7 +47,17 @@ pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req)
     let metadata = serde_json::json!({ "agent_id": agent_id }).to_string();
     let opts = crate::memory::silva::NodeWriteOptions::new("agent_generated").owner_scope(owner_scope);
     match state.silva.upsert_node_with_validity(&node_id, node_type, content, &metadata, opts).await {
-        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "node_id": node_id }))).into_response(),
+        Ok(_) => {
+            // D-17: capa 2 (juez LLM, fire-and-forget) también aquí — B-9 midió
+            // que esta ruta no llegaba nunca al juez. Mismo patrón que
+            // `handler_remember.rs`: no bloquea la respuesta ni falla la escritura.
+            crate::security::write_gate::spawn_write_gate_judge(
+                state.silva.clone(),
+                node_id.clone(),
+                content.to_string(),
+            );
+            (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "node_id": node_id }))).into_response()
+        }
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "write failed" }))).into_response(),
     }
 }

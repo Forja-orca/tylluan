@@ -162,6 +162,16 @@ pub async fn handle_tylluan_remember(
                         chrono::Utc::now().timestamp(),
                     ).await;
                 }
+                // D-17: cuarto camino de escritura. Este retorno temprano no crea
+                // nodo, así que se quedaba fuera del juez (hallazgo abierto de D-9):
+                // el texto entrante refuerza un nodo existente sin que nadie mire
+                // si ese nodo es contenido no confiable. Se juzga el nodo que SE
+                // REFUERZA (es el que queda en memoria), no el texto descartado.
+                crate::security::write_gate::spawn_write_gate_judge(
+                    server.silva.clone(),
+                    existing_node.id.clone(),
+                    existing_node.content.clone(),
+                );
                 let preview = existing_node.content.chars().take(100).collect::<String>();
                 return Ok(CallToolResult {
                     content: vec![Content::text(format!(
