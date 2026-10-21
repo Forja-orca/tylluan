@@ -1,6 +1,8 @@
 //! Tests de `handler_do`, extraidos de `mod.rs` en D-22a (movimiento puro).
 
 use super::embedding::parse_content_for_embedding;
+use super::coloquio_utils::parse_coloquio_intent;
+use super::routing::resolve_guild_name;
 
 #[test]
 fn d16_approve_intent_matches_only_when_the_phrase_starts_the_intent() {
