@@ -16,7 +16,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/version-0.17.1-blue.svg" alt="v0.17.1">
-  <img src="https://img.shields.io/badge/rust-1.88+-orange.svg" alt="Rust 1.88+">
+  <img src="https://img.shields.io/badge/rust-1.88+-orange.svg" alt="Rust 1.88+ mínimo (toolchain fijada en 1.99.1 en rust-toolchain.toml)">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
   <img src="https://img.shields.io/badge/cloud-none-brightgreen.svg" alt="No Cloud">
