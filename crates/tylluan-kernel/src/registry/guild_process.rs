@@ -1712,6 +1712,96 @@ mod tests {
         }
     }
 
+    /// T-DSH-17 (vía 1) — auditoría adversarial del techo del proxy tras D-19.
+    ///
+    /// Ninguna guild FUERA de `CPU_INFERENCE_GUILDS` puede recibir el techo
+    /// plano (3600 s) por ninguna vía del registry:
+    ///   - `effective_tool_call_secs` (lo que alimenta el `TimeoutsConfig` del
+    ///     spawn y por tanto el timeout del proxy), y
+    ///   - `timeouts_for` (la forma que realmente se pasa a `Guild::spawn`).
+    ///
+    /// La tabla se recorre sobre el catálogo COMPLETO, no sobre una lista fija:
+    /// si aparece una guild nueva que cae en el carril ilimitado sin estar en
+    /// la const, esto falla. También falla si `main.rs` deja de cablear
+    /// `.with_guild_timeouts(...)`: sin ese cableado `effective_tool_call_secs`
+    /// devuelve el plano 3600 a TODAS las guilds (bash incluida) por la rama
+    /// de fallback, que es exactamente el bypass que D-19 quería cerrar.
+    #[test]
+    fn only_cpu_inference_guilds_get_the_unlimited_proxy_ceiling() {
+        let registry = GuildRegistry::new(
+            PathBuf::from("."), 300,
+            TimeoutsConfig { handshake_secs: 120, tool_call_secs: 3600 },
+            3,
+        ).with_guild_timeouts(GuildTimeoutsConfig {
+            system_guild_ms: 15_000,
+            analysis_guild_ms: 60_000,
+            heavy_guild_ms: 180_000,
+            mcp_client_heartbeat_ms: 8_000,
+        });
+
+        let mut with_ceiling: Vec<String> = Vec::new();
+        for g in crate::router::catalog::builtin_catalog() {
+            let secs = registry.effective_tool_call_secs(&g.name);
+            // Segunda vía: lo que de verdad se entrega al spawn debe coincidir.
+            assert_eq!(
+                registry.timeouts_for(&g.name).tool_call_secs,
+                secs,
+                "'{}': timeouts_for no coincide con effective_tool_call_secs",
+                g.name
+            );
+            if CPU_INFERENCE_GUILDS.contains(&g.name.as_str()) {
+                assert_eq!(
+                    secs, 3600,
+                    "la guild de inferencia '{}' perdió el techo plano",
+                    g.name
+                );
+            } else {
+                assert_ne!(
+                    secs, 3600,
+                    "la guild '{}' recibe 3600 s SIN estar en CPU_INFERENCE_GUILDS",
+                    g.name
+                );
+                assert!(
+                    secs <= 180,
+                    "la guild '{}' recibe {secs} s > 180 s fuera del carril de inferencia",
+                    g.name
+                );
+            }
+            if secs == 3600 {
+                with_ceiling.push(g.name.clone());
+            }
+        }
+        let mut expected: Vec<String> =
+            CPU_INFERENCE_GUILDS.iter().map(|n| n.to_string()).collect();
+        expected.sort();
+        with_ceiling.sort();
+        assert_eq!(
+            with_ceiling, expected,
+            "las guilds con techo de 3600 s deben ser EXACTAMENTE CPU_INFERENCE_GUILDS"
+        );
+
+        // Guard estructural: el cableado de categorías en producción es lo que
+        // impide que la rama de fallback dé 3600 s a todo el mundo.
+        let main_src = include_str!("../main.rs");
+        assert!(
+            main_src.contains(".with_guild_timeouts("),
+            "main.rs debe cablear .with_guild_timeouts(...): sin ello el proxy deja \
+             el techo plano 3600 s a TODAS las guilds (bash/docker incluidas) y D-19 \
+             queda anulado en producción (T-DSH-17)"
+        );
+
+        // Documentado: sin `with_guild_timeouts` el fallback plano da 3600 a
+        // cualquiera (comportamiento previo, no una decisión de categoría).
+        // El test fija ese límite para que quede explícito y no se confunda con
+        // una vía legítima de paciencia ilimitada.
+        let fallback = GuildRegistry::new(
+            PathBuf::from("."), 300,
+            TimeoutsConfig { handshake_secs: 120, tool_call_secs: 3600 },
+            3,
+        );
+        assert_eq!(fallback.effective_tool_call_secs("bash"), 3600);
+    }
+
     #[test]
     fn test_guild_process_creation() {
         let launcher = GuildLauncher::Python { module_path: "guilds.core.bash".to_string() };
