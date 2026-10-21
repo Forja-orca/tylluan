@@ -7,7 +7,7 @@
 | Bloque | Entrega | Estado |
 |---|---|---|
 | Aprobación de planes | D-13, D-16 (intención `approve action for plan`), D-26 (el audit nombra `operator`) | En `main`; matriz de audit de 13 filas sin mentiras |
-| Memoria no confiable | D-17 (capa 1 en `ingest` y `memory/write`), D-18 (`untrusted_content` con banners, herencia y escritores), banner en `tylluan_think`, `@inbox` con payload antiguo, herencia retroactiva a resúmenes | En `main`; matriz adversarial sin huecos salvo B2 |
+| Memoria no confiable | D-17 (capa 1 en `ingest` y `memory/write`), D-18 (`untrusted_content` con banners, herencia y escritores), banner en `tylluan_think`, `@inbox` con payload antiguo, herencia retroactiva a resúmenes | En `main`: la **propagación** de la marca funciona. **Corrección del 22-oct:** el **marcado en escritura** cubre solo 2 de las 6 vías y la capa 1 es evadible (red-team de Buffy; D-31, D-32 y D-33 abiertos) |
 | OAuth fase 2 | D-15 (página de consentimiento), D-25 (techo de fallos por IP con escalado, tope de pendientes, fail-closed ante fichero ilegible) | En `main`, **inactivo** hasta `dev_mode=false` (decisión de José) |
 | Juez ASI06 | D-19 (`llama_backend` sin techo de 60 s; causa real distinta de la hipótesis C3), fuente única `CPU_INFERENCE_GUILDS` | En `main` |
 | Índice FTS | D-23: un solo punto de borrado, contador real de desincronía, rebuild disponible y **sin ejecutar** | En `main`; reconstrucción de producción pendiente de José |
