@@ -50,14 +50,20 @@ async fn test_state() -> Arc<HttpState> {
     // ADR-019 step 2: permission denials are audited via log_audit_entry ->
     // guild_audit_log. Keep those rows in a per-process temp file instead of
     // polluting the repo tree (./data/audit.db relative to the crate dir).
-    if std::env::var("TYLLUAN_AUDIT_DB").is_err() {
-        let p = std::env::temp_dir().join(format!(
-            "tylluan_audit_fed_{}.db",
-            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
-        // Safety: set once, before any audit write in this test process.
-        unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", p); }
-    }
+    // `Once`: two tests racing through the old `is_err()` check could each set a
+    // different file, so t15 read one path while the audit row went to the
+    // other (red in CI on aa57b01, never locally).
+    static AUDIT_SEAM: std::sync::Once = std::sync::Once::new();
+    AUDIT_SEAM.call_once(|| {
+        if std::env::var("TYLLUAN_AUDIT_DB").is_err() {
+            let p = std::env::temp_dir().join(format!(
+                "tylluan_audit_fed_{}.db",
+                TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+            ));
+            // Safety: runs exactly once, before any audit write in this test process.
+            unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", p); }
+        }
+    });
 
     // Build default repo map for test
     let cwd = std::env::current_dir().unwrap_or_default();
