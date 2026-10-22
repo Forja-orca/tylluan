@@ -82,7 +82,7 @@ Se define **una interfaz** (`SandboxRuntime`: preparar, ejecutar con política, 
 
 ### 4.4 Manifiesto de capacidades
 
-**Hoy no existe ningún manifiesto:** lo único que hay es la constante `CAPABILITIES = {...}` dentro del propio `.py`, que `catalog.rs` (`extract_capabilities`) parsea, y solo la tienen 3 guilds. Se propone que cada guilda y cada conector declare, en un manifiesto leído por el kernel (que sustituiría a esa constante):
+**Hoy no existe ningún manifiesto:** lo único que hay es la constante `CAPABILITIES = {...}` dentro del propio `.py`, que `catalog.rs` (`extract_capabilities`) parsea, y solo la tienen 3 guilds. **Medido en T-DSH-32:** el parser cierra mal los dicts multilínea y el catálogo real solo expone las capacidades de `bash`; las de `vision` y `websearch` se pierden (ver `docs/internal/IMPL_T-DSH-32_matriz_capabilities_enforce_2026-10-23.md`). Arreglar el parser es el primer paso de F0. Se propone que cada guilda y cada conector declare, en un manifiesto leído por el kernel (que sustituiría a esa constante):
 
 - `process_execution` (lista de binarios o `false`), `filesystem_scope` (rutas, por defecto solo su espacio de trabajo), `network_hosts` (dominios y métodos permitidos, por defecto vacío), `container_daemon` (nuevo: acceso al daemon es capacidad de host), `kernel_credential` (nuevo: qué clase de credencial del kernel necesita, §4.5), `env_inherit` (nuevo: si hereda el entorno del kernel), `timeouts`.
 - **Valor por defecto para T2: denegar todo.** Para T1: se declara primero (fase F0) y se aplica después (`capabilities_enforce` encendido por defecto cuando las guilds núcleo estén declaradas y se haya medido qué se rompe).
