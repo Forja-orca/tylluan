@@ -367,67 +367,136 @@ fn extract_guild_name(content: &str) -> Option<String> {
     None
 }
 
+/// ¿La línea empieza con una comilla triple (docstring Python)? Se comprueba en
+/// bytes para no incrustar secuencias de comillas en el propio fuente.
+fn starts_with_triple_quote(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    bytes.starts_with(&[0x22, 0x22, 0x22]) || bytes.starts_with(&[0x27, 0x27, 0x27])
+}
+
+/// Quita un comentario `# ...` de una linea de Python (solo fuera de cadenas).
+fn strip_python_comment(line: &str) -> &str {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for (idx, ch) in line.char_indices() {
+        if let Some(q) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == q {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '\'' | '"' => quote = Some(ch),
+            '#' => return &line[..idx],
+            _ => {}
+        }
+    }
+    line
+}
+
+/// Acumula en `out` el contenido de un bloque `CAPABILITIES = {...}` contando
+/// llaves (ignorando las que están dentro de cadenas) e **incluyendo la llave de
+/// cierre**. Devuelve `true` cuando el bloque queda cerrado.
+fn push_capabilities_block(code: &str, out: &mut String, depth: &mut i32) -> bool {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for ch in code.chars() {
+        if let Some(q) = quote {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == q {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '\'' | '"' => {
+                quote = Some(ch);
+                out.push(ch);
+            }
+            '{' => {
+                *depth += 1;
+                out.push(ch);
+            }
+            '}' => {
+                *depth -= 1;
+                out.push(ch);
+                if *depth <= 0 {
+                    return true;
+                }
+            }
+            _ => out.push(ch),
+        }
+    }
+    false
+}
+
 /// Extract CAPABILITIES dict from a Python guild file.
-/// Parses `CAPABILITIES = { ... }` module-level declarations.
-/// Supports simple dict literals with string, bool, and array values.
-/// Returns None if no CAPABILITIES declaration is found.
+///
+/// D-35(a): antes, la linea con la llave de cierre se descartaba (el `break`
+/// ocurria antes de anadirla), asi que cualquier declaracion multilinea quedaba
+/// truncada y `serde_json` devolvia `None` (vision y websearch nunca llegaban a
+/// `check_capabilities`). Ahora se acumulan los caracteres del bloque contando
+/// llaves fuera de cadenas e incluyendo el `}` final; los comentarios `#`
+/// (tambien con llaves dentro) se ignoran fuera de cadenas. Se sigue soportando
+/// el dict de una linea y la conversion `True`/`False`/`None` de Python a JSON.
 fn extract_capabilities(content: &str) -> Option<serde_json::Value> {
-    let mut in_block = false;
-    let mut brace_depth = 0;
-    let mut result = String::new();
+    let mut started = false;
+    let mut depth = 0i32;
+    let mut json = String::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
-
-        if trimmed.starts_with('#') || trimmed.starts_with("\"\"\"") || trimmed.starts_with("'''") {
+        if starts_with_triple_quote(trimmed) {
             continue;
         }
-
-        if !in_block {
-            if let Some(pos) = trimmed.find("CAPABILITIES") {
-                let after_keyword = &trimmed[pos + 12..].trim();
-                if let Some(rest) = after_keyword.strip_prefix('=') {
-                    let after_eq = rest.trim();
-                    if let Some(rest) = after_eq.strip_prefix('{') {
-                        in_block = true;
-                        brace_depth = 1;
-                        result.push('{');
-                        if let Some(end_brace) = rest.rfind('}') {
-                            result.push_str(&rest[..end_brace]);
-                            result.push('}');
-                            break;
-                        } else {
-                            result.push_str(rest);
-                        }
-                    }
-                }
-            }
-        } else {
-            for ch in trimmed.chars() {
-                match ch {
-                    '{' => brace_depth += 1,
-                    '}' => brace_depth -= 1,
-                    _ => {}
-                }
-            }
-            if brace_depth == 0 {
+        if !started {
+            let Some(pos) = trimmed.find("CAPABILITIES") else {
+                continue;
+            };
+            let after_keyword = trimmed[pos + 12..].trim();
+            let Some(rest) = after_keyword.strip_prefix('=') else {
+                continue;
+            };
+            let rest = rest.trim();
+            let Some(body) = rest.strip_prefix('{') else {
+                continue;
+            };
+            started = true;
+            depth = 1;
+            json.push('{');
+            if push_capabilities_block(body, &mut json, &mut depth) {
                 break;
             }
-            result.push_str(trimmed);
-            result.push(' ');
+        } else {
+            let code = strip_python_comment(trimmed);
+            if code.trim().is_empty() {
+                continue;
+            }
+            if push_capabilities_block(code, &mut json, &mut depth) {
+                break;
+            }
         }
     }
 
-    if result.is_empty() || result == "{}" {
+    if json.is_empty() || json == "{}" {
         return None;
     }
 
-    // Convert Python bool/None to JSON-compatible strings
-    let json_str = result
+    let json_str = json
         .replace("True", "true")
         .replace("False", "false")
-        .replace("None", "null");
-
+        .replace("None", "null")
+        // Python permite coma final antes de `}`; JSON no.
+        .replace(",}", "}")
+        .replace(", }", "}");
     serde_json::from_str(&json_str).ok()
 }
 
@@ -670,6 +739,27 @@ fn guild_root_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extract_capabilities_handles_multiline_singleline_and_comments() {
+        let single = "CAPABILITIES = {\"process_execution\": True}\n";
+        let parsed = extract_capabilities(single).expect("dict de una linea");
+        assert_eq!(parsed["process_execution"], serde_json::json!(true));
+
+        let multiline = "CAPABILITIES = {\n    \"process_execution\": False,\n    \"filesystem_scope\": [\"/\"],\n    \"network_hosts\": [],\n}\n";
+        let parsed = extract_capabilities(multiline).expect("dict multilinea");
+        assert_eq!(parsed["process_execution"], serde_json::json!(false));
+        assert_eq!(parsed["filesystem_scope"][0], serde_json::json!("/"));
+        assert_eq!(parsed["network_hosts"], serde_json::json!([]));
+
+        let commented = "CAPABILITIES = {\n    # comentario con llaves { } que no cuentan\n    \"process_execution\": False,  # sin ejecucion\n    \"network_hosts\": [\"127.0.0.1:32700\"],\n}\n";
+        let parsed = extract_capabilities(commented).expect("dict multilinea con comentarios");
+        assert_eq!(parsed["process_execution"], serde_json::json!(false));
+        assert_eq!(parsed["network_hosts"][0], serde_json::json!("127.0.0.1:32700"));
+
+        assert!(extract_capabilities("OTRA_COSA = 1").is_none());
+        assert!(extract_capabilities("CAPABILITIES = {}").is_none());
+    }
 
     #[test]
     fn test_catalog_not_empty() {

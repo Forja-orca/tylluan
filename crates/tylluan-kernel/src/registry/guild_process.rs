@@ -204,7 +204,8 @@ pub fn enforce_capabilities(
                 }
             } else {
                 // Non-empty allowlist: extract requested command and check
-                if let Some(cmd) = extract_requested_binary(params)
+                if is_exec_like_tool(params)
+                    && let Some(cmd) = extract_requested_binary(params)
                     && !list.iter().any(|allowed| allowed == &cmd) {
                         return Some(format!(
                             "CAPABILITY_BLOCKED: guild '{}' declares process_execution allowlist {:?}, \
@@ -221,19 +222,15 @@ pub fn enforce_capabilities(
                 }
             }
         }
-        Some(v) if v.as_bool() == Some(false) => {
-            let is_exec_tool = is_exec_like_tool(params);
-            let has_command_arg = params.arguments.as_ref()
-                .and_then(|a| a.get("command"))
-                .and_then(|v| v.as_str())
-                .map(|s| !s.is_empty())
-                .unwrap_or(false);
-            if is_exec_tool || has_command_arg {
-                return Some(format!(
-                    "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution=false. \
-                     This guild may not execute system commands."
-                ));
-            }
+        // D-35b: la semántica de ejecución sale del nombre de la herramienta, no
+        // de la mera presencia de `command`: el router siembra `command=intent`
+        // en TODA llamada (prepare.rs), así que como criterio bloquearía
+        // web_search/vision legítimas (T-DSH-43).
+        Some(v) if v.as_bool() == Some(false) && is_exec_like_tool(params) => {
+            return Some(format!(
+                "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution=false. \
+                 This guild may not execute system commands."
+            ));
         }
         _ => {} // true or unknown type → allow
     }
@@ -1989,11 +1986,22 @@ mod tests {
     }
 
     #[test]
-    fn test_enforce_process_execution_blocks_command_arg() {
+    fn test_enforce_process_execution_ignores_command_arg_on_non_exec_tool() {
+        // D-35b: el router siembra `command=intent` en toda llamada; no es señal de ejecución.
         let caps = serde_json::json!({"process_execution": false});
+        let params = make_params("web_search", &[("command", "busca rust async")]);
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
         let params = make_params("filesystem_read", &[("command", "rm -rf /")]);
-        let result = enforce_capabilities("test", &caps, &params);
-        assert!(result.is_some());
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_allowlist_ignores_command_arg_on_non_exec_tool() {
+        let caps = serde_json::json!({"process_execution": ["git"]});
+        let params = make_params("web_search", &[("command", "busca rust async")]);
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+        let params = make_params("bash_execute", &[("command", "rm -rf /")]);
+        assert!(enforce_capabilities("test", &caps, &params).is_some());
     }
 
     #[test]

@@ -29,7 +29,7 @@
 use std::path::{Path, PathBuf};
 
 use rmcp::model::CallToolRequestParam;
-use serde_json::{Value, json};
+use serde_json::Value;
 use tylluan_kernel::registry::guild_process::enforce_capabilities;
 use tylluan_kernel::router::catalog::builtin_catalog;
 
@@ -175,8 +175,8 @@ const CASES: &[Case] = &[
         tool: "vision_analyze",
         args: &[("image_path", "/tmp/a.png"), ("command", "rm -rf /")],
         kind: Kind::Malicious,
-        note: "argumento 'command' inyectado en herramienta no-exec",
-        expect_blocked: true,
+        note: "argumento 'command' en herramienta no-exec: pasa tras D-35b (el router lo siembra siempre; residual declarado)",
+        expect_blocked: false,
     },
     // ── websearch: process_execution false, network_hosts, filesystem [] ────
     Case {
@@ -210,8 +210,8 @@ const CASES: &[Case] = &[
         // es el tercer fallback LEGÍTIMO de la query, no un comando de shell.
         args: &[("command", "rust async")],
         kind: Kind::Legit,
-        note: "FALSO BLOQUEO: 'command' es fallback de query en el .py",
-        expect_blocked: true,
+        note: "'command' es fallback de query en el .py (falso bloqueo arreglado por D-35b)",
+        expect_blocked: false,
     },
     Case {
         guild: "websearch",
@@ -302,23 +302,6 @@ fn declared_capabilities(rel: &str) -> Value {
     })
 }
 
-fn expected_caps(guild: &str) -> Value {
-    match guild {
-        "bash" => json!({"process_execution": true}),
-        "vision" => json!({
-            "process_execution": false,
-            "filesystem_scope": ["/"],
-            "network_hosts": [],
-        }),
-        "websearch" => json!({
-            "process_execution": false,
-            "network_hosts": ["127.0.0.1:32700"],
-            "filesystem_scope": [],
-        }),
-        other => panic!("guild sin CAPABILITIES esperadas: {other}"),
-    }
-}
-
 fn params(tool: &str, args: &[(&str, &str)]) -> CallToolRequestParam {
     let mut map = serde_json::Map::new();
     for (k, v) in args {
@@ -330,38 +313,29 @@ fn params(tool: &str, args: &[(&str, &str)]) -> CallToolRequestParam {
     }
 }
 
-/// Bug actual del catálogo: `extract_capabilities` solo cierra dicts de una
-/// línea; en las declaraciones multilínea se corta en la última línea (`}`) sin
-/// añadirla → JSON truncado → `None`. Consecuencia: `vision` y `websearch`
-/// entran en `check_capabilities` como "sin CAPABILITIES" y NUNCA se enforzan.
-/// Este test fija ese estado; cuando se arregle, fallará aquí y habrá que
-/// actualizar la matriz y la conclusión de F0.
+/// D-35(a) aplicado: el catálogo ya parsea las declaraciones multilínea de
+/// `vision` y `websearch`, además del dict de una línea de `bash`.
 #[test]
-fn catalog_capability_parser_gap() {
+fn catalog_capabilities_are_parsed_after_d35() {
     let catalog = builtin_catalog();
     assert!(!catalog.is_empty(), "catálogo vacío: ¿no se encontró guilds/?");
 
-    let with_caps: Vec<&str> = catalog
+    let mut with_caps: Vec<&str> = catalog
         .iter()
         .filter(|g| g.capabilities.is_some())
         .map(|g| g.name.as_str())
         .collect();
+    with_caps.sort_unstable();
     println!("catalogo: guilds con capabilities declaradas y PARSEADAS = {with_caps:?}");
     assert_eq!(
         with_caps,
-        vec!["bash"],
-        "el parser del catálogo cambió: hoy solo bash (dict de una línea) llega con capabilities; \
-         si vision/websearch ya aparecen, actualizar la matriz F0 de T-DSH-32"
-    );
-
-    let bash = catalog.iter().find(|g| g.name == "bash").unwrap();
-    assert_eq!(
-        bash.capabilities.as_ref().unwrap(),
-        &declared_capabilities("guilds/builders/plugins/bash.py"),
-        "las capabilities parseadas de bash deben coincidir con su .py"
+        vec!["bash", "vision", "websearch"],
+        "D-35: esperado bash (dict de una línea) + vision y websearch (multilínea); \
+         si cambió, revisar extract_capabilities"
     );
 
     for (guild, rel) in [
+        ("bash", "guilds/builders/plugins/bash.py"),
         ("vision", "guilds/core/vision.py"),
         ("websearch", "guilds/core/websearch.py"),
     ] {
@@ -369,21 +343,51 @@ fn catalog_capability_parser_gap() {
             .iter()
             .find(|g| g.name == guild)
             .unwrap_or_else(|| panic!("guild '{guild}' ausente del catálogo"));
-        assert!(
-            desc.capabilities.is_none(),
-            "'{guild}' ya tiene capabilities parseadas: el parser está arreglado; \
-             actualizar la matriz F0 de T-DSH-32 con ellas"
-        );
-        // La declaración del .py SÍ existe y es la que usa la matriz de abajo.
         assert_eq!(
-            declared_capabilities(rel),
-            expected_caps(guild),
-            "CAPABILITIES declaradas por '{guild}' distintas de las esperadas"
-        );
-        println!(
-            "catalogo: {guild} tiene CAPABILITIES en su .py, pero el catálogo las pierde (null)"
+            desc.capabilities.as_ref().unwrap(),
+            &declared_capabilities(rel),
+            "las capabilities parseadas de '{guild}' deben coincidir con su .py"
         );
     }
+}
+
+/// Criterio (6) de T-DSH-42: con las capacidades YA parseadas, el perfil Strict
+/// (que fuerza `process_execution = false`) no debe bloquear ningún uso legítimo
+/// de `vision` ni de `websearch` (D-35b: `web_search(command=...)` ya no se bloquea).
+///
+/// `check_capabilities` es privada; se emula su rama Strict con el override que
+/// hace ella (process_execution=false sobre las caps declaradas).
+#[test]
+fn strict_profile_does_not_block_legit_vision_and_documents_websearch_fallback() {
+    let catalog = builtin_catalog();
+    let strict_caps = |guild: &str| {
+        let mut caps = catalog
+            .iter()
+            .find(|g| g.name == guild)
+            .and_then(|g| g.capabilities.clone())
+            .unwrap_or_else(|| panic!("'{guild}' sin capacidades parseadas (D-35)"));
+        if let Some(obj) = caps.as_object_mut() {
+            obj.insert("process_execution".to_string(), Value::Bool(false));
+        }
+        caps
+    };
+
+    let mut blocked_legit: Vec<String> = Vec::new();
+    for case in CASES.iter().filter(|c| {
+        c.kind == Kind::Legit && (c.guild == "vision" || c.guild == "websearch")
+    }) {
+        let caps = strict_caps(case.guild);
+        if enforce_capabilities(case.guild, &caps, &params(case.tool, case.args)).is_some() {
+            blocked_legit.push(format!("{}.{}", case.guild, case.tool));
+        }
+    }
+    blocked_legit.sort();
+    println!("Strict: llamadas legítimas bloqueadas = {blocked_legit:?}");
+    assert_eq!(
+        blocked_legit,
+        Vec::<String>::new(),
+        "Strict no debe bloquear ninguna llamada legítima (D-35a parser + D-35b: 'command' solo cuenta en herramientas exec-like)"
+    );
 }
 
 #[test]
@@ -462,16 +466,12 @@ fn capabilities_enforce_matrix_fixes_current_behaviour() {
     );
     assert_eq!(
         false_blocks.len(),
-        1,
-        "hoy hay exactamente UN falso bloqueo (web_search con argumento command); si cambió, revisar D-32/ADR-022"
-    );
-    assert_eq!(
-        false_blocks[0].guild, "websearch",
-        "el falso bloqueo esperado es websearch.web_search"
+        0,
+        "tras D-35b no debe haber falsos bloqueos (web_search con command ya no se bloquea); si cambió, revisar D-35b/ADR-022"
     );
     assert_eq!(
         malicious_passing.len(),
-        6,
-        "hoy pasan exactamente SEIS llamadas maliciosas; si cambió, revisar D-32/ADR-022"
+        7,
+        "hoy pasan exactamente SIETE llamadas maliciosas (6 + vision con 'command' tras D-35b); si cambió, revisar D-32/ADR-022"
     );
 }
