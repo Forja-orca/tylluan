@@ -56,25 +56,27 @@ fn params(tool: &str, args: &[(&str, &str)]) -> CallToolRequestParam {
     }
 }
 
-/// **Comportamiento ACTUAL (vivo).** El catálogo no expone capacidades para
-/// vision ni websearch: `extract_capabilities` pierde el cierre de los dicts
-/// multilínea. Deep debe invertir este test al cerrar D-35.
+/// **Comportamiento TRAS D-35(a) (pin de regresion).** El catalogo ya expone
+/// las CAPABILITIES declaradas en multilinea de vision y websearch: si vuelve a
+/// `None`, el parser ha regresado.
 #[test]
-fn d35_current_catalog_returns_none_for_multiline_capabilities() {
+fn d35_catalog_now_parses_multiline_capabilities() {
     for guild in ["vision", "websearch"] {
-        assert!(
-            catalog_capabilities(guild).is_none(),
-            "comportamiento actual esperado: el catálogo NO debe exponer CAPABILITIES de \
-             '{guild}' todavía (si ya las expone, D-35 está arreglado: invierte este test)"
+        let capabilities = catalog_capabilities(guild).unwrap_or_else(|| {
+            panic!("regresion de D-35: el catalogo vuelve a dar None para '{guild}'")
+        });
+        assert_eq!(
+            capabilities.get("process_execution").and_then(|v| v.as_bool()),
+            Some(false),
+            "'{guild}' debe declarar process_execution=false; capacidades: {capabilities}"
         );
     }
 }
 
 /// **DESEADO (a) — D-35.** Tras arreglar el parser, `vision` y `websearch`
 /// (declaraciones multilínea) deben exponerse como `Some` con
-/// `process_execution = false`. Hoy falla: `None` para ambas.
+/// `process_execution = false` (aceptado por D-35(a)).
 #[test]
-#[ignore = "D-35"]
 fn d35_desired_multiline_capabilities_are_parsed() {
     for guild in ["vision", "websearch"] {
         let capabilities = catalog_capabilities(guild).unwrap_or_else(|| {
@@ -97,7 +99,6 @@ fn d35_desired_multiline_capabilities_are_parsed() {
 /// comando de shell. Hoy falla ya en el primer paso (el catálogo da `None`), que
 /// es la razón correcta.
 #[test]
-#[ignore = "D-35"]
 fn d35_desired_websearch_command_fallback_is_not_blocked() {
     let capabilities = catalog_capabilities("websearch").unwrap_or_else(|| {
         panic!(
