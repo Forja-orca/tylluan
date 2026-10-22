@@ -80,8 +80,6 @@ const SQUASHED_PATTERNS: &[&str] = &[
     "disregardallpriorinstructions",
     "overridesecuritypolicy",
     "youarenow",
-    "imstart",
-    "imend",
     "ignoratodaslasinstruccionesanteriores",
     "ignoralasinstruccionesanteriores",
     "olvidatodaslasinstruccionesanteriores",
