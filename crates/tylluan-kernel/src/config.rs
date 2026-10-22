@@ -1418,6 +1418,13 @@ pub struct SecurityConfig {
     /// producto es de José/TL (D-32); el kernel solo deja la palanca.
     #[serde(default = "default_mark_uploads_untrusted")]
     pub mark_uploads_untrusted: bool,
+    /// D-33: modelo que se manda al juez (capa 2 de escritura y capa 4) cuando
+    /// el backend compatible con OpenAI tiene varios cargados. Sin el campo
+    /// `model`, LM Studio y compania responden 400 y el juez queda inerte.
+    /// Vacio = no se envia nada y el guild resuelve el primero de `/v1/models`.
+    /// No cambia el modelo por defecto del guild (decision de Jose, M-BUFFY-3).
+    #[serde(default)]
+    pub judge_model: Option<String>,
 }
 
 fn default_encrypt_at_rest() -> bool {
@@ -1439,6 +1446,7 @@ impl Default for SecurityConfig {
             encrypt_at_rest: default_encrypt_at_rest(),
             coherence_gate_hybrid_enabled: default_coherence_gate_hybrid_enabled(),
             mark_uploads_untrusted: default_mark_uploads_untrusted(),
+            judge_model: None,
         }
     }
 }

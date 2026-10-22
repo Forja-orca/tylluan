@@ -25,6 +25,11 @@ pub struct JudgeTelemetry {
     ok: AtomicU64,
     timeouts: AtomicU64,
     http_errors: AtomicU64,
+    /// D-33: el backend **respondio rechazando** la peticion (400 por falta de
+    /// `model`, 404 de ruta, 5xx con "Bad Request" dentro del cuerpo). Es el
+    /// sintoma de "juez muerto por configuracion", distinto de un fallo de
+    /// transporte o de un 5xx opaco (`http_errors`).
+    backend_errors: AtomicU64,
     transport_errors: AtomicU64,
     parse_errors: AtomicU64,
     busy_skips: AtomicU64,
@@ -55,6 +60,9 @@ impl JudgeTelemetry {
             }
             JudgeOutcome::HttpError => {
                 self.http_errors.fetch_add(1, Ordering::Relaxed);
+            }
+            JudgeOutcome::BackendError => {
+                self.backend_errors.fetch_add(1, Ordering::Relaxed);
             }
             JudgeOutcome::TransportError => {
                 self.transport_errors.fetch_add(1, Ordering::Relaxed);
@@ -89,6 +97,7 @@ impl JudgeTelemetry {
     pub fn failures(&self) -> u64 {
         self.timeouts.load(Ordering::Relaxed)
             + self.http_errors.load(Ordering::Relaxed)
+            + self.backend_errors.load(Ordering::Relaxed)
             + self.transport_errors.load(Ordering::Relaxed)
             + self.parse_errors.load(Ordering::Relaxed)
     }
@@ -128,6 +137,7 @@ impl JudgeTelemetry {
             "by_kind": {
                 "timeout": self.timeouts.load(Ordering::Relaxed),
                 "http": self.http_errors.load(Ordering::Relaxed),
+                "backend_error": self.backend_errors.load(Ordering::Relaxed),
                 "transport": self.transport_errors.load(Ordering::Relaxed),
                 "parse": self.parse_errors.load(Ordering::Relaxed),
                 "busy_skip": self.busy_skips(),
@@ -157,6 +167,10 @@ pub enum JudgeOutcome {
     Ok,
     Timeout,
     HttpError,
+    /// D-33: el backend rechazo nuestra peticion (configuracion: falta `model`,
+    /// ruta inexistente...). Se cuenta aparte para que `/health` pueda decir
+    /// "el juez no puede emitir veredictos" en vez de "hay errores http".
+    BackendError,
     TransportError,
     ParseError,
 }
@@ -212,6 +226,17 @@ mod tests {
         // Sin contenido: el JSON del juez no debe tener ninguna clave de texto.
         let text = json.to_string();
         assert!(!text.contains("prompt") && !text.contains("verdict"));
+    }
+
+    #[test]
+    fn backend_error_is_its_own_kind_and_counts_as_failure() {
+        let t = JudgeTelemetry::default();
+        t.observe(Duration::from_millis(50), JudgeOutcome::BackendError);
+        assert_eq!(t.failures(), 1, "un rechazo del backend es un fallo del juez");
+        assert_eq!(t.ok(), 0);
+        let json = t.to_json();
+        assert_eq!(json["by_kind"]["backend_error"], 1);
+        assert_eq!(json["by_kind"]["http"], 0, "no se mezcla con http");
     }
 
     #[test]

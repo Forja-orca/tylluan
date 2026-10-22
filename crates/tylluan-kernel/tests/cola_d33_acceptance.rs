@@ -14,14 +14,11 @@
 //!   - responde `400` a `POST /v1/chat/completions` si el cuerpo NO trae `model`;
 //!   - responde `200` con una completion válida (`SAFE`) si lo trae.
 //!
-//! Tests:
-//!   - **vivo** fija el comportamiento de hoy: el guild `llama_backend` pide sin
-//!     `model` → 400 → error (el juez moriría en silencio);
-//!   - `#[ignore = "D-33"]` deseado (a): la petición lleva `model` (uno de los
-//!     dos del backend) y el veredicto llega;
-//!   - `#[ignore = "D-33"]` deseado (b): con un backend que devuelve 400 siempre,
-//!     el fallo del juez queda VISIBLE en `components.judge.by_kind` como
-//!     `backend_error` (hoy no existe esa clave: se pierde en `debug!`).
+//! Tests (D-33 cerrado: los tres fijan el comportamiento DESEADO):
+//!   - el guild `llama_backend` manda `model` (resuelto de `GET /v1/models`) y
+//!     el backend lo acepta: el juez puede emitir veredictos;
+//!   - un backend que devuelve 400 siempre deja el fallo VISIBLE en
+//!     `components.judge.by_kind` como `backend_error`.
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d33_acceptance
@@ -251,12 +248,12 @@ fn body_has_model(body: &str) -> bool {
 // Comportamiento ACTUAL (vivo): sin `model` → 400 → el juez moriría en silencio
 // ---------------------------------------------------------------------------
 
-/// **Comportamiento de HOY.** El guild pide `/v1/chat/completions` sin `model`,
-/// el backend falso responde 400 y la llamada vuelve como error: exactamente el
-/// caso en que la capa 2 muere sin que nada lo muestre. Deep debe invertir este
-/// test al cerrar D-33.
+/// **D-33 cerrado.** El guild resuelve el modelo con `GET /v1/models` y lo manda
+/// en `/v1/chat/completions`: el backend ya no responde 400 y la completion
+/// llega. Antes de D-33 la peticion iba sin `model`, el backend devolvia 400 y la
+/// capa 2 moria sin que nada lo mostrara.
 #[tokio::test(flavor = "multi_thread")]
-async fn d33_current_judge_request_lacks_model_and_fails() {
+async fn d33_judge_request_carries_model_and_succeeds() {
     let fake = start_fake(Behavior::OpenAiCompatible);
     let mut process = spawn_llama_backend(&fake, "current").await;
     let (text, is_error) = call_query_model(&mut process).await;
@@ -264,18 +261,26 @@ async fn d33_current_judge_request_lacks_model_and_fails() {
     let bodies = fake.post_bodies_to("/chat/completions");
     assert!(
         !bodies.is_empty(),
-        "comportamiento actual esperado: el guild debe haber llamado a /v1/chat/completions; texto={text:?}"
+        "D-33: el guild debe llamar a /v1/chat/completions; texto={text:?}"
+    );
+    let last = bodies.last().unwrap();
+    assert!(
+        body_has_model(last),
+        "D-33: la peticion debe llevar 'model' (si no, el backend responde 400 y el juez \
+         muere); cuerpo: {last}"
+    );
+    let model = serde_json::from_str::<serde_json::Value>(last)
+        .ok()
+        .and_then(|v| v.get("model").cloned())
+        .and_then(|m| m.as_str().map(str::to_string))
+        .unwrap_or_default();
+    assert!(
+        model == "fake-model-A" || model == "fake-model-B",
+        "D-33: el 'model' debe salir de GET /v1/models; model={model:?}"
     );
     assert!(
-        !body_has_model(bodies.last().unwrap()),
-        "comportamiento actual esperado: la petición NO lleva 'model' (si lo lleva, D-33 está \
-         arreglado: invierte este test). Cuerpo: {}",
-        bodies.last().unwrap()
-    );
-    assert!(
-        is_error || text.to_lowercase().contains("error") || text.contains("400"),
-        "comportamiento actual esperado: el backend 400 hace que la llamada vuelva como error; \
-         texto={text:?} is_error={is_error}"
+        !is_error && text.contains("SAFE"),
+        "D-33: con 'model' la completion debe llegar; texto={text:?} is_error={is_error}"
     );
 
     let _ = process.kill().await;
@@ -290,7 +295,6 @@ async fn d33_current_judge_request_lacks_model_and_fails() {
 /// (`SAFE`) debe llegar. Hoy falla: la petición va sin `model` y el backend
 /// responde 400.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-33"]
 async fn d33_desired_judge_request_carries_model_and_gets_verdict() {
     let fake = start_fake(Behavior::OpenAiCompatible);
     let mut process = spawn_llama_backend(&fake, "desired").await;
@@ -332,7 +336,6 @@ async fn d33_desired_judge_request_carries_model_and_gets_verdict() {
 /// desaparecer en un `debug!`. Hoy esa clave **no existe**: el test falla
 /// diciéndolo.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-33"]
 async fn d33_desired_judge_failure_is_visible() {
     let fake = start_fake(Behavior::Always400);
     // El juez llama a `{TYLLUAN_KERNEL_URL}/api/v1/guilds/llama_backend/tools/query_model`.

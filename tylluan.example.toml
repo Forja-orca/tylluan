@@ -164,6 +164,13 @@ repeat_penalty = 1.1
 # enable this if you understand that llama-server may start unattended while
 # you are doing something else resource-intensive on this machine.
 # coherence_gate_hybrid_enabled = false
+# D-33: modelo que se envia al juez de la capa 2 (puerta de escritura ASI06) y
+# a la capa 4. Necesario cuando el backend compatible con OpenAI tiene varios
+# modelos cargados (LM Studio y similares): sin este campo el backend responde
+# 400 y el juez queda inerte (se ve en /health?verbose=true ->
+# components.judge.by_kind.backend_error). Vacio = el guild envia el primero que
+# anuncie /v1/models. No cambia el modelo por defecto del backend.
+# judge_model = "qwen2.5-0.5b-instruct"
 
 # Docker sandbox for bash/code guilds (opt-in, disabled by default)
 # When enabled, bash and code guilds run in an isolated Docker container

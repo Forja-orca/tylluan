@@ -710,6 +710,57 @@ def _post_chat_completion(backend_url, request_body):
         return result["choices"][0]["message"]["content"]
 
 
+# D-33: un backend compatible con OpenAI que tiene varios modelos cargados
+# (LM Studio, vLLM, llama.cpp con --model alias...) rechaza con 400 CUALQUIER
+# peticion sin `model`. El juez del kernel (capa 2 de escritura y capa 4)
+# mandaba el cuerpo sin ese campo, asi que la capa 2 moria en silencio. Aqui se
+# resuelve el modelo una vez (cache de 60 s) consultando `/v1/models`.
+_LEGACY_MODEL_CACHE = {}  # base_url -> (timestamp, model)
+_LEGACY_MODEL_TTL_S = 60.0
+
+
+def _fetch_backend_models(base_url, timeout=2.0):
+    """IDs que anuncia un backend compatible con OpenAI. Lista vacia si no se
+    puede consultar (nunca propaga: es una pista, no un requisito)."""
+    import urllib.request as _urllib
+
+    with _urllib.urlopen(f"{base_url}/models", timeout=timeout) as resp:
+        payload = json.loads(resp.read())
+    items = payload.get("data", []) if isinstance(payload, dict) else payload
+    return [
+        m.get("id")
+        for m in items
+        if isinstance(m, dict) and isinstance(m.get("id"), str) and m["id"]
+    ]
+
+
+def _resolve_legacy_model(base_url, requested=""):
+    """Modelo a enviar al backend legacy: el pedido, o el primero cargado.
+
+    Devuelve "" cuando no hay pista (backend sin `/v1/models`, sin modelos):
+    en ese caso se mantiene el comportamiento anterior (no enviar `model`) y
+    el kernel lo contara como `backend_error` en /health si el backend protesta.
+    """
+    if requested:
+        # Si el llamante ya eligio modelo y no hay proveedor externo que lo
+        # liste, se envia TAL CUAL: antes se descartaba en silencio y el
+        # backend contestaba 400 igual.
+        return requested
+    now = time.time()
+    cached = _LEGACY_MODEL_CACHE.get(base_url)
+    if cached and now - cached[0] < _LEGACY_MODEL_TTL_S:
+        return cached[1]
+    try:
+        models = _fetch_backend_models(base_url)
+    except Exception as exc:  # noqa: BLE001 - nunca romper la inferencia por esto
+        sys.stderr.write(f"[llama_backend] /v1/models no disponible en {base_url}: {exc}\n")
+        _LEGACY_MODEL_CACHE[base_url] = (now, "")
+        return ""
+    model = models[0] if models else ""
+    _LEGACY_MODEL_CACHE[base_url] = (now, model)
+    return model
+
+
 @mcp.tool()
 async def query_model(
     prompt: str,
@@ -776,6 +827,14 @@ async def query_model(
     }
     if grammar:
         request_body["grammar"] = grammar
+
+    if is_external:
+        # D-33 (a): sin `model` el backend puede responder 400 y el juez queda
+        # inerte sin que nadie lo vea. Solo aplica al backend legacy: los
+        # `[[external_providers]]` ya llevan su modelo en `_call_external_provider`.
+        legacy_model = await asyncio.to_thread(_resolve_legacy_model, backend_url, model)
+        if legacy_model:
+            request_body["model"] = legacy_model
 
     return await asyncio.to_thread(
         _post_chat_completion, backend_url, request_body
