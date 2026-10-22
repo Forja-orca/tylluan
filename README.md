@@ -38,7 +38,7 @@ Concretely, that means:
 
 Agent memory is a crowded space right now — Mem0, Letta, Zep, Cognee, Graphiti, A-MEM, and others all take real, different approaches, and are worth evaluating on their own terms depending on what you need. What Tylluan specifically bets on is running well on modest, offline, or air-gapped hardware, with a compiled binary instead of a Python service you have to keep alive, and a mesh where peers share knowledge directly without a coordinator node in the middle.
 
-**Air-gapped by default (fixed 2026-08-23):** the kernel used to attempt a STUN request to `stun.l.google.com:19302` on every boot regardless of whether federation/mesh was even enabled — real outbound traffic on a host meant to stay fully offline. STUN discovery is now opt-in: `[nat] enabled = false` by default, gating the whole discovery block. Set `enabled = true` explicitly if you want NAT traversal for the mesh.
+**Air-gapped by default:** the kernel used to attempt a STUN request to `stun.l.google.com:19302` on every boot regardless of whether federation/mesh was even enabled — real outbound traffic on a host meant to stay fully offline. STUN discovery is now opt-in: `[nat] enabled = false` by default, gating the whole discovery block. Set `enabled = true` explicitly if you want NAT traversal for the mesh.
 
 **Local cryptographic mesh, not an autonomous global web:** Tylluan's core mission is to give AI agents authentic persistent continuity — cumulative memories and episodes that time does not wash away, operating in near real-time without cloud dependencies. But continuity must never compromise sovereignty: peer synchronization is strictly designed for internal networks and explicit, operator-approved peers over an encrypted cryptographic mesh (Noise NK/XK, Ed25519, ChaCha20-Poly1305, opt-in LAN mDNS). It is never an uncontrolled global DHT connecting memories automatically across the public internet.
 
@@ -60,8 +60,8 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync, Noise NK / ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
 | **Mesh** | Cryptographic local mesh: Kademlia routing table + Gossip dissemination (Noise NK once a peer's key is known, opt-in LAN mDNS, operator-approved peers; no release ships WAN bootstrap, so there are no autonomous global connections) — legacy plaintext wire path exists only for backward compat with older peers, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
-| **A2A Protocol** | Agent Card discovery + JSON-RPC 2.0 server — interoperates with any Agent2Agent-compliant client (LangGraph, CrewAI, etc.), not just other Tylluan instances |
-| **MCP Native** | SSE + HTTP Streamable — works with Claude, Cursor, VS Code, LM Studio, any MCP client |
+| **A2A Protocol** | Agent Card discovery (`/.well-known/agent-card.json`) + JSON-RPC 2.0 server — intended to interoperate with Agent2Agent-compliant clients, not just other Tylluan instances (interop with specific frameworks not yet tested) |
+| **MCP Native** | SSE + HTTP Streamable — works with MCP clients such as Claude, Cursor, VS Code and LM Studio (configs in `integrations/`) |
 | **GPU Acceleration** | Optional DirectML (Windows, any GPU vendor) or CUDA execution provider for local ONNX inference — CPU stays the zero-config default |
 
 <details>
@@ -97,7 +97,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 
 Tylluan ships with a React dashboard for watching the kernel work.
 
-- **Production (single binary):** served automatically at [http://127.0.0.1:47004/](http://127.0.0.1:47004/) once the kernel is running.
+- **Single binary built with `--features bundled-dashboard`:** the dashboard is embedded and served at [http://127.0.0.1:47004/](http://127.0.0.1:47004/) once the kernel is running. Without that feature, the kernel serves the output of `pnpm build` in `dashboard/` from the source tree, if you have built it.
 - **Development:** `cd dashboard && pnpm dev` for the hot-reloading dev server at [http://localhost:5173/](http://localhost:5173/).
 
 <p align="center">
@@ -115,7 +115,7 @@ Tylluan ships with a React dashboard for watching the kernel work.
 
 ### Six tools, nothing hidden behind them
 
-Every MCP client that connects to Tylluan sees exactly these six tools — no matter how many guilds are running underneath:
+With the default configuration, every MCP client that connects to Tylluan sees exactly these six tools — no matter how many guilds are running underneath (setting `expose_guild_tools = true` in `tylluan.toml` also exposes the guild tools directly):
 
 ```
 tylluan_do        Route a task to a guild, described in natural language
@@ -155,11 +155,11 @@ Three profiles trade retrieval quality for footprint — pick based on what you'
 
 | Profile | Model | Download | RAM | R@5* | R@10* | Latency p50* |
 |---------|-------|----------|-----|-----|------|--------------|
-| `portable` | BM25 only | 0 MB | ~30 MB | 38% | 42% | 0.4 ms |
-| `clinic` | BGE-Small (384d) | ~100 MB | ~300 MB | 61% | 68% | 3.2 ms |
+| `portable` | BM25 only | 0 MB | not measured | not measured | not measured | not measured |
+| `clinic` | BGE-Small (384d) | ~67 MB | not measured | not measured | not measured | not measured |
 | `server` | mxbai-embed-large (1024d) | unverified | unverified | 82% | 90% | 12.9 ms |
 
-*\*`server` row's R@5/R@10/latency are the BGE-M3 numbers above, not yet re-measured against the current default (`mxbai-embed-large`) — see the note above. `portable`/`clinic` are unaffected by the default-model change.*
+*\*The `server` row's R@5/R@10/latency are the BGE-M3 numbers above, not yet re-measured against the current default (`mxbai-embed-large`) — see the note above. The `portable` and `clinic` retrieval figures have no benchmark file behind them yet, so they are not published here.*
 
 `portable` is the default profile installed by `install.sh`/`install.ps1` (zero downloads, instant boot, ideal for Raspberry Pi or offline deployments); `clinic` suits a RAM-constrained laptop; `server` is for a desktop or server where full semantic retrieval quality is the priority.
 
@@ -201,7 +201,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 ## Quick Start
 
-> **Setup takes under a minute.** The automated installer configures the `portable` profile by default (BM25-only, zero downloads, instant boot on any hardware). You can upgrade to full semantic search (`mxbai-embed-large`) at any time with `tylluan-cli install --profile server` or `tylluan start --setup` (which auto-detects your RAM and GPU). The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it (fixed 2026-08-23, verified live in CI via a dedicated no-ONNX boot smoke test) — if it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking.
+> **Setup is quick.** The automated installer configures the `portable` profile by default (BM25-only, zero downloads, instant boot on any hardware). You can upgrade to full semantic search (`mxbai-embed-large`) at any time with `tylluan-cli install --profile server` or `tylluan start --setup` (which auto-detects your RAM and GPU). The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it. If it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking. A dedicated no-ONNX boot smoke test runs in CI (`boot-smoke-no-onnx` in `.github/workflows/ci.yml`).
 
 **Supported platforms:**
 
@@ -234,7 +234,7 @@ The installer starts the kernel automatically. If you need to start it manually:
 tylluan-cli start
 ```
 
-It boots instantly in portable mode (BM25-only, zero downloads):
+In portable mode (BM25-only, no downloads) the kernel starts without fetching models. Example output:
 
 ```
 🚀 Starting TylluanNexus kernel...
@@ -251,11 +251,11 @@ curl -s http://127.0.0.1:47004/health
 
 > [!TIP]
 > **Upgrading to semantic search (vector embeddings):**
-> * **Auto-detect hardware:** `tylluan start --setup` (probes RAM/GPU and writes optimal profile to `tylluan.toml`)
-> * **Full semantic (1024d):** `tylluan-cli install --profile server` (downloads `mxbai-embed-large`, ~670 MB)
+> * **Auto-detect hardware:** `tylluan-cli start --setup` (probes RAM/GPU and writes optimal profile to `tylluan.toml`)
+> * **Full semantic (1024d):** `tylluan-cli install --profile server` (downloads `mxbai-embed-large`; size not verified)
 > * **Lightweight semantic (384d):** `tylluan-cli install --profile clinic` (downloads `bge-small`, ~67 MB)
 
-> **Auth:** a bearer token is generated automatically at `.tylluan-token` on first boot. Dev mode (`--dev`) skips auth entirely — only use that on a network you fully control.
+> **Auth:** a bearer token is generated automatically at `.tylluan-token` on first boot. Setting `dev_mode = true` in `tylluan.toml` disables auth entirely — only use that on a network you fully control.
 
 ### 3 — Connect your agent
 
@@ -305,7 +305,7 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | Topic | Guide |
 |-------|-------|
 | Configuration, auth, troubleshooting | [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) |
-| Python guilds (45 tools) | [guilds/README.md](guilds/README.md) |
+| Python guilds (45 guilds) | [guilds/README.md](guilds/README.md) |
 | Build from source | [docs/getting-started/QUICKSTART.md#build-from-source](docs/getting-started/QUICKSTART.md#build-from-source) |
 | CLI reference | `tylluan-cli --help` |
 | Installation profiles | `tylluan-cli install --profile=portable` |

@@ -76,12 +76,12 @@
     <!-- Client 1: MCP -->
     <rect x="60" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
     <text x="75" y="82" fill="#f8fafc" font-size="13" font-weight="600">MCP IDEs / Assistants</text>
-    <text x="75" y="99" fill="#94a3b8" font-size="11">Claude Code · Cursor · VS Code · Claude Desktop · Qwen · Antigravity</text>
+    <text x="75" y="99" fill="#94a3b8" font-size="11">Claude Code · Cursor · VS Code · Claude Desktop · LM Studio</text>
 
     <!-- Client 2: A2A -->
     <rect x="455" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
     <text x="470" y="82" fill="#f8fafc" font-size="13" font-weight="600">External A2A Clients</text>
-    <text x="470" y="99" fill="#94a3b8" font-size="11">LangGraph · CrewAI · AutoGen · any A2A SDK</text>
+    <text x="470" y="99" fill="#94a3b8" font-size="11">Agent2Agent-compliant clients</text>
 
     <!-- Client 3: REST & UI -->
     <rect x="850" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
@@ -103,7 +103,7 @@
     
     <!-- Badges (positioned between Arrow 2 at 640 and Arrow 3 at 1035 for clean clearance) -->
     <rect x="705" y="183" width="160" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
-    <text x="720" y="199" fill="#34d399" font-size="11" font-weight="700">1,154 TESTS GREEN</text>
+    <text x="720" y="199" fill="#34d399" font-size="11" font-weight="700">1,272 TESTS GREEN</text>
     
     <rect x="875" y="183" width="125" height="24" rx="12" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
     <text x="890" y="199" fill="#38bdf8" font-size="11" font-weight="700">MIT SOBERANO</text>
@@ -121,12 +121,12 @@
       <!-- A2A Server -->
       <rect x="460" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
       <text x="475" y="269" fill="#f8fafc" font-size="12" font-weight="600">A2A Protocol Server</text>
-      <text x="475" y="284" fill="#cbd5e1" font-size="10">Agent Card (/api/v1/a2a/agents) · Tasks · Streaming SSE</text>
+      <text x="475" y="284" fill="#cbd5e1" font-size="10">Agent Card (/.well-known/agent-card.json) · Tasks · Streaming SSE</text>
 
       <!-- REST Server -->
       <rect x="840" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
       <text x="855" y="269" fill="#f8fafc" font-size="12" font-weight="600">REST API v1</text>
-      <text x="855" y="284" fill="#cbd5e1" font-size="10">/api/v1/do · /recall · /remember · /think · /graph · /decide · /health</text>
+      <text x="855" y="284" fill="#cbd5e1" font-size="10">/api/v1/do · /api/v1/memory/search · /api/v1/memory/write · /api/v1/decide · /health</text>
     </g>
 
     <!-- SECTION 2: SOVEREIGN CORE, SCHEDULER & DECISION FABRIC -->
