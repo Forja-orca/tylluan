@@ -805,7 +805,37 @@ async fn silva_edge_search_handler(State(state): State<Arc<HttpState>>, Json(q):
 
 async fn silva_create_node_handler(State(state): State<Arc<HttpState>>, Json(p): Json<CreateNodePayload>) -> impl IntoResponse {
     let node_id = format!("{}__{}", p.node_type, uuid::Uuid::new_v4().simple());
-    match state.silva.upsert_node(&node_id, &p.node_type, &p.content, &p.metadata).await {
+
+    // D-32: esta era la vía de escritura más ancha del kernel sin defensa alguna —
+    // la usa la subida de ficheros (`/api/v1/ingest/upload` → guild `ingest` →
+    // `add_node`) y las guilds de visión. Semántica `ingest` (D-17): no se rechaza
+    // (son documentos legítimos que pueden hablar de seguridad), se marca y el
+    // juez de capa 2 decide sobre el nodo ya escrito. Además se deja procedencia
+    // en `metadata.source` (el que declare la guild, o `http_api`).
+    let mark_all_uploads = state.config.read().await.security.mark_uploads_untrusted;
+    let mut meta_value: serde_json::Value = serde_json::from_str(&p.metadata).unwrap_or(serde_json::Value::Null);
+    let mut metadata_out = p.metadata.clone();
+    let mut untrusted = false;
+    if meta_value.is_object() {
+        let origin = meta_value
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("http_api")
+            .to_string();
+        if meta_value.get("source").is_none() {
+            meta_value["source"] = serde_json::json!("http_api");
+        }
+        untrusted = crate::security::trust::mark_if_layer1_flagged(&mut meta_value, &p.content, &origin);
+        if mark_all_uploads && !untrusted {
+            // Opción de producto (apagada por defecto, decisión de José/TL): todo
+            // lo que entra por esta ruta se considera no confiable por procedencia.
+            crate::security::trust::mark_untrusted(&mut meta_value, &format!("upload_provenance ({origin})"));
+            untrusted = true;
+        }
+        metadata_out = meta_value.to_string();
+    }
+
+    match state.silva.upsert_node(&node_id, &p.node_type, &p.content, &metadata_out).await {
         Ok(_) => {
             if let Some(w) = p.weight {
                 let _ = tokio::task::block_in_place(|| {
@@ -826,7 +856,14 @@ async fn silva_create_node_handler(State(state): State<Arc<HttpState>>, Json(p):
                     let model_id = engine.engine_id();
                     let _ = state.silva.save_embedding(&node_id, &vec, &model_id, None).await;
                 }
-            (StatusCode::CREATED, Json(serde_json::json!({"ok": true, "id": node_id}))).into_response()
+            // D-32: capa 2 sobre el nodo ya escrito (fire-and-forget, igual que
+            // `ingest`). Fire-and-forget de verdad: un juez caído no bloquea.
+            crate::security::write_gate::spawn_write_gate_judge(
+                state.silva.clone(),
+                node_id.clone(),
+                p.content.clone(),
+            );
+            (StatusCode::CREATED, Json(serde_json::json!({"ok": true, "id": node_id, "untrusted": untrusted}))).into_response()
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"ok": false, "error": e.to_string()}))).into_response(),
     }

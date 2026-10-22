@@ -155,11 +155,20 @@ impl GraphRagManager {
         }
 
         let node_id = format!("graphrag_summary:{cluster_id}");
-        let metadata = serde_json::json!({
+        let mut metadata_value = serde_json::json!({
             "type": "cluster_summary",
             "member_count": member_ids.len(),
             "generated_at": chrono::Utc::now().to_rfc3339()
-        }).to_string();
+        });
+        // D-32 (V7, enmienda de T-DSH-33): esta ruta hace un INSERT directo en
+        // `nodes` y el resumen entraba sin capa 1 — y es exactamente el material
+        // de "alta confianza" que luego leen `tylluan_think`/recall.
+        crate::security::trust::mark_if_layer1_flagged(
+            &mut metadata_value,
+            summary,
+            "graphrag_summary",
+        );
+        let metadata = metadata_value.to_string();
         let members_json = serde_json::to_string(&member_ids).unwrap_or_default();
 
         let (already_exists, linked) = tokio::task::block_in_place(|| -> Result<(bool, usize)> {
@@ -266,6 +275,12 @@ impl GraphRagManager {
         }
 
         info!("📝 GraphRAG: summary saved for cluster {} ({} members linked)", cluster_id, linked);
+        // D-32: capa 2 sobre el nodo ya escrito, igual que `ingest`.
+        crate::security::write_gate::spawn_write_gate_judge(
+            self.silva.clone(),
+            node_id.clone(),
+            summary.to_string(),
+        );
         Ok(node_id)
     }
 

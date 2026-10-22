@@ -120,16 +120,32 @@ pub(crate) async fn handle_skill_prefix(
             )));
         }
         let skill_id = format!("skill:project:{workspace_hash:x}:{name}");
-        let meta = serde_json::json!({
+        let mut meta_value = serde_json::json!({
             "project_root": workspace_root.to_string_lossy(),
             "name": name,
-        }).to_string();
+        });
+        // D-32 (V6): `@skill:save` escribe texto arbitrario como `project_skill`
+        // sin capa 1 ni juez; el skill luego se lee como instrucciones del
+        // proyecto, que es justo lo que un veneno quiere ser.
+        crate::security::trust::mark_if_layer1_flagged(
+            &mut meta_value,
+            content,
+            "tylluan_do:@skill:save",
+        );
+        let meta = meta_value.to_string();
 
         match server.silva.upsert_node(&skill_id, "project_skill", content, &meta).await {
-            Ok(()) => return Some(Ok(CallToolResult {
-                content: vec![Content::text(format!("Skill '{name}' saved."))],
-                is_error: Some(false),
-            })),
+            Ok(()) => {
+                crate::security::write_gate::spawn_write_gate_judge(
+                    server.silva.clone(),
+                    skill_id.clone(),
+                    content.to_string(),
+                );
+                return Some(Ok(CallToolResult {
+                    content: vec![Content::text(format!("Skill '{name}' saved."))],
+                    is_error: Some(false),
+                }));
+            }
             Err(e) => return Some(Ok(error_result(&format!("save failed: {e}")))),
         }
     }

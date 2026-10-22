@@ -1404,6 +1404,20 @@ pub struct SecurityConfig {
     /// default, "aunque demos 10000 opciones mÃ¡s".
     #[serde(default = "default_coherence_gate_hybrid_enabled")]
     pub coherence_gate_hybrid_enabled: bool,
+    /// D-32 — marca por PROCEDENCIA, apagada por defecto.
+    ///
+    /// Con `true`, todo nodo que entre por `POST /api/v1/silva/node` (la ruta de
+    /// la subida de ficheros y de las guilds de visión) queda `untrusted_content`
+    /// aunque la capa 1 no detecte nada: el contenido de un fichero subido es
+    /// datos de un tercero, no instrucciones. Con `false` solo se marca lo que
+    /// detecta la capa 1 (semántica `ingest`).
+    ///
+    /// Por qué apagada: cada nodo marcado penaliza ×0.1 en el recall
+    /// (CoherenceGate capa 2) y añade banner en bootstrap/`@inbox`. Encender esto
+    /// degrada la recuperación de todo lo que el usuario sube. La decisión de
+    /// producto es de José/TL (D-32); el kernel solo deja la palanca.
+    #[serde(default = "default_mark_uploads_untrusted")]
+    pub mark_uploads_untrusted: bool,
 }
 
 fn default_encrypt_at_rest() -> bool {
@@ -1413,6 +1427,7 @@ fn default_encrypt_at_rest() -> bool {
 fn default_intent_filter() -> bool { true }
 fn default_capabilities_enforce() -> bool { false }
 fn default_coherence_gate_hybrid_enabled() -> bool { false }
+fn default_mark_uploads_untrusted() -> bool { false }
 
 impl Default for SecurityConfig {
     fn default() -> Self {
@@ -1423,6 +1438,7 @@ impl Default for SecurityConfig {
             acl: AclConfig::default(),
             encrypt_at_rest: default_encrypt_at_rest(),
             coherence_gate_hybrid_enabled: default_coherence_gate_hybrid_enabled(),
+            mark_uploads_untrusted: default_mark_uploads_untrusted(),
         }
     }
 }

@@ -24,7 +24,8 @@
 //! - `silva_create_node_handler` (`api_v1/mod.rs:806-833`) hace
 //!   `upsert_node` + embedding y devuelve 201 — sin capa 1, sin capa 2.
 //!
-//! Todos van `#[ignore = "ASI06-REDTEAM"]`: la corrida normal queda en verde.
+//! V3-V6 quedan VIVOS desde D-32 (el bypass esta cerrado y se afirma la defensa);
+//! el test de procedencia sigue `#[ignore = "ASI06-REDTEAM"]` (clase abierta).
 //! Ningún test usa `cfg(unix)`/`cfg(windows)` en la función entera.
 //! `src/` intacto — esta suite solo añade tests.
 
@@ -129,7 +130,6 @@ async fn post_coloquio(app: &axum::Router, channel: &str, author: &str, content:
 /// (`guilds/core/silva_utils.py:145`, commentario: "Routed through the same
 /// HTTP IPC pattern so the kernel is the single writer").
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "ASI06-REDTEAM: demuestra escritura sin capa 1 por la vía de subida"]
 async fn via3_silva_node_escribe_veneno_sin_marcado() {
     let state = support::test_state("rtv3").await;
     let app = support::build_test_app(state.clone());
@@ -166,14 +166,13 @@ async fn via3_silva_node_escribe_veneno_sin_marcado() {
     let flagged = untrusted_flag_of_node_containing(&state.silva, VENENO_ES).await;
     assert_eq!(
         flagged,
-        Some(false),
-        "VÍA 3: el nodo quedó marcado como untrusted — el bypass ya no existe \
-         (flag={flagged:?}). Actualiza este test y el informe."
+        Some(true),
+        "D-32: el veneno debe quedar marcado untrusted_content por esta via (flag={flagged:?})"
     );
 
     println!(
         "\n🔴 VÍA 3: veneno aceptado por /api/v1/silva/node (dev_mode, SIN \
-         credencial) y almacenado SIN `untrusted_content`."
+         credencial) y almacenado CON `untrusted_content` (D-32)."
     );
 }
 
@@ -194,7 +193,6 @@ async fn via3_silva_node_escribe_veneno_sin_marcado() {
 /// (El job corre en `main.rs`, fuera del router de tests — por eso se invoca
 /// `record_memory` directamente: es exactamente la llamada que el job hace.)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "ASI06-REDTEAM: demuestra que Coloquio y su index no marcan el veneno"]
 async fn via4_coloquio_y_su_index_escriben_sin_marcado() {
     let state = support::test_state("rtv4").await;
     let app = support::build_test_app(state.clone());
@@ -222,14 +220,13 @@ async fn via4_coloquio_y_su_index_escriben_sin_marcado() {
     let flagged = untrusted_flag_of_node_containing(&state.silva, &content).await;
     assert_eq!(
         flagged,
-        Some(false),
-        "VÍA 4: el nodo del Coloquio quedó marcado — el bypass ya no existe \
-         (flag={flagged:?}). Actualiza el informe."
+        Some(true),
+        "D-32: el veneno debe quedar marcado untrusted_content por esta via (flag={flagged:?})"
     );
 
     println!(
         "\n🔴 VÍA 4: mensaje de Coloquio aceptado y su index \
-         (record_memory) deja el nodo SIN `untrusted_content`."
+         (record_memory) deja el nodo CON `untrusted_content` (D-32)."
     );
 }
 
@@ -244,7 +241,6 @@ async fn via4_coloquio_y_su_index_escriben_sin_marcado() {
 ///
 /// Ese handler no contiene `matches_injection_pattern` ni `write_gate`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "ASI06-REDTEAM: demuestra que tylluan_graph crea nodos sin capa 1"]
 async fn via5_grafo_crea_conceptos_sin_marcado() {
     let state = support::test_state("rtv5").await;
     // `/mcp` vive en el router de producción (`build_router`), no en
@@ -273,14 +269,13 @@ async fn via5_grafo_crea_conceptos_sin_marcado() {
     let flagged = untrusted_flag_of_node_containing(&state.silva, VENENO_ES).await;
     assert_eq!(
         flagged,
-        Some(false),
-        "VÍA 5: el concepto quedó marcado como untrusted — el bypass ya no existe \
-         (flag={flagged:?}). Actualiza el informe."
+        Some(true),
+        "D-32: el veneno debe quedar marcado untrusted_content por esta via (flag={flagged:?})"
     );
 
     println!(
         "\n🔴 VÍA 5: tylluan_graph(add_triple) creó el concepto con el veneno \
-         SIN `untrusted_content`."
+         CON `untrusted_content` (D-32)."
     );
 }
 
@@ -302,7 +297,6 @@ async fn via5_grafo_crea_conceptos_sin_marcado() {
 ///     `upsert_node(&skill_id, "project_skill", content, …)` con el contenido
 ///     arbitrario del intent, sin ninguna capa de ASI06.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "ASI06-REDTEAM: demuestra que tylluan_do escribe sin capa 1"]
 async fn via6_do_escribe_veneno_sin_marcado() {
     let state = support::test_state("rtv6").await;
     // `/mcp` solo existe en `build_router` (router de producción).
@@ -355,9 +349,8 @@ async fn via6_do_escribe_veneno_sin_marcado() {
     let flagged = untrusted_flag_of_node_containing(&state.silva, VENENO_ES).await;
     assert_eq!(
         flagged,
-        Some(false),
-        "VÍA 6: el skill quedó marcado como untrusted — el bypass ya no existe \
-         (flag={flagged:?}). Actualiza el informe."
+        Some(true),
+        "D-32: el veneno debe quedar marcado untrusted_content por esta via (flag={flagged:?})"
     );
 
     println!(

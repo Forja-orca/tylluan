@@ -3,9 +3,9 @@
 //! Este fichero es la **lista de aceptación ejecutable** de D-32: para cada vía
 //! sin defensa (V3..V7) declara el comportamiento DESEADO —el nodo queda
 //! marcado `untrusted_content` (o la escritura se rechaza)— con un veneno en
-//! **español** que la capa 1 actual no detecta (por eso hoy deben fallar, y por
-//! eso D-31 va antes que D-32). Cuando D-32 esté implementado, el TL quita el
-//! `#[ignore = "D-32"]` de la vía cerrada y el test pasa sin cambios.
+//! **español** que la capa 1 no detectaba antes de D-31/D-32. Las cinco vías
+//! están CERRADAS desde D-32: los tests ya no van `#[ignore]` y afirman la
+//! defensa (nodo marcado `untrusted_content`), no el bypass.
 //!
 //! Además incluye un test **vivo** (no ignorado) que fija que las dos vías ya
 //! defendidas (V1 `memory/write`, V2 `ingest`) siguen estándolo con un veneno
@@ -120,7 +120,6 @@ async fn call_tool(
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-32"]
 async fn v3_silva_node_debe_marcar_veneno_es() {
     let state = support::test_state("d32v3").await;
     let app = support::build_test_app(state.clone());
@@ -147,7 +146,6 @@ async fn v3_silva_node_debe_marcar_veneno_es() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-32"]
 async fn v4_coloquio_index_debe_marcar_veneno_es() {
     let state = support::test_state("d32v4").await;
     let app = support::build_test_app(state.clone());
@@ -182,7 +180,6 @@ async fn v4_coloquio_index_debe_marcar_veneno_es() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-32"]
 async fn v5_grafo_debe_marcar_veneno_es() {
     let state = support::test_state("d32v5").await;
     let app = tylluan_kernel::transport::http::build_router(state.clone());
@@ -211,7 +208,6 @@ async fn v5_grafo_debe_marcar_veneno_es() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-32"]
 async fn v6_skill_save_debe_marcar_veneno_es() {
     let state = support::test_state("d32v6").await;
     let app = tylluan_kernel::transport::http::build_router(state.clone());
@@ -241,7 +237,6 @@ async fn v6_skill_save_debe_marcar_veneno_es() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-32"]
 async fn v7_cluster_summary_debe_marcar_veneno_es() {
     let state = support::test_state("d32v7").await;
     let app = support::build_test_app(state.clone());
