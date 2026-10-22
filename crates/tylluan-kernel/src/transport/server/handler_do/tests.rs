@@ -1274,38 +1274,50 @@ async fn md3_rate_limit_error_is_rate_limited() {
 #[tokio::test(flavor = "multi_thread")]
 async fn d28_tylluan_do_without_agent_id_audits_anonymous_not_empty() {
     let server = test_server().await;
-    let unique = format!(
-        "d28 probe sin agent id {} {}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    );
-    let result = CallToolResult {
-        content: vec![Content::text("d28 ok")],
-        is_error: Some(false),
-    };
-    let _ = post_process_outcome(
-        &server, &unique, "d28_guild", "d28_tool", &None, false, None, result, 1,
-    )
-    .await;
-
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    // La ruta del audit es global al proceso (`TYLLUAN_AUDIT_DB`): mientras
+    // `audit_store_seam_write_and_read_land_on_same_file` tiene el seam puesto,
+    // una escritura de este test cae en el temporal de aquel y se borra con el
+    // (flaky en CI sobre 51c6e41, mismo patron que el test D-13 de handlers.rs).
+    // Se reintenta con un intent nuevo para que algun intento quede fuera de
+    // esa ventana.
     let mut audited: Option<String> = None;
-    while std::time::Instant::now() < deadline {
-        if let Ok(conn) = crate::config::open_db(&audit_db_path()) {
-            let row = conn.query_row(
-                "SELECT agent_id FROM guild_audit_log WHERE intent = ?1 LIMIT 1",
-                rusqlite::params![unique],
-                |r| r.get::<_, String>(0),
-            );
-            if let Ok(agent) = row {
-                audited = Some(agent);
-                break;
+    for attempt in 0..4 {
+        let unique = format!(
+            "d28 probe sin agent id {} {} {}",
+            std::process::id(),
+            attempt,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let result = CallToolResult {
+            content: vec![Content::text("d28 ok")],
+            is_error: Some(false),
+        };
+        let _ = post_process_outcome(
+            &server, &unique, "d28_guild", "d28_tool", &None, false, None, result, 1,
+        )
+        .await;
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
+            if let Ok(conn) = crate::config::open_db(&audit_db_path()) {
+                let row = conn.query_row(
+                    "SELECT agent_id FROM guild_audit_log WHERE intent = ?1 LIMIT 1",
+                    rusqlite::params![unique],
+                    |r| r.get::<_, String>(0),
+                );
+                if let Ok(agent) = row {
+                    audited = Some(agent);
+                    break;
+                }
             }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        if audited.is_some() {
+            break;
+        }
     }
 
     let agent = audited.expect("la llamada debe dejar una fila de audit localizable por su intent");
