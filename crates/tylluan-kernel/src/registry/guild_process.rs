@@ -179,14 +179,112 @@ fn is_exec_like_tool(params: &CallToolRequestParam) -> bool {
         || tn.contains("shell") || tn.contains("command")
 }
 
+/// Qué hacer con el binario declarado en `exec_tools` para la rama de allowlist.
+enum DeclaredBinary {
+    /// La herramienta declara ejecución pero el argumento no es un comando local
+    /// (p. ej. `server_url` con `http://…` en lugar de `stdio://…`).
+    NotALocalCommand,
+    /// La herramienta ejecuta pero no se puede extraer el binario para verificar.
+    Missing,
+    /// Binario extraído de `command_arg` (tras quitar `command_prefix`).
+    Binary(String),
+}
+
+fn declared_unit<'a>(declared: &'a serde_json::Value, key: &str) -> Option<&'a str> {
+    declared.get(key).and_then(|v| v.as_str())
+}
+
+/// Extrae el binario declarado por la guild (`exec_tools.<tool>.command_arg`) y lo
+/// comprueba contra `command_prefix`. No infiere nada del argumento `command`
+/// genérico (el router lo siembra en toda llamada; lección T-DSH-43).
+fn extract_declared_binary(
+    declared: &serde_json::Value,
+    params: &CallToolRequestParam,
+) -> DeclaredBinary {
+    let Some(arg_name) = declared_unit(declared, "command_arg") else {
+        // Ejecuta lanzando un proceso sin comando del llamador: la allowlist no
+        // puede verificarlo.
+        return DeclaredBinary::Missing;
+    };
+    let Some(raw) = params
+        .arguments
+        .as_ref()
+        .and_then(|a| a.get(arg_name))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
+        return DeclaredBinary::Missing;
+    };
+    let command = match declared_unit(declared, "command_prefix") {
+        Some(prefix) => match raw.strip_prefix(prefix) {
+            Some(rest) => rest.trim(),
+            None => return DeclaredBinary::NotALocalCommand,
+        },
+        None => raw,
+    };
+    match command.split_whitespace().next() {
+        Some(binary) if !binary.is_empty() => DeclaredBinary::Binary(binary.to_string()),
+        _ => DeclaredBinary::Missing,
+    }
+}
+
+/// Si la herramienta declara `allowlist_arg` y el llamador lo pasa a `false`,
+/// devuelve el nombre del argumento (el bypass se bloquea con la contención activa).
+fn allowlist_bypass_requested(
+    declared: &serde_json::Value,
+    params: &CallToolRequestParam,
+) -> Option<String> {
+    let arg_name = declared_unit(declared, "allowlist_arg")?;
+    let disabled = params
+        .arguments
+        .as_ref()
+        .and_then(|a| a.get(arg_name))
+        .and_then(|v| v.as_bool())
+        == Some(false);
+    disabled.then(|| arg_name.to_string())
+}
+
 /// Deterministic capability enforcement — no config or catalog lookup.
 /// Returns Some(block_message) if the call violates declared capabilities.
 /// Guilds without capabilities (null) are never enforced.
+///
+/// D-46 (aditivo): si `caps` declara `exec_tools` (objeto herramienta → 
+/// `{command_arg?, command_prefix?, allowlist_arg?, why?}`), la herramienta
+/// ejecuta SOLO si está listada y el nombre deja de importar. Sin `exec_tools`
+/// se mantiene EXACTAMENTE la heurística de nombre anterior.
 pub fn enforce_capabilities(
     guild_name: &str,
     caps: &serde_json::Value,
     params: &CallToolRequestParam,
 ) -> Option<String> {
+    let tool_name: &str = params.name.as_ref();
+    let declared_exec_tools = caps.get("exec_tools").and_then(|v| v.as_object());
+    let declared_entry = declared_exec_tools.and_then(|m| m.get(tool_name));
+    let executes = match declared_exec_tools {
+        // Declarada, y su argumento de comando (si lo hay) no es una URL no local:
+        // `mcp_call("http://…/sse")` no lanza ningún proceso.
+        Some(map) => {
+            map.contains_key(tool_name)
+                && !declared_entry.is_some_and(|entry| {
+                    matches!(extract_declared_binary(entry, params), DeclaredBinary::NotALocalCommand)
+                })
+        }
+        None => is_exec_like_tool(params),
+    };
+
+    // D-46: el bypass de allowlist declarado (`allowlist_arg`) se bloquea cuando
+    // la contención está activa, aunque `process_execution` no esté declarado.
+    if let Some(entry) = declared_entry
+        && let Some(arg_name) = allowlist_bypass_requested(entry, params)
+    {
+        return Some(format!(
+            "CAPABILITY_BLOCKED: guild '{guild_name}' declares exec_tools.{tool_name}.allowlist_arg = \
+             '{arg_name}' and the caller set it to false; disabling the allowlist is not allowed \
+             while capability enforcement is active."
+        ));
+    }
+
     // Check process_execution
     match caps.get("process_execution") {
         None => {} // absent → skip enforcement (same as before)
@@ -196,37 +294,45 @@ pub fn enforce_capabilities(
                 .collect();
             if list.is_empty() {
                 // Empty allowlist = no commands allowed, equivalent to false
-                if is_exec_like_tool(params) {
+                if executes {
                     return Some(format!(
                         "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution=[] (empty allowlist). \
                          No commands are allowed."
                     ));
                 }
-            } else {
-                // Non-empty allowlist: extract requested command and check
-                if is_exec_like_tool(params)
-                    && let Some(cmd) = extract_requested_binary(params)
-                    && !list.iter().any(|allowed| allowed == &cmd) {
+            } else if executes {
+                // Non-empty allowlist: extraer el binario y comprobarlo.
+                let binary = match declared_entry {
+                    Some(entry) => extract_declared_binary(entry, params),
+                    None => match extract_requested_binary(params) {
+                        Some(binary) => DeclaredBinary::Binary(binary),
+                        None => DeclaredBinary::Missing,
+                    },
+                };
+                match binary {
+                    DeclaredBinary::Binary(cmd) if !list.iter().any(|allowed| allowed == &cmd) => {
                         return Some(format!(
                             "CAPABILITY_BLOCKED: guild '{}' declares process_execution allowlist {:?}, \
                              but command '{}' is not allowed. Allowed commands: {}.",
                             guild_name, list, cmd, list.join(", ")
                         ));
                     }
-                // If no command arg but tool looks exec-like, also block
-                if is_exec_like_tool(params) && extract_requested_binary(params).is_none() {
-                    return Some(format!(
-                        "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution allowlist {list:?}, \
-                         but no command could be extracted to verify against the allowlist."
-                    ));
+                    DeclaredBinary::Binary(_) => {}
+                    DeclaredBinary::Missing => {
+                        return Some(format!(
+                            "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution allowlist {list:?}, \
+                             but no command could be extracted to verify against the allowlist."
+                        ));
+                    }
+                    // `http://…`/SSE: el argumento no lanza un proceso local.
+                    DeclaredBinary::NotALocalCommand => {}
                 }
             }
         }
-        // D-35b: la semántica de ejecución sale del nombre de la herramienta, no
-        // de la mera presencia de `command`: el router siembra `command=intent`
-        // en TODA llamada (prepare.rs), así que como criterio bloquearía
-        // web_search/vision legítimas (T-DSH-43).
-        Some(v) if v.as_bool() == Some(false) && is_exec_like_tool(params) => {
+        // D-35b: la semántica de ejecución sale de la herramienta (nombre o
+        // declaración `exec_tools`), no de la mera presencia de `command`: el
+        // router siembra `command=intent` en TODA llamada (prepare.rs).
+        Some(v) if v.as_bool() == Some(false) && executes => {
             return Some(format!(
                 "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution=false. \
                  This guild may not execute system commands."
@@ -2089,6 +2195,112 @@ mod tests {
 
         let params_allowed = make_params("filesystem_list", &[("directory", "/data/snapshots")]);
         assert!(enforce_capabilities("test", &caps, &params_allowed).is_none());
+    }
+    fn make_params_values(
+        name: &str,
+        args: &[(&str, serde_json::Value)],
+    ) -> CallToolRequestParam {
+        let mut m = serde_json::Map::new();
+        for (k, v) in args {
+            m.insert((*k).to_string(), v.clone());
+        }
+        CallToolRequestParam {
+            name: name.to_string().into(),
+            arguments: if m.is_empty() { None } else { Some(m) },
+        }
+    }
+
+    #[test]
+    fn test_enforce_exec_tools_declared_non_exec_tool_not_blocked() {
+        // "get_execution_status" es exec-like por heuristica, pero la guild
+        // declara exec_tools: el nombre deja de importar y NO se bloquea.
+        let caps = serde_json::json!({
+            "process_execution": false,
+            "exec_tools": {"browser_navigate": {"why": "subprocess"}}
+        });
+        let params = make_params("get_execution_status", &[("execution_id", "1")]);
+        assert!(enforce_capabilities("n8n_bridge", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_exec_tools_declared_exec_tool_blocked() {
+        let caps = serde_json::json!({
+            "process_execution": false,
+            "exec_tools": {"browser_navigate": {"why": "subprocess"}}
+        });
+        let params = make_params("browser_navigate", &[("url", "https://example.com")]);
+        let result = enforce_capabilities("browser", &caps, &params);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("process_execution=false"));
+    }
+
+    #[test]
+    fn test_enforce_without_exec_tools_keeps_name_heuristic() {
+        // Compatibilidad aditiva: sin `exec_tools` el comportamiento es el de
+        // siempre (heuristica de nombre).
+        let caps = serde_json::json!({"process_execution": false});
+        // Sin `exec_tools` se mantiene la heurística de nombre TAL CUAL,
+        // incluido su falso positivo conocido ("get_execution_status" contiene "exec").
+        let params = make_params("get_execution_status", &[]);
+        assert!(enforce_capabilities("x", &caps, &params).is_some());
+        let params = make_params("bash_execute", &[("command", "ls")]);
+        assert!(enforce_capabilities("x", &caps, &params).is_some());
+    }
+
+    #[test]
+    fn test_enforce_allowlist_arg_false_blocks_bypass_and_command_arg_allowlist() {
+        let caps = serde_json::json!({
+            "process_execution": false,
+            "exec_tools": {
+                "mcp_call": {"command_arg": "server_url", "command_prefix": "stdio://", "allowlist_arg": "enforce_allowlist"}
+            }
+        });
+        let params = make_params_values("mcp_call", &[
+            ("server_url", serde_json::json!("stdio://node server.js")),
+            ("enforce_allowlist", serde_json::json!(false)),
+        ]);
+        let result = enforce_capabilities("mcp_bridge", &caps, &params);
+        assert!(result.is_some(), "allowlist_arg=false debe bloquearse");
+        assert!(result.unwrap().contains("allowlist_arg"));
+
+        // Allowlist no vacia: el binario se extrae de `command_arg` (tras el prefijo).
+        let caps_allow = serde_json::json!({
+            "process_execution": ["node"],
+            "exec_tools": {
+                "mcp_call": {"command_arg": "server_url", "command_prefix": "stdio://", "allowlist_arg": "enforce_allowlist"}
+            }
+        });
+        let params = make_params_values("mcp_call", &[
+            ("server_url", serde_json::json!("stdio://node server.js")),
+            ("enforce_allowlist", serde_json::json!(true)),
+        ]);
+        assert!(enforce_capabilities("mcp_bridge", &caps_allow, &params).is_none());
+        let params = make_params_values("mcp_call", &[
+            ("server_url", serde_json::json!("stdio://bash -c id")),
+            ("enforce_allowlist", serde_json::json!(true)),
+        ]);
+        assert!(enforce_capabilities("mcp_bridge", &caps_allow, &params).is_some());
+        // URL SSE: no es comando local -> no bloquea por allowlist.
+        let params = make_params_values("mcp_call", &[
+            ("server_url", serde_json::json!("http://127.0.0.1:4000/sse")),
+        ]);
+        assert!(enforce_capabilities("mcp_bridge", &caps_allow, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_exec_tools_sse_url_not_blocked_under_process_execution_false() {
+        // TL: bajo Strict (process_execution=false) una URL SSE no lanza proceso local,
+        // pero un stdio:// sí y se bloquea.
+        let caps = serde_json::json!({
+            "process_execution": false,
+            "exec_tools": {
+                "mcp_call": {"command_arg": "server_url", "command_prefix": "stdio://"}
+            }
+        });
+        let sse = make_params("mcp_call", &[("server_url", "http://127.0.0.1:4000/sse")]);
+        assert!(enforce_capabilities("mcp_bridge", &caps, &sse).is_none());
+        let stdio = make_params("mcp_call", &[("server_url", "stdio://node server.js")]);
+        assert!(enforce_capabilities("mcp_bridge", &caps, &stdio).is_some());
     }
 }
 

@@ -329,13 +329,15 @@ fn catalog_capabilities_are_parsed_after_d35() {
     println!("catalogo: guilds con capabilities declaradas y PARSEADAS = {with_caps:?}");
     assert_eq!(
         with_caps,
-        vec!["bash", "vision", "websearch"],
+        vec!["bash", "browser", "mcp_bridge", "vision", "websearch"],
         "D-35: esperado bash (dict de una línea) + vision y websearch (multilínea); \
          si cambió, revisar extract_capabilities"
     );
 
     for (guild, rel) in [
         ("bash", "guilds/builders/plugins/bash.py"),
+        ("browser", "guilds/core/browser.py"),
+        ("mcp_bridge", "guilds/core/mcp_bridge.py"),
         ("vision", "guilds/core/vision.py"),
         ("websearch", "guilds/core/websearch.py"),
     ] {
