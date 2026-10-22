@@ -1580,16 +1580,29 @@ mod embedding_fingerprint_index_tests {
     /// D-20: la aserción era `p95 < 50ms` en ABSOLUTO y fallaba una de cada
     /// tres pasadas completas de la lib en paralelo, porque bajo carga el p95
     /// refleja la contención de la máquina y no el coste de la puerta. Se mide
-    /// ahora en RELATIVO contra la resolución por candidato que ya existía en
-    /// los bucles HNSW/IVF (`get_node_sync` × 300), midiendo ambas de forma
-    /// intercalada: la contención afecta a las dos por igual y el cociente
-    /// sigue teniendo sentido; el margen y el suelo están explícitos.
+    /// en RELATIVO contra la resolución por candidato que ya existía en los
+    /// bucles HNSW/IVF (`get_node_sync` × 300), midiendo ambas de forma
+    /// intercalada.
+    ///
+    /// D-29: incluso en relativo, se comparaba el p95 de la puerta contra el
+    /// **p50** de la referencia, y una preempción del scheduler en una pasada
+    /// disparaba el cociente sin que la puerta fuera más cara. Medido en la
+    /// repro (10 pasadas completas de la lib, 1 fallo): gate p50=4.493us,
+    /// gate p95=129.447us, referencia p50=23.501us → presupuesto 94.004us.
+    /// El p95 no medía la puerta, medía la cola de la máquina.
+    /// Arreglo: (1) mismo percentil en los dos lados (p95 contra p95 de la
+    /// MISMA ronda, misma cola de carga); (2) mínimo de RONDAS rondas (se
+    /// queda la ronda menos interferida): la propiedad a probar es "la puerta
+    /// acotada no domina el coste", y el peor p95 de una pasada es ruido del
+    /// host, no una regresión. Margen y suelo siguen explícitos; si el p95 de
+    /// la mejor de 3 rondas no baja del presupuesto, el test falla.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn fingerprint_gate_cost() {
         const ROWS: usize = 1000;
         const CANDIDATES: usize = 300; // HNSW window at limit=100 (limit * 3)
-        const ITERS: usize = 100;
-        /// Margen explícito: la puerta puede costar hasta 4× la referencia.
+        const ITERS: usize = 60; // por ronda
+        const ROUNDS: usize = 3;
+        /// Margen explícito: la puerta puede costar hasta 4× el p95 de la referencia.
         const MARGIN: u64 = 4;
         /// Suelo: si la referencia es diminuta (máquina ociosa), 2 ms es de
         /// sobra para 300 candidatos y evita un cociente sobre ruido de reloj.
@@ -1606,46 +1619,67 @@ mod embedding_fingerprint_index_tests {
         db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
         let candidate_ids: Vec<String> = (0..CANDIDATES).map(|i| format!("row_{i:05}")).collect();
 
-        // Intercalado a propósito: la puerta y su referencia ven la misma
-        // carga en cada iteración (ver D-20 en el doc de arriba).
-        let mut samples = Vec::with_capacity(ITERS);
-        let mut baseline = Vec::with_capacity(ITERS);
-        tokio::task::block_in_place(|| {
-            let conn = db.conn_timed();
-            for _ in 0..ITERS {
-                let t0 = std::time::Instant::now();
-                let dropped = db.fingerprint_dropped_ids(&conn, &candidate_ids, 16);
-                samples.push(t0.elapsed().as_micros() as u64);
-                assert!(dropped.is_empty(), "all candidates share the declared engine");
+        // (ronda) gate_p50, gate_p95, gate_min, gate_max, base_p50, base_p95
+        let mut per_round: Vec<(u64, u64, u64, u64, u64, u64)> = Vec::with_capacity(ROUNDS);
+        for _ in 0..ROUNDS {
+            // Intercalado a propósito: la puerta y su referencia ven la misma
+            // carga en cada iteración (ver D-20/D-29 arriba).
+            let mut samples = Vec::with_capacity(ITERS);
+            let mut baseline = Vec::with_capacity(ITERS);
+            tokio::task::block_in_place(|| {
+                let conn = db.conn_timed();
+                for _ in 0..ITERS {
+                    let t0 = std::time::Instant::now();
+                    let dropped = db.fingerprint_dropped_ids(&conn, &candidate_ids, 16);
+                    samples.push(t0.elapsed().as_micros() as u64);
+                    assert!(dropped.is_empty(), "all candidates share the declared engine");
 
-                // Referencia: la resolución por candidato que ya existía en
-                // los bucles HNSW/IVF antes de la puerta.
-                let t1 = std::time::Instant::now();
-                for id in &candidate_ids {
-                    let _ = db.get_node_sync(id, &conn);
+                    // Referencia: la resolución por candidato que ya existía en
+                    // los bucles HNSW/IVF antes de la puerta.
+                    let t1 = std::time::Instant::now();
+                    for id in &candidate_ids {
+                        let _ = db.get_node_sync(id, &conn);
+                    }
+                    baseline.push(t1.elapsed().as_micros() as u64);
                 }
-                baseline.push(t1.elapsed().as_micros() as u64);
-            }
-        });
-        samples.sort_unstable();
-        baseline.sort_unstable();
-        let p50 = samples[ITERS / 2];
-        let p95 = samples[ITERS * 95 / 100];
-        let base_p50 = baseline[ITERS / 2];
-        let budget = (base_p50 * MARGIN).max(FLOOR_US);
+            });
+            samples.sort_unstable();
+            baseline.sort_unstable();
+            per_round.push((
+                samples[ITERS / 2],
+                samples[ITERS * 95 / 100],
+                samples[0],
+                samples[ITERS - 1],
+                baseline[ITERS / 2],
+                baseline[ITERS * 95 / 100],
+            ));
+        }
 
+        // La ronda menos interferida: el mínimo p95 de la puerta entre rondas.
+        let best = per_round
+            .iter()
+            .min_by_key(|r| r.1)
+            .copied()
+            .expect("al menos una ronda");
+        let (gate_p50, gate_p95, gate_min, gate_max, base_p50, base_p95) = best;
+        let budget = (base_p95 * MARGIN).max(FLOOR_US);
+
+        for (idx, r) in per_round.iter().enumerate() {
+            println!(
+                "T1277-E ronda {}: gate p50={}us p95={}us | referencia p50={}us p95={}us",
+                idx + 1,
+                r.0,
+                r.1,
+                r.4,
+                r.5
+            );
+        }
         println!(
-            "T1277-E fingerprint_gate_cost: rows={ROWS} candidates={CANDIDATES} iters={ITERS} \
-             gate_p50={p50}us gate_p95={p95}us (min={}us max={}us) — \
-             reference get_node_sync loop p50={base_p50}us, budget={budget}us \
-             ({MARGIN}x, floor {FLOOR_US}us)",
-            samples[0],
-            samples[ITERS - 1]
+            "T1277-E fingerprint_gate_cost: rows={ROWS} candidates={CANDIDATES} iters={ITERS} rounds={ROUNDS}              — mejor ronda: gate_p50={gate_p50}us gate_p95={gate_p95}us (min={gate_min}us max={gate_max}us) —              reference get_node_sync loop p50={base_p50}us p95={base_p95}us, budget={budget}us              ({MARGIN}x p95, floor {FLOOR_US}us)"
         );
         assert!(
-            p95 <= budget,
-            "bounded candidate lookup should stay within {MARGIN}x of the per-candidate \
-             reference (gate p95={p95}us, reference p50={base_p50}us, budget={budget}us)"
+            gate_p95 <= budget,
+            "bounded candidate lookup should stay within {MARGIN}x of the reference p95              (best-round gate p95={gate_p95}us, reference p95={base_p95}us, budget={budget}us)"
         );
     }
 }
