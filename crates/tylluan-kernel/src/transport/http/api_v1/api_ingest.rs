@@ -393,10 +393,8 @@ pub async fn ingest_handler(
     // rechazarlo daría falsos positivos. La decisión del TL es marcarlo: la capa 1
     // deja `untrusted_content: true` en el metadata y el juez decide después.
     // Antes de esto, B-9 midió 8/8 muestras de inyección guardadas SIN marca.
-    let layer1_flagged = crate::security::poison_patterns::matches_injection_pattern(&content);
-    if layer1_flagged {
-        tracing::warn!("ingest: content matches a known injection pattern (ASI06 Layer 1) - stored MARKED as untrusted, not rejected");
-    }
+    // D-32: la marca vive en `security::trust::mark_if_layer1_flagged`, que es la
+    // misma regla que aplican el resto de vías de escritura.
     let mut metadata_value = serde_json::json!({
         "source": "ingest_pipeline",
         "filename": file_name,
@@ -404,12 +402,8 @@ pub async fn ingest_handler(
         "tags": tags_owned,
         "context": q.context,
     });
-    if layer1_flagged && let Some(obj) = metadata_value.as_object_mut() {
-        obj.insert("untrusted_content".to_string(), serde_json::Value::Bool(true));
-        obj.insert("untrusted_reason".to_string(), serde_json::Value::String(
-            "ASI06 Layer 1: content matches a known prompt-injection pattern".to_string()
-        ));
-    }
+    let _layer1_flagged =
+        crate::security::trust::mark_if_layer1_flagged(&mut metadata_value, &content, "ingest");
     let metadata = metadata_value.to_string();
 
     let upsert_result = silva.upsert_node(&node_id, &node_type_owned, &content, &metadata).await;
@@ -480,9 +474,20 @@ pub async fn ingest_handler(
                 if let Some(text) = c.as_text() {
                     let vision_desc = text.text.trim();
                     if !vision_desc.is_empty() && !vision_desc.starts_with('[') {
-                        let meta = serde_json::json!({"source": "vision", "image_path": img_path}).to_string();
+                        // D-32 (matiz 5 de T-DSH-33): la descripción de visión es
+                        // otra vía de escritura (contenido derivado de un fichero
+                        // que subió el usuario) y salía sin capa 1 ni juez.
+                        let mut meta_value = serde_json::json!({"source": "vision", "image_path": img_path});
+                        crate::security::trust::mark_if_layer1_flagged(&mut meta_value, vision_desc, "vision_description");
+                        let meta = meta_value.to_string();
                         let vision_node_id = format!("vision_desc__{}", uuid::Uuid::new_v4().simple());
-                        let _ = silva.upsert_node(&vision_node_id, "vision_description", vision_desc, &meta).await;
+                        if silva.upsert_node(&vision_node_id, "vision_description", vision_desc, &meta).await.is_ok() {
+                            crate::security::write_gate::spawn_write_gate_judge(
+                                silva.clone(),
+                                vision_node_id.clone(),
+                                vision_desc.to_string(),
+                            );
+                        }
                         let _ = silva.add_edge(&node_id_final, &vision_node_id, "described_as", 1.0, "{}").await;
                     }
                 }

@@ -26,9 +26,31 @@ pub async fn handle_tylluan_graph(
             if subject.is_empty() || predicate.is_empty() || object.is_empty() {
                 return Ok(error_result("add_triple requires 'subject', 'predicate', and 'object'."));
             }
-            let metadata = serde_json::json!({"timestamp": chrono::Utc::now().to_rfc3339(), "source": "tylluan_graph", "agent": agent_id}).to_string();
-            let _ = server.silva.upsert_node_with_provenance(&subject, "concept", &subject, &metadata, "agent_generated").await;
-            let _ = server.silva.upsert_node_with_provenance(&object, "concept", &object, &metadata, "agent_generated").await;
+            let metadata = serde_json::json!({"timestamp": chrono::Utc::now().to_rfc3339(), "source": "tylluan_graph", "agent": agent_id});
+            // D-32 (V5): `add_triple` escribe DOS nodos con texto del llamante y no
+            // tenía capa 1 ni juez. Se marca cada nodo con SU propio contenido
+            // (subject y object pueden diferir) y se lanza el juez tras escribir.
+            for (node, text) in [(&subject, subject.as_str()), (&object, object.as_str())] {
+                let mut meta_value = metadata.clone();
+                crate::security::trust::mark_if_layer1_flagged(
+                    &mut meta_value,
+                    text,
+                    "tylluan_graph:add_triple",
+                );
+                if server
+                    .silva
+                    .upsert_node_with_provenance(node, "concept", text, &meta_value.to_string(), "agent_generated")
+                    .await
+                    .is_ok()
+                {
+                    crate::security::write_gate::spawn_write_gate_judge(
+                        server.silva.clone(),
+                        node.to_string(),
+                        text.to_string(),
+                    );
+                }
+            }
+            let metadata = metadata.to_string();
             match server.silva.add_edge(&subject, &object, &predicate, 1.0, &metadata).await {
                 Ok(_) => {
                     info!("🌲 tylluan_graph: added triple {} -[{}]-> {}", subject, predicate, object);

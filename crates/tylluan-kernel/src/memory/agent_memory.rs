@@ -187,16 +187,28 @@ impl AgentMemoryManager {
     pub async fn record_memory(&self, agent_id: &str, content: &str, importance: f64) -> String {
         let node_id = format!("agent_memory:{}:{}", agent_id, Uuid::new_v4().simple());
         let tagged = format!("[{agent_id}] {content}");
-        let meta = serde_json::json!({
+        // D-32 (V4, matiz 1 de T-DSH-33): el nodo lo crea ESTA función, no el
+        // handler de Coloquio, así que la marca va aquí o no va. Es condicional a
+        // la capa 1 (record_memory también persiste memorias legítimas): misma
+        // semántica que `ingest` — marcar, no rechazar.
+        let mut meta_value = serde_json::json!({
             "agent_id": agent_id,
             "importance": importance,
-        }).to_string();
+        });
+        crate::security::trust::mark_if_layer1_flagged(&mut meta_value, content, "agent_memory");
+        let meta = meta_value.to_string();
         let scope = format!("agent:{agent_id}");
         let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
 
         if self.silva.upsert_node_with_validity(&node_id, "agent_memory", &tagged, &meta, opts).await.is_ok() {
             let weight = importance.clamp(0.1, 5.0);
             let _ = self.silva.set_weight(&node_id, weight).await;
+            // D-32: capa 2 sobre el nodo ya escrito (fire-and-forget, como `ingest`).
+            crate::security::write_gate::spawn_write_gate_judge(
+                self.silva.clone(),
+                node_id.clone(),
+                tagged.clone(),
+            );
         }
         node_id
     }
@@ -224,11 +236,15 @@ impl AgentMemoryManager {
         } else {
             format!("{content} | lección: {lesson}")
         };
-        let meta = serde_json::json!({
+        let mut meta_value = serde_json::json!({
             "agent_id": agent_id,
             "verdict": verdict,
             "kind": "experience",
-        }).to_string();
+        });
+        // D-32 (V6, segunda mitad): `record_experience` escribe por la misma vía
+        // que el skill y tampoco tenía capa 1. Condicional, como `record_memory`.
+        crate::security::trust::mark_if_layer1_flagged(&mut meta_value, &content, "agent_experience");
+        let meta = meta_value.to_string();
         let scope = format!("agent:{agent_id}");
         let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
         if self.silva.upsert_node_with_validity(&node_id, "experience", &content, &meta, opts).await.is_ok() {
@@ -240,6 +256,11 @@ impl AgentMemoryManager {
                 _ => 0.8,
             };
             let _ = self.silva.set_weight(&node_id, weight).await;
+            crate::security::write_gate::spawn_write_gate_judge(
+                self.silva.clone(),
+                node_id.clone(),
+                content.clone(),
+            );
         }
         node_id
     }
