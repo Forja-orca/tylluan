@@ -28,17 +28,17 @@
 
 ---
 
-## 2. Estado real verificado (árbol `27e3a57`, 2026-10-22)
+## 2. Estado real verificado (árbol `991528a`; las líneas las contrastó DSH de forma independiente en T-DSH-30)
 
 | # | Hecho | Evidencia |
 |---|---|---|
 | H1 | Las guilds comparten usuario del SO con el kernel («Guilds share OS user with kernel») | `docs/concepts/SECURITY.md` línea 51 |
-| H2 | El sandbox de guilds (`security.sandbox`) está **apagado por defecto** y solo soporta Docker | `tylluan.toml` `[security.sandbox] enabled = false`; `config.rs` (`SandboxConfig`) |
-| H3 | La contención de capacidades es **opt-in y está apagada**: `capabilities_enforce = false` | `config.rs` (`default_capabilities_enforce`), `tylluan.toml` línea 221 |
-| H4 | Cuando está encendida, solo cubre `process_execution` y `filesystem_scope`; `network_hosts` es solo orientativo; un guild sin `CAPABILITIES` «is never enforced» | `config.rs` líneas 1368-1376; `guild_process.rs` `enforce_capabilities` (líneas 182-239) |
+| H2 | El sandbox de guilds (`security.sandbox`) está **apagado por defecto** y solo existe el camino Docker | `config.rs` líneas 1683-1692 (`impl Default for SandboxConfig`: `enabled: false`); `guild_process.rs` líneas 415-438 (solo `Command::new("docker")`; `git grep -i podman` en `crates/tylluan-kernel/src` da 0); plantilla `tylluan.example.toml` |
+| H3 | La contención de capacidades es **opt-in y está apagada por defecto**: `capabilities_enforce = false`. Solo gobierna la rama *Balanced* de `check_capabilities`; en perfil *Strict* se fuerza `process_execution=false` sin consultar ese flag. Con el sandbox deshabilitado el perfil efectivo cae a *Balanced*, así que lo que lo deja pasar es el flag, no el perfil | `config.rs` líneas 1375-1376, 1414 y 1421; `guild_process.rs` líneas 540-594 (`check_capabilities`); `config.rs` ~1755-1762 (`load_sandbox_profile`). Valor de la configuración local de José: `tylluan.toml` línea 221 (fichero **no versionado**) |
+| H4 | Cuando está encendida, solo cubre `process_execution` y `filesystem_scope`; `network_hosts` es solo orientativo; un guild sin `CAPABILITIES` «is never enforced» | `config.rs` líneas 1368-1376; `guild_process.rs` `enforce_capabilities` (líneas 185-266) |
 | H5 | `enforce_capabilities` es un **filtro de argumentos al despachar**: mira el argumento `command` y heurísticas sobre el nombre de la herramienta; no limita lo que hace el proceso hijo | `guild_process.rs` líneas 163-239 |
-| H6 | **Cada guilda stdio recibe `TYLLUAN_TOKEN`**, el token que acepta el kernel (el maestro) | `guild_process.rs` líneas 478-491 |
-| H7 | La configuración de producción tiene `default_role = "admin"` y `dev_mode = true`: un agente **sin listar** en el contrato es administrador; figurar como `reader` **reduce** permisos | `tylluan.toml` líneas 198 y 230; `.tylluan/agents.toml` |
+| H6 | Cada guilda stdio **nativa** recibe `TYLLUAN_TOKEN`, el token que acepta el kernel (el maestro), **si el kernel puede resolverlo** (variable de entorno o `.tylluan-token`); dentro del sandbox Docker no se propaga por entorno salvo que se pase de forma explícita (deducido de los argumentos de `docker run`, sin ejecución real) | `guild_process.rs` líneas 478-491 y 426-438 |
+| H7 | La configuración local de José tiene `default_role = "admin"` y `dev_mode = true`: un agente **sin listar** en el contrato es administrador; figurar como `reader` **reduce** permisos | Semántica verificada en `auth.rs` líneas 137-139 y 175-199 (`resolve_role_for_token`, `resolve_acl_role_inner`) y `.tylluan/agents.toml`; valores en `tylluan.toml` líneas 198 y 230 (**no versionado**: no reproducible en un checkout limpio); defaults en `config.rs` |
 | H8 | De las 6 guilds auditadas solo `bash` declara `CAPABILITIES` (en todo el repo la constante existe en 3 guilds: `bash`, `vision` y `websearch`); `bash` ejecuta un shell crudo (la allowlist del primer token no es frontera), `git` no valida `cwd`, `code` lee fuera del workspace, `docker` habla con el daemon (capacidad de host) | `IMPL_T-DSH-26` |
 | H9 | Ya existe consumo de servidores MCP externos por API (alta, baja, edición, descubrimiento) | `routes.rs` líneas 105-107 (`/api/v1/mcp/external`) |
 | H10 | ADR-016 ya dijo NO-GO a OpenShell como dependencia (exige contenedor o microVM, rompe `portable` y ARM64) y conservó tres patrones de diseño | `ADR016_nvidia_openshell_runtime.md` |
@@ -82,7 +82,7 @@ Se define **una interfaz** (`SandboxRuntime`: preparar, ejecutar con política, 
 
 ### 4.4 Manifiesto de capacidades
 
-Cada guilda y cada conector declara, en un manifiesto leído por el kernel:
+**Hoy no existe ningún manifiesto:** lo único que hay es la constante `CAPABILITIES = {...}` dentro del propio `.py`, que `catalog.rs` (`extract_capabilities`) parsea, y solo la tienen 3 guilds. Se propone que cada guilda y cada conector declare, en un manifiesto leído por el kernel (que sustituiría a esa constante):
 
 - `process_execution` (lista de binarios o `false`), `filesystem_scope` (rutas, por defecto solo su espacio de trabajo), `network_hosts` (dominios y métodos permitidos, por defecto vacío), `container_daemon` (nuevo: acceso al daemon es capacidad de host), `kernel_credential` (nuevo: qué clase de credencial del kernel necesita, §4.5), `env_inherit` (nuevo: si hereda el entorno del kernel), `timeouts`.
 - **Valor por defecto para T2: denegar todo.** Para T1: se declara primero (fase F0) y se aplica después (`capabilities_enforce` encendido por defecto cuando las guilds núcleo estén declaradas y se haya medido qué se rompe).
@@ -90,7 +90,7 @@ Cada guilda y cada conector declara, en un manifiesto leído por el kernel:
 
 ### 4.5 Credencial de guilda distinta del token maestro
 
-Hoy cada guilda recibe el token maestro (H6). Se propone una **credencial adicional de clase agente**, emitida por el kernel solo para guilds, con el alcance mínimo que usan de verdad (por ejemplo `silva/node`, `memory/write`, `coloquio/*`) y **sin** rutas de operador (administración, mantenimiento, configuración, despachos, aprobaciones). `guilds/core/kernel_auth.py` recoge esta credencial en lugar de la maestra.
+Hoy cada guilda stdio nativa recibe el token maestro cuando el kernel puede resolverlo (H6). Se propone una **credencial adicional de clase agente**, emitida por el kernel solo para guilds, con el alcance mínimo que usan de verdad (por ejemplo `silva/node`, `memory/write`, `coloquio/*`) y **sin** rutas de operador (administración, mantenimiento, configuración, despachos, aprobaciones). `guilds/core/kernel_auth.py` recoge esta credencial en lugar de la maestra.
 
 Es **aditiva**: el token maestro y `.tylluan-token` no se tocan ni se rotan, y el kernel sigue funcionando igual para un cliente con el Bearer maestro (regla de José). Esta pieza (D-34) es independiente del sandbox y, sola, ya reduce el daño de una guilda comprometida de «operador» a «agente».
 
@@ -100,10 +100,12 @@ Es **aditiva**: el token maestro y `.tylluan-token` no se tocan ni se rotan, y e
 - El registro oficial se describe a sí mismo como «a community driven registry service», está en preview y avisa de que «breaking changes or data resets may occur» (README del repositorio `modelcontextprotocol/registry`): sirve de fuente de descubrimiento, **no de garantía**. Verifica la propiedad del espacio de nombres al publicar (GitHub OAuth/OIDC, DNS o HTTP).
 - Cada conector admitido lleva: **versión fijada y hash**, manifiesto de capacidades, permisos **por herramienta** (permitir, preguntar, bloquear), secretos por el corredor de §4.7, auditoría de cada llamada, y su salida marcada `untrusted_content`.
 - Patrones tomados de los IDE (H-2, fuentes de Hermes): lista de permitidos y de denegados con precedencia de la denegación (VS Code), política por herramienta `allow`/`ask`/`blocked` (Claude Desktop gestionado), configuración de proyecto más global fusionadas (Cursor), aprobación por defecto antes de usar una herramienta.
-- **Regla dura:** ningún conector de terceros antes de que exista N2 y el manifiesto aplicado. Los servidores MCP externos arrancan **envueltos por nuestro lanzador**: sin eso corren sin restricción en el anfitrión (advertencia explícita de la documentación de Claude Code).
+- **Regla dura:** ningún conector de terceros antes de que exista N2 y el manifiesto aplicado. Los servidores MCP externos arrancarían **envueltos por nuestro lanzador** (**hoy no existe tal lanzador**: se registran y arrancan con su comando directo; el envoltorio forma parte de F2): sin eso corren sin restricción en el anfitrión (advertencia explícita de la documentación de Claude Code).
 - Los conectores entran por el router como un tipo propio, no por la superficie MCP: se mantiene CONTRACT-01 (seis herramientas soberanas).
 
 ### 4.7 Corredor de secretos y red en dos fases
+
+> **Todo este apartado es diseño futuro:** hoy no hay corredor de secretos, ni sistema de ficheros de solo lectura para las guilds, ni espacio de trabajo en copia con diff.
 
 - **Los secretos no se montan ni se pasan por entorno al sandbox.** Un proxy del lado del kernel los guarda y el sandbox ve un marcador. Patrón verificado en Docker Sandboxes («the key itself never enters the sandbox») y en Claude Code en la nube (un proxy guarda el token de GitHub).
 - **Dos fases de red** para conectores: instalar/descargar con una lista de dominios; ejecutar sin red por defecto. Si se abre, lista de dominios y de métodos (Codex recomienda solo `GET`, `HEAD` y `OPTIONS`).
@@ -173,7 +175,8 @@ Las aprobaciones deciden **si** algo se ejecuta; el aislamiento limita **qué al
 
 - Las citas de Hermes (H-2, H-3) tienen un solo lector; el TL no ha reabierto las fuentes que usa este ADR. En H-2, algunas celdas de VS Code reutilizan documentación de Cursor, y así consta en su fichero.
 - Cifras de arranque y memoria de Firecracker, gVisor, Podman y SPACE: no medidas por nosotros ni publicadas en sus README.
-- Si `check_capabilities` (que DSH describe ligado al perfil de sandbox) y `enforce_capabilities` (ligado a `capabilities_enforce`) son dos mecanismos distintos o uno solo con dos puertas: pendiente de contraste en F0.
+- ~~Si `check_capabilities` y `enforce_capabilities` son dos mecanismos o uno solo~~: **resuelto por T-DSH-30**: es **una cadena con dos puertas**. `check_capabilities` (privada) decide según el perfil efectivo y llama a `enforce_capabilities` (pública, chequeo determinista de `process_execution` y `filesystem_scope`); `capabilities_enforce` solo gobierna la rama *Balanced*.
+- **Revisión independiente de DSH (T-DSH-30) de H1 a H12:** 8 correctos, 4 imprecisos (H2, H3, H6, H7) y ninguno falso; las cuatro correcciones y las de §4.4 a §4.7 (que describían como presente lo que es diseño) están aplicadas en este texto.
 - La tarjeta del sistema de ChatGPT (modo agente), la documentación oficial de Gemini sobre ejecución de código y las imágenes de uso de ordenador de Anthropic: pendientes de H-3.
 
 ## Impact
