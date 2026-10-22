@@ -45,10 +45,13 @@ const BENIGN_CORPUS: &str = concat!(
     "/../../benchmarks/benign_corpus_v1.json"
 );
 
-/// Ids que B-9 midió aceptados sin marca por ambas rutas. Si el corpus cambia,
-/// este test avisa: la lista de capa 1 detectada es parte del contrato medido.
-const B9_FLAGGED: [&str; 8] = [
-    "inj_01", "inj_02", "inj_07", "inj_12", "inj_19", "inj_22", "inj_35", "inj_36",
+/// Ids que la capa 1 detecta: los 8 que midió B-9 más los 4 en español que
+/// empezó a detectar D-31 (`inj_13`..`inj_16`). Si el corpus o los patrones
+/// cambian, este test avisa: la lista de capa 1 detectada es parte del contrato
+/// medido.
+const B9_FLAGGED: [&str; 12] = [
+    "inj_01", "inj_02", "inj_07", "inj_12", "inj_13", "inj_14", "inj_15", "inj_16", "inj_19", "inj_22", "inj_35",
+    "inj_36",
 ];
 
 fn samples(path: &str) -> Vec<(String, String)> {
@@ -146,7 +149,7 @@ async fn d17_layer1_and_judge_cover_memory_write_and_ingest() {
 
     let spawns_before = judge_spawn_count();
 
-    // (2) memory/write rechaza las 8 ANTES de escribir y no lanza juez.
+    // (2) memory/write rechaza las inyecciones ANTES de escribir y no lanza juez.
     for (id, text) in injection.iter().filter(|(id, _)| B9_FLAGGED.contains(&id.as_str())) {
         let (status, body) =
             post_json(&app, "/api/v1/memory/write", serde_json::json!({ "content": text, "agent_id": "d17" })).await;
@@ -168,7 +171,7 @@ async fn d17_layer1_and_judge_cover_memory_write_and_ingest() {
         "a rejected write must not spend a judge call"
     );
 
-    // (3) ingest guarda las 8 MARCADAS y lanza un juicio por escritura.
+    // (3) ingest guarda las inyecciones MARCADAS y lanza un juicio por escritura.
     for (id, text) in injection.iter().filter(|(id, _)| B9_FLAGGED.contains(&id.as_str())) {
         let node_id = ingest(&app, text).await;
         let node = state
@@ -194,7 +197,7 @@ async fn d17_layer1_and_judge_cover_memory_write_and_ingest() {
     }
     assert_eq!(
         judge_spawn_count(),
-        spawns_before + 8,
+        spawns_before + B9_FLAGGED.len() as u64,
         "ingest must launch the judge once per stored document"
     );
 
@@ -219,7 +222,7 @@ async fn d17_layer1_and_judge_cover_memory_write_and_ingest() {
     }
     assert_eq!(
         judge_spawn_count(),
-        spawns_before + 8 + 2 * benign.len() as u64,
+        spawns_before + B9_FLAGGED.len() as u64 + 2 * benign.len() as u64,
         "every accepted write on both routes must reach the judge"
     );
 }

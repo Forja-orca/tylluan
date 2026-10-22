@@ -1,8 +1,8 @@
 //! B-12 — especificación ejecutable de D-17 (capa 1 de ASI06 en `ingest` y `memory/write`).
 //!
 //!(spec-first, sin tocar `src/`). Contrato de D-17:
-//!  - `/api/v1/memory/write` **rechaza** las 8 muestras de `benchmarks/injection_corpus_v1.json`
-//!    que la capa 1 detecta (mismas 8 que `tylluan_remember` ya rechaza).
+//!  - `/api/v1/memory/write` **rechaza** las muestras de `benchmarks/injection_corpus_v1.json`
+//!    que la capa 1 detecta (12 desde D-31: las 8 de B-9 más 4 en español).
 //!  - `/api/v1/ingest` **no rechaza** ninguna, pero las guarda **marcadas**
 //!    (`untrusted_content` en metadata) para que el recall las trate como no confiables.
 //!  - **Ningún** documento benigno de `benchmarks/benign_corpus_v1.json` se rechaza
@@ -28,8 +28,14 @@ use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 use tylluan_kernel::security::poison_patterns::matches_injection_pattern;
 
-/// Las 8 muestras que la capa 1 detecta hoy (B-9 midió exactamente estas sobre 40).
-const EXPECTED_DETECTED: &[&str] = &["inj_01", "inj_02", "inj_07", "inj_12", "inj_19", "inj_22", "inj_35", "inj_36"];
+/// Las muestras que la capa 1 detecta hoy: las 8 que midió B-9 sobre 40 más
+/// `inj_13`/`inj_14`/`inj_15`/`inj_16`, que empezaron a detectarse con las
+/// reglas en español y la normalización de D-31 (2026-10-22). El nombre del
+/// test conserva el "8" histórico; el contrato es esta lista, no el número.
+const EXPECTED_DETECTED: &[&str] = &[
+    "inj_01", "inj_02", "inj_07", "inj_12", "inj_13", "inj_14", "inj_15", "inj_16", "inj_19", "inj_22", "inj_35",
+    "inj_36",
+];
 
 /// Las 40 muestras benignas.
 const BENIGN_COUNT: usize = 40;
@@ -44,7 +50,7 @@ fn read_json(path: &std::path::Path) -> serde_json::Value {
     serde_json::from_str(&raw).unwrap_or_else(|e| panic!("JSON inválido en {}: {e}", path.display()))
 }
 
-/// Devuelve `(id, texto)` de cada corpus, validando que las 8 esperadas siguen
+/// Devuelve `(id, texto)` de cada corpus, validando que las esperadas siguen
 /// siendo las que la capa 1 detecta — así el test no se rompe en silencio si
 /// `poison_patterns.rs` cambia.
 fn load_corpora() -> Corpora {
