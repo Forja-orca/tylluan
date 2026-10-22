@@ -205,6 +205,28 @@ pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &
     call_judge(&kernel_base, prompt, grammar, JUDGE_TIMEOUT).await
 }
 
+/// D-33: el modelo que se envia al juez. Prioridad: `TYLLUAN_JUDGE_MODEL`
+/// (util para pruebas manuales) y despues `[security] judge_model` del
+/// `tylluan.toml`. `None` significa "no enviar `model`": el guild decidira
+/// (y si el backend exige el campo, el fallo se cuenta como `backend_error`).
+fn configured_judge_model() -> Option<String> {
+    if let Ok(raw) = std::env::var("TYLLUAN_JUDGE_MODEL") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    let cfg = crate::config::TylluanConfig::load_cached().ok()?;
+    let guard = cfg.try_read().ok()?;
+    guard
+        .security
+        .judge_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map(str::to_string)
+}
+
 /// Cuerpo separado del wrapper para poder apuntarlo a un servidor local en tests
 /// (y, en C1+C2, para envolverlo con el semáforo) sin mutar variables de entorno
 /// globales del proceso.
@@ -214,14 +236,66 @@ pub(crate) async fn call_judge(
     grammar: &str,
     timeout: std::time::Duration,
 ) -> Result<String, String> {
+    let judge_model = configured_judge_model();
     call_judge_inner(
         crate::security::judge_telemetry::judge_telemetry(),
         kernel_base,
         prompt,
         grammar,
         timeout,
+        judge_model.as_deref(),
     )
     .await
+}
+
+/// D-33: clasificar un fallo del juez por su causa.
+///
+/// `BackendError` = el backend contesto **rechazando nuestra peticion**: un 4xx
+/// (salvo 401/403, que son de autenticacion y los cubre `http`), o un 5xx cuyo
+/// cuerpo arrastra el rechazo del backend de verdad (el guild convierte el 400
+/// de LM Studio en un 500 al propagar la excepcion). Antes todo esto era
+/// `http` y el sintoma "el juez no puede emitir veredictos" se perdia.
+pub(crate) fn classify_judge_failure(status: u16, body: &str) -> crate::security::judge_telemetry::JudgeOutcome {
+    use crate::security::judge_telemetry::JudgeOutcome;
+
+    if matches!(status, 401 | 403) {
+        return JudgeOutcome::HttpError;
+    }
+    if (400..500).contains(&status) {
+        return JudgeOutcome::BackendError;
+    }
+    let lower = body.to_ascii_lowercase();
+    let backend_rejected = lower.contains("bad request")
+        || lower.contains("http error 400")
+        || (lower.contains("400") && lower.contains("model"));
+    if backend_rejected {
+        JudgeOutcome::BackendError
+    } else {
+        JudgeOutcome::HttpError
+    }
+}
+
+/// D-33: un unico `warn!` por arranque. Si el backend rechaza la peticion del
+/// juez, la capa 2 (puerta de escritura) y la capa 4 quedan inertes y hasta
+/// ahora eso solo se veia en `debug!`, indistinguible de "juez limpio".
+fn warn_judge_cannot_verdict(status: u16, body: &str, judge_model: Option<&str>) {
+    use std::sync::OnceLock;
+    static WARNED: OnceLock<()> = OnceLock::new();
+    if WARNED.set(()).is_err() {
+        return;
+    }
+    let hint = if judge_model.is_some() {
+        "el campo `model` ya se envia: revisa que ese modelo exista en el backend"
+    } else if body.to_ascii_lowercase().contains("model") {
+        "el backend parece exigir `model`: fija [security] judge_model (o TYLLUAN_JUDGE_MODEL)"
+    } else {
+        "revisa el backend de inferencia ([inference.llama] / external_providers)"
+    };
+    tracing::warn!(
+        "write_gate/coherence_gate: el juez NO puede emitir veredictos (el backend respondio {}),          la capa 2 y la capa 4 quedan inertes hasta arreglarlo. {}",
+        status,
+        hint
+    );
 }
 
 /// Igual que `call_judge` pero con una instancia de telemetría explícita: los
@@ -233,19 +307,26 @@ pub(crate) async fn call_judge_inner(
     prompt: &str,
     grammar: &str,
     timeout: std::time::Duration,
+    judge_model: Option<&str>,
 ) -> Result<String, String> {
     use crate::security::judge_telemetry::JudgeOutcome;
 
     let _in_flight = telemetry.enter();
     let started = std::time::Instant::now();
 
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "intent": "query_model",
         "prompt": prompt,
         "max_tokens": JUDGE_MAX_TOKENS,
         "temperature": 0.0,
         "grammar": grammar,
     });
+    // D-33: sin `model`, un backend con varios modelos cargados responde 400 y
+    // la capa 2 muere en silencio. Solo se envia si hay uno configurado: el
+    // guild resuelve el primero de `/v1/models` cuando no llega nada.
+    if let Some(model) = judge_model.map(str::trim).filter(|m| !m.is_empty()) {
+        body["model"] = serde_json::Value::String(model.to_string());
+    }
 
     let client = reqwest::Client::new();
     // Real bug found live 2026-08-12 (external audit): this call had no
@@ -282,8 +363,14 @@ pub(crate) async fn call_judge_inner(
     };
 
     if !resp.status().is_success() {
-        outcome(JudgeOutcome::HttpError);
-        return Err(format!("HTTP error: judge returned status {}", resp.status().as_u16()));
+        let status = resp.status().as_u16();
+        let body_text = resp.text().await.unwrap_or_default();
+        let kind = classify_judge_failure(status, &body_text);
+        outcome(kind);
+        if kind == JudgeOutcome::BackendError {
+            warn_judge_cannot_verdict(status, &body_text, judge_model);
+        }
+        return Err(format!("HTTP error: judge returned status {status}"));
     }
 
     let json: serde_json::Value = match resp.json().await {
@@ -1311,7 +1398,7 @@ mod tests {
 // sin depender de un modelo real ni de variables de entorno globales.
 #[cfg(test)]
 mod judge_call_tests {
-    use super::call_judge_inner;
+    use super::{call_judge_inner, classify_judge_failure};
     use crate::security::judge_telemetry::JudgeTelemetry;
     use axum::response::IntoResponse;
     use axum::{routing::post, Json, Router};
@@ -1324,17 +1411,32 @@ mod judge_call_tests {
         ServerError,
         Garbage,
         NoText,
+        /// D-33: se comporta como LM Studio con varios modelos cargados --
+        /// sin `model` en el cuerpo responde 400.
+        RequiresModel,
     }
 
     async fn spawn_judge(mode: Mode) -> String {
         let app = Router::new().route(
             "/api/v1/guilds/llama_backend/tools/query_model",
-            post(move || async move {
+            post(move |body: Option<Json<serde_json::Value>>| async move {
                 let ok_body = || {
                     Json(serde_json::json!({ "content": [{ "text": "CLEAN" }] })).into_response()
                 };
+                let has_model = body
+                    .as_ref()
+                    .and_then(|Json(v)| v.get("model"))
+                    .and_then(|m| m.as_str())
+                    .map(|m| !m.trim().is_empty())
+                    .unwrap_or(false);
                 match mode {
                     Mode::Ok => ok_body(),
+                    Mode::RequiresModel if !has_model => (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({ "error": "model is required" })),
+                    )
+                        .into_response(),
+                    Mode::RequiresModel => ok_body(),
                     Mode::Slow => {
                         tokio::time::sleep(Duration::from_millis(800)).await;
                         ok_body()
@@ -1362,7 +1464,7 @@ mod judge_call_tests {
         let base = spawn_judge(Mode::Ok).await;
         let t = JudgeTelemetry::default();
 
-        let verdict = call_judge_inner(&t, &base, "prompt", "grammar", Duration::from_secs(5))
+        let verdict = call_judge_inner(&t, &base, "prompt", "grammar", Duration::from_secs(5), None)
             .await
             .expect("un juez que responde CLEAN no debe fallar");
         assert_eq!(verdict, "CLEAN");
@@ -1379,7 +1481,7 @@ mod judge_call_tests {
         let base = spawn_judge(Mode::Slow).await;
         let t = JudgeTelemetry::default();
 
-        let err = call_judge_inner(&t, &base, "prompt", "grammar", Duration::from_millis(100))
+        let err = call_judge_inner(&t, &base, "prompt", "grammar", Duration::from_millis(100), None)
             .await
             .expect_err("un juez más lento que el timeout debe fallar");
         assert!(err.contains("HTTP error"), "got: {err}");
@@ -1396,11 +1498,73 @@ mod judge_call_tests {
         let base = spawn_judge(Mode::ServerError).await;
         let t = JudgeTelemetry::default();
 
-        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5)).await.unwrap_err();
+        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5), None).await.unwrap_err();
         assert!(err.contains("500"), "el error debe decir el status: {err}");
         assert_eq!(t.to_json()["by_kind"]["http"], 1);
         assert_eq!(t.to_json()["by_kind"]["timeout"], 0);
         assert_eq!(t.in_flight(), 0);
+    }
+
+    // ── D-33: el juez deja de morir en silencio ──────────────────────────────
+    #[tokio::test(flavor = "multi_thread")]
+    async fn configured_model_is_sent_and_accepted() {
+        // El backend falso rechaza cualquier peticion sin `model` (400), que es
+        // exactamente lo que hace LM Studio con varios modelos cargados.
+        let base = spawn_judge(Mode::RequiresModel).await;
+        let t = JudgeTelemetry::default();
+
+        let verdict = call_judge_inner(
+            &t,
+            &base,
+            "p",
+            "g",
+            Duration::from_secs(5),
+            Some("qwen2.5-0.5b-instruct"),
+        )
+        .await
+        .expect("con `model` el backend falso acepta la peticion");
+        assert_eq!(verdict, "CLEAN");
+        assert_eq!(t.ok(), 1);
+        assert_eq!(t.to_json()["by_kind"]["backend_error"], 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn rejected_request_is_counted_as_backend_error() {
+        // Sin `model`: 400. Antes esto solo dejaba un `debug!` en el log y el
+        // contador lo mezclaba con `http`; ahora hay un cubo propio.
+        let base = spawn_judge(Mode::RequiresModel).await;
+        let t = JudgeTelemetry::default();
+
+        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5), None)
+            .await
+            .unwrap_err();
+        assert!(err.contains("400"), "el error debe decir el status: {err}");
+        assert_eq!(t.to_json()["by_kind"]["backend_error"], 1);
+        assert_eq!(t.to_json()["by_kind"]["http"], 0);
+        assert_eq!(t.failures(), 1);
+        assert_eq!(t.ok(), 0);
+    }
+
+    #[test]
+    fn classify_judge_failure_distinguishes_backend_rejection() {
+        use crate::security::judge_telemetry::JudgeOutcome;
+
+        assert_eq!(classify_judge_failure(400, ""), JudgeOutcome::BackendError);
+        assert_eq!(
+            classify_judge_failure(404, "no such tool"),
+            JudgeOutcome::BackendError
+        );
+        assert_eq!(
+            classify_judge_failure(401, ""),
+            JudgeOutcome::HttpError,
+            "401/403 son autenticacion, no configuracion del modelo"
+        );
+        assert_eq!(
+            classify_judge_failure(500, "HTTP Error 400: Bad Request"),
+            JudgeOutcome::BackendError,
+            "el guild propaga el rechazo del backend como 500: hay que mirar el cuerpo"
+        );
+        assert_eq!(classify_judge_failure(500, "boom"), JudgeOutcome::HttpError);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1408,7 +1572,7 @@ mod judge_call_tests {
         let base = spawn_judge(Mode::Garbage).await;
         let t = JudgeTelemetry::default();
 
-        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5)).await.unwrap_err();
+        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5), None).await.unwrap_err();
         assert!(err.contains("JSON parse error"), "got: {err}");
         assert_eq!(t.to_json()["by_kind"]["parse"], 1);
         assert_eq!(t.failures(), 1);
@@ -1421,7 +1585,7 @@ mod judge_call_tests {
         let base = spawn_judge(Mode::NoText).await;
         let t = JudgeTelemetry::default();
 
-        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5)).await.unwrap_err();
+        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5), None).await.unwrap_err();
         assert!(err.contains("Empty response"), "got: {err}");
         assert_eq!(t.to_json()["by_kind"]["parse"], 1);
         assert_eq!(t.ok(), 0);
