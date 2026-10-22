@@ -33,6 +33,20 @@ from mcp.server.fastmcp import FastMCP
 
 from guilds.core import utils
 
+# D-46: capacidades declarativas (aditivo). Las tres herramientas stdio pueden
+# lanzar un proceso elegido por el llamador (`server_url='stdio://...'`): el
+# binario se extrae de `command_arg` tras `command_prefix` para comprobarlo
+# contra la allowlist, y `allowlist_arg=false` (bypass) queda bloqueado con la
+# contención activa.
+CAPABILITIES = {
+    "process_execution": False,
+    "exec_tools": {
+        "mcp_list_tools": {"command_arg": "server_url", "command_prefix": "stdio://", "why": "lanza servidores MCP externos por stdio"},
+        "mcp_call": {"command_arg": "server_url", "command_prefix": "stdio://", "allowlist_arg": "enforce_allowlist", "why": "llamada a servidor MCP externo (stdio o SSE)"},
+        "mcp_ping": {"command_arg": "server_url", "command_prefix": "stdio://", "why": "ping a servidor MCP externo por stdio"},
+    },
+}
+
 mcp = FastMCP("tylluan-mcp-bridge")
 
 # In-process tool cache: server_url -> list[dict]

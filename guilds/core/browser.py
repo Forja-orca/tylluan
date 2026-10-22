@@ -39,6 +39,16 @@ else:
             return func
     mcp = StubMCP()
 
+# D-46: capacidades declarativas (aditivo). Solo estas dos herramientas lanzan un
+# proceso (el navegador del sistema); el resto no ejecuta nada.
+CAPABILITIES = {
+    "process_execution": False,
+    "exec_tools": {
+        "browser_navigate": {"why": "subprocess.run para lanzar el navegador del sistema"},
+        "search_web": {"why": "delega en browser_navigate"},
+    },
+}
+
 # Cross-platform startup info (Windows needs STARTUPINFO for hidden window)
 if sys.platform == "win32":
     _STARTUPINFO = subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW)

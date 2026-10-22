@@ -580,10 +580,19 @@ fn mcp_bridge_allowlist_is_bypassable_by_the_caller() {
         "el comando del hijo stdio sale del server_url del llamador"
     );
 
-    // mcp_bridge no declara CAPABILITIES: la contención no lo mira hoy.
+    // T-DSH-46: mcp_bridge ya declara CAPABILITIES con exec_tools; el bypass
+    // queda bloqueado por allowlist_arg cuando la contención está activa.
     assert!(
-        !text.contains("CAPABILITIES"),
-        "mcp_bridge.py no declara CAPABILITIES: enforce_capabilities no lo evalúa (hallazgo)"
+        text.contains("CAPABILITIES") && text.contains("\"exec_tools\""),
+        "mcp_bridge.py debe declarar CAPABILITIES con exec_tools (T-DSH-46)"
+    );
+    assert!(
+        text.contains("\"mcp_call\": {\"command_arg\": \"server_url\""),
+        "mcp_call debe declarar command_arg=server_url en exec_tools"
+    );
+    assert!(
+        text.contains("\"allowlist_arg\": \"enforce_allowlist\""),
+        "mcp_call debe declarar allowlist_arg=enforce_allowlist (bypass bloqueado con la contención activa)"
     );
 
     // Líneas exactas para el informe (se imprimen y se fijan).
@@ -594,10 +603,10 @@ fn mcp_bridge_allowlist_is_bypassable_by_the_caller() {
         "mcp_call en mcp_bridge.py:{mcp_call_line}; StdioServerParameters en :{stdio_params_line}; \
          stdio_client en :{stdio_client_line}; allowlist en :{allow_start}"
     );
-    assert_eq!(allow_start, 48, "allowlist medido en mcp_bridge.py:48");
-    assert_eq!(warn_line, 162, "aviso de bypass medido en mcp_bridge.py:162");
-    assert_eq!(pass_line, 167, "propagación medido en mcp_bridge.py:167");
-    assert_eq!(mcp_call_line, 136, "mcp_call medido en mcp_bridge.py:136");
-    assert_eq!(stdio_params_line, 87, "StdioServerParameters medido en mcp_bridge.py:87");
-    assert_eq!(stdio_client_line, 92, "stdio_client medido en mcp_bridge.py:92");
+    assert_eq!(allow_start, 62, "allowlist medido en mcp_bridge.py:62");
+    assert_eq!(warn_line, 176, "aviso de bypass medido en mcp_bridge.py:176");
+    assert_eq!(pass_line, 181, "propagación medido en mcp_bridge.py:181");
+    assert_eq!(mcp_call_line, 150, "mcp_call medido en mcp_bridge.py:150");
+    assert_eq!(stdio_params_line, 101, "StdioServerParameters medido en mcp_bridge.py:101");
+    assert_eq!(stdio_client_line, 106, "stdio_client medido en mcp_bridge.py:106");
 }

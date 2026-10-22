@@ -464,8 +464,8 @@ fn exec_like_heuristic_measured_over_real_core_tools() {
         "falsos negativos medidos hoy sobre guilds/core"
     );
     let fragile_expected = vec![
-        "browser:71 ensure_browser_running",
-        "browser:102 send_cdp_command",
+        "browser:81 ensure_browser_running",
+        "browser:112 send_cdp_command",
         "coloquio:336 _truncate",
         "coloquio_digest:279 _run_reasoning_background",
         "scheduler:171 _run_deepeval_once",
