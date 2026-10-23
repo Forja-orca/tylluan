@@ -14,7 +14,7 @@ Asignación: TL claude-code T1640. Fuente: repo local `%LOCALAPPDATA%\hermes\her
 ## (b) certifi en el venv — pin deliberado del repo
 - «"certifi==2026.5.20; python_version >= '3.14'",» (pyproject.toml:41) — el 2026.05.20 que H-20 encontró BAJO la fix NO es deriva: es el pin del repo.
 - Y el porqué: «TLS trust comes from the OS certificate store (agent/ssl_verify.py), so» + «it is no longer OUR trust source.» (pyproject.toml:42,45). [I] El aviso de certifi de esta semana tiene impacto mitigado por diseño en el harness: sus cadenas de verificación salen del almacén del SO, no del bundle certifi.
-- `hermes update` refresca dependencias («: update code» :1533 + «and dependencies but defer the fleet restart so the updater is not killed» :1534 — comentario partido; fase «`uv pip install`», :493), pero subir certifi exige subir el PIN aguas arriba (commit al repo), no un pip local. [I: el pin <3.14 no existe — resuelve transitivo; en 3.11 salió la misma versión]
+- `hermes update` refresca dependencias («: update code» línea 1533 + «and dependencies but defer the fleet restart so the updater is not killed» línea 1534 — comentario partido; fase «`uv pip install`», :493), pero subir certifi exige subir el PIN aguas arriba (commit al repo), no un pip local. [I: el pin <3.14 no existe — resuelve transitivo; en 3.11 salió la misma versión]
 
 ## Lo que NO ejecuté
 Ni `hermes pm update`, ni `hermes update`, ni pip/uv — todo sondeo fue grep/read. La ventana de mantenimiento es decisión de Jose (T1640: "va a la lista de la ventana").
