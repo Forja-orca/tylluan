@@ -572,6 +572,12 @@ pub struct NexusConfig {
     #[serde(default = "default_port")]
     pub port: u16,
 
+    /// D-38: segundos que el arranque reintenta el puerto configurado cuando
+    /// está ocupado. `0` = fallar de inmediato. Nunca se elige otro puerto en
+    /// silencio: si tras el margen sigue ocupado, el kernel no arranca.
+    #[serde(default = "default_port_retry_secs")]
+    pub port_retry_secs: u64,
+
     // REAL BUG FIX (2026-08-19, found live via the security-claims-gate CI
     // job): this used to be plain `#[serde(default)]`, which for a
     // `Vec<String>` field falls back to `Vec::default()` -- an EMPTY vec --
@@ -628,6 +634,7 @@ impl Default for NexusConfig {
         Self {
             host: default_host(),
             port: default_port(),
+            port_retry_secs: default_port_retry_secs(),
             transport: default_transports(),
             timeouts: TimeoutsConfig::default(),
             dev_mode: false,
@@ -1943,6 +1950,9 @@ fn default_host() -> String { "127.0.0.1".into() }
 // Canonical port: 47004 (CONTRACT-01, tylluan-cli DEFAULT_PORT, tylluan-mcp, install scripts).
 // Migrated 2026-09-12 by José to prevent collisions with common dev ports (3000, 3030, 4000, 8080).
 fn default_port() -> u16 { 47004 }
+
+/// D-38: margen de reintento del puerto antes de fallar el arranque.
+fn default_port_retry_secs() -> u64 { 10 }
 /// stdio is opt-in (`--stdio`, or an explicit `transport` entry): a kernel
 /// started without a terminal (service, `nohup`, CI, `curl | sh`) reads
 /// end-of-input on stdin and shuts down, HTTP included. `main.rs` appends

@@ -168,6 +168,7 @@ fn test_real_health_response_struct_matches_schema() {
         status: "ok".to_string(),
         version: "0.16.0".to_string(),
         commit: "be69f11".to_string(),
+        repo_map: "ok".to_string(),
     };
 
     // 2. Serialize real struct instance

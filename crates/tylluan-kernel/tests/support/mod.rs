@@ -94,7 +94,7 @@ pub async fn test_state_custom(identity_tag: &str, auth_token: Option<String>, d
     let (download_tx, _) = tokio::sync::broadcast::channel(10);
 
     let cwd = std::env::current_dir().unwrap_or_default();
-    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
+    let repo_map = tylluan_kernel::repo_map::RepoMapHandle::ready(tylluan_kernel::repo_map::RepoMap::build(&cwd));
 
     // Fase 2 (D-15): en tests la credencial de operador es el mismo token
     // maestro que ya lleva el estado; el store de consentimientos es efímero

@@ -1433,7 +1433,7 @@ async fn main() -> anyhow::Result<()> {
         let cancel_token_clone = cancel_token.clone();
         let health_for_http = health_ready.clone();
         tokio::spawn(async move {
-            if let Err(e) = transport::http::start_http_server_with_download(&host, port, http_token.clone(), config.nexus.dev_mode, Some(server_clone), registry_for_http.clone(), download_clone, tunnel_wsl_url, coloquio.clone(), jobs_for_http, cancel_token_clone, health_for_http, node_identity.clone()).await {
+            if let Err(e) = transport::http::start_http_server_with_download(&host, port, config.nexus.port_retry_secs, http_token.clone(), config.nexus.dev_mode, Some(server_clone), registry_for_http.clone(), download_clone, tunnel_wsl_url, coloquio.clone(), jobs_for_http, cancel_token_clone, health_for_http, node_identity.clone()).await {
                 error!("❌ Universal Gateway: HTTP server error: {}", e);
             }
         });

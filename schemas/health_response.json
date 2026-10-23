@@ -9,9 +9,11 @@
       "enum": [
         "ok",
         "degraded",
-        "error"
+        "error",
+        "warming_up",
+        "starting"
       ],
-      "description": "Kernel health status"
+      "description": "Kernel health status (starting = repo map still building)"
     },
     "version": {
       "type": "string",
@@ -22,6 +24,15 @@
       "type": "string",
       "minLength": 7,
       "description": "Git commit SHA baked at build time"
+    },
+    "repo_map": {
+      "type": "string",
+      "enum": [
+        "building",
+        "ok",
+        "failed"
+      ],
+      "description": "Repo map sub-state (D-39); building while the background build runs"
     }
   },
   "required": [

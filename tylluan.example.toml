@@ -4,6 +4,9 @@
 [nexus]
 host = "127.0.0.1"
 port = 47004  # canonical default (CONTRACT-01) -- matches config.rs's default_port(), kept in sync 2026-10-09
+# D-38: si el puerto está ocupado, reintenta hasta N s y luego falla con error
+# claro; nunca arranca en otro puerto en silencio. 0 = fallar de inmediato.
+port_retry_secs = 10
 transport = ["stdio", "http"]
 
 # Security timeouts for tool execution and handshakes
