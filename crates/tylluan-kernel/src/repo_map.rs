@@ -40,13 +40,13 @@ pub struct FileEntry {
     pub kind: &'static str,
 }
 
-const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", "__pycache__", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".hypothesis", ".fastembed_cache"];
+const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", "__pycache__", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".hypothesis", ".fastembed_cache", ".next"];
 
 /// D-39a (T-DSH-50, medido): en un checkout real el mapa leia ~31 GB (modelos,
 /// datos de kernels de prueba, copias de `target`, logs) y tardaba 16-25 min
 /// ANTES de abrir el puerto. Estos directorios solo se omiten en la RAIZ del
 /// repositorio: un `models/` anidado dentro de un crate sigue siendo codigo.
-const SKIP_TOP_LEVEL_DIRS: &[&str] = &["models", "logs", "data"];
+const SKIP_TOP_LEVEL_DIRS: &[&str] = &["models", "logs", "data", "guilds-python"];
 const SKIP_TOP_LEVEL_PREFIXES: &[&str] = &["test-run-", "target-", "boot-"];
 
 /// Un fichero mayor que esto no se lee para contar lineas (se cuenta como
