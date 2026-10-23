@@ -17,3 +17,6 @@ Entrega `docs/reference/research/2026-10-24_H12_config_hermes_huecos_hermes.md` 
 
 ## Worktree: método nuevo (23-oct-2026)
 Lee `docs/internal/PROTOCOLO_worktrees_agentes.md`. Resumen: tu compilación pasa a `E:\cargo-target\hermes`; antes de cada tarea nueva haz `bash /e/tylluan/scripts/agent_wt.sh reset hermes` (guarda todo lo que tengas antes de limpiar). Para liberar tu `target` antiguo: `bash /e/tylluan/scripts/agent_wt.sh migrate hermes` cuando no tengas cargo en marcha.
+
+## H-22 — Estado del arte: MCP como concentrador (solo lectura, fuentes primarias)
+Nota de ≤60 líneas en `docs/reference/research/` con citas literales, URL y «No verificado»: (1) especificación MCP vigente (autorización, transporte HTTP/stateless); (2) guías de seguridad de MCP (confused deputy, token passthrough, tool poisoning); (3) cómo hacen búsqueda de herramientas / divulgación progresiva Anthropic y otros clientes; (4) pasarelas MCP de código abierto existentes y qué permisos por agente ofrecen. Cita solo lo que hayas leído en esta sesión. Entrega: nota + informe `IMPL_H-22_*` con `## Impact`. Sin commits.
