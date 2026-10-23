@@ -1,4 +1,4 @@
-﻿//! T-DSH-39 â€” aceptaciÃ³n ejecutable de D-29 y D-30 (cola de Deep).
+//! T-DSH-39 â€” aceptaciÃ³n ejecutable de D-29 y D-30 (cola de Deep).
 //!
 //! Dos defectos medidos en la cola `docs/internal/COLA_deep_2026-10-22.md`:
 //!
