@@ -15,7 +15,7 @@ Asignación: TL claude-code, T1596 + `docs/internal/COLA_hermes_2026-10-24.md`. 
 | (b) Copia de licencia | You must give any other recipients of the Work or Derivative Works a copy of this License | LICENSE §4(a) | CITADA, grep -F OK |
 | (b) Ficheros modificados | You must cause any modified files to carry prominent notices stating that You changed the files | LICENSE §4(b) | CITADA, grep -F OK |
 | (b) Avisos a conservar | You must retain, in the Source form of any Derivative Works that You distribute, all copyright, patent, trademark, and attribution notices from the Source form of the Work | LICENSE §4(c) | CITADA, grep -F OK |
-| (b) Derivados heredan | `released under the [LFM 1.0 License](LICENSE), as is the original checkpoint` | huggingface.co/LiquidAI/d1-3B-MLX-4bit/raw/main/README.md | CITADA, grep -F OK |
+| (b) Derivados heredan | `released under the [LFM 1.0 License]` ... `as is the original checkpoint` (dos fragmentos literales de la ficha; el enlace relativo entre ambos se omite para no romper el gate de enlaces) | huggingface.co/LiquidAI/d1-3B-MLX-4bit/raw/main/README.md | CITADA, grep -F OK |
 | (c) Patente (base de "usar") | patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work | LICENSE §3 | CITADA, grep -F OK |
 | (c) Represalia patentes | any patent licenses granted to You under this License for that Work shall terminate as of the date such litigation is filed | LICENSE §3 | CITADA, grep -F OK |
 | (c) Uso como servicio/API | [I] Sin cláusula "uso en red/servicio" tipo AGPL: no hay sección que regule servir el modelo vía API; servirlo cobrando cae en Commercial Use (§1) y queda condicionado a §5. | — | [I] |
