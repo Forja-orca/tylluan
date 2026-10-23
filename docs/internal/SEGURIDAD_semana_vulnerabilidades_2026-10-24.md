@@ -16,6 +16,21 @@ Origen: aviso de José (vídeo de midudev: PHP, Node.js, Java, Python/Rust/Go, E
 | Windows 11 24H2 Home/Pro fin de soporte | learn.microsoft.com | SÍ, URGENTE: esta máquina es 24H2 build 26100.9711 (última actualización posible); el soporte de 24H2 Pro termina el 2026-10-14 (tabla de ciclo de vida y página de estado de Microsoft: «has reached end of updates» desde el 13 de octubre) | Pendiente: pasar a 25H2 con el paquete de habilitación KB5054156 (un reinicio) en el mantenimiento de la workstation, decisión de José |
 | Windows zero-day de octubre (Shell, evasión de Mark of the Web) | secundaria | Cubierto por KB5127648 (instalado 22/10) | Hecho por Windows Update |
 
+## Corrección: lectura de las noticias reales (Python, Rust, Java, PHP)
+
+La primera versión de este informe trató Python y Rust solo por el lado de los certificados. Releídas las fuentes oficiales:
+
+| Producto | Gravedad (fuente primaria) | Qué corrige | Versión que nos protege | Lo que tenemos |
+|----------|----------------------------|-------------|--------------------------|----------------|
+| PHP | 9.2 en CVSS v4 (php.net); ejecución remota sin autenticación; prueba de concepto pública y intentos de explotación (Sophos, secundaria) | dos fallos del núcleo del intérprete | 8.5.12, 8.4.27, 8.3.36, 8.2.35 | no hay PHP |
+| Java | 9.1, remoto sin autenticación, JSSE (alerta de seguridad de Oracle, tabla de riesgo leída hoy) | confianza HTTPS: el aviso distrust-a las intermedias de eMudhra | afectadas hasta 21.0.13; arreglo 21.0.14 (inferencia) | Temurin 21.0.8 instalado; `winget` solo ofrece 21.0.12 |
+| Node.js | «high», sin puntuación en el aviso: escritura fuera de límites en Brotli, ejecución remota; fallos de TLS y DNS | 10 CVE | 22.23.4, 24.22.1, 26.12.1 | Node 24.13.0 y los dos Node embebidos de Hermes por debajo |
+| Python | sin puntuación en el aviso oficial; 11 CVE entre ssl, zipfile, tarfile, urllib, expat; OpenSSL 3.5.9 en Windows (blog de Python, 1-oct-2026) | publicado el 1 de octubre | 3.12.15 y 3.14.8 | Python 3.14.3 global y 3.12.14 en los guilds de producción: **por debajo**. `winget` ofrece 3.14.7 (insuficiente); el índice de uv aún no lista 3.12.15, aunque `python-build-standalone` ya publicó builds de 3.12.15 y 3.14.8 |
+| Rust (compilador y cargo) | ningún aviso oficial de octubre encontrado (el último es de mayo, severidad media) | n/a | n/a | rustc 1.99.1 |
+| Rust (dependencias) | RUSTSEC de rustls 2,3 a 4,0 (bajo o medio); `rustls-webpki` RUSTSEC-2026-0382 / CVE-2026-111943 (intermedias distrust-adas) | 14 y 20 de octubre | rustls 0.23.46, rustls-webpki 0.103.16 | **ya están en `Cargo.lock`** (verificado) |
+
+Conclusión: lo más urgente para Tylluan es **Python de los guilds** (el que ejecuta código y red en producción), después Node y el reinicio del kernel. Java y PHP no los ejecuta Tylluan. En Rust no hay nada grave pendiente.
+
 ## Hecho hoy (sin reiniciar nada)
 
 1. `Cargo.lock`: `tokio` 1.52.3 -> 1.54.1 (RUSTSEC-2026-0386, `AsyncFd`; el código no usa `AsyncFd`). `cargo deny check advisories` pasó de fallar a `advisories ok`; `cargo check -p tylluan-kernel` exit 0.

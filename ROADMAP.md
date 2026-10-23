@@ -320,6 +320,14 @@ These decisions were taken by the project owner on 2026-10-15 and have started t
 - 🟡 **REA** as an optional external MCP server, after a verification checklist.
 - ⛔ **`iroh` transport:** NO-GO for now; LAN or your own VPN is the supported path. Reopen only if a team must connect from another network without a VPN.
 
+### Closures of 2026-10-22 and 2026-10-23 (verified by the TL)
+
+- ✅ **Kernel startup:** the repo map is no longer built before the port opens (D-39b), skips heavy directories (D-39a, D-39a2: 1.2 s measured on the real tree, from 945 s), the model fingerprint is cached (T-DSH-54) and the three ONNX sessions load in parallel (T-DSH-55). Real end-to-end startup time after these changes: not yet measured.
+- ✅ **Occupied port:** the kernel retries the configured port and fails with a clear error; it never falls back to a random port (D-38).
+- ✅ **Guild credentials:** guilds no longer receive the operator token (D-34). Corrupt `consents.json` is preserved and pending plans survive a restart (D-29, D-30).
+- ✅ **Supply chain:** `tokio` 1.54.1, certifi and pip floors, tiptap overrides, `scripts/check_supply_chain.sh` (report-only). Week-of-vulnerabilities report: `docs/internal/SEGURIDAD_semana_vulnerabilidades_2026-10-24.md`.
+- 🟡 **Production restart** pending: the running kernel does not have the changes above. Plan and next steps: `docs/internal/RECAP_2026-10-22_23_arranque_seguridad_readme.md`.
+
 Evidence and details: `docs/reference/adr/ADR019_team_scoped_networks.md`, `docs/reference/adr/ADR018_decision_fabric.md`, `docs/reference/research/2026-10-15_decision_models_industry_integration.md`.
 
 ---

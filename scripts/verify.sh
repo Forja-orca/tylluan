@@ -232,6 +232,14 @@ if [ "$RUN_DOCS" = "1" ]; then
         echo "⚠️  dead config fields heuristic found suspects — see above. Report-only, does not block this push."
     fi
 
+    # Supply-chain status table (report-only; T-DSH-56): cargo deny advisories,
+    # npm audit, certifi/pip floors. Always exits 0, prints OK/FALLA per row.
+    if bash scripts/check_supply_chain.sh; then
+        ok "supply-chain status (check_supply_chain.sh, report-only)"
+    else
+        echo "⚠️  supply-chain status found issues — see above. Report-only, does not block this push."
+    fi
+
     if bash scripts/check_head_sync.sh; then
         ok "STATUS.md HEAD citation"
     else
