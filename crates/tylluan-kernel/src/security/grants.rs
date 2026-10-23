@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::sync::{RwLock, oneshot};
 
@@ -45,6 +46,19 @@ struct GrantStore {
 // M31-P2: Plan mode — stores resolved guild+tool+args for approval before execution
 static PLAN_STORE: OnceLock<RwLock<HashMap<String, PendingPlan>>> = OnceLock::new();
 
+/// D-30: los planes pendientes de aprobación sobreviven a un reinicio.
+///
+/// Antes vivían solo en memoria: un plan aprobado por el operador podía ejecutar
+/// una herramienta que ya no existía, y uno **pendiente** desaparecía sin dejar
+/// rastro (el operador no podía aprobarlo nunca y el agente no sabía por qué).
+/// Ahora se persisten en `<data>/pending_plans.json` con escritura atómica
+/// (tmp + rename, `0600` en Unix) y `init_plan_store` los recarga al arrancar.
+///
+/// Un plan caduca a las [`PLAN_TTL_SECS`]: una aprobación vieja no debe ejecutar
+/// nada al día siguiente por un reinicio.
+pub const PLANS_FILE: &str = "pending_plans.json";
+pub const PLAN_TTL_SECS: i64 = 24 * 60 * 60;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PendingPlan {
     pub guild: String,
@@ -52,22 +66,164 @@ pub struct PendingPlan {
     pub args: serde_json::Map<String, serde_json::Value>,
     pub agent_id: String,
     pub intent: String,
+    /// Segundos Unix de creación; `0` (planes antiguos sin el campo) se trata
+    /// como recién creado al cargar, no se descarta.
+    #[serde(default)]
+    pub created_at_unix: i64,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PendingPlansFile {
+    version: u32,
+    plans: HashMap<String, PendingPlan>,
+}
+
+/// Serializa las escrituras del fichero de planes (dos aprobaciones a la vez
+/// compartirían el `.tmp` y una podría perder la otra).
+static PLAN_PERSIST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Directorio de datos para los planes.
+///
+/// Orden: `TYLLUAN_DATA_DIR`, `DATA_DIR` (tests y lanzadores) y, si no hay
+/// variable, el `data/` del directorio de trabajo **solo si ya existe** — el
+/// kernel lo crea con sus bases de datos, así que en un binario de test sin
+/// entorno no se inventa un `data/` en la raíz del crate. Sin directorio, los
+/// planes son solo de proceso (comportamiento anterior).
+fn plans_dir() -> Option<PathBuf> {
+    for key in ["TYLLUAN_DATA_DIR", "DATA_DIR"] {
+        if let Ok(value) = std::env::var(key) {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(PathBuf::from(value));
+            }
+        }
+    }
+    let fallback = PathBuf::from("data");
+    fallback.is_dir().then_some(fallback)
+}
+
+fn plans_path() -> Option<PathBuf> {
+    plans_dir().map(|dir| dir.join(PLANS_FILE))
+}
+
+#[cfg(unix)]
+fn write_private(path: &Path, body: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    file.write_all(body.as_bytes())?;
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn write_private(path: &Path, body: &str) -> std::io::Result<()> {
+    std::fs::write(path, body)
+}
+
+fn load_plans() -> HashMap<String, PendingPlan> {
+    let Some(path) = plans_path() else {
+        return HashMap::new();
+    };
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return HashMap::new(),
+        Err(e) => {
+            tracing::warn!(
+                "plan store: no se pudo leer {} ({e}); planes pendientes solo en memoria",
+                path.display()
+            );
+            return HashMap::new();
+        }
+    };
+    let parsed: PendingPlansFile = match serde_json::from_str(&raw) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            // No se borra ni se pisa: se ignora hasta que alguien lo mire.
+            tracing::warn!(
+                "plan store: {} ilegible ({e}); planes pendientes solo en memoria",
+                path.display()
+            );
+            return HashMap::new();
+        }
+    };
+    let now = now_unix();
+    let before = parsed.plans.len();
+    let plans: HashMap<String, PendingPlan> = parsed
+        .plans
+        .into_iter()
+        .filter(|(_, plan)| plan.created_at_unix == 0 || now - plan.created_at_unix <= PLAN_TTL_SECS)
+        .collect();
+    let expired = before - plans.len();
+    if expired > 0 {
+        tracing::info!("plan store: {expired} plan(es) caducado(s) al arrancar, descartados");
+    }
+    plans
+}
+
+fn persist_plans(plans: &HashMap<String, PendingPlan>) {
+    let Some(path) = plans_path() else {
+        return;
+    };
+    let _serialized = PLAN_PERSIST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(dir) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        tracing::warn!("plan store: no se pudo crear {} ({e})", dir.display());
+        return;
+    }
+    let body = match serde_json::to_string_pretty(&PendingPlansFile {
+        version: 1,
+        plans: plans.clone(),
+    }) {
+        Ok(body) => body,
+        Err(e) => {
+            tracing::warn!("plan store: no se pudo serializar ({e})");
+            return;
+        }
+    };
+    let tmp = path.with_extension("json.tmp");
+    match write_private(&tmp, &body).and_then(|_| std::fs::rename(&tmp, &path)) {
+        Ok(()) => {}
+        Err(e) => tracing::warn!(
+            "plan store: no se pudo escribir {} ({e}); el plan vale solo en este proceso",
+            path.display()
+        ),
+    }
+}
+
+/// Arranca el store de planes cargando los pendientes no caducados del disco.
 pub fn init_plan_store() {
-    PLAN_STORE.set(RwLock::new(HashMap::new())).ok();
+    PLAN_STORE.set(RwLock::new(load_plans())).ok();
 }
 
 pub async fn store_plan(id: &str, guild: &str, tool: &str, args: &serde_json::Value, agent_id: &str, intent: &str) {
     let store = PLAN_STORE.get_or_init(|| RwLock::new(HashMap::new()));
-    let mut locked = store.write().await;
-    locked.insert(id.to_string(), PendingPlan {
-        guild: guild.to_string(),
-        tool: tool.to_string(),
-        args: args.as_object().cloned().unwrap_or_default(),
-        agent_id: agent_id.to_string(),
-        intent: intent.to_string(),
-    });
+    let snapshot = {
+        let mut locked = store.write().await;
+        locked.insert(id.to_string(), PendingPlan {
+            guild: guild.to_string(),
+            tool: tool.to_string(),
+            args: args.as_object().cloned().unwrap_or_default(),
+            agent_id: agent_id.to_string(),
+            intent: intent.to_string(),
+            created_at_unix: now_unix(),
+        });
+        locked.clone()
+    };
+    persist_plans(&snapshot);
 }
 
 pub async fn get_plan(id: &str) -> Option<PendingPlan> {
@@ -78,8 +234,17 @@ pub async fn get_plan(id: &str) -> Option<PendingPlan> {
 
 pub async fn remove_plan(id: &str) -> bool {
     let Some(store) = PLAN_STORE.get() else { return false };
-    let mut locked = store.write().await;
-    locked.remove(id).is_some()
+    let (removed, snapshot) = {
+        let mut locked = store.write().await;
+        let removed = locked.remove(id).is_some();
+        (removed, locked.clone())
+    };
+    if removed {
+        // Un plan aprobado (o cancelado) no debe resucitar si el kernel
+        // reinicia antes del siguiente `store_plan`.
+        persist_plans(&snapshot);
+    }
+    removed
 }
 
 pub fn init() {
