@@ -10,12 +10,11 @@
 //! (b) si recibe el token maestro (`TYLLUAN_TOKEN` con el valor resuelto por el kernel);
 //! (c) si recibe secretos del proceso padre (variables con TOKEN/KEY/SECRET/PASSWORD).
 //!
-//! El test `desired_*` va `#[ignore = "D-34"]`: afirma lo DESEADO (la guild no
-//! recibe el token maestro) y hoy falla, como la aceptación de D-32.
+//! Both tests are LIVE since D-34: the guild gets no master token, no parent
+//! secrets, and one ephemeral `TYLLUAN_GUILD_TOKEN` credential.
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test guild_env_audit -- --nocapture
-//!   rustup run 1.99.1 cargo test -p tylluan-kernel --test guild_env_audit -- --ignored
 //!
 //! No arranca el kernel ni toca puertos; sin `cfg(unix)`/`cfg(windows)` en
 //! ninguna función; `src/` intacto.
@@ -146,10 +145,10 @@ fn is_master_token(env: &HashMap<String, String>, parent_token: &str) -> bool {
     env.get("TYLLUAN_TOKEN").map(|v| v == parent_token).unwrap_or(false)
 }
 
-/// **Comportamiento ACTUAL (pasa hoy):** la guild recibe el token maestro y
-/// hereda todos los secretos del entorno del kernel.
+/// **D-34 (live):** the guild receives its own ephemeral credential and
+/// inherits neither the master token nor the parent's secrets.
 #[tokio::test(flavor = "multi_thread")]
-async fn current_guild_env_receives_master_token_and_parent_secrets() {
+async fn guild_env_is_cleared_and_carries_only_its_own_credential() {
     // Entorno del "kernel" (este proceso) con token maestro y secretos conocidos.
     // SAFETY: variables de proceso; el binario de test solo corre estos dos tests
     // y los ignorados no se ejecutan en la suite normal.
@@ -170,7 +169,7 @@ async fn current_guild_env_receives_master_token_and_parent_secrets() {
     tylluan_keys.sort();
     for k in &tylluan_keys {
         println!(
-            "{:<38} {:<10} {:<26} inyección del kernel (fleet token) / heredada",
+            "{:<38} {:<10} {:<26} motivo",
             k,
             "SI",
             mask(env.get(*k).map(String::as_str).unwrap_or(""))
@@ -194,33 +193,40 @@ async fn current_guild_env_receives_master_token_and_parent_secrets() {
             "SI",
             mask(env.get(*k).map(String::as_str).unwrap_or("")),
             if k.starts_with("D34_") {
-                "Heredada sin filtrar (Command no hace env_clear)"
+                "LEAK: inherited from the kernel environment"
             } else {
-                "Heredada del proceso padre"
+                "LEAK: inherited from the parent process"
             }
         );
     }
 
-    // (b) token maestro: compartido con el padre y presente en el hijo.
+    // (b) D-34: no master token, under any spelling.
     assert!(
-        is_master_token(&env, SENTINEL_TOKEN),
-        "comportamiento actual esperado: la guild recibe TYLLUAN_TOKEN == token del kernel"
+        !is_master_token(&env, SENTINEL_TOKEN),
+        "D-34: the guild must not receive the master token"
+    );
+    assert!(
+        !env.contains_key("TYLLUAN_TOKEN"),
+        "D-34: TYLLUAN_TOKEN must never be injected into a guild"
     );
 
-    // (c) secretos del padre: todos presentes (herencia de entorno).
-    for (k, v) in PARENT_SECRETS {
-        assert_eq!(
-            env.get(*k).map(String::as_str),
-            Some(*v),
-            "comportamiento actual esperado: la guild hereda '{k}' del padre"
+    // (c) D-34: parent secrets do not cross the boundary (env_clear + whitelist).
+    for (k, _) in PARENT_SECRETS {
+        assert!(
+            !env.contains_key(*k),
+            "D-34: the guild inherited parent secret '{k}'"
         );
     }
 
-    // (a) TYLLUAN_*: al menos el token inyectado.
+    // (a) D-34: it DOES get one ephemeral credential of its own class.
+    let guild_token = env
+        .get("TYLLUAN_GUILD_TOKEN")
+        .expect("D-34: the guild must receive TYLLUAN_GUILD_TOKEN");
     assert!(
-        tylluan_keys.iter().any(|k| k.as_str() == "TYLLUAN_TOKEN"),
-        "comportamiento actual esperado: TYLLUAN_TOKEN entre las variables TYLLUAN_*"
+        guild_token.starts_with("tyg_"),
+        "D-34: the guild credential must carry the tyg_ prefix"
     );
+    assert_ne!(guild_token, SENTINEL_TOKEN);
 
     let _ = process.kill().await;
 }
@@ -228,7 +234,6 @@ async fn current_guild_env_receives_master_token_and_parent_secrets() {
 /// **Comportamiento DESEADO para D-34 (ignorado):** la guild recibe una
 /// credencial de clase agente, no el token maestro, y no hereda secretos.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-34"]
 async fn desired_guild_env_does_not_receive_master_token_or_parent_secrets() {
     unsafe {
         std::env::set_var("TYLLUAN_TOKEN", SENTINEL_TOKEN);

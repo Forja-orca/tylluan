@@ -1,26 +1,28 @@
-"""Shared kernel auth resolution for guilds (fleet token injection, 2026-10-04).
+"""Shared kernel auth resolution for guilds.
 
-Before this module, only silva_utils.py and scholars/plugins/memory_bridge.py
-sent an Authorization header to the kernel, and both depended on the
-TYLLUAN_TOKEN env var being present in the guild process — which the kernel
-did not set on spawn (only PYTHONPATH/PYTHONUNBUFFERED) and which is absent
-in the default token-in-FILE setup. Result: with dev_mode=false every guild
-call to /api/v1/* would 401 (silently, in most callers).
+Single guild-side resolution path for the Bearer sent to the kernel.
 
-The kernel now injects TYLLUAN_TOKEN into every stdio guild env at spawn
-(crates/tylluan-kernel/src/registry/guild_process.rs). This helper is the
-single guild-side resolution path, mirroring kernel-side
-resolve_self_auth_token (security/coherence_gate.rs):
+History: before 2026-10-04 the kernel did not inject any credential at spawn, so
+with dev_mode=false every guild call to /api/v1/* returned 401 (silently, in
+most callers). The kernel then injected the MASTER token as TYLLUAN_TOKEN.
 
-1. TYLLUAN_TOKEN env (kernel-injected at spawn, or operator-set for manual
-   runs),
-2. `.tylluan-token` file at the workspace root (the same file the kernel
-   reads on startup — config.rs / coherence_gate.rs),
-3. None → send no auth header (a dev_mode=true kernel ignores auth anyway).
+D-34 (2026-10-23) replaced that injection: a kernel-spawned guild now receives
+TYLLUAN_GUILD_TOKEN, an ephemeral per-process credential with agent-class
+authority only (no admin/maintenance/config/dispatch/approvals), and the kernel
+no longer puts the master token in the child environment.
 
-Never log or print the resolved token. The token file is gitignored and is
-already in guilds/core/_security.py SKIP_FILES so guild file operations
-never touch it.
+Resolution order:
+
+1. TYLLUAN_GUILD_TOKEN -- kernel-spawned guild. Used, and NO fallback happens:
+   falling back to the master token or to `.tylluan-token` would defeat the
+   whole split.
+2. TYLLUAN_TOKEN -- operator running a guild by hand with the master token.
+3. `.tylluan-token` at the workspace root -- legacy/manual runs (same file the
+   kernel reads at startup).
+4. None -> send no auth header (a dev_mode=true kernel ignores auth anyway).
+
+Never log or print the resolved token. The token file is gitignored and is in
+guilds/core/_security.py SKIP_FILES so guild file operations never touch it.
 """
 
 import os
@@ -28,10 +30,17 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _TOKEN_FILE = _REPO_ROOT / ".tylluan-token"
+_GUILD_TOKEN_ENV = "TYLLUAN_GUILD_TOKEN"
 
 
 def resolve_kernel_token():
-    """Return the kernel bearer token (env first, then file) or None."""
+    """Return the kernel bearer token or None.
+
+    Priority: guild credential (no fallback), operator env token, token file.
+    """
+    guild_token = os.environ.get(_GUILD_TOKEN_ENV, "").strip()
+    if guild_token:
+        return guild_token
     token = os.environ.get("TYLLUAN_TOKEN", "").strip()
     if token:
         return token
