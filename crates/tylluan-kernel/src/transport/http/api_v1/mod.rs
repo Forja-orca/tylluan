@@ -723,7 +723,19 @@ async fn silva_conflicted_handler(
 
 async fn silva_add_edge_handler(State(state): State<Arc<HttpState>>, Json(p): Json<EdgePayload>) -> impl IntoResponse {
     let weight = p.weight.unwrap_or(1.0);
-    match state.silva.add_edge(&p.source, &p.target, &p.edge_type, weight, &p.metadata).await {
+    // D-34: the ONE operator-class route a guild credential may call
+    // (Jose/TL 2026-10-23, option A), because `silva_utils.write_edge` has no
+    // non-operator alternative yet. Every use leaves an audit row naming the
+    // issuing guild; the credential itself is never logged.
+    let guild_caller = matches!(
+        crate::transport::http::auth::current_auth_kind(),
+        Some(crate::transport::http::auth::AclAuthKind::GuildToken)
+    );
+    let result = state.silva.add_edge(&p.source, &p.target, &p.edge_type, weight, &p.metadata).await;
+    if guild_caller {
+        audit_guild_edge_exception(&p, result.is_ok());
+    }
+    match result {
         Ok(_) => {
             let edge_embed_id = format!("edge::{}::{}::{}", p.source, p.target, p.edge_type);
             let embed_text = format!("{}: {} -> {}", p.edge_type, p.source, p.target);
@@ -736,6 +748,45 @@ async fn silva_add_edge_handler(State(state): State<Arc<HttpState>>, Json(p): Js
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"ok": false, "error": e.to_string()}))).into_response(),
     }
+}
+
+/// D-34: audit row for the guild exception. Records WHO (the guild that owns
+/// the credential) and WHICH triple (subject/predicate/object truncated to 64
+/// chars each), plus whether it landed. Fire-and-forget: the audit write is
+/// blocking SQLite and must not turn a successful triple write into a 500.
+fn audit_guild_edge_exception(p: &EdgePayload, success: bool) {
+    const MAX_PART: usize = 64;
+    fn truncate(s: &str) -> String {
+        let total = s.chars().count();
+        let mut out: String = s.chars().take(MAX_PART).collect();
+        if total > MAX_PART {
+            out.push_str("...");
+        }
+        out
+    }
+    let agent_id = crate::transport::http::auth::current_bound_agent_id().unwrap_or_default();
+    let guild = agent_id
+        .strip_prefix("guild:")
+        .unwrap_or("unknown")
+        .to_string();
+    let preview = format!(
+        "{} -[{}]-> {}",
+        truncate(&p.source),
+        truncate(&p.edge_type),
+        truncate(&p.target)
+    );
+    drop(tokio::task::spawn_blocking(move || {
+        let _ = crate::transport::server::handler_do::audit::log_audit_entry(
+            "POST /api/v1/silva/edge (D-34 guild exception)",
+            &guild,
+            "silva/edge",
+            &agent_id,
+            success,
+            &preview,
+            0,
+            false,
+        );
+    }));
 }
 
 async fn silva_edge_search_handler(State(state): State<Arc<HttpState>>, Json(q): Json<EdgeSearchQuery>) -> impl IntoResponse {

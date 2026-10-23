@@ -66,6 +66,11 @@ pub enum AclAuthKind {
     MasterTokenQuery,
     /// A JWT issued by the local OAuth server.
     OAuthJwt,
+    /// D-34: per-process credential the kernel issues to ONE stdio guild.
+    /// It authenticates agent-class routes and NEVER satisfies the operator
+    /// class (`operator_gate_allows`); the single audited exception is
+    /// `POST /api/v1/silva/edge` (`guild_operator_exception`).
+    GuildToken,
     /// dev_mode=true local bypass.
     DevBypass,
     /// Endpoint with internal verification (federation peers, mcp probe…).
@@ -339,6 +344,26 @@ pub fn operator_gate_allows(kind: Option<AclAuthKind>) -> bool {
     )
 }
 
+/// D-34: the ONE audited exception where a guild credential may cross into the
+/// operator class (Jose/TL 2026-10-23, option A). `guilds/core/silva_utils.py`
+/// writes knowledge triples through this route and no non-operator path exists
+/// yet; every use is recorded in `guild_audit_log` by the handler. Any other
+/// operator-class route keeps returning 403 to a guild (see
+/// `d34_guild_credential_has_exactly_one_operator_exception` and the live sweep
+/// in `tests/cola_d34_acceptance.rs`).
+///
+/// Retirement: when `write_edge` has a non-operator route, delete this function
+/// and its use in `operator_gate_middleware`; the guild-side helper must stop
+/// writing triples through `/api/v1/silva/edge` at the same time.
+pub fn guild_operator_exception(method: &str, path: &str) -> bool {
+    method.eq_ignore_ascii_case("POST") && path == "/api/v1/silva/edge"
+}
+
+/// Resolve the guild that issued a bearer, if it is a guild credential.
+fn guild_authenticated_guild(token: Option<&str>) -> Option<String> {
+    token.and_then(crate::security::guild_credential::authenticate)
+}
+
 /// Fase 2 (D-3): desafío de un 401 (RFC 6750 + RFC 9728). Apunta al documento
 /// del recurso protegido para que el cliente descubra el AS sin configuración
 /// previa, y pide el único scope que un cliente MCP necesita.
@@ -379,7 +404,12 @@ pub async fn operator_gate_middleware(
 ) -> Response {
     let method = request.method().to_string();
     let path = request.uri().path().to_string();
-    if operator_class_required(&method, &path) && !operator_gate_allows(current_auth_kind()) {
+    let guild_exception = matches!(current_auth_kind(), Some(AclAuthKind::GuildToken))
+        && guild_operator_exception(&method, &path);
+    if operator_class_required(&method, &path)
+        && !operator_gate_allows(current_auth_kind())
+        && !guild_exception
+    {
         warn!(
             "🚫 OPERATOR_REQUIRED: refusing {:?} auth on {} {}",
             current_auth_kind(),
@@ -480,7 +510,12 @@ pub async fn bearer_auth_middleware(
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
 
+            // D-34: a guild credential authenticates as its own class. It is
+            // resolved from the header only (never the query string) so a guild
+            // can never ride the master token or the OAuth `mcp` scope.
+            let mut guild_identity: Option<String> = None;
             let (has_master_bearer, has_oauth_bearer) = if let Some(bearer) = auth_header.strip_prefix("Bearer ") {
+                guild_identity = crate::security::guild_credential::authenticate(bearer);
                 (
                     ExecutionGuard::secure_compare(bearer, expected),
                     state.oauth.validate_bearer(bearer),
@@ -512,6 +547,8 @@ pub async fn bearer_auth_middleware(
                 // E1 (turno 1237): el token por query-string autentica, pero
                 // el MEDIO no satisface la clase operador (solo cabecera).
                 (true, AclAuthKind::MasterTokenQuery)
+            } else if guild_identity.is_some() {
+                (true, AclAuthKind::GuildToken)
             } else if has_oauth_bearer {
                 (true, AclAuthKind::OAuthJwt)
             } else {
@@ -586,8 +623,27 @@ pub async fn bearer_auth_middleware(
     let query_str = request.uri().query().unwrap_or("");
     let bearer_token = extract_token(&headers, query_str);
 
-    let acl_role = resolve_acl_role(&state, bearer_token.as_deref(), agent_id.as_deref()).await;
-    let acl_agent_id = {
+    // D-34: a guild credential is identified by the guild that minted it, not
+    // by the ACL token tables (it is created at spawn and lives in memory).
+    // Its ACL role is `default_role` -- identical to what the guild had with
+    // the master token -- because the privilege reduction happens at the
+    // operator gate, not in the per-guild ACL maps. `agent_id` is stamped as
+    // `guild:<name>` so rate limits, audit rows and memory attribution stay
+    // per guild.
+    let guild_identity = if auth_kind == AclAuthKind::GuildToken {
+        guild_authenticated_guild(bearer_token.as_deref())
+    } else {
+        None
+    };
+    let acl_role = if guild_identity.is_some() {
+        let config = state.config.read().await;
+        config.security.acl.default_role.clone()
+    } else {
+        resolve_acl_role(&state, bearer_token.as_deref(), agent_id.as_deref()).await
+    };
+    let acl_agent_id = if let Some(ref guild) = guild_identity {
+        format!("guild:{guild}")
+    } else {
         let config = state.config.read().await;
         let acl = &config.security.acl;
         match bearer_token {
@@ -1003,6 +1059,25 @@ mod fase1_operator_tests {
         assert!(!operator_gate_allows(Some(AclAuthKind::OAuthJwt)));
         assert!(!operator_gate_allows(Some(AclAuthKind::PublicBypass)));
         assert!(!operator_gate_allows(None), "absence is fail-closed");
+        assert!(
+            !operator_gate_allows(Some(AclAuthKind::GuildToken)),
+            "D-34: a guild credential never satisfies the operator class"
+        );
+    }
+
+    /// D-34: the exception is exactly one route, one method. A list, not a
+    /// prefix: `silva/edge/search` (read-only) and `silva/consolidate` stay
+    /// operator-only.
+    #[test]
+    fn d34_guild_credential_has_exactly_one_operator_exception() {
+        assert!(guild_operator_exception("POST", "/api/v1/silva/edge"));
+        assert!(guild_operator_exception("post", "/api/v1/silva/edge"));
+        assert!(!guild_operator_exception("GET", "/api/v1/silva/edge"));
+        assert!(!guild_operator_exception("POST", "/api/v1/silva/edge/search"));
+        assert!(!guild_operator_exception("POST", "/api/v1/silva/consolidate"));
+        assert!(!guild_operator_exception("POST", "/api/v1/silva/node"));
+        assert!(!guild_operator_exception("POST", "/api/v1/admin/shutdown"));
+        assert!(!guild_operator_exception("POST", "/api/v1/maintenance/purge"));
     }
 
     /// Structural inventory (TL 1210): EVERY mutating route in the api_v1

@@ -21,6 +21,7 @@ pub mod llm_examples;
 pub mod write_gate;
 pub mod judge_telemetry;
 pub mod trust;
+pub mod guild_credential;
 
 #[cfg(test)]
 mod integration_tests;

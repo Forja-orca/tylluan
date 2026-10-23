@@ -22,6 +22,82 @@ use tracing::{info, error, warn, debug};
 use std::sync::Arc;
 use rusqlite::{Connection, params};
 
+/// D-34: environment a stdio guild may inherit from the kernel.
+///
+/// Name-based and **fail-closed**: a variable that is not listed here does not
+/// reach the child, so a new secret (`OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`,
+/// `TYLLUAN_TOKEN`, an agent token) is excluded by default instead of leaking
+/// until someone remembers to filter it. `TYLLUAN_TOKEN` is deliberately absent;
+/// the guild credential is injected separately as `TYLLUAN_GUILD_TOKEN`.
+fn guild_inherited_env(key: &str) -> bool {
+    // Executable discovery + Windows process basics: without these a child
+    // cannot even start (`CreateProcess` needs SystemRoot/ComSpec).
+    const EXACT: &[&str] = &[
+        "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC",
+        "TEMP", "TMP", "TMPDIR", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
+        "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+        "USERNAME", "USERDOMAIN", "LOGONSERVER", "OS", "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "LANG", "LANGUAGE", "TZ",
+        "VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
+        // Container engine (the Docker sandbox branch is chosen per profile).
+        "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "DOCKER_CERT_PATH",
+        "DOCKER_TLS_VERIFY",
+        // Proxies/TLS trust for guilds that call external providers.
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+        "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+        // Benign TYLLUAN_* that guilds actually read (see `rg environ` in
+        // guilds/): never a token, never a secret.
+        "TYLLUAN_ROOT", "TYLLUAN_KERNEL_URL", "TYLLUAN_AGENT_ID",
+        "TYLLUAN_INBOX", "TYLLUAN_PENDING",
+        // Deployment configuration the guilds read as overrides (kernel URL,
+        // scheduler store, local service URLs, backend autodetection).
+        "KERNEL_BASE", "SCHEDULER_DB", "SCHEDULER_POLL_SECS",
+        "COMFY_BASE_URL", "N8N_BASE_URL", "N8N_WEBHOOK_BASE", "TERM",
+        "OPENAI_BASE_URL", "LITELLM_API_BASE", "OLLAMA_HOST",
+        "ANTHROPIC_BASE_URL",
+        // TL (revision D-34): overrides opcionales que las guilds leen de verdad
+        // (`rg environ guilds/`), todos con valor por defecto y ninguno es secreto.
+        "FFMPEG_PATH", "FFPROBE_PATH", "SCREENSHOTS_DIR", "CRON_DIR",
+        "DEEPEVAL_TIMEOUT_SECS", "COMFYUI_URL", "FORJA_URL",
+        "LOCAL_LLM_URL", "LOCAL_LLM_PROVIDER", "LM_STUDIO_URL", "LM_STUDIO_MODEL",
+        "WATCHER_LLM_URL", "WATCHER_LLM_MODEL", "WATCHER_AGENT_ID",
+    ];
+    const PREFIXES: &[&str] = &["PYTHON", "LC_", "SSL_", "REQUESTS_", "CURL_", "OPENSSL_"];
+    if EXACT.iter().any(|k| k.eq_ignore_ascii_case(key)) {
+        return true;
+    }
+    let upper = key.to_ascii_uppercase();
+    PREFIXES.iter().any(|p| upper.starts_with(p))
+}
+
+/// D-34: service credentials that a specific guild needs to do its own job.
+///
+/// These are NOT operator authority over the kernel (the kernel credential is
+/// `TYLLUAN_GUILD_TOKEN`); they belong to the third-party service the guild
+/// talks to, and the guild is the only party that can use them. Scoping them
+/// per guild keeps the rest of the fleet blind to them:
+///
+/// - `llama_backend` is the single bridge to external OpenAI-compatible
+///   providers, and `[[external_providers]] api_key_env` is operator-defined,
+///   so it receives any `*_API_KEY` / `*_API_TOKEN` (it already had all of them
+///   by inheritance before D-34).
+/// - `n8n_bridge`, `claude_watcher`, `antigravity_watcher` read exactly one
+///   key each with a hardcoded name.
+///
+/// If a future guild needs a new service credential, add it HERE by name; do
+/// not widen `guild_inherited_env`.
+fn guild_may_inherit(guild: &str, key: &str) -> bool {
+    let upper = key.to_ascii_uppercase();
+    match guild {
+        "llama_backend" => upper.ends_with("_API_KEY") || upper.ends_with("_API_TOKEN"),
+        "n8n_bridge" => upper == "N8N_API_KEY",
+        "claude_watcher" => upper == "ANTHROPIC_API_KEY",
+        "antigravity_watcher" => upper == "GEMINI_API_KEY",
+        "openai_compat_watcher" => upper == "WATCHER_LLM_KEY",
+        _ => false,
+    }
+}
+
 /// **Fuente única de verdad** de las guilds de inferencia CPU (ONNX / LLM
 /// local). Antes había DOS listas mantenidas a mano —esta, como const asociada
 /// del registry, y otra local en `main.rs`— con el riesgo de divergir: `main.rs`
@@ -505,6 +581,9 @@ impl GuildProcess {
             root
         };
 
+        // D-34: what the LAUNCHER needs travels in this vec, not straight on
+        // `command`, because the environment is cleared wholesale below.
+        let mut launcher_env: Vec<(String, String)> = Vec::new();
         let mut command = match &self.launcher {
 GuildLauncher::Python { module_path } => {
                 let python = find_python().await.map_err(|e| {
@@ -536,6 +615,7 @@ GuildLauncher::Python { module_path } => {
                         "-w", "/workspace",
                         "-e", "PYTHONPATH=/workspace",
                         "-e", "PYTHONUNBUFFERED=1",
+                        "-e", "TYLLUAN_ROOT=/workspace",
                         sb.image.as_str(),
                         "python", "-m", module_path.as_str(),
                     ]);
@@ -546,8 +626,18 @@ GuildLauncher::Python { module_path } => {
                     cmd.arg("-m")
                        .arg(module_path)
                        .current_dir(&workspace_root);
-                    cmd.env("PYTHONPATH", workspace_root.to_string_lossy().as_ref());
-                    cmd.env("PYTHONUNBUFFERED", "1");
+                    launcher_env.push((
+                        "PYTHONPATH".to_string(),
+                        workspace_root.to_string_lossy().to_string(),
+                    ));
+                    launcher_env.push(("PYTHONUNBUFFERED".to_string(), "1".to_string()));
+                    // D-34: bash/filesystem plugins default to `os.getcwd()` when
+                    // this is absent; the kernel used to reach them only because
+                    // the whole parent environment was inherited.
+                    launcher_env.push((
+                        "TYLLUAN_ROOT".to_string(),
+                        workspace_root.to_string_lossy().to_string(),
+                    ));
                     cmd
                 }
             }
@@ -570,7 +660,7 @@ GuildLauncher::Python { module_path } => {
                     cmd.current_dir(guilds_dir);
                 }
                 if let Some(e) = env {
-                    cmd.envs(e);
+                    launcher_env.extend(e.iter().map(|(k, v)| (k.clone(), v.clone())));
                 }
                 cmd
             }
@@ -578,21 +668,32 @@ GuildLauncher::Python { module_path } => {
             GuildLauncher::Sse { .. } => unreachable!("Sse handled above"),
         };
 
-        // Fleet token injection (2026-10-04): stdio guilds call the kernel
-        // over HTTP (/api/v1/*) and bearer_auth_middleware 401s every call
-        // without a valid token once dev_mode=false. Until now only
-        // PYTHONPATH/PYTHONUNBUFFERED were set here, so a guild saw
-        // TYLLUAN_TOKEN only if the operator exported it in the kernel's own
-        // shell — with the default token-in-FILE setup (.tylluan-token) every
-        // guild ran unauthenticated (hallazgo 2, re-verificación 2026-10-04:
-        // coloquio/coordinator/scheduler/night_reasoner/seed_tools no mandan
-        // header, y ni silva_utils ni memory_bridge tenían de dónde sacarlo).
-        // Resolve the SAME token the kernel accepts (env → file, same order
-        // as config.rs startup and the kernel's own self-calls) and inject
-        // it. Guild-side pickup: guilds/core/kernel_auth.py.
-        if let Some(token) = crate::security::coherence_gate::resolve_self_auth_token() {
-            command.env("TYLLUAN_TOKEN", token);
+        // D-34 (2026-10-23): a stdio guild gets NO operator authority and NO
+        // inherited environment. Before this, every guild received
+        // `TYLLUAN_TOKEN` -- the very token the kernel accepts as operator --
+        // and inherited every secret the kernel had in its own environment
+        // (API keys, service tokens; measured in IMPL_T-DSH-38). A compromised
+        // guild could therefore administer the kernel, and a sandbox was no
+        // help while the token travelled inside.
+        //
+        // What the child gets now:
+        //   1. a fail-closed whitelist of the parent env (system, locale,
+        //      Python, container engine, proxies) -- see `guild_inherited_env`;
+        //   2. what its own launcher needs (PYTHONPATH, TYLLUAN_ROOT, ...);
+        //   3. ONE ephemeral credential for its guild class, in memory only.
+        // Guild-side pickup: guilds/core/kernel_auth.py (`TYLLUAN_GUILD_TOKEN`
+        // wins and disables the master-token/file fallbacks).
+        command.env_clear();
+        for (key, value) in std::env::vars() {
+            if guild_inherited_env(&key) || guild_may_inherit(&self.name, &key) {
+                command.env(key, value);
+            }
         }
+        for (key, value) in launcher_env {
+            command.env(key, value);
+        }
+        let guild_token = crate::security::guild_credential::issue(&self.name);
+        command.env("TYLLUAN_GUILD_TOKEN", guild_token);
 
         let proxy = McpProxy::spawn(
             &self.name,
@@ -932,6 +1033,8 @@ GuildLauncher::Python { module_path } => {
             }
             self.tools.clear();
         }
+        // D-34: the credential dies with the guild.
+        crate::security::guild_credential::revoke_guild(&self.name);
         // An intentional kill (unload_guild, retry-respawn, shutdown) is NOT a
         // crash: reset the T13 exponential backoff so the next
         // ensure_guild_running respawns immediately instead of waiting 2^N
