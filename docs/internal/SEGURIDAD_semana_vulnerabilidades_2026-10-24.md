@@ -8,12 +8,12 @@ Origen: aviso de José (vídeo de midudev: PHP, Node.js, Java, Python/Rust/Go, E
 |---|---|---|---|
 | PHP RCE (dos críticas, corregidas en 8.5.12, 8.4.27, 8.3.36 y 8.2.35) | php.net | NO: no hay PHP en esta máquina (`php` no existe), ni en Dockerfile, ni en compose, ni en guilds | Nada que parchear |
 | Node.js (10 CVE, 4 altas, Brotli RCE; fijadas 22.23.4, 24.22.1, 26.12.1) | nodejs.org | PARCIAL: Node 24.13.0 local (build del dashboard, herramientas); el kernel no usa Node | Pendiente actualizar (ver abajo) |
-| Java (Oracle CPU: 55 parches, 49 remotos sin autenticación) | oracle.com | BAJO: Temurin 21.0.8 instalado, pero el kernel y los guilds no lo ejecutan | Pendiente actualizar (winget da 21.0.12) |
+| Java (Oracle CPU: 55 parches, 49 remotos sin autenticación) | oracle.com | BAJO: Temurin 21.0.8 instalado, pero el kernel y los guilds no lo ejecutan. El aviso de seguridad de Oracle de eMudhra (CVE-2026-91403, JSSE) afecta a 21.0.13 y anteriores, así que el arreglo es 21.0.14 (según OpenJDK; `winget` solo ofrece 21.0.12, insuficiente) | Pendiente: esperar 21.0.14 |
 | eMudhra: 8 claves de CA intermedias comprometidas (Go 1.27.3, certifi 2026.10.19+, webpki-roots 1.0.10+, pip 26.2.2) | go.dev, PyPI, crates.io | SÍ en Python; NO en Rust | Ver abajo |
 | Electron | releases de GitHub | NO: el escritorio usa Tauri (WebView2), no Electron | Nada |
 | pip 26.2.2 | PyPI | SÍ: pip global 26.1.2 y venv 25.3 | HECHO |
-| Bun | GitHub releases | BAJO: 1.3.14 instalado, última 1.4.4; no verifiqué si 1.4.4 trae el arreglo de eMudhra | Pendiente |
-| Windows 11 24H2 Home/Pro fin de soporte | learn.microsoft.com | SÍ, URGENTE: esta máquina es 24H2 build 26100.9711 (última actualización posible); el soporte de 24H2 Pro termina el 2026-10-14 (según la tabla de ciclo de vida) | Pendiente: pasar a 25H2 (decisión de José: requiere reinicio) |
+| Bun | GitHub releases | BAJO: 1.3.14 instalado es vulnerable (la GHSA de Bun fija el rango `< 1.4.4`; el arreglo está en 1.4.4) | Pendiente: actualizar Bun |
+| Windows 11 24H2 Home/Pro fin de soporte | learn.microsoft.com | SÍ, URGENTE: esta máquina es 24H2 build 26100.9711 (última actualización posible); el soporte de 24H2 Pro termina el 2026-10-14 (tabla de ciclo de vida y página de estado de Microsoft: «has reached end of updates» desde el 13 de octubre) | Pendiente: pasar a 25H2 con el paquete de habilitación KB5054156 (un reinicio) en el mantenimiento de la workstation, decisión de José |
 | Windows zero-day de octubre (Shell, evasión de Mark of the Web) | secundaria | Cubierto por KB5127648 (instalado 22/10) | Hecho por Windows Update |
 
 ## Hecho hoy (sin reiniciar nada)
@@ -31,9 +31,13 @@ Origen: aviso de José (vídeo de midudev: PHP, Node.js, Java, Python/Rust/Go, E
 - Imagen Docker: reconstruir sobre `debian:bookworm-slim` actualizado para que `ca-certificates` traiga la corrección (secundaria: Debian 12 `20250419~deb12u2`).
 - Producción sigue en `955179f`: no recibirá estos cambios hasta el próximo reinicio autorizado.
 
+## Cerrado por H-19 (Hermes, verificado por el TL con las fuentes)
+
+- Bun: GHSA de oven-sh/bun, versiones vulnerables `< 1.4.4`.
+- Windows 24H2 Home/Pro: Microsoft Learn confirma que terminaron las actualizaciones el 13-oct-2026; el paso a 25H2 es el paquete de habilitación KB5054156 (un reinicio).
+- Oracle: CVE-2026-91403 existe y lo cubre un Security Alert aparte del CPU de octubre; OpenJDK lista afectadas hasta 21.0.13 (corrección 21.0.14: inferencia de Hermes, sin notas de release leídas).
+
 ## No verificado
 
-- CVE-2026-91403 de Java (JSSE, 9.1): solo lo cuentan blogs, no lo encontré en la página de Oracle.
-- Que Microsoft haya bloqueado las intermedias de eMudhra en Windows: solo fuentes secundarias; no hay KB propio.
-- Que Bun 1.4.4 traiga el arreglo de eMudhra.
+- Que Microsoft haya distrust-ado las intermedias de eMudhra en Windows: no hay aviso primario de Microsoft; solo terceros.
 - Que Windows Update ofrezca ya 25H2 en esta máquina.
