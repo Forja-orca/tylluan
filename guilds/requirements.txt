@@ -15,3 +15,6 @@ fastmcp>=3.2.4
 
 # ── System guilds: system_metrics, monitor ────────────────────────────────────
 psutil>=5.9.0
+
+# Seguridad 2026-10: bundle de CAs sin las 8 intermedias eMudhra comprometidas
+certifi>=2026.10.19
