@@ -50,5 +50,13 @@
     "vite": "^5.4.11",
     "vite-plugin-node-polyfills": "^0.26.0",
     "vitest": "^2.1.9"
+  },
+  "overrides": {
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-code": "3.32.0",
+    "@tiptap/extension-highlight": "3.32.0",
+    "@tiptap/extension-list": "3.32.0",
+    "@tiptap/react": "3.32.0",
+    "@tiptap/pm": "3.32.0"
   }
 }
