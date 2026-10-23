@@ -514,36 +514,22 @@ async fn main() -> anyhow::Result<()> {
             warn!("⚠️ Failed to load config: {}, using defaults", e);
             TylluanConfig::default()
         });
-    // Pre-cache for hot-reload API (optional)
-    let _ = TylluanConfig::load_cached();
-    
-    // Override port from CLI if present
-    if let Some(pos) = args.iter().position(|r| r == "--port")
-        && let Some(port_str) = args.get(pos + 1)
-            && let Ok(port) = port_str.parse::<u16>() {
-                config.nexus.port = port;
-                info!("🔌 Port override from CLI: {}", port);
-            }
+    // D-42: precedencia de arranque CLI > env > fichero. El fichero (incluido
+    // `--config`, cuyo override de ruta se registra arriba) ya se cargó; aquí
+    // solo se aplican las capas superiores. NO se vuelve a leer `--config`:
+    // esa recarga era la que borraba `--port` (bug de DSH, D-42).
+    let env_port = std::env::var("TYLLUAN_PORT").ok();
+    let env_host = std::env::var("TYLLUAN_HOST").ok();
+    config.apply_startup_overrides(&args, env_port.as_deref(), env_host.as_deref());
 
-    // Override host from CLI if present (Essential for WSL/External access)
-    if let Some(pos) = args.iter().position(|r| r == "--host")
-        && let Some(host_str) = args.get(pos + 1) {
-            config.nexus.host = host_str.clone();
-            info!("🌐 Host override from CLI: {}", host_str);
+    // La config global cacheada (HttpState.config) debe ver los mismos
+    // overrides que el arranque, no solo el contenido del fichero.
+    if let Ok(cached) = TylluanConfig::load_cached() {
+        match cached.try_write() {
+            Ok(mut guard) => *guard = config.clone(),
+            Err(_) => warn!("⚠️ No pude sincronizar la config cacheada con los overrides de arranque"),
         }
-
-    // Override config path from CLI if present. The path override itself is
-    // already registered earlier (before the pre-cache load_cached() call) --
-    // this just applies it to this file's local `config` variable too.
-    if let Some(pos) = args.iter().position(|r| r == "--config")
-        && let Some(config_path_str) = args.get(pos + 1) {
-            info!("📄 Config path override from CLI: {}", config_path_str);
-            if let Ok(content) = std::fs::read_to_string(config_path_str) {
-                config = toml::from_str(&content)?;
-            } else {
-                warn!("⚠️ Config file from CLI not found or invalid: {}", config_path_str);
-            }
-        }
+    }
 
     // Force stdio from CLI if present
     if args.contains(&"--stdio".to_string())

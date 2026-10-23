@@ -2210,7 +2210,64 @@ impl TylluanConfig {
 
 // â”€â”€â”€ Config Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+/// D-42: primer valor que sigue a `flag` en la línea de comandos.
+fn cli_arg<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|arg| arg == flag)
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
+}
+
 impl TylluanConfig {
+    /// D-42: aplica la precedencia de arranque **CLI > env > fichero**.
+    ///
+    /// Se llama DESPUÉS de cargar el fichero (incluido `--config`). No vuelve a
+    /// leerlo: esa recarga era el bug de DSH, porque `--config` se aplicaba
+    /// después de `--port`/`--host` y los borraba.
+    ///
+    /// `TYLLUAN_PORT` y `TYLLUAN_HOST` son las variables de entorno; un valor
+    /// inválido se ignora (con aviso) y deja pasar la capa siguiente.
+    pub fn apply_startup_overrides(
+        &mut self,
+        args: &[String],
+        env_port: Option<&str>,
+        env_host: Option<&str>,
+    ) {
+        if let Some(raw) = env_port {
+            match raw.trim().parse::<u16>() {
+                Ok(port) => {
+                    self.nexus.port = port;
+                    info!("Port override from TYLLUAN_PORT: {port}");
+                }
+                Err(_) if !raw.trim().is_empty() => {
+                    warn!(
+                        "Invalid TYLLUAN_PORT={raw:?}; keeping port {}",
+                        self.nexus.port
+                    );
+                }
+                Err(_) => {}
+            }
+        }
+        if let Some(host) = env_host.map(str::trim).filter(|host| !host.is_empty()) {
+            self.nexus.host = host.to_string();
+            info!("Host override from TYLLUAN_HOST: {host}");
+        }
+
+        if let Some(raw) = cli_arg(args, "--port") {
+            match raw.trim().parse::<u16>() {
+                Ok(port) => {
+                    self.nexus.port = port;
+                    info!("Port override from CLI: {port}");
+                }
+                Err(_) => warn!("Invalid --port={raw:?}; keeping port {}", self.nexus.port),
+            }
+        }
+        if let Some(host) = cli_arg(args, "--host").map(str::trim).filter(|host| !host.is_empty()) {
+            self.nexus.host = host.to_string();
+            info!("Host override from CLI: {host}");
+        }
+    }
+
     /// Load configuration from `tylluan.toml` in the current directory,
     /// or fall back to sensible defaults if no config file exists.
     pub fn load() -> anyhow::Result<Self> {
@@ -2893,5 +2950,80 @@ code = "permissive"
         let toml_str = "[night]\nmax_parallel_phases = 8\n";
         let cfg: TylluanConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.night.max_parallel_phases, Some(8));
+    }
+
+    #[test]
+    fn startup_overrides_cli_beats_env_and_file() {
+        let mut cfg = TylluanConfig::default();
+        cfg.nexus.port = 47004;
+        cfg.nexus.host = "127.0.0.1".into();
+        let args = vec![
+            "tylluan-nexus".to_string(),
+            "--port".to_string(),
+            "48002".to_string(),
+            "--host".to_string(),
+            "192.168.1.10".to_string(),
+        ];
+        cfg.apply_startup_overrides(&args, Some("48001"), Some("10.0.0.5"));
+        assert_eq!(cfg.nexus.port, 48002);
+        assert_eq!(cfg.nexus.host, "192.168.1.10");
+    }
+
+    #[test]
+    fn startup_overrides_env_beats_file() {
+        let mut cfg = TylluanConfig::default();
+        cfg.nexus.port = 47004;
+        cfg.nexus.host = "127.0.0.1".into();
+        cfg.apply_startup_overrides(&[], Some("48001"), Some("10.0.0.5"));
+        assert_eq!(cfg.nexus.port, 48001);
+        assert_eq!(cfg.nexus.host, "10.0.0.5");
+    }
+
+    #[test]
+    fn startup_overrides_keep_file_without_env_or_cli() {
+        let mut cfg = TylluanConfig::default();
+        cfg.nexus.port = 47004;
+        cfg.nexus.host = "127.0.0.1".into();
+        cfg.apply_startup_overrides(&[], None, None);
+        assert_eq!(cfg.nexus.port, 47004);
+        assert_eq!(cfg.nexus.host, "127.0.0.1");
+    }
+
+    #[test]
+    fn startup_overrides_invalid_env_falls_through_to_file() {
+        let mut cfg = TylluanConfig::default();
+        cfg.nexus.port = 47004;
+        cfg.apply_startup_overrides(&[], Some("not-a-port"), None);
+        assert_eq!(cfg.nexus.port, 47004);
+    }
+
+    #[test]
+    fn startup_overrides_invalid_cli_falls_through_to_env() {
+        let mut cfg = TylluanConfig::default();
+        cfg.nexus.port = 47004;
+        let args = vec![
+            "tylluan-nexus".to_string(),
+            "--port".to_string(),
+            "nope".to_string(),
+        ];
+        cfg.apply_startup_overrides(&args, Some("48001"), None);
+        assert_eq!(cfg.nexus.port, 48001);
+    }
+
+    /// D-42 regression: `--config` carga el fichero, pero NO puede borrar el
+    /// `--port` que se aplica después. Antes, la recarga tardía del fichero
+    /// dejaba el puerto del fichero y el operador no se enteraba.
+    #[test]
+    fn startup_overrides_cli_port_survives_config_flag() {
+        let mut cfg: TylluanConfig = toml::from_str("[nexus]\nport = 47731\n").unwrap();
+        let args = vec![
+            "tylluan-nexus".to_string(),
+            "--config".to_string(),
+            "custom.toml".to_string(),
+            "--port".to_string(),
+            "47732".to_string(),
+        ];
+        cfg.apply_startup_overrides(&args, None, None);
+        assert_eq!(cfg.nexus.port, 47732, "--port debe ganar a --config");
     }
 }
