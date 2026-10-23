@@ -277,7 +277,13 @@ impl super::SilvaDB {
 
     /// Get a node by ID. Applies lazy weight decay before returning.
     pub async fn get_node(&self, id: &str) -> Result<Option<GraphNode>> {
-        self.apply_node_decay(id).await.map_err(|e| warn!("🌲 node_decay failed for '{}': {}", id, e)).ok();
+        match self.apply_node_decay(id).await {
+            Ok(_) => {}
+            Err(e) if e.to_string().starts_with("Node not found:") => {
+                tracing::debug!("node_decay skipped for '{}': {}", id, e);
+            }
+            Err(e) => warn!("🌲 node_decay failed for '{}': {}", id, e),
+        }
         tokio::task::block_in_place(|| {
             let conn = self.conn_timed();
             let now = std::time::SystemTime::now()
@@ -1198,7 +1204,12 @@ impl super::SilvaDB {
             let (weight, last_touched) = match result {
                 Ok((w, Some(lt))) => (w, lt),
                 Ok((w, None)) => return Ok(w),
-                Err(_) => return Err(anyhow::anyhow!("Node not found: {node_id}")),
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(anyhow::anyhow!("Node not found: {node_id}"));
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!("node_decay query failed for {node_id}: {e}"));
+                }
             };
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2081,5 +2092,16 @@ mod tests {
 
         let second = db.purge_legacy_nested_graphrag_summaries().await.unwrap();
         assert_eq!(second, (0, 0, 0), "a second run with nothing left to purge must be a clean no-op");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn apply_node_decay_missing_node_is_not_found() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        let err = db.apply_node_decay("missing:node").await.unwrap_err();
+        assert!(
+            err.to_string().starts_with("Node not found:"),
+            "missing node must be reported as not-found, got: {err}"
+        );
+        assert!(db.get_node("missing:node").await.unwrap().is_none());
     }
 }

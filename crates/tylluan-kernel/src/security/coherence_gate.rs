@@ -20,7 +20,10 @@
 
 use crate::memory::silva::GraphNode;
 use crate::security::poison_patterns::matches_injection_pattern;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 /// Same bar Ouroboros/Consensus already use for "is this semantically the
 /// same thing" — one threshold across the codebase, not a gate-specific number.
@@ -172,6 +175,146 @@ pub fn judge_max_concurrency() -> usize {
     JUDGE_MAX_CONCURRENCY
 }
 
+// ── D-36: dedupe del juez por contenido ─────────────────────────────────────
+//
+// El semaforo de D-14/C2 ya limita CUANTOS juicios corren a la vez, pero no
+// evita juzgar dos veces el MISMO contenido: los reintentos de escritura y los
+// caminos que reescriben el mismo nodo (D-17/D-32) pueden mandar el mismo texto
+// al modelo una y otra vez. Esta cache guarda solo el hash del prompt+gramatica
+// y el veredicto (nunca el prompt), con ventana y tope configurables en
+// `[security]`.
+const DEFAULT_JUDGE_DEDUP_WINDOW_SECS: u64 = 60;
+const MAX_JUDGE_DEDUP_WINDOW_SECS: u64 = 3_600;
+const DEFAULT_JUDGE_DEDUP_MAX_ENTRIES: usize = 256;
+const MAX_JUDGE_DEDUP_MAX_ENTRIES: usize = 4_096;
+
+fn effective_judge_dedup(window_secs: u64, max_entries: usize) -> (std::time::Duration, usize) {
+    (
+        std::time::Duration::from_secs(window_secs.min(MAX_JUDGE_DEDUP_WINDOW_SECS)),
+        max_entries.clamp(1, MAX_JUDGE_DEDUP_MAX_ENTRIES),
+    )
+}
+
+/// D-36: lee `[security] judge_dedup_*` en cada juicio. Usa el mismo
+/// `load_cached` que `configured_judge_model`, asi que un reload de config se
+/// respeta sin reiniciar el kernel.
+fn configured_judge_dedup() -> (std::time::Duration, usize) {
+    let (mut window_secs, mut max_entries) =
+        (DEFAULT_JUDGE_DEDUP_WINDOW_SECS, DEFAULT_JUDGE_DEDUP_MAX_ENTRIES);
+    if let Ok(cfg) = crate::config::TylluanConfig::load_cached()
+        && let Ok(guard) = cfg.try_read()
+    {
+        window_secs = guard.security.judge_dedup_window_secs;
+        max_entries = guard.security.judge_dedup_max_entries;
+    }
+    effective_judge_dedup(window_secs, max_entries)
+}
+
+fn judge_prompt_hash(prompt: &str, grammar: &str) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(grammar.as_bytes());
+    hasher.update([0u8]);
+    hasher.update(prompt.as_bytes());
+    let digest = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(digest.as_slice());
+    key
+}
+
+struct CachedVerdict {
+    verdict: String,
+    stored_at: std::time::Instant,
+}
+
+#[derive(Default)]
+struct VerdictCache {
+    entries: Mutex<HashMap<[u8; 32], CachedVerdict>>,
+}
+
+impl VerdictCache {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn lookup(
+        &self,
+        key: &[u8; 32],
+        window: std::time::Duration,
+        now: std::time::Instant,
+    ) -> Option<String> {
+        if window.is_zero() {
+            return None;
+        }
+        let mut entries = self
+            .entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match entries.get(key) {
+            Some(entry) if now.saturating_duration_since(entry.stored_at) < window => {
+                Some(entry.verdict.clone())
+            }
+            Some(_) => {
+                entries.remove(key);
+                None
+            }
+            None => None,
+        }
+    }
+
+    fn store(
+        &self,
+        key: [u8; 32],
+        verdict: String,
+        window: std::time::Duration,
+        max_entries: usize,
+        now: std::time::Instant,
+    ) {
+        if window.is_zero() {
+            return;
+        }
+        let mut entries = self
+            .entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        entries.retain(|_, entry| now.saturating_duration_since(entry.stored_at) < window);
+        while entries.len() >= max_entries.max(1) {
+            let Some(oldest) = entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.stored_at)
+                .map(|(key, _)| *key)
+            else {
+                break;
+            };
+            entries.remove(&oldest);
+        }
+        entries.insert(
+            key,
+            CachedVerdict {
+                verdict,
+                stored_at: now,
+            },
+        );
+    }
+
+    fn len(&self) -> usize {
+        self.entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len()
+    }
+}
+
+static JUDGE_VERDICT_CACHE: OnceLock<VerdictCache> = OnceLock::new();
+
+fn verdict_cache() -> &'static VerdictCache {
+    JUDGE_VERDICT_CACHE.get_or_init(VerdictCache::new)
+}
+
+/// Cuantos veredictos viven ahora mismo en la cache (telemetria de `/health`).
+pub fn judge_cache_entries() -> usize {
+    verdict_cache().len()
+}
+
 /// Pide la ranura del juez con espera acotada. `None` = el juez esta ocupado y
 /// este juicio se salta (contabilizado como `busy_skip`).
 pub(crate) async fn acquire_judge_permit(
@@ -197,12 +340,52 @@ pub(crate) async fn acquire_judge_permit(
 pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
     let kernel_base = std::env::var("TYLLUAN_KERNEL_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:47004".to_string());
-    // C1+C2: una sola ranura, espera acotada. Si el juez esta saturado nos
-    // saltamos NUESTRO juicio (no el del otro), y queda contado.
+    let (dedup_window, dedup_max_entries) = configured_judge_dedup();
+    call_reasoning_backend_with_grammar_using(
+        &kernel_base,
+        prompt,
+        grammar,
+        dedup_window,
+        dedup_max_entries,
+    )
+    .await
+}
+
+/// D-36: cuerpo con la base y la ventana inyectables para los tests. El
+/// semaforo de D-14/C2 sigue siendo el tope real (1 ranura); el dedupe va
+/// ANTES de pedir la ranura, asi que un veredicto repetido no consume turno de
+/// generacion. Se vuelve a mirar tras adquirir el permiso para que dos
+/// llamadas identicas simultaneas no generen dos veces.
+async fn call_reasoning_backend_with_grammar_using(
+    kernel_base: &str,
+    prompt: &str,
+    grammar: &str,
+    dedup_window: std::time::Duration,
+    dedup_max_entries: usize,
+) -> Result<String, String> {
+    let key = judge_prompt_hash(prompt, grammar);
+    if let Some(verdict) = verdict_cache().lookup(&key, dedup_window, std::time::Instant::now()) {
+        crate::security::judge_telemetry::judge_telemetry().note_dedup_hit();
+        return Ok(verdict);
+    }
     let Some(_permit) = acquire_judge_permit(JUDGE_QUEUE_WAIT).await else {
         return Err("judge busy: no slot within queue wait (skipped)".to_string());
     };
-    call_judge(&kernel_base, prompt, grammar, JUDGE_TIMEOUT).await
+    if let Some(verdict) = verdict_cache().lookup(&key, dedup_window, std::time::Instant::now()) {
+        crate::security::judge_telemetry::judge_telemetry().note_dedup_hit();
+        return Ok(verdict);
+    }
+    let result = call_judge(kernel_base, prompt, grammar, JUDGE_TIMEOUT).await;
+    if let Ok(ref verdict) = result {
+        verdict_cache().store(
+            key,
+            verdict.clone(),
+            dedup_window,
+            dedup_max_entries,
+            std::time::Instant::now(),
+        );
+    }
+    result
 }
 
 /// D-33: el modelo que se envia al juez. Prioridad: `TYLLUAN_JUDGE_MODEL`
@@ -1638,6 +1821,201 @@ mod judge_concurrency_tests {
         assert!(
             acquire_judge_permit(Duration::from_millis(50)).await.is_some(),
             "al liberarse la ranura el siguiente juicio entra"
+        );
+    }
+}
+
+// ── D-36: dedupe por hash ──────────────────────────────────────────────────
+#[cfg(test)]
+mod judge_dedup_tests {
+    use super::*;
+    use axum::response::IntoResponse;
+    use axum::{routing::post, Json, Router};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    fn key(byte: u8) -> [u8; 32] {
+        [byte; 32]
+    }
+
+    fn unique_prompt(tag: &str) -> String {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        format!(
+            "d36-{tag}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        )
+    }
+
+    #[test]
+    fn cache_reuses_within_window_and_expires_after_it() {
+        let cache = VerdictCache::new();
+        let t0 = Instant::now();
+        cache.store(key(1), "SAFE".into(), Duration::from_secs(60), 256, t0);
+
+        assert_eq!(
+            cache.lookup(&key(1), Duration::from_secs(60), t0 + Duration::from_secs(59)),
+            Some("SAFE".to_string())
+        );
+        assert_eq!(
+            cache.lookup(&key(1), Duration::from_secs(60), t0 + Duration::from_secs(61)),
+            None,
+            "fuera de la ventana el veredicto ya no se reutiliza"
+        );
+        assert_eq!(cache.len(), 0, "la entrada expirada se elimina al mirarla");
+    }
+
+    #[test]
+    fn cache_is_disabled_with_zero_window() {
+        let cache = VerdictCache::new();
+        let t0 = Instant::now();
+        cache.store(key(1), "SAFE".into(), Duration::ZERO, 256, t0);
+        assert_eq!(cache.len(), 0, "ventana 0 no guarda nada");
+        assert_eq!(cache.lookup(&key(1), Duration::ZERO, t0), None);
+    }
+
+    #[test]
+    fn cache_evicts_oldest_entry_when_full() {
+        let cache = VerdictCache::new();
+        let t0 = Instant::now();
+        cache.store(key(1), "A".into(), Duration::from_secs(60), 2, t0);
+        cache.store(key(2), "B".into(), Duration::from_secs(60), 2, t0 + Duration::from_secs(1));
+        cache.store(key(3), "C".into(), Duration::from_secs(60), 2, t0 + Duration::from_secs(2));
+
+        assert_eq!(cache.len(), 2, "el tope de entradas se respeta");
+        assert_eq!(cache.lookup(&key(1), Duration::from_secs(60), t0 + Duration::from_secs(2)), None);
+        assert_eq!(
+            cache.lookup(&key(2), Duration::from_secs(60), t0 + Duration::from_secs(2)),
+            Some("B".to_string())
+        );
+        assert_eq!(
+            cache.lookup(&key(3), Duration::from_secs(60), t0 + Duration::from_secs(2)),
+            Some("C".to_string())
+        );
+    }
+
+    #[test]
+    fn hash_separates_prompt_and_grammar() {
+        assert_eq!(judge_prompt_hash("p", "g"), judge_prompt_hash("p", "g"));
+        assert_ne!(judge_prompt_hash("p", "g"), judge_prompt_hash("p", "h"));
+        assert_ne!(judge_prompt_hash("p", "g"), judge_prompt_hash("q", "g"));
+    }
+
+    #[test]
+    fn dedup_limits_are_clamped() {
+        assert_eq!(effective_judge_dedup(0, 0), (Duration::ZERO, 1));
+        assert_eq!(
+            effective_judge_dedup(u64::MAX, usize::MAX),
+            (Duration::from_secs(3_600), 4_096)
+        );
+        assert_eq!(
+            effective_judge_dedup(60, 256),
+            (Duration::from_secs(60), 256)
+        );
+    }
+
+    #[test]
+    fn security_defaults_are_conservative() {
+        let security = crate::config::SecurityConfig::default();
+        assert_eq!(security.judge_dedup_window_secs, 60);
+        assert_eq!(security.judge_dedup_max_entries, 256);
+    }
+
+    async fn spawn_counting_judge(statuses: Vec<u16>) -> (String, Arc<AtomicUsize>) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_handler = calls.clone();
+        let app = Router::new().route(
+            "/api/v1/guilds/llama_backend/tools/query_model",
+            post(move || {
+                let calls = calls_for_handler.clone();
+                let statuses = statuses.clone();
+                async move {
+                    let n = calls.fetch_add(1, Ordering::SeqCst);
+                    let status = statuses.get(n).copied().unwrap_or(200);
+                    if status == 200 {
+                        Json(serde_json::json!({ "content": [{ "text": "SAFE" }] }))
+                            .into_response()
+                    } else {
+                        (
+                            axum::http::StatusCode::from_u16(status).unwrap(),
+                            "boom",
+                        )
+                            .into_response()
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (format!("http://{addr}"), calls)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn same_prompt_does_not_hit_the_model_twice() {
+        let (base, calls) = spawn_counting_judge(vec![200, 200]).await;
+        let prompt = unique_prompt("same");
+
+        let first = call_reasoning_backend_with_grammar_using(
+            &base,
+            &prompt,
+            "g",
+            Duration::from_secs(60),
+            256,
+        )
+        .await
+        .unwrap();
+        let second = call_reasoning_backend_with_grammar_using(
+            &base,
+            &prompt,
+            "g",
+            Duration::from_secs(60),
+            256,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(first, "SAFE");
+        assert_eq!(second, "SAFE");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "el segundo juicio del mismo prompt sale de la cache"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn failed_verdict_is_not_cached() {
+        let (base, calls) = spawn_counting_judge(vec![500, 200]).await;
+        let prompt = unique_prompt("retry");
+
+        let first = call_reasoning_backend_with_grammar_using(
+            &base,
+            &prompt,
+            "g",
+            Duration::from_secs(60),
+            256,
+        )
+        .await;
+        assert!(first.is_err(), "un 500 no es un veredicto");
+
+        let second = call_reasoning_backend_with_grammar_using(
+            &base,
+            &prompt,
+            "g",
+            Duration::from_secs(60),
+            256,
+        )
+        .await
+        .unwrap();
+        assert_eq!(second, "SAFE");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "un fallo transitorio no se cachea: el reintento vuelve al modelo"
         );
     }
 }

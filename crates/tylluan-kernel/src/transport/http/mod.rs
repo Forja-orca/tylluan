@@ -338,6 +338,44 @@ async fn bind_http_listener(
     }
 }
 
+const AUTOLINK_COOLDOWN_SECS: u64 = 6 * 3600;
+
+fn autolink_cooldown_path(port: u16) -> std::path::PathBuf {
+    if let Ok(dir) = std::env::var("TYLLUAN_DATA_DIR") {
+        return std::path::PathBuf::from(dir).join("autolink_last_run");
+    }
+    let dir = if port == 47004 {
+        "./data".to_string()
+    } else {
+        format!("./data-port-{port}")
+    };
+    std::path::PathBuf::from(dir).join("autolink_last_run")
+}
+
+fn autolink_should_run(last_run_secs: Option<u64>, now_secs: u64, cooldown_secs: u64) -> bool {
+    match last_run_secs {
+        Some(last) => now_secs.saturating_sub(last) >= cooldown_secs,
+        None => true,
+    }
+}
+
+fn read_autolink_last_run(path: &std::path::Path) -> Option<u64> {
+    std::fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+fn write_autolink_last_run(path: &std::path::Path) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if let Err(e) = std::fs::write(path, now.to_string()) {
+        warn!("⚠️ No pude escribir {}: {e}", path.display());
+    }
+}
+
 pub async fn start_http_server(
     host: &str,
     port: u16,
@@ -957,8 +995,25 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     let silva_clone = state.silva.clone();
     let registry_clone = state.registry.clone();
     let broadcast_clone = broadcast_tx.clone();
+    let health_ready = state.health_ready.clone();
+    let cooldown_path = autolink_cooldown_path(port);
     tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
+        while !health_ready.load(std::sync::atomic::Ordering::Acquire) {
+            if tokio::time::Instant::now() >= deadline {
+                tracing::warn!("Auto-linking skipped: kernel not ready after 300s");
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        if !autolink_should_run(read_autolink_last_run(&cooldown_path), now, AUTOLINK_COOLDOWN_SECS) {
+            tracing::info!("Auto-linking skipped: cooldown not elapsed");
+            return;
+        }
         let arc = registry_clone.arc();
         let reg = arc.read().await;
         let knowledge_running = reg.guilds.get("knowledge").map(|g| g.is_running()).unwrap_or(false);
@@ -1003,6 +1058,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 tracing::error!("❌ Auto-linking failed: {}", e);
             }
         }
+        write_autolink_last_run(&cooldown_path);
     });
 
     // --- M18-1 AutoResearch Daemon Spawning ---
@@ -1824,5 +1880,23 @@ mod tests {
             .expect("debe bindear cuando el puerto se libera");
         assert_eq!(listener.local_addr().unwrap().port(), port);
         release.await.unwrap();
+    }
+
+    #[test]
+    fn test_autolink_should_run_cooldown() {
+        assert!(autolink_should_run(None, 1_000, 100));
+        assert!(!autolink_should_run(Some(950), 1_000, 100));
+        assert!(autolink_should_run(Some(900), 1_000, 100));
+        assert!(autolink_should_run(Some(1_000), 1_000, 0));
+    }
+
+    #[test]
+    fn test_autolink_last_run_roundtrip() {
+        let path = std::env::temp_dir().join(format!("tylluan-autolink-{}", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(read_autolink_last_run(&path), None);
+        write_autolink_last_run(&path);
+        assert!(read_autolink_last_run(&path).is_some());
+        let _ = std::fs::remove_file(&path);
     }
 }

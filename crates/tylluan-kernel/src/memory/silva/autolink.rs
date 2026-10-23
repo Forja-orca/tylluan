@@ -1,5 +1,13 @@
 use anyhow::Result;
 
+const EXTRACT_MAX_ATTEMPTS: usize = 2;
+const EXTRACT_MAX_CONSECUTIVE_FAILURES: usize = 3;
+const EXTRACT_BACKOFF_MS: u64 = 250;
+
+fn is_fatal_extract_error(msg: &str) -> bool {
+    msg.contains("disconnected") || msg.contains("not found") || msg.contains("not available")
+}
+
 impl super::SilvaDB {
     /// Link a new node to similar existing nodes using keyword overlap (Jaccard similarity).
     /// Returns number of edges created.
@@ -58,20 +66,38 @@ impl super::SilvaDB {
         tracing::info!("🔄 SilvaDB: processing {} nodes for retrograde extraction", eligible.len());
 
         let mut edges_added: usize = 0;
-        for node in eligible {
+        let mut consecutive_failures = 0usize;
+        let mut processed = 0usize;
+        'nodes: for node in eligible {
             let snippet: String = node.content.chars().take(500).collect();
-            let extract_result = extractor(snippet).await;
-            // Abort entire loop on guild disconnection — avoids log spam
-            if let Err(ref e) = extract_result {
-                let msg = e.to_string();
-                if msg.contains("disconnected") || msg.contains("not found") || msg.contains("not available") {
-                    tracing::warn!("🕸️ Retrograde extract aborted: {}", msg);
-                    break;
+            let mut triple_json = None;
+            let mut last_error = None;
+            for attempt in 0..EXTRACT_MAX_ATTEMPTS {
+                match extractor(snippet.clone()).await {
+                    Ok(json) => {
+                        triple_json = Some(json);
+                        break;
+                    }
+                    Err(e) => {
+                        let msg = e.to_string();
+                        if is_fatal_extract_error(&msg) {
+                            tracing::warn!("🕸️ Retrograde extract aborted: {}", msg);
+                            break 'nodes;
+                        }
+                        last_error = Some(msg);
+                        if attempt + 1 < EXTRACT_MAX_ATTEMPTS {
+                            let backoff_ms = EXTRACT_BACKOFF_MS * (1u64 << attempt);
+                            tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                        }
+                    }
                 }
             }
-            if let Ok(triple_json) = extract_result
-                && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&triple_json)
-                    && let Some(triples) = parsed["triples"].as_array() {
+            processed += 1;
+            match triple_json {
+                Some(triple_json) => {
+                    consecutive_failures = 0;
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&triple_json)
+                        && let Some(triples) = parsed["triples"].as_array() {
                         for triple in triples {
                             let confidence = triple["confidence"].as_f64().unwrap_or(0.0);
                             if confidence >= 0.45 {
@@ -87,8 +113,32 @@ impl super::SilvaDB {
                             }
                         }
                     }
+                }
+                None => {
+                    consecutive_failures += 1;
+                    tracing::warn!(
+                        "Retrograde extract failed for node '{}' after {} attempts: {}",
+                        node.id,
+                        EXTRACT_MAX_ATTEMPTS,
+                        last_error.as_deref().unwrap_or("unknown error")
+                    );
+                    if consecutive_failures >= EXTRACT_MAX_CONSECUTIVE_FAILURES {
+                        tracing::warn!(
+                            "Retrograde extract aborted after {} consecutive failures",
+                            consecutive_failures
+                        );
+                        break 'nodes;
+                    }
+                }
+            }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
+        tracing::info!(
+            "Retrograde extract done: {} nodes processed, {} edges added, {} consecutive failures",
+            processed,
+            edges_added,
+            consecutive_failures
+        );
         Ok(edges_added)
     }
 
@@ -147,5 +197,84 @@ impl super::SilvaDB {
 
         tracing::info!("retrolink_orphans: processed {} orphans, created {} edges", processed, total_links);
         Ok(total_links)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EXTRACT_MAX_ATTEMPTS, EXTRACT_MAX_CONSECUTIVE_FAILURES};
+    use crate::memory::silva::SilvaDB;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    async fn seed(db: &SilvaDB, n: usize) {
+        for i in 0..n {
+            db.upsert_node(
+                &format!("test:node:{i}"),
+                "memory",
+                &format!("contenido suficientemente largo para el extractor {}", "x".repeat(120)),
+                "{}",
+            ).await.unwrap();
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn retrograde_extract_caps_consecutive_failures() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.init().await.unwrap();
+        seed(&db, 10).await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+        let result = db.retrograde_extract_triples(10, move |_s| {
+            let calls = calls_clone.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(anyhow::anyhow!("transient boom"))
+            }
+        }).await;
+        assert!(result.is_ok());
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            EXTRACT_MAX_CONSECUTIVE_FAILURES * EXTRACT_MAX_ATTEMPTS
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn retrograde_extract_retries_transient_failure_once() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.init().await.unwrap();
+        seed(&db, 1).await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+        let result = db.retrograde_extract_triples(1, move |_s| {
+            let calls = calls_clone.clone();
+            async move {
+                if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(anyhow::anyhow!("transient boom"))
+                } else {
+                    Ok(r#"{"triples":[]}"#.to_string())
+                }
+            }
+        }).await;
+        assert!(result.is_ok());
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn retrograde_extract_aborts_immediately_on_disconnect() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.init().await.unwrap();
+        seed(&db, 5).await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+        let result = db.retrograde_extract_triples(5, move |_s| {
+            let calls = calls_clone.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(anyhow::anyhow!("knowledge guild disconnected"))
+            }
+        }).await;
+        assert!(result.is_ok());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 }
