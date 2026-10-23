@@ -25,6 +25,9 @@ use fastembed::{TextEmbedding, TextInitOptions, EmbeddingModel, TextRerank, Rera
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
+use std::collections::BTreeMap;
+use std::time::UNIX_EPOCH;
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use crate::config::InferenceDevice;
 
@@ -402,6 +405,134 @@ fn sha256_file(path: &std::path::Path) -> Option<String> {
     Some(format!("{:x}", hasher.finalize()))
 }
 
+// ─── T-DSH-54: caché persistente de huellas (evita re-hashear 1,34 GB por boot) ──
+//
+// `compute_engine_fingerprint` hashea el `model.onnx` del snapshot (hoy 1,34 GB
+// para mxbai, con los pesos inline) + `tokenizer.json` (17 MB). En el arranque
+// del 22-23 oct eso costaba 12-15 s antes de abrir el puerto (medido en
+// IMPL_T-DSH-53). La huella solo cambia si cambia el CONTENIDO del fichero, y
+// el contenido de un snapshot de HF es inmutable por revisión; con la clave
+// (ruta, tamaño, mtime) podemos reutilizar el sha256 mientras el fichero no se
+// toque. El JSON vive bajo el DATA_DIR (`TYLLUAN_DATA_DIR` o `data/`) y se
+// escribe de forma atómica (tmp + rename). Un fallo de lectura/escritura de la
+// caché NUNCA rompe la huella: se recalcula y se sigue.
+
+/// Nombre del fichero de caché dentro del DATA_DIR.
+const FINGERPRINT_CACHE_FILE: &str = "fingerprint_cache.json";
+const FINGERPRINT_CACHE_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FingerprintCacheEntry {
+    size: u64,
+    mtime_ns: u64,
+    sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FingerprintCache {
+    #[serde(default = "fingerprint_cache_version")]
+    version: u32,
+    #[serde(default)]
+    entries: BTreeMap<String, FingerprintCacheEntry>,
+}
+
+fn fingerprint_cache_version() -> u32 {
+    FINGERPRINT_CACHE_VERSION
+}
+
+impl Default for FingerprintCache {
+    fn default() -> Self {
+        Self { version: FINGERPRINT_CACHE_VERSION, entries: BTreeMap::new() }
+    }
+}
+
+/// Ruta del JSON de caché: `<DATA_DIR>/fingerprint_cache.json`, con
+/// `TYLLUAN_DATA_DIR` como override (el kernel usa `data/` por defecto).
+fn fingerprint_cache_path() -> std::path::PathBuf {
+    let data_dir = std::env::var_os("TYLLUAN_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::PathBuf::from("data"));
+    data_dir.join(FINGERPRINT_CACHE_FILE)
+}
+
+/// Clave de caché: (ruta, tamaño, mtime en ns). `None` si el fichero no es
+/// legible o no es regular (entonces no hay nada que cachear).
+fn fingerprint_cache_key(path: &std::path::Path) -> Option<(String, u64, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    let mtime_ns = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos().min(u64::MAX as u128) as u64)?;
+    Some((path.to_string_lossy().to_string(), meta.len(), mtime_ns))
+}
+
+fn read_fingerprint_cache(path: &std::path::Path) -> FingerprintCache {
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return FingerprintCache::default();
+    };
+    match serde_json::from_str::<FingerprintCache>(&raw) {
+        // JSON corrupto o de otra versión -> caché vacía, se recalcula.
+        Ok(cache) if cache.version == FINGERPRINT_CACHE_VERSION => cache,
+        _ => FingerprintCache::default(),
+    }
+}
+
+/// Escritura atómica: JSON a un temporal en el mismo directorio y rename. En
+/// Windows el rename falla si el destino existe, así que se reintenta tras
+/// borrarlo. Cualquier fallo se ignora (la caché es una optimización).
+fn write_fingerprint_cache(path: &std::path::Path, cache: &FingerprintCache) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if std::fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let Ok(json) = serde_json::to_vec_pretty(cache) else {
+        return;
+    };
+    let tmp = path.with_extension(format!("json.tmp-{}", std::process::id()));
+    if std::fs::write(&tmp, &json).is_err() {
+        return;
+    }
+    if std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::rename(&tmp, path);
+    }
+}
+
+/// `sha256_file` con caché opcional. `cache_path=None` = comportamiento
+/// anterior (hash directo, sin leer/escribir nada). La huella devuelta es
+/// SIEMPRE el sha256 real del contenido: la caché solo evita recalcularlo.
+fn sha256_file_cached(
+    path: &std::path::Path,
+    cache_path: Option<&std::path::Path>,
+) -> Option<String> {
+    let key = fingerprint_cache_key(path)?;
+    let mut cache = cache_path.map(read_fingerprint_cache).unwrap_or_default();
+    if let Some(entry) = cache.entries.get(&key.0)
+        && entry.size == key.1
+        && entry.mtime_ns == key.2
+        && !entry.sha256.is_empty()
+    {
+        return Some(entry.sha256.clone());
+    }
+    let hash = sha256_file(path)?;
+    if let Some(cache_path) = cache_path {
+        cache.version = FINGERPRINT_CACHE_VERSION;
+        cache.entries.insert(
+            key.0,
+            FingerprintCacheEntry { size: key.1, mtime_ns: key.2, sha256: hash.clone() },
+        );
+        write_fingerprint_cache(cache_path, &cache);
+    }
+    Some(hash)
+}
+
 /// Canonical fingerprint v1 (format `sha256:<64 hex>`): deterministic parts,
 /// NO volatile inputs (no mtimes, no absolute paths) — an identical
 /// re-download keeps the SAME fingerprint and does NOT trigger a re-embed
@@ -437,14 +568,32 @@ fn locate_onnx_graph(snapshot: &std::path::Path) -> Option<std::path::PathBuf> {
 /// Fingerprint of the engine fastembed just loaded (TL-approved design
 /// 2026-10-05): model type + HF revision + output dims + normalization +
 /// content hashes of the ONNX graph and the tokenizer + byte size of the
-/// external weights blob. Never reads the multi-GB weights blob itself
-/// (boot stays ~100 ms); revision sha + graph/tokenizer hashes + size pin
-/// the identity. `None` = cache not found (honest unknown, never guessed).
+/// external weights blob. Never reads the multi-GB weights blob itself;
+/// revision sha + graph/tokenizer hashes + size pin the identity.
+/// `None` = cache not found (honest unknown, never guessed).
+///
+/// T-DSH-54: el sha256 del grafo (1,34 GB en mxbai, con los pesos inline) se
+/// cachea en `<DATA_DIR>/fingerprint_cache.json` con clave (ruta, tamaño,
+/// mtime). El FORMATO de la huella no cambia: solo se evita re-leer el fichero
+/// cuando sus metadatos no han cambiado. `compute_engine_fingerprint_from_snapshot`
+/// permite testear sin el caché real de fastembed.
 pub(crate) fn compute_engine_fingerprint(model_type: &str, dimension: u32) -> Option<String> {
     let snapshot = find_fastembed_snapshot(model_type)?;
-    let graph = locate_onnx_graph(&snapshot)?;
-    let graph_hash = sha256_file(&graph)?;
-    let tokenizer_hash = sha256_file(&snapshot.join("tokenizer.json"))
+    let cache_path = fingerprint_cache_path();
+    compute_engine_fingerprint_from_snapshot(&snapshot, model_type, dimension, Some(&cache_path))
+}
+
+/// Núcleo de `compute_engine_fingerprint`, con caché opcional (tests: `None`
+/// = hash directo, sin tocar disco salvo los ficheros del snapshot).
+fn compute_engine_fingerprint_from_snapshot(
+    snapshot: &std::path::Path,
+    model_type: &str,
+    dimension: u32,
+    cache_path: Option<&std::path::Path>,
+) -> Option<String> {
+    let graph = locate_onnx_graph(snapshot)?;
+    let graph_hash = sha256_file_cached(&graph, cache_path)?;
+    let tokenizer_hash = sha256_file_cached(&snapshot.join("tokenizer.json"), cache_path)
         .unwrap_or_else(|| "absent".to_string());
     let data_size = graph
         .parent()
@@ -1692,5 +1841,130 @@ mod tests {
         // Newer minor: ort only WARNS (Ordering::Greater), never panics → compatible.
         assert!(ort_version_compatible(&format!("1.{}.0", ort::MINOR_VERSION + 1)));
         assert!(ort_version_compatible("1.99.9"));
+    }
+
+    // ─── T-DSH-54: caché de huellas (sin modelos reales ni red) ───────────
+
+    fn cache_test_file(dir: &std::path::Path, name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).expect("write test file");
+        path
+    }
+
+    /// Fuerza una entrada con el sha256 que queramos para la MISMA
+    /// (ruta, tamaño, mtime): si la caché se usa, ese valor debe salir.
+    fn plant_cache_entry(
+        cache_path: &std::path::Path,
+        file: &std::path::Path,
+        sha256: &str,
+    ) -> (String, u64, u64) {
+        let key = fingerprint_cache_key(file).expect("cache key");
+        let mut cache = read_fingerprint_cache(cache_path);
+        cache.entries.insert(
+            key.0.clone(),
+            FingerprintCacheEntry { size: key.1, mtime_ns: key.2, sha256: sha256.to_string() },
+        );
+        write_fingerprint_cache(cache_path, &cache);
+        key
+    }
+
+    #[test]
+    fn fingerprint_cache_hit_returns_stored_hash_without_rehashing() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = cache_test_file(dir.path(), "model.onnx", b"pesos falsos del grafo");
+        let cache_path = dir.path().join("data").join(FINGERPRINT_CACHE_FILE);
+
+        // Primera llamada: hashea y escribe la entrada.
+        let real = sha256_file_cached(&file, Some(&cache_path)).unwrap();
+        assert_eq!(real, sha256_file(&file).unwrap());
+        assert!(read_fingerprint_cache(&cache_path).entries.len() == 1);
+
+        // Saboteamos la entrada con el mismo (size, mtime) y otro sha: si
+        // reutiliza la caché, devuelve el centinela sin re-hashear.
+        let (key, _, _) = plant_cache_entry(&cache_path, &file, "sentinel-cache-hit");
+        assert_eq!(sha256_file_cached(&file, Some(&cache_path)).unwrap(), "sentinel-cache-hit");
+        assert!(read_fingerprint_cache(&cache_path).entries.contains_key(&key));
+    }
+
+    #[test]
+    fn fingerprint_cache_invalidates_when_size_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = cache_test_file(dir.path(), "model.onnx", b"corto");
+        let cache_path = dir.path().join("data").join(FINGERPRINT_CACHE_FILE);
+        let _ = sha256_file_cached(&file, Some(&cache_path)).unwrap();
+        plant_cache_entry(&cache_path, &file, "sentinel-size");
+
+        // Cambia el contenido y el tamaño: la clave ya no coincide.
+        std::fs::write(&file, b"contenido distinto y bastante mas largo").unwrap();
+        let recomputed = sha256_file_cached(&file, Some(&cache_path)).unwrap();
+        assert_ne!(recomputed, "sentinel-size");
+        assert_eq!(recomputed, sha256_file(&file).unwrap());
+    }
+
+    #[test]
+    fn fingerprint_cache_invalidates_when_mtime_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = cache_test_file(dir.path(), "model.onnx", b"mismo contenido");
+        let cache_path = dir.path().join("data").join(FINGERPRINT_CACHE_FILE);
+        let real = sha256_file_cached(&file, Some(&cache_path)).unwrap();
+        plant_cache_entry(&cache_path, &file, "sentinel-mtime");
+
+        // Cambiar SOLO el mtime (mismo tamaño y contenido) debe invalidar.
+        let handle = std::fs::OpenOptions::new().write(true).open(&file).unwrap();
+        let future = std::time::SystemTime::now() + std::time::Duration::from_secs(120);
+        handle
+            .set_times(std::fs::FileTimes::new().set_modified(future))
+            .expect("set mtime");
+        drop(handle);
+
+        let recomputed = sha256_file_cached(&file, Some(&cache_path)).unwrap();
+        assert_ne!(recomputed, "sentinel-mtime", "mtime distinto -> recalcula");
+        assert_eq!(recomputed, real, "el sha256 real no cambia (solo el mtime)");
+    }
+
+    #[test]
+    fn fingerprint_cache_corrupt_json_recomputes_and_rewrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = cache_test_file(dir.path(), "model.onnx", b"grafo");
+        let cache_path = dir.path().join("data").join(FINGERPRINT_CACHE_FILE);
+        std::fs::create_dir_all(cache_path.parent().unwrap()).unwrap();
+        std::fs::write(&cache_path, b"{ esto no es json ").unwrap();
+
+        let hash = sha256_file_cached(&file, Some(&cache_path)).unwrap();
+        assert_eq!(hash, sha256_file(&file).unwrap());
+        // El JSON corrupto se sustituye por uno válido con la entrada nueva.
+        let key = fingerprint_cache_key(&file).unwrap();
+        let reloaded = read_fingerprint_cache(&cache_path);
+        assert_eq!(reloaded.version, FINGERPRINT_CACHE_VERSION);
+        assert_eq!(reloaded.entries.get(&key.0).map(|e| e.sha256.clone()), Some(hash));
+    }
+
+    #[test]
+    fn engine_fingerprint_is_identical_with_and_without_cache() {
+        // Snapshot falso con el layout onnx/model.onnx (sin modelos reales).
+        let dir = tempfile::tempdir().unwrap();
+        let snapshot = dir.path().join("snapshots").join("rev-test");
+        std::fs::create_dir_all(snapshot.join("onnx")).unwrap();
+        std::fs::write(snapshot.join("onnx").join("model.onnx"), b"grafo falso").unwrap();
+        std::fs::write(snapshot.join("tokenizer.json"), b"{\"tok\":1}").unwrap();
+        let cache_path = dir.path().join("data").join(FINGERPRINT_CACHE_FILE);
+
+        let without_cache = compute_engine_fingerprint_from_snapshot(
+            &snapshot, "mxbai-embed-large", 1024, None,
+        )
+        .expect("huella sin cache");
+        let with_cache_1 = compute_engine_fingerprint_from_snapshot(
+            &snapshot, "mxbai-embed-large", 1024, Some(&cache_path),
+        )
+        .expect("huella con cache (1)");
+        let with_cache_2 = compute_engine_fingerprint_from_snapshot(
+            &snapshot, "mxbai-embed-large", 1024, Some(&cache_path),
+        )
+        .expect("huella con cache (2)");
+
+        assert_eq!(without_cache, with_cache_1, "la caché no cambia la huella");
+        assert_eq!(with_cache_1, with_cache_2, "segunda llamada = caché caliente");
+        assert!(without_cache.starts_with("sha256:"), "formato de huella intacto");
+        assert_eq!(without_cache.len(), "sha256:".len() + 64);
     }
 }
