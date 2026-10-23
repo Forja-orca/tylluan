@@ -33,6 +33,10 @@ pub struct JudgeTelemetry {
     transport_errors: AtomicU64,
     parse_errors: AtomicU64,
     busy_skips: AtomicU64,
+    /// D-36: juicios que NO llegaron al modelo porque la cache ya tenia el
+    /// veredicto del mismo prompt+gramatica dentro de la ventana. No son
+    /// llamadas: se cuentan aparte para que `/health` muestre el ahorro.
+    dedup_hits: AtomicU64,
     in_flight: AtomicU64,
     total_ms: AtomicU64,
     max_ms: AtomicU64,
@@ -83,6 +87,12 @@ impl JudgeTelemetry {
         self.busy_skips.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// D-36: un juicio resuelto por la cache de veredictos, sin llamar al
+    /// modelo. Se cuenta aparte de `calls` (que solo mide HTTP real).
+    pub fn note_dedup_hit(&self) {
+        self.dedup_hits.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub fn enter(&self) -> InFlight<'_> {
         self.in_flight.fetch_add(1, Ordering::Relaxed);
         InFlight(self)
@@ -103,6 +113,9 @@ impl JudgeTelemetry {
     }
     pub fn busy_skips(&self) -> u64 {
         self.busy_skips.load(Ordering::Relaxed)
+    }
+    pub fn dedup_hits(&self) -> u64 {
+        self.dedup_hits.load(Ordering::Relaxed)
     }
     pub fn in_flight(&self) -> u64 {
         self.in_flight.load(Ordering::Relaxed)
@@ -143,6 +156,8 @@ impl JudgeTelemetry {
                 "busy_skip": self.busy_skips(),
             },
             "in_flight": self.in_flight(),
+            "dedup_hits": self.dedup_hits(),
+            "dedup_entries": crate::security::coherence_gate::judge_cache_entries(),
             "latency_ms_avg": self.avg_ms(),
             "latency_ms_max": self.max_ms(),
             "latency_buckets": buckets,
@@ -237,6 +252,17 @@ mod tests {
         let json = t.to_json();
         assert_eq!(json["by_kind"]["backend_error"], 1);
         assert_eq!(json["by_kind"]["http"], 0, "no se mezcla con http");
+    }
+
+    #[test]
+    fn dedup_hits_are_counted_apart_from_model_calls() {
+        let t = JudgeTelemetry::default();
+        t.note_dedup_hit();
+        t.note_dedup_hit();
+        assert_eq!(t.dedup_hits(), 2);
+        assert_eq!(t.calls(), 0, "un acierto de cache no llega al modelo");
+        assert_eq!(t.failures(), 0);
+        assert_eq!(t.to_json()["dedup_hits"], 2);
     }
 
     #[test]

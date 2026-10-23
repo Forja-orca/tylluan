@@ -1432,6 +1432,18 @@ pub struct SecurityConfig {
     /// No cambia el modelo por defecto del guild (decision de Jose, M-BUFFY-3).
     #[serde(default)]
     pub judge_model: Option<String>,
+    /// D-36: ventana (segundos) durante la cual se reutiliza el veredicto del
+    /// juez para el mismo contenido (hash de prompt + gramatica) en vez de
+    /// volver a llamar al modelo. `0` desactiva el dedupe. Default 60 s:
+    /// cubre reintentos y escrituras duplicadas sin congelar un veredicto
+    /// durante la vida del nodo.
+    #[serde(default = "default_judge_dedup_window_secs")]
+    pub judge_dedup_window_secs: u64,
+    /// D-36: maximo de veredictos guardados en la cache en memoria. Default
+    /// 256; se recortan primero los mas antiguos. La cache nunca guarda el
+    /// prompt ni el contenido, solo el hash y el veredicto.
+    #[serde(default = "default_judge_dedup_max_entries")]
+    pub judge_dedup_max_entries: usize,
 }
 
 fn default_encrypt_at_rest() -> bool {
@@ -1442,6 +1454,8 @@ fn default_intent_filter() -> bool { true }
 fn default_capabilities_enforce() -> bool { false }
 fn default_coherence_gate_hybrid_enabled() -> bool { false }
 fn default_mark_uploads_untrusted() -> bool { false }
+fn default_judge_dedup_window_secs() -> u64 { 60 }
+fn default_judge_dedup_max_entries() -> usize { 256 }
 
 impl Default for SecurityConfig {
     fn default() -> Self {
@@ -1454,6 +1468,8 @@ impl Default for SecurityConfig {
             coherence_gate_hybrid_enabled: default_coherence_gate_hybrid_enabled(),
             mark_uploads_untrusted: default_mark_uploads_untrusted(),
             judge_model: None,
+            judge_dedup_window_secs: default_judge_dedup_window_secs(),
+            judge_dedup_max_entries: default_judge_dedup_max_entries(),
         }
     }
 }
