@@ -161,7 +161,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
 
     // Build default repo map for test
     let cwd = std::env::current_dir().unwrap_or_default();
-    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
+    let repo_map = tylluan_kernel::repo_map::RepoMapHandle::ready(tylluan_kernel::repo_map::RepoMap::build(&cwd));
     Arc::new(HttpState {
         task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
@@ -350,7 +350,7 @@ async fn dst_test_state(
 
     // Build default repo map for test
     let cwd = std::env::current_dir().unwrap_or_default();
-    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
+    let repo_map = tylluan_kernel::repo_map::RepoMapHandle::ready(tylluan_kernel::repo_map::RepoMap::build(&cwd));
     Arc::new(HttpState {
         task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),

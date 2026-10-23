@@ -254,7 +254,7 @@ async fn build_minimal_state() -> Arc<HttpState> {
     let config = Arc::new(RwLock::new(config));
 
     let cwd = std::env::current_dir().unwrap_or_default();
-    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
+    let repo_map = tylluan_kernel::repo_map::RepoMapHandle::ready(tylluan_kernel::repo_map::RepoMap::build(&cwd));
     let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new(silva.clone()));
 
     Arc::new(HttpState {

@@ -204,6 +204,66 @@ impl RepoMap {
     }
 }
 
+/// D-39: estado del mapa cuando el HTTP ya está aceptando peticiones.
+///
+/// El arranque abre el puerto primero y construye el mapa en segundo plano;
+/// hasta que termina, las rutas que lo necesitan responden 503 con
+/// «repo map en construccion» en vez de bloquear el arranque. `failed` evita
+/// que `/health` diga `building` para siempre si el build paniquea.
+#[derive(Debug)]
+enum RepoMapSlot {
+    Building,
+    Ready(Arc<RepoMap>),
+    Failed(String),
+}
+
+#[derive(Debug)]
+pub struct RepoMapHandle {
+    slot: std::sync::RwLock<RepoMapSlot>,
+}
+
+impl RepoMapHandle {
+    pub fn building() -> Arc<Self> {
+        Arc::new(Self { slot: std::sync::RwLock::new(RepoMapSlot::Building) })
+    }
+
+    pub fn ready(map: Arc<RepoMap>) -> Arc<Self> {
+        Arc::new(Self { slot: std::sync::RwLock::new(RepoMapSlot::Ready(map)) })
+    }
+
+    pub fn set_ready(&self, map: Arc<RepoMap>) {
+        *self.slot.write().unwrap_or_else(|e| e.into_inner()) = RepoMapSlot::Ready(map);
+    }
+
+    pub fn set_failed(&self, reason: impl Into<String>) {
+        *self.slot.write().unwrap_or_else(|e| e.into_inner()) = RepoMapSlot::Failed(reason.into());
+    }
+
+    /// `Some` solo cuando el mapa está listo; nunca bloquea.
+    pub fn get(&self) -> Option<Arc<RepoMap>> {
+        match &*self.slot.read().unwrap_or_else(|e| e.into_inner()) {
+            RepoMapSlot::Ready(map) => Some(map.clone()),
+            _ => None,
+        }
+    }
+
+    /// `"building"` | `"ok"` | `"failed"` — para `/health`.
+    pub fn status(&self) -> &'static str {
+        match &*self.slot.read().unwrap_or_else(|e| e.into_inner()) {
+            RepoMapSlot::Building => "building",
+            RepoMapSlot::Ready(_) => "ok",
+            RepoMapSlot::Failed(_) => "failed",
+        }
+    }
+
+    pub fn failure(&self) -> Option<String> {
+        match &*self.slot.read().unwrap_or_else(|e| e.into_inner()) {
+            RepoMapSlot::Failed(reason) => Some(reason.clone()),
+            _ => None,
+        }
+    }
+}
+
 fn count_lines(path: &Path) -> usize {
     // No leer enteros los binarios / bases de datos / logs gigantes (D-39a).
     if std::fs::metadata(path).map(|m| m.len() > MAX_LINE_COUNT_BYTES).unwrap_or(false) {
@@ -406,5 +466,33 @@ mod tests {
         assert!(idents.contains(&"async fn fetch".to_string()));
         assert!(idents.contains(&"fn helper".to_string()));
         assert!(idents.contains(&"async fn load".to_string()));
+    }
+
+    #[test]
+    fn test_repo_map_handle_starts_building_and_becomes_ready() {
+        let handle = RepoMapHandle::building();
+        assert_eq!(handle.status(), "building");
+        assert!(handle.get().is_none());
+        assert!(handle.failure().is_none());
+
+        let dir = tempfile::tempdir().unwrap();
+        let map = RepoMap::build(dir.path());
+        handle.set_ready(map.clone());
+        assert_eq!(handle.status(), "ok");
+        assert!(handle.get().is_some());
+        assert!(handle.failure().is_none());
+
+        let ready = RepoMapHandle::ready(map);
+        assert_eq!(ready.status(), "ok");
+        assert!(ready.get().is_some());
+    }
+
+    #[test]
+    fn test_repo_map_handle_failure_is_visible() {
+        let handle = RepoMapHandle::building();
+        handle.set_failed("boom");
+        assert_eq!(handle.status(), "failed");
+        assert_eq!(handle.failure().as_deref(), Some("boom"));
+        assert!(handle.get().is_none());
     }
 }

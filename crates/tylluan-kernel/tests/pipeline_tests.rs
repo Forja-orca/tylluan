@@ -66,7 +66,7 @@ async fn test_state() -> Arc<HttpState> {
          .unwrap_or_else(|_| Arc::new(RwLock::new(tylluan_kernel::config::TylluanConfig::default())));
     // Build default repo map for test
     let cwd = std::env::current_dir().unwrap_or_default();
-    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
+    let repo_map = tylluan_kernel::repo_map::RepoMapHandle::ready(tylluan_kernel::repo_map::RepoMap::build(&cwd));
     Arc::new(HttpState {
         task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().unwrap()),
         version: "test".to_string(),

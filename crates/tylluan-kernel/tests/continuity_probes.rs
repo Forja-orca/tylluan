@@ -91,7 +91,7 @@ async fn try_build_state(dir: &Path, tag: &str) -> anyhow::Result<Arc<HttpState>
     let (broadcast_tx, _) = tokio::sync::broadcast::channel(10);
     let (download_tx, _) = tokio::sync::broadcast::channel(10);
     let cwd = std::env::current_dir().unwrap_or_default();
-    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
+    let repo_map = tylluan_kernel::repo_map::RepoMapHandle::ready(tylluan_kernel::repo_map::RepoMap::build(&cwd));
 
     Ok(Arc::new(HttpState {
         task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory()?),

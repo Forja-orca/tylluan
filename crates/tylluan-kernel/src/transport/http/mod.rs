@@ -26,7 +26,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::sync::RwLock;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 use std::time::Instant;
 use dashmap::DashMap;
 use tower_http::cors::CorsLayer;
@@ -137,7 +137,7 @@ pub struct HttpState {
     pub dispatch_router: Arc<std::sync::Mutex<tylluan_link::dispatch::DispatchRouter>>,
     pub dispatch_queue: Arc<std::sync::Mutex<DispatchQueue>>,
     pub p2p_pool: Arc<tokio::sync::Mutex<P2pSessionPool>>,
-    pub repo_map: Arc<crate::repo_map::RepoMap>,
+    pub repo_map: Arc<crate::repo_map::RepoMapHandle>,
     pub a2a_task_manager: Arc<a2a::A2aTaskManager>,
     /// A2A outbound: configured external agents (persisted in SilvaDB) and the
     /// HTTP client used to reach them. F2 — see crates/tylluan-kernel/src/transport/http/a2a_client.rs
@@ -297,10 +297,53 @@ fn default_export_limit() -> usize { 5000 }
 
 // --- Initialization ---
 
+/// D-38: bindea el puerto configurado, reintentando mientras esté ocupado.
+/// Nunca cae a otro puerto: al agotar `retry_secs`, devuelve un error claro.
+async fn bind_http_listener(
+    host: &str,
+    port: u16,
+    retry_secs: u64,
+) -> std::io::Result<tokio::net::TcpListener> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(retry_secs);
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        match tokio::net::TcpListener::bind((host, port)).await {
+            Ok(listener) => {
+                if attempt > 1 {
+                    info!("🔌 Puerto {} libre tras {} intentos", port, attempt);
+                }
+                return Ok(listener);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AddrInUse,
+                        format!(
+                            "puerto {host}:{port} ocupado tras {attempt} intentos ({retry_secs}s): {e}. \
+                             No arranco en otro puerto (D-38). Cierra el proceso que lo ocupa o cambia \
+                             [nexus].port / sube [nexus].port_retry_secs."
+                        ),
+                    ));
+                }
+                warn!(
+                    "🔌 bind {host}:{port} intento {attempt}: {e}; reintento en 500 ms ({:.1}s restantes)",
+                    remaining.as_secs_f64()
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(500).min(remaining)).await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 pub async fn start_http_server(
     host: &str,
     port: u16,
+    port_retry_secs: u64,
     state: Arc<HttpState>,
+    bound_tx: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = build_router(state);
     
@@ -314,31 +357,31 @@ pub async fn start_http_server(
                     old_port = Some(p as u16);
                 }
 
-    let listener = match tokio::net::TcpListener::bind(format!("{host}:{port}")).await {
-        Ok(l) => l,
-        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
-            info!("⚠️ Port {} is already in use. Searching for a free port...", port);
-            let mut bound_listener = None;
-            for candidate_port in (port + 1)..=(port + 100) {
-                let candidate_addr = format!("{host}:{candidate_port}");
-                match tokio::net::TcpListener::bind(&candidate_addr).await {
-                    Ok(l) => {
-                        info!("🎯 Found free port to bind: {}", candidate_port);
-                        bound_listener = Some(l);
-                        break;
-                    }
-                    Err(_) => continue,
-                }
-            }
-            if let Some(l) = bound_listener {
-                l
-            } else {
-                info!("⚠️ No candidate ports in range free. Letting OS assign free port...");
-                tokio::net::TcpListener::bind(format!("{host}:0")).await?
-            }
+    // D-38: si hay un kernel anterior, pedirle el shutdown ANTES de bindear.
+    // El arranque ya no elige otro puerto en silencio: reintenta el puerto
+    // configurado durante `port_retry_secs` y, si sigue ocupado, falla con un
+    // error claro. `active_port.json` solo se usa para localizar al kernel
+    // anterior, y solo dentro del rango que este kernel pudo haber bindeado
+    // (configurado..configurado+100, por el fallback histórico).
+    let own_port_range = port..=(port.saturating_add(100));
+    if let Some(op) = old_port
+        && op != 0
+        && own_port_range.contains(&op)
+    {
+        info!("🔌 Pidiendo shutdown al kernel anterior en :{} (active_port.json)...", op);
+        let client = reqwest::Client::new();
+        let shutdown_url = format!("http://127.0.0.1:{op}/api/v1/admin/shutdown");
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            client.post(&shutdown_url).header("host", "127.0.0.1").send(),
+        ).await {
+            Ok(Ok(resp)) => info!("🔌 Shutdown :{} -> HTTP {}", op, resp.status()),
+            Ok(Err(e)) => warn!("🔌 No pude contactar el kernel anterior en :{}: {e}", op),
+            Err(_) => warn!("🔌 Timeout esperando el shutdown del kernel anterior en :{}", op),
         }
-        Err(e) => return Err(e.into()),
-    };
+    }
+
+    let listener = bind_http_listener(host, port, port_retry_secs).await?;
 
     let bound_addr = listener.local_addr()?;
     let bound_port = bound_addr.port();
@@ -354,34 +397,12 @@ pub async fn start_http_server(
         info!("📝 Written active port {} to data/active_port.json", bound_port);
     }
 
-    // Now that the new kernel is fully up and running on the new port,
-    // gracefully shutdown the old kernel so the proxy starts routing to the new one.
-    // Safety: only ever hot-swap-shutdown a port this same kernel could
-    // plausibly have bound to previously -- the configured port plus the
-    // fallback range used above (port..=port+100) when the configured port
-    // was already taken. A stale/corrupted active_port.json must never let
-    // this kernel send a shutdown signal to an unrelated process on some
-    // other port (e.g. another local service, or anything else on the host).
-    //
-    // This is deliberately derived from `port` (the configured value) rather
-    // than a hardcoded range: Tylluan's real shipped default is :47004 (see
-    // tylluan.example.toml) -- a fixed "Tylluan always uses 4000-4099" range was wrong and
-    // would have silently broken zero-downtime restarts for any user running
-    // the default config, since :47004 fell outside that hardcoded window.
-    let own_port_range = port..=(port.saturating_add(100));
-    if let Some(op) = old_port
-        && op != bound_port
-        && own_port_range.contains(&op) {
-            tokio::spawn(async move {
-                info!("🔌 Sending graceful shutdown signal to previous kernel on port {}...", op);
-                let client = reqwest::Client::new();
-                let shutdown_url = format!("http://127.0.0.1:{op}/api/v1/admin/shutdown");
-                let _ = tokio::time::timeout(
-                    std::time::Duration::from_secs(3),
-                    client.post(&shutdown_url).header("host", "127.0.0.1").send()
-                ).await;
-            });
-        }
+    // D-39: el puerto ya está bound; despertar al constructor del repo map.
+    // Se hace aquí (no antes) para que un fallo de bind no deje un mapa
+    // construido sin servidor que lo use.
+    if let Some(tx) = bound_tx {
+        let _ = tx.send(());
+    }
 
     axum::serve(
         listener,
@@ -398,6 +419,7 @@ pub async fn start_http_server(
 pub async fn start_http_server_with_download(
     host: &str,
     port: u16,
+    port_retry_secs: u64,
     auth_token: Option<String>,
     dev_mode: bool,
     server: Option<Arc<tokio::sync::RwLock<TylluanServer>>>,
@@ -457,14 +479,12 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
 
     let p2p_pool = Arc::new(tokio::sync::Mutex::new(P2pSessionPool::new(16, 300)));
 
-    let repo_map = {
-        let root = find_workspace_root();
-        tokio::task::spawn_blocking(move || {
-            crate::repo_map::RepoMap::build(&root)
-        }).await.unwrap_or_else(|_| {
-            crate::repo_map::RepoMap::build(&std::path::PathBuf::from("."))
-        })
-    };
+    // D-39: el mapa NO se construye aquí. Antes bloqueaba el bind del HTTP
+    // (946 s medidos con el árbol real en el log del 23-oct) y el kernel no
+    // aceptaba conexiones hasta terminar. Ahora se publica el estado
+    // `building` y la tarea de fondo lo construye cuando el puerto ya está
+    // abierto (ver el spawn antes de `start_http_server`).
+    let repo_map = crate::repo_map::RepoMapHandle::building();
 
     let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new(silva.clone()));
     let a2a_agents = Arc::new(a2a_client::A2aAgentStore::new(silva.clone()));
@@ -580,8 +600,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         agents_contract,
     });
 
-    info!("🗺️  Repo map built: {} files, {} dirs, {} lines ({}ms)",
-        state.repo_map.total_files, state.repo_map.total_dirs, state.repo_map.total_lines, state.repo_map.build_duration_ms);
+    info!("🗺️  Repo map: building in background (the HTTP port opens first)");
 
     // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.
     {
@@ -1040,7 +1059,36 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     });
     // ------------------------------------------
 
-    start_http_server(host, port, state)
+    // D-39: construir el repo map DESPUÉS de que el listener esté bound.
+    // Antes se construía en línea antes de `start_http_server` y bloqueaba el
+    // arranque completo (946 s con el árbol real; ver log del 23-oct). La
+    // señal `bound_tx` la envía `start_http_server` tras escribir
+    // `data/active_port.json`.
+    let (bound_tx, bound_rx) = tokio::sync::oneshot::channel::<()>();
+    let repo_map_task = state.repo_map.clone();
+    tokio::spawn(async move {
+        if bound_rx.await.is_err() {
+            return;
+        }
+        let root = find_workspace_root();
+        match tokio::task::spawn_blocking(move || crate::repo_map::RepoMap::build(&root)).await {
+            Ok(map) => {
+                info!(
+                    "🗺️  Repo map built: {} files, {} dirs, {} lines ({}ms)",
+                    map.total_files, map.total_dirs, map.total_lines, map.build_duration_ms
+                );
+                repo_map_task.set_ready(map);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "🗺️  Repo map build failed: {e}; /api/v1/repo-map responderá 503"
+                );
+                repo_map_task.set_failed(e.to_string());
+            }
+        }
+    });
+
+    start_http_server(host, port, port_retry_secs, state, Some(bound_tx))
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))
 }
@@ -1379,6 +1427,10 @@ pub struct HealthResponse {
     pub status: String,
     pub version: String,
     pub commit: String,
+    /// D-39: `"building"` | `"ok"` | `"failed"`. El estado del mapa no bloquea
+    /// el arranque; este campo permite distinguir «listo» de «aún construyendo»
+    /// sin abrir `/health?verbose=true`.
+    pub repo_map: String,
 }
 
 async fn health_handler(
@@ -1421,6 +1473,10 @@ async fn health_handler(
         // tabla de contenido y por eso mentía: siempre coincidía.
         let fts = state.silva.fts_desync().await.unwrap_or_default();
 
+        // D-39: el repo map se construye en segundo plano tras abrir el puerto.
+        let repo_map = state.repo_map.get();
+        let repo_map_status = state.repo_map.status();
+
         let overall = if !ready { "warming_up" }
             else if embeddings_loaded && active_guilds > 0 { "healthy" }
             else if embeddings_loaded || active_guilds > 0 { "degraded" }
@@ -1433,6 +1489,16 @@ async fn health_handler(
             "boot_ready": ready,
             "components": {
                 "kernel": { "ok": ready },
+                // D-39: mapa del repo — se construye tras abrir el puerto.
+                "repo_map": {
+                    "ok": repo_map.is_some(),
+                    "status": repo_map_status,
+                    "files": repo_map.as_ref().map(|m| m.total_files).unwrap_or(0),
+                    "dirs": repo_map.as_ref().map(|m| m.total_dirs).unwrap_or(0),
+                    "lines": repo_map.as_ref().map(|m| m.total_lines).unwrap_or(0),
+                    "build_duration_ms": repo_map.as_ref().map(|m| m.build_duration_ms).unwrap_or(0),
+                    "error": state.repo_map.failure(),
+                },
                 "embeddings": { "ok": embeddings_loaded, "model": embedding_model },
                 "reranker":   { "ok": reranker_loaded, "model": "jina-reranker-v1-turbo-en" },
                 "silva":      { "ok": node_count > 0, "nodes": node_count, "edges": edge_count },
@@ -1463,11 +1529,22 @@ async fn health_handler(
         }))).into_response();
     }
 
-    let status = if ready { "ok" } else { "warming_up" };
+    let repo_map_status = state.repo_map.status();
+    // D-39: `starting` = el kernel ya acepta peticiones pero el repo map sigue
+    // construyéndose; `ok` solo cuando ambos están listos. El campo `repo_map`
+    // expone el subestado aunque `status` ya sea `ok`.
+    let status = if !ready {
+        "warming_up"
+    } else if repo_map_status == "building" {
+        "starting"
+    } else {
+        "ok"
+    };
     let resp = HealthResponse {
         status: status.to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         commit: env!("TYLLUAN_GIT_COMMIT").to_string(),
+        repo_map: repo_map_status.to_string(),
     };
     (StatusCode::OK, Json(resp)).into_response()
 }
@@ -1721,5 +1798,31 @@ mod tests {
         let json = r#"{"node_id":"x","addr":"127.0.0.1:1","capabilities":[],"clock":1}"#;
         let entry: tylluan_link::gossip::GossipEntry = serde_json::from_str(json).unwrap();
         assert_eq!(entry.ed25519_pubkey, None);
+    }
+
+    #[tokio::test]
+    async fn test_bind_http_listener_fails_clear_when_port_occupied() {
+        let squatter = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = squatter.local_addr().unwrap().port();
+        let err = bind_http_listener("127.0.0.1", port, 0).await.unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("ocupado"), "mensaje poco claro: {msg}");
+        assert!(msg.contains(&port.to_string()), "falta el puerto: {msg}");
+        assert!(msg.contains("No arranco en otro puerto"), "falta la politica: {msg}");
+    }
+
+    #[tokio::test]
+    async fn test_bind_http_listener_retries_until_released() {
+        let squatter = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = squatter.local_addr().unwrap().port();
+        let release = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            drop(squatter);
+        });
+        let listener = bind_http_listener("127.0.0.1", port, 3)
+            .await
+            .expect("debe bindear cuando el puerto se libera");
+        assert_eq!(listener.local_addr().unwrap().port(), port);
+        release.await.unwrap();
     }
 }
