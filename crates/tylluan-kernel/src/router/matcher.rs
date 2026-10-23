@@ -227,10 +227,18 @@ impl GuildMatcher {
             .context("No ONNX model found. FastEmbed will auto-download on first use")?;
 
         let engine = EmbeddingEngine::load_with_device(&model_path, device)?;
+        self.install_engine(engine, allowed_guilds)
+    }
+
+    /// T-DSH-55: instala un motor YA CARGADO (el arranque lo carga en
+    /// `spawn_blocking` en paralelo con sparse/reranker) y pre-embebe las
+    /// descripciones de guilds. Mismo trabajo que la parte final de
+    /// `load_model_with_device`, sin recargar el modelo.
+    pub fn install_engine(&mut self, engine: EmbeddingEngine, allowed_guilds: Option<&[String]>) -> anyhow::Result<()> {
         let engine_arc = Arc::new(engine);
         *self.engine.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(engine_arc.clone());
         let engine_ref = engine_arc.as_ref();
-        
+
         let mut embeddings = Vec::new();
         for guild in &self.catalog {
             // If allowed_guilds specified, filter to those only (toaster-friendly)
@@ -245,7 +253,7 @@ impl GuildMatcher {
             let emb = engine_ref.embed(&guild.description)?;
             embeddings.push((guild.name.clone(), emb));
         }
-        
+
         self.set_embeddings(embeddings);
         Ok(())
     }

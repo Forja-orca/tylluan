@@ -793,6 +793,11 @@ pub fn resolve_onnx_thread_cap(configured: Option<usize>) -> Option<usize> {
 /// if the ONNX Runtime dynamic library is available, initializes the global
 /// ONNX Runtime thread pool with the specified intra-op threads and 1 inter-op thread.
 ///
+/// T-DSH-55: ¿ya se aplicó el cap/`ort::init` en el hilo principal? Evita que
+/// las cargas paralelas vuelvan a tocar el entorno a la vez.
+static ONNX_CAP_ALREADY_APPLIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Calling this multiple times is safe:
 /// - Environment variables (`ORT_NUM_THREADS`, `OMP_NUM_THREADS`, `RAYON_NUM_THREADS`) are set/updated.
 /// - The global ONNX Runtime thread pool is committed once via `ort::init().commit()`.
@@ -804,6 +809,14 @@ pub fn resolve_onnx_thread_cap(configured: Option<usize>) -> Option<usize> {
 /// inside `ort::api()`'s version check; 2026-10-12).
 pub fn apply_onnx_thread_cap(cap: Option<usize>) -> Option<usize> {
     let resolved = resolve_onnx_thread_cap(cap);
+    // T-DSH-55: el arranque llama a esto UNA vez en el hilo principal ANTES de
+    // lanzar las 3 cargas ONNX en paralelo. Las llamadas internas de cada
+    // `load_*` (cap=None) deben ser no-op: `std::env::set_var` concurrente con
+    // lecturas de entorno de fastembed/ort no es seguro. Los tests que pasan
+    // un cap explícito (Some) siguen aplicándolo siempre.
+    if cap.is_none() && ONNX_CAP_ALREADY_APPLIED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return resolved;
+    }
     if let Some(threads) = resolved {
         let threads_str = threads.to_string();
         // Propagate to standard multi-threading env vars for child libraries / OpenMP / Rayon.
@@ -850,6 +863,34 @@ pub fn apply_onnx_thread_cap(cap: Option<usize>) -> Option<usize> {
         }
     }
     resolved
+}
+
+/// Resultado de una carga de motor lanzada con `spawn_blocking` (T-DSH-55).
+///
+/// El arranque lanza las tres sesiones ONNX (sparse, dense, reranker) en
+/// paralelo y las espera con [`await_engine_load`]. Un fallo de UNA sesión
+/// no aborta el arranque: se convierte en `Failed(mensaje)` y el `main`
+/// mantiene EXACTAMENTE los caminos de degradación que ya tenía (sparse
+/// deshabilitado, BM25-only, fallback RRF). `JoinError` (panic de la tarea)
+/// también cae en `Failed`: antes el reranker lo cubría con `catch_unwind`
+/// (no-op bajo `panic="abort"`), y las otras dos abortaban igual que ahora.
+#[doc(hidden)]
+#[derive(Debug)]
+pub enum EngineLoadOutcome<T> {
+    Loaded(T),
+    Failed(String),
+}
+
+/// Espera una carga de motor de `spawn_blocking` y normaliza éxito/fallo.
+#[doc(hidden)]
+pub async fn await_engine_load<T: Send + 'static>(
+    handle: tokio::task::JoinHandle<Result<T, anyhow::Error>>,
+) -> EngineLoadOutcome<T> {
+    match handle.await {
+        Ok(Ok(engine)) => EngineLoadOutcome::Loaded(engine),
+        Ok(Err(e)) => EngineLoadOutcome::Failed(format!("{e:#}")),
+        Err(join_err) => EngineLoadOutcome::Failed(format!("tarea de carga de motor abortada: {join_err}")),
+    }
 }
 
 impl EmbeddingEngine {
@@ -1966,5 +2007,42 @@ mod tests {
         assert_eq!(with_cache_1, with_cache_2, "segunda llamada = caché caliente");
         assert!(without_cache.starts_with("sha256:"), "formato de huella intacto");
         assert_eq!(without_cache.len(), "sha256:".len() + 64);
+    }
+
+    // ─── T-DSH-55: resultado de cargas de motor en paralelo ───────────────
+
+    #[tokio::test]
+    async fn engine_load_outcome_maps_failures_to_the_same_degradation_path() {
+        // Éxito: el motor se propaga tal cual.
+        let ok = tokio::task::spawn_blocking(|| Ok::<u32, anyhow::Error>(7));
+        match await_engine_load(ok).await {
+            EngineLoadOutcome::Loaded(v) => assert_eq!(v, 7),
+            EngineLoadOutcome::Failed(e) => panic!("éxito inesperado: {e}"),
+        }
+
+        // Err de carga: Failed con el mensaje (main mantiene su warn/log/fallback).
+        let err = tokio::task::spawn_blocking(|| Err::<u32, anyhow::Error>(anyhow::anyhow!("modelo no disponible")));
+        match await_engine_load(err).await {
+            EngineLoadOutcome::Failed(msg) => assert!(msg.contains("modelo no disponible")),
+            EngineLoadOutcome::Loaded(_) => panic!("una carga fallida no debe pasar por éxito"),
+        }
+
+        // Panic de la tarea (JoinError): degradación, nunca propagación al arranque.
+        let panicked = tokio::task::spawn_blocking(
+            || -> Result<u32, anyhow::Error> { panic!("ort panic simulado") },
+        );
+        match await_engine_load(panicked).await {
+            EngineLoadOutcome::Failed(msg) => assert!(msg.contains("abortada"), "mensaje: {msg}"),
+            EngineLoadOutcome::Loaded(_) => panic!("un panic no debe propagarse como éxito"),
+        }
+
+        // El fallo de una sesión no contamina a las otras dos.
+        let a = tokio::task::spawn_blocking(|| Ok::<u8, anyhow::Error>(1));
+        let b = tokio::task::spawn_blocking(|| Err::<u8, anyhow::Error>(anyhow::anyhow!("sin sparse")));
+        let c = tokio::task::spawn_blocking(|| Ok::<u8, anyhow::Error>(3));
+        let (ra, rb, rc) = tokio::join!(await_engine_load(a), await_engine_load(b), await_engine_load(c));
+        assert!(matches!(ra, EngineLoadOutcome::Loaded(1)));
+        assert!(matches!(rb, EngineLoadOutcome::Failed(_)));
+        assert!(matches!(rc, EngineLoadOutcome::Loaded(3)));
     }
 }

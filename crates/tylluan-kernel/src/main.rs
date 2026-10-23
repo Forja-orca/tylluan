@@ -12,7 +12,7 @@ use tylluan_kernel::registry::{guild_process::GuildRegistry, guild_list::LAZY_GU
 use tylluan_kernel::memory::{hybrid::HybridMemory, silva::SilvaDB, mailbox::Mailbox, coloquio::ColoquioDb, consensus::ConsensusEngine, agent_profile::AgentProfileStore, agent_memory::AgentMemoryManager};
 use tylluan_kernel::memory::agent_nodes::AgentNodeRouter;
 use tylluan_kernel::memory::silva::nodes::build_contextual_text;
-use tylluan_kernel::router::{matcher::GuildMatcher, catalog::builtin_catalog, embeddings::{EmbeddingEngine, RerankEngine}};
+use tylluan_kernel::router::{matcher::GuildMatcher, catalog::builtin_catalog, embeddings::{EmbeddingEngine, RerankEngine, SparseEngine, EngineLoadOutcome, await_engine_load, apply_onnx_thread_cap}};
 use tylluan_kernel::doctor::Doctor;
 use tylluan_kernel::guard::GuardedTask;
 use tylluan_kernel::curriculum::CurriculumLearner;
@@ -726,17 +726,78 @@ async fn main() -> anyhow::Result<()> {
     }
     mailbox.init().await?;
 
-    // ─── Learned-sparse retrieval source (opt-in) ───────────────────
-    // Loads a second ONNX model (~1GB RAM). Failure is non-fatal: search_hybrid
-    // keeps running with the pre-existing 3-source fusion.
-    if config.silva.hybrid_sparse_enabled {
-        match tylluan_kernel::router::embeddings::SparseEngine::try_new(&config.inference.device) {
-            Ok(engine) => {
+    // ─── T-DSH-55: cargar las 3 sesiones ONNX en PARALELO (spawn_blocking) ──
+    // Antes se cargaban en serie: SparseEngine (BGE-M3), EmbeddingEngine
+    // (mxbai, con su fingerprint) y el reranker. Las tres lecturas de modelo
+    // son independientes, así que se lanzan ya y cada una se espera en su
+    // punto original de instalación: el ORDEN DE LOS RESULTADOS no cambia
+    // (sparse → dense → reranker) y los caminos de degradación son EXACTAMENTE
+    // los de antes (una sesión que falla no aborta el arranque). El thread
+    // pool/entorno de ONNX se prepara UNA vez aquí para no tocar `set_var`
+    // en paralelo desde las cargas.
+    apply_onnx_thread_cap(None);
+    let engine_device = config.inference.device.clone();
+
+    // 1) Sparse (opt-in por config).
+    let sparse_handle = if config.silva.hybrid_sparse_enabled {
+        let device = engine_device.clone();
+        Some(tokio::task::spawn_blocking(move || SparseEngine::try_new(&device)))
+    } else {
+        None
+    };
+
+    // 2) Dense (mxbai): solo si hay modelo configurado y está cacheado.
+    let dense_model_name = config.memory.embedding_model.clone();
+    let dense_model_path = EmbeddingEngine::model_path_from_config(&dense_model_name);
+    let dense_cached = dense_model_path
+        .as_ref()
+        .is_some_and(|_| fastembed_model_cached(&dense_model_name));
+    let needs_bg_download = dense_model_path.is_some() && !dense_cached;
+    if dense_model_path.is_none() {
+        info!("🧠 Embedding model disabled — using BM25-only retrieval");
+    } else if !dense_cached {
+        info!("📥 Model '{}' not cached — fast start with BM25, background download pending", dense_model_name);
+    } else {
+        info!("🧠 Pre-loading embedding model: {}", dense_model_name);
+    }
+    let dense_handle = match (dense_model_path.as_ref(), dense_cached) {
+        (Some(path), true) => {
+            let device = engine_device.clone();
+            let path = path.clone();
+            Some(tokio::task::spawn_blocking(move || {
+                EmbeddingEngine::load_with_device(&path, &device)
+            }))
+        }
+        _ => None,
+    };
+    let bg_model_name = if needs_bg_download { Some(dense_model_name.clone()) } else { None };
+
+    // 3) Reranker (Jina): misma condición que antes (ORT compatible + config).
+    // catch_unwind dentro de la tarea = misma defensa que tenía el `main`
+    // antes (no-op bajo panic="abort", pero convierte un panic en Err en debug).
+    let rerank_enabled =
+        onnx_runtime_ort_compatible() && config.silva.reranker_enabled;
+    let rerank_handle = if rerank_enabled {
+        let device = engine_device.clone();
+        Some(tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                RerankEngine::load_with_device(&device)
+            }))
+            .unwrap_or_else(|_| Err(anyhow::anyhow!("ort panicó al cargar el reranker")))
+        }))
+    } else {
+        None
+    };
+
+    // Sparse: se instala en su punto original (mismo log y misma degradación).
+    if let Some(handle) = sparse_handle {
+        match await_engine_load(handle).await {
+            EngineLoadOutcome::Loaded(engine) => {
                 silva.install_sparse_engine(std::sync::Arc::new(engine));
                 info!("🧠 Hybrid sparse source: enabled (BGE-M3 sparse fused as 4th RRF signal)");
             }
-            Err(e) => {
-                warn!("⚠️ SparseEngine failed to load (non-fatal, sparse source disabled): {e:#}");
+            EngineLoadOutcome::Failed(e) => {
+                warn!("⚠️ SparseEngine failed to load (non-fatal, sparse source disabled): {e}");
             }
         }
     }
@@ -834,27 +895,23 @@ async fn main() -> anyhow::Result<()> {
 
     let mut matcher = GuildMatcher::new(builtin_catalog());
     let _always_on = config.guilds.core.always_on.clone();
-    let needs_bg_download = if let Some(ref _model) = tylluan_kernel::router::embeddings::EmbeddingEngine::model_path_from_config(&config.memory.embedding_model) {
-        if !fastembed_model_cached(&config.memory.embedding_model) {
-            info!("📥 Model '{}' not cached — fast start with BM25, background download pending", config.memory.embedding_model);
-            true
-        } else {
-            let model_name = &config.memory.embedding_model;
-            info!("🧠 Pre-loading embedding model: {}", model_name);
-            // Surface load failures instead of swallowing them: an unknown
-            // embedding_model (typo) fails explicitly here with the valid
-            // value list and the kernel continues BM25-only — no silent
-            // BGE-M3 substitution, no download (embeddings.rs resolve_model).
-            if let Err(e) = tokio::task::block_in_place(|| matcher.load_model_with_device(None, model_name, &config.inference.device)) {
-                error!("❌ Embedding model '{}' failed to load: {e:#} — continuing BM25-only (semantic search disabled)", model_name);
+
+    // T-DSH-55: el motor dense ya se estaba cargando en paralelo; aquí solo se
+    // espera y se instala (pre-embebe las descripciones de guilds, el mismo
+    // trabajo que hacía `load_model_with_device` pero sin recargar el modelo).
+    // El camino de degradación es el de antes: error -> log y BM25-only.
+    if let Some(handle) = dense_handle {
+        match await_engine_load(handle).await {
+            EngineLoadOutcome::Loaded(engine) => {
+                if let Err(e) = matcher.install_engine(engine, None) {
+                    error!("❌ Embedding model '{}' failed to load: {e:#} — continuing BM25-only (semantic search disabled)", dense_model_name);
+                }
             }
-            false
+            EngineLoadOutcome::Failed(e) => {
+                error!("❌ Embedding model '{}' failed to load: {e} — continuing BM25-only (semantic search disabled)", dense_model_name);
+            }
         }
-    } else {
-        info!("🧠 Embedding model disabled — using BM25-only retrieval");
-        false
-    };
-    let bg_model_name = if needs_bg_download { Some(config.memory.embedding_model.clone()) } else { None };
+    }
     let matcher = matcher.with_curriculum(curriculum.clone());
     // Create shared HormoneSystem before Arc-wrapping so both matcher and server share the same instance
     let hormones_shared = Arc::new(std::sync::Mutex::new(HormoneSystem::new()));
@@ -892,31 +949,26 @@ async fn main() -> anyhow::Result<()> {
     // onnx_runtime_ort_compatible(), which mirrors every check ort::api()
     // makes (symbol → version → GetApi) and returns false instead of
     // panicking -- check-by-check mirror in router/embeddings.rs.
-    let reranker = if !onnx_runtime_ort_compatible() || !config.silva.reranker_enabled {
+    // T-DSH-55: el reranker ya se estaba cargando en paralelo (con el mismo
+    // catch_unwind dentro de la tarea). Aquí solo se espera: si estaba
+    // deshabilitado no hay handle y se conserva el warn original; si falló,
+    // el mismo mensaje de fallback a RRF de antes.
+    let reranker = if !rerank_enabled {
         warn!("⚠️ Reranker: ONNX Runtime dylib missing or incompatible with the pinned ort (checked before calling into ort) -- fallback a RRF puro");
         None
-    } else {
-        // catch_unwind kept as defense-in-depth for panics inside `ort` that
-        // slip past the compatibility probe (e.g. a dylib that passes every
-        // version check but is corrupt) -- it still works whenever this
-        // binary happens to run under panic=unwind (tests, a debug build),
-        // and is a no-op (costs nothing) when it doesn't.
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device))
-        })) {
-            Ok(Ok(r)) => {
+    } else if let Some(handle) = rerank_handle {
+        match await_engine_load(handle).await {
+            EngineLoadOutcome::Loaded(r) => {
                 info!("🔀 Reranker BGE listo");
                 Some(Arc::new(r))
             }
-            Ok(Err(e)) => {
-                warn!("⚠️ Reranker no disponible (fallback a RRF puro): {}", e);
-                None
-            }
-            Err(_) => {
-                warn!("⚠️ Reranker: ort panicó al cargar (ONNX Runtime ausente o incompatible) -- fallback a RRF puro");
+            EngineLoadOutcome::Failed(e) => {
+                warn!("⚠️ Reranker no disponible (fallback a RRF puro): {e}");
                 None
             }
         }
+    } else {
+        None
     };
 
     // ─── Hub Mailbox Listener (processes incoming agent proposals) ──────────
