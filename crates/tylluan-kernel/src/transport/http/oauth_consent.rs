@@ -255,6 +255,53 @@ impl ConsentStore {
         }
     }
 
+    /// D-29: un `consents.json` que no se puede parsear no se pisa en silencio.
+    ///
+    /// Antes, un fichero corrupto se cargaba como «todo revocado» (fail-closed
+    /// correcto) y la siguiente aprobación **lo sobrescribía**: el contenido
+    /// anterior desaparecía del disco sin copia. Ahora se conserva como
+    /// `consents.json.corrupt-<ns>` antes de reescribir; si el movimiento falla
+    /// no se escribe nada (mejor un consentimiento sin persistir que borrar la
+    /// evidencia de lo que hubiera).
+    fn quarantine_corrupt(&self, path: &Path) -> bool {
+        let raw = match std::fs::read_to_string(path) {
+            Ok(raw) => raw,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return true,
+            Err(e) => {
+                tracing::error!(
+                    "oauth consent: {} no se puede leer ({e}); NO se reescribe",
+                    path.display()
+                );
+                return false;
+            }
+        };
+        if serde_json::from_str::<ConsentFile>(&raw).is_ok() {
+            return true;
+        }
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let backup = path.with_file_name(format!("{CONSENTS_FILE}.corrupt-{stamp}"));
+        match std::fs::rename(path, &backup) {
+            Ok(()) => {
+                tracing::warn!(
+                    "oauth consent: {} ilegible; conservado como {} antes de reescribir",
+                    path.display(),
+                    backup.display()
+                );
+                true
+            }
+            Err(e) => {
+                tracing::error!(
+                    "oauth consent: {} ilegible y no se pudo conservar ({e}); NO se reescribe",
+                    path.display()
+                );
+                false
+            }
+        }
+    }
+
     fn persist(&self) {
         let Some(path) = self.path.as_deref() else {
             return;
@@ -274,6 +321,10 @@ impl ConsentStore {
                 return;
             }
         };
+        // D-29: antes de sobrescribir, conservar un original ilegible.
+        if !self.quarantine_corrupt(path) {
+            return;
+        }
         let tmp = path.with_extension("json.tmp");
         let write = write_private(&tmp, &body).and_then(|_| std::fs::rename(&tmp, path));
         match write {

@@ -1,24 +1,24 @@
-//! T-DSH-39 — aceptación ejecutable de D-29 y D-30 (cola de Deep).
+﻿//! T-DSH-39 â€” aceptaciÃ³n ejecutable de D-29 y D-30 (cola de Deep).
 //!
 //! Dos defectos medidos en la cola `docs/internal/COLA_deep_2026-10-22.md`:
 //!
 //! - **D-29**: un `consents.json` ilegible se trata como revocado en memoria
 //!   (fail-closed correcto), pero el siguiente `persist` lo **sobrescribe** con
-//!   el estado vacío y el contenido anterior desaparece del disco. Lo deseado:
+//!   el estado vacÃ­o y el contenido anterior desaparece del disco. Lo deseado:
 //!   antes de escribir, mover el ilegible a `consents.json.corrupt-<ts>` y
 //!   registrar `warn!` (no escribir si el movimiento falla).
-//! - **D-30**: los planes pendientes de aprobación viven en `PLAN_STORE`, un
+//! - **D-30**: los planes pendientes de aprobaciÃ³n viven en `PLAN_STORE`, un
 //!   `OnceLock<RwLock<HashMap>>` en memoria (`security/grants.rs`); un reinicio
 //!   los pierde. Lo deseado: `init_plan_store` carga los pendientes no caducados
 //!   al arrancar desde la base de datos del kernel.
 //!
 //! Este fichero fija, para cada uno:
 //!   - un test **VIVO** con el comportamiento ACTUAL (corrupto se sobrescribe;
-//!     el plan se pierde), que Deep tendrá que invertir al arreglar;
+//!     el plan se pierde), que Deep tendrÃ¡ que invertir al arreglar;
 //!   - un test `#[ignore = "D-29"|"D-30"]` con el comportamiento DESEADO, que
-//!     hoy falla por la razón correcta y se des-ignora al cerrar el defecto.
+//!     hoy falla por la razÃ³n correcta y se des-ignora al cerrar el defecto.
 //!
-//! El «reinicio» de D-30 se simula con un **proceso hijo** del propio binario de
+//! El Â«reinicioÂ» de D-30 se simula con un **proceso hijo** del propio binario de
 //! test (un `OnceLock` no se puede reiniciar in-process): el padre crea el plan
 //! con `DATA_DIR` apuntando a un temporal, y el hijo arranca de cero, llama a
 //! `init_plan_store()` y busca el plan.
@@ -28,7 +28,7 @@
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d29_d30_acceptance -- --ignored
 //!
 //! Solo directorios temporales; sin `cfg(unix)`/`cfg(windows)` en ninguna
-//! función; `src/` intacto.
+//! funciÃ³n; `src/` intacto.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -67,11 +67,11 @@ fn corrupt_backups(dir: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Escenario común de D-29: fichero corrupto + aprobación de un cliente nuevo.
+/// Escenario comÃºn de D-29: fichero corrupto + aprobaciÃ³n de un cliente nuevo.
 fn corrupt_then_approve(dir: &Path) -> (Vec<u8>, serde_json::Value) {
     let corrupt = b"{ esto no es JSON valido ///".to_vec();
     std::fs::write(dir.join(CONSENTS_FILE), &corrupt).expect("escribir consents corrupto");
-    // with_file relee: falla, deja el estado vacío (fail-closed) y marca error.
+    // with_file relee: falla, deja el estado vacÃ­o (fail-closed) y marca error.
     let store = ConsentStore::with_file(dir);
     let _ = store.record_consent(
         "cliente-nuevo-d29",
@@ -104,7 +104,6 @@ fn consent_client_ids(parsed: &serde_json::Value) -> Vec<String> {
 /// `consents.json.corrupt-*` y el nuevo `consents.json` solo tiene el cliente
 /// nuevo. Hoy falla: no hay copia y el corrupto se pierde.
 #[test]
-#[ignore = "D-29"]
 fn d29_corrupt_consents_must_be_preserved() {
     let dir = fresh_dir("d29_desired");
     let (corrupt, parsed) = corrupt_then_approve(&dir);
@@ -112,8 +111,8 @@ fn d29_corrupt_consents_must_be_preserved() {
     let backups = corrupt_backups(&dir);
     assert!(
         !backups.is_empty(),
-        "D-29 pendiente: no se conservó copia del consents.json ilegible \
-         (consents.json.corrupt-<ts>); el contenido original se perdió"
+        "D-29 pendiente: no se conservÃ³ copia del consents.json ilegible \
+         (consents.json.corrupt-<ts>); el contenido original se perdiÃ³"
     );
     let backup = std::fs::read(&backups[0]).expect("leer copia");
     assert_eq!(
@@ -128,40 +127,71 @@ fn d29_corrupt_consents_must_be_preserved() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **Comportamiento ACTUAL (fija lo que hay hoy).** El corrupto se sobrescribe
-/// sin copia: no queda `.corrupt-*` y el contenido anterior se pierde. Deep debe
-/// invertir este test al cerrar D-29.
+/// **Guarda de la otra cara de D-29.** Un fichero **vÃ¡lido** no se cuarentena:
+/// el arreglo no debe empezar a llenar el directorio de copias ni a perder
+/// consentimientos que estaban bien.
 #[test]
-fn d29_current_corrupt_consents_is_overwritten() {
-    let dir = fresh_dir("d29_current");
-    let (_corrupt, parsed) = corrupt_then_approve(&dir);
-
+fn d29_valid_consents_file_is_not_quarantined() {
+    let dir = fresh_dir("d29_valid");
+    let valid = r#"{
+  "version": 1,
+  "consents": [
+    {
+      "client_id": "cliente-viejo-d29",
+      "client_name": "Cliente viejo",
+      "redirect_uri": "http://127.0.0.1:47004/callback",
+      "scopes": ["read"],
+      "granted_at": 1,
+      "last_used_at": 1,
+      "expires_at": 9999999999
+    }
+  ]
+}"#;
+    std::fs::write(dir.join(CONSENTS_FILE), valid).expect("escribir consents vÃ¡lido");
+    let store = ConsentStore::with_file(&dir);
+    let _ = store.record_consent(
+        "cliente-nuevo-d29",
+        "Cliente D29",
+        "http://127.0.0.1:47004/callback",
+        &["read".to_string()],
+    );
     assert!(
         corrupt_backups(&dir).is_empty(),
-        "comportamiento actual esperado: hoy NO se crea copia .corrupt-* \
-         (si ya se crea, D-29 está arreglado: invierte este test)"
+        "D-29: un consents.json vÃ¡lido no debe moverse a .corrupt-*"
     );
+    let raw = std::fs::read_to_string(dir.join(CONSENTS_FILE)).expect("consents.json");
+    let parsed: serde_json::Value = serde_json::from_str(&raw).expect("JSON");
+    let mut ids = consent_client_ids(&parsed);
+    ids.sort();
     assert_eq!(
-        consent_client_ids(&parsed),
-        vec!["cliente-nuevo-d29".to_string()],
-        "comportamiento actual esperado: el consents.json se reescribe solo con el cliente nuevo"
+        ids,
+        vec![
+            "cliente-nuevo-d29".to_string(),
+            "cliente-viejo-d29".to_string()
+        ],
+        "D-29: el consentimiento que ya estaba vÃ¡lido debe sobrevivir a la escritura"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ---------------------------------------------------------------------------
-// D-30 — reinicio simulado con un proceso hijo del propio binario de test
+// D-30 â€” reinicio simulado con un proceso hijo del propio binario de test
 // ---------------------------------------------------------------------------
 
-/// Si esta variable está en el entorno, el test actúa como PROCESO HIJO
-/// («reinicio»): arranca el plan store desde cero y busca el plan. Códigos de
+/// Si esta variable estÃ¡ en el entorno, el test actÃºa como PROCESO HIJO
+/// (Â«reinicioÂ»): arranca el plan store desde cero y busca el plan. CÃ³digos de
 /// salida: 0 = encontrado, 2 = no encontrado, otros = error.
 const CHILD_ENV: &str = "TYLLUAN_D30_CHILD";
 const PLAN_ID_ENV: &str = "TYLLUAN_D30_PLAN_ID";
 
+/// Los dos tests de D-30 comparten `DATA_DIR` (variable de **proceso**) y el
+/// `PLAN_STORE` (`OnceLock`): en paralelo se pisan entre sÃ­ (uno escribe el
+/// snapshot del otro en su directorio). Se serializan dentro del binario.
+static D30_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Crea el plan en ESTE proceso (con `DATA_DIR` fijado al temporal) y devuelve
 /// el id. Nota: hoy `store_plan` solo escribe en memoria; D-30 debe hacerlo
-/// escribir también en la base de datos del kernel.
+/// escribir tambiÃ©n en la base de datos del kernel.
 async fn create_plan(dir: &Path) -> String {
     // El kernel real resuelve su directorio de datos por entorno; el test lo
     // fija antes de inicializar el store.
@@ -184,7 +214,7 @@ async fn create_plan(dir: &Path) -> String {
 }
 
 /// Arranca un proceso hijo del mismo binario para simular el reinicio y
-/// devuelve su código de salida.
+/// devuelve su cÃ³digo de salida.
 fn restart_and_lookup(dir: &Path, plan_id: &str, test_name: &str, test_is_ignored: bool) -> Option<i32> {
     let exe = std::env::current_exe().expect("current_exe");
     let mut cmd = Command::new(exe);
@@ -198,11 +228,11 @@ fn restart_and_lookup(dir: &Path, plan_id: &str, test_name: &str, test_is_ignore
         .env(PLAN_ID_ENV, plan_id)
         .output()
         .expect("lanzar proceso hijo de reinicio");
-    // El marcador demuestra que el hijo ejecutó el helper (si el filtro de
-    // libtest no casa, el hijo saldría con 0 sin haber comprobado nada).
+    // El marcador demuestra que el hijo ejecutÃ³ el helper (si el filtro de
+    // libtest no casa, el hijo saldrÃ­a con 0 sin haber comprobado nada).
     assert!(
         dir.join("child_ran.marker").exists(),
-        "el proceso hijo no ejecutó el helper (¿filtro de test incorrecto?): {}{}",
+        "el proceso hijo no ejecutÃ³ el helper (Â¿filtro de test incorrecto?): {}{}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
@@ -210,7 +240,7 @@ fn restart_and_lookup(dir: &Path, plan_id: &str, test_name: &str, test_is_ignore
 }
 
 /// Rama del PROCESO HIJO: store nuevo, `init_plan_store()` (que D-30 debe hacer
-/// cargar desde disco) y búsqueda del plan.
+/// cargar desde disco) y bÃºsqueda del plan.
 async fn child_lookup() -> ! {
     let id = std::env::var(PLAN_ID_ENV).expect("plan id en el hijo");
     let dir = std::env::var("DATA_DIR").expect("DATA_DIR en el hijo");
@@ -223,39 +253,46 @@ async fn child_lookup() -> ! {
 /// **Comportamiento DESEADO (D-30).** El plan sobrevive a un reinicio: un
 /// proceso nuevo con el mismo `DATA_DIR` lo encuentra tras `init_plan_store`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "D-30"]
 async fn d30_pending_plan_must_survive_restart() {
     if std::env::var(CHILD_ENV).is_ok() {
         child_lookup().await;
     }
+    let _guard = D30_GUARD.lock().await;
     let dir = fresh_dir("d30_desired");
     let id = create_plan(&dir).await;
-    let code = restart_and_lookup(&dir, &id, "d30_pending_plan_must_survive_restart", true);
+    let code = restart_and_lookup(&dir, &id, "d30_pending_plan_must_survive_restart", false);
     assert_eq!(
         code,
         Some(0),
-        "D-30 pendiente: el plan '{id}' no sobrevive al reinicio (el hijo salió con {code:?}; \
+        "D-30 pendiente: el plan '{id}' no sobrevive al reinicio (el hijo saliÃ³ con {code:?}; \
          2 = no encontrado). PLAN_STORE sigue siendo solo memoria de proceso"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **Comportamiento ACTUAL (fija lo que hay hoy).** El plan se pierde al
-/// reiniciar: el proceso hijo sale con 2 (no encontrado). Deep debe invertir
-/// este test al cerrar D-30.
+/// **Guarda de la otra cara de D-30.** Persistir no debe resucitar lo aprobado:
+/// un plan que se quita del store desaparece tambiÃ©n del disco, asÃ­ que un
+/// reinicio posterior no lo encuentra (si lo encontrara, la aprobaciÃ³n se
+/// ejecutarÃ­a dos veces).
 #[tokio::test(flavor = "multi_thread")]
-async fn d30_current_pending_plan_is_lost_on_restart() {
+async fn d30_removed_plan_does_not_survive_restart() {
     if std::env::var(CHILD_ENV).is_ok() {
         child_lookup().await;
     }
-    let dir = fresh_dir("d30_current");
-    let id = create_plan(&dir).await;
-    let code = restart_and_lookup(&dir, &id, "d30_current_pending_plan_is_lost_on_restart", false);
+    let _guard = D30_GUARD.lock().await;
+    let dir = fresh_dir("d30_removed");
+    create_plan(&dir).await;
+    let id = format!("d30-plan-{}", std::process::id());
+    assert!(
+        grants::remove_plan(&id).await,
+        "D-30: el plan reciÃ©n creado debe existir para poder quitarlo"
+    );
+    let code = restart_and_lookup(&dir, &id, "d30_removed_plan_does_not_survive_restart", false);
     assert_eq!(
         code,
         Some(2),
-        "comportamiento actual esperado: el plan NO sobrevive al reinicio (hijo salió con {code:?}; \
-         si sale 0, D-30 está arreglado: invierte este test)"
+        "D-30: un plan ya quitado no debe aparecer tras el reinicio (hijo saliÃ³ con {code:?}; \
+         0 = resucitÃ³)"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
