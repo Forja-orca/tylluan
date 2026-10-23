@@ -40,7 +40,24 @@ pub struct FileEntry {
     pub kind: &'static str,
 }
 
-const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", "__pycache__", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".hypothesis"];
+const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", "__pycache__", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".hypothesis", ".fastembed_cache"];
+
+/// D-39a (T-DSH-50, medido): en un checkout real el mapa leia ~31 GB (modelos,
+/// datos de kernels de prueba, copias de `target`, logs) y tardaba 16-25 min
+/// ANTES de abrir el puerto. Estos directorios solo se omiten en la RAIZ del
+/// repositorio: un `models/` anidado dentro de un crate sigue siendo codigo.
+const SKIP_TOP_LEVEL_DIRS: &[&str] = &["models", "logs", "data"];
+const SKIP_TOP_LEVEL_PREFIXES: &[&str] = &["test-run-", "target-", "boot-"];
+
+/// Un fichero mayor que esto no se lee para contar lineas (se cuenta como
+/// fichero, con 0 lineas): son binarios, bases de datos o logs, no codigo.
+const MAX_LINE_COUNT_BYTES: u64 = 2 * 1024 * 1024;
+
+fn skip_top_level(name: &str) -> bool {
+    SKIP_TOP_LEVEL_DIRS.contains(&name)
+        || SKIP_TOP_LEVEL_PREFIXES.iter().any(|p| name.starts_with(p))
+}
+
 const KEY_CONFIG_FILES: &[(&str, &str)] = &[
     ("Cargo.toml", "manifest"),
     ("package.json", "manifest"),
@@ -73,7 +90,11 @@ impl RepoMap {
             .into_iter()
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
-                !SKIP_DIRS.contains(&name.as_ref())
+                if SKIP_DIRS.contains(&name.as_ref()) {
+                    return false;
+                }
+                // depth 1 = hijo directo de la raiz.
+                !(e.depth() == 1 && e.file_type().is_dir() && skip_top_level(&name))
             });
 
         for entry in walker.filter_map(|e| e.ok()) {
@@ -184,6 +205,10 @@ impl RepoMap {
 }
 
 fn count_lines(path: &Path) -> usize {
+    // No leer enteros los binarios / bases de datos / logs gigantes (D-39a).
+    if std::fs::metadata(path).map(|m| m.len() > MAX_LINE_COUNT_BYTES).unwrap_or(false) {
+        return 0;
+    }
     std::fs::read_to_string(path)
         .ok()
         .map(|s| s.lines().count())
@@ -312,6 +337,37 @@ mod tests {
         // that assertion flaky. The field's presence/type is guaranteed by
         // the struct definition; its value on a real multi-thousand-file repo
         // is exercised by repo_map_endpoint_test.rs instead.
+    }
+
+    #[test]
+    fn d39a_skips_heavy_top_level_dirs_but_not_nested_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        for d in ["models", "logs", "data", "test-run-p1", "target-codex-baseline", "src/models", "src/data"] {
+            fs::create_dir_all(dir.path().join(d)).unwrap();
+            let mut f = fs::File::create(dir.path().join(d).join("x.py")).unwrap();
+            writeln!(f, "print('hi')").unwrap();
+        }
+        let map = RepoMap::build(dir.path());
+        // Solo cuentan los dos x.py anidados en src/ (models y data de primer nivel
+        // y los prefijos test-run-/target- se omiten).
+        assert_eq!(map.total_files, 2, "solo src/models/x.py y src/data/x.py");
+    }
+
+    #[test]
+    fn d39a_does_not_read_files_above_the_size_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let big = dir.path().join("big.txt");
+        let mut f = fs::File::create(&big).unwrap();
+        let line = "linea\n".repeat(1000);
+        for _ in 0..((MAX_LINE_COUNT_BYTES as usize / line.len()) + 2) {
+            f.write_all(line.as_bytes()).unwrap();
+        }
+        drop(f);
+        let small = dir.path().join("small.txt");
+        fs::write(&small, "a\nb\nc\n").unwrap();
+        let map = RepoMap::build(dir.path());
+        assert_eq!(map.total_files, 2, "el grande se cuenta como fichero");
+        assert_eq!(map.total_lines, 3, "pero solo se leen las lineas del pequeño");
     }
 
     #[test]
