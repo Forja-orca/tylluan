@@ -13,3 +13,7 @@ El TL escribió un informe sobre tu configuración con huecos. Tienes el código
 4. **Checkpoints**: cómo elige Hermes la raíz del proyecto a la que hace `git add -A` y por qué pudo agotar 60 s con `cwd = D:\hermes-projects` (la doc dice que omite directorios de más de 50 000 ficheros).
 
 Entrega `docs/reference/research/2026-10-24_H12_config_hermes_huecos_hermes.md` con tabla pregunta -> cita -> fuente -> estado.
+
+
+## Worktree: método nuevo (23-oct-2026)
+Lee `docs/internal/PROTOCOLO_worktrees_agentes.md`. Resumen: tu compilación pasa a `E:\cargo-target\hermes`; antes de cada tarea nueva haz `bash /e/tylluan/scripts/agent_wt.sh reset hermes` (guarda todo lo que tengas antes de limpiar). Para liberar tu `target` antiguo: `bash /e/tylluan/scripts/agent_wt.sh migrate hermes` cuando no tengas cargo en marcha.
