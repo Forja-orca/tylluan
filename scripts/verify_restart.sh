@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# T-DSH-60 — Comprobación posterior al reinicio del kernel (SOLO LECTURA).
+# T-DSH-60/T-DSH-61 — Comprobación posterior al reinicio del kernel (SOLO LECTURA).
 #
 # Hace GET /health y verifica, una línea por comprobación con OK/FALLO:
 #   1. commit   : el `commit` de /health == `git rev-parse --short origin/main`
 #   2. status   : pasa de `starting` a `ok` dentro de --timeout segundos
-#   3. repo_map : el campo `repo_map` de /health (o components.repo_map.status) llega a `ok`
+#   3. repo_map : llega a `ok` (campo superior `repo_map` del /health público;
+#                 también acepta `components.repo_map.status` de /health?verbose=true)
 # Sale 0 si las tres están OK, 1 si alguna falla.
 #
 # Puerto: --port N, o [nexus].port de tylluan.toml (por defecto la raíz del repo;
@@ -106,11 +107,21 @@ print(out if isinstance(out, str) else ("" if out is None else out))
         case "$path" in
             commit) printf '%s' "$json" | tr -d '\r\n' | grep -o '"commit"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' ;;
             status) printf '%s' "$json" | tr -d '\r\n' | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' ;;
+            repo_map) printf '%s' "$json" | tr -d '\r\n' | grep -o '"repo_map"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' ;;
             components.repo_map.status)
                     printf '%s' "$json" | tr -d '\r\n' | grep -o '"repo_map"[^}]*}' | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' ;;
             *) echo "" ;;
         esac
     fi
+}
+
+get_repo_map_status() { # acepta /health público (repo_map: "building") y ?verbose=true
+    local body="$1" value
+    value="$(json_field "$body" repo_map)"
+    if [ -z "$value" ]; then
+        value="$(json_field "$body" components.repo_map.status)"
+    fi
+    printf '%s' "$value"
 }
 
 START_TS=$(date +%s)
@@ -135,8 +146,7 @@ while :; do
     fi
     FINAL_JSON="$body"
     status="$(json_field "$body" status)"
-    repo_status="$(json_field "$body" repo_map)"
-    [ -n "$repo_status" ] || repo_status="$(json_field "$body" components.repo_map.status)"
+    repo_status="$(get_repo_map_status "$body")"
     case "$status" in
         warming_up) [ -n "$SEEN_WARMING" ] || SEEN_WARMING="$elapsed" ;;
         starting)   [ -n "$SEEN_STARTING" ] || STARTING_AT="$elapsed"; SEEN_STARTING=1 ;;
@@ -178,12 +188,11 @@ else
 fi
 
 # ─── 3. repo_map ok ──────────────────────────────────────────────────────────
-REPO_FINAL="$(json_field "$FINAL_JSON" repo_map)"
-[ -n "$REPO_FINAL" ] || REPO_FINAL="$(json_field "$FINAL_JSON" components.repo_map.status)"
+REPO_FINAL="$(get_repo_map_status "$FINAL_JSON")"
 if [ "$REPO_FINAL" = "ok" ]; then
-    printf 'OK    repo_map  repo_map=ok@%ss (total %ss)\n' "${REPO_OK_AT:-$TOTAL_ELAPSED}" "$TOTAL_ELAPSED"
+    printf 'OK    repo_map  /health repo_map=ok@%ss (total %ss)\n' "${REPO_OK_AT:-$TOTAL_ELAPSED}" "$TOTAL_ELAPSED"
 else
-    printf 'FALLO repo_map  repo_map=%s tras %ss\n' "${REPO_FINAL:-?}" "$TOTAL_ELAPSED"
+    printf 'FALLO repo_map  /health repo_map=%s tras %ss\n' "${REPO_FINAL:-?}" "$TOTAL_ELAPSED"
     FAILS=$((FAILS + 1))
 fi
 

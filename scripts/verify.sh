@@ -199,6 +199,21 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "broken Markdown links — see scripts/check_doc_links.py output above"
     fi
 
+    # README claims guardian (H-24/H-25, 2026-10-24): sovereign-tool counts,
+    # test-count cross-consistency (README.md vs README.es.md vs AGENTS.md),
+    # version badges and relative file links, verified statically and read-only.
+    # REPORT-ONLY on purpose (TL's H-25 spec "modo informe"): the live per-suite
+    # test counts remain check_test_count.sh's job in CI; this catches the
+    # cross-document drift class check_test_count.sh can't see (it never reads
+    # README.es.md — the first run found exactly that: "1125 tests" vs 1329).
+    # Do NOT route this through fail(): scripts/test_verify_semantics.sh T2
+    # asserts this stays non-blocking, and T6 forces it to remain wired.
+    if bash scripts/check_readme_claims.sh; then
+        ok "README claims vs tree consistency (check_readme_claims.sh, report-only)"
+    else
+        echo "⚠️  README claims drifted — see scripts/check_readme_claims.sh output above. Report-only, does not block this push."
+    fi
+
     # Pilar 2 (repo-pillars) contract gate: JSON schemas under schemas/ are
     # valid, and if a kernel happens to be live on :47004 its real endpoints
     # get checked against them too. Degrades gracefully with no live kernel
