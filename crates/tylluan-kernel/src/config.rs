@@ -1527,8 +1527,12 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     // harmless (idempotent) -- left as-is rather than touched, to avoid
     // colliding with concurrent M21-P0 work on the same files.
     conn.execute_batch(
-        "PRAGMA journal_mode=WAL; \
-         PRAGMA busy_timeout=5000; \
+        // D-51: busy_timeout ANTES de journal_mode. En un fichero nuevo, el
+        // cambio a WAL puede devolver "database is locked" si otra conexión
+        // está abriendo la BD; sin el busy_timeout ya armado no espera. No se
+        // cambia ningún valor, solo el orden.
+        "PRAGMA busy_timeout=5000; \
+         PRAGMA journal_mode=WAL; \
          PRAGMA synchronous=NORMAL; \
          PRAGMA cache_size=-65536; \
          PRAGMA mmap_size=268435456;"
@@ -3025,5 +3029,25 @@ code = "permissive"
         ];
         cfg.apply_startup_overrides(&args, None, None);
         assert_eq!(cfg.nexus.port, 47732, "--port debe ganar a --config");
+    }
+
+    /// D-51: una BD nueva debe salir con busy_timeout armado (5000) y WAL.
+    /// El orden importa: busy_timeout va antes que journal_mode para que el
+    /// cambio a WAL espere si otra conexión está abriendo el fichero.
+    #[test]
+    fn open_db_sets_busy_timeout_before_wal() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_path = dir.path().join("d51-order.db");
+        let conn = open_db(&db_path).expect("open_db");
+
+        let busy_timeout: i64 = conn
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .expect("busy_timeout");
+        assert_eq!(busy_timeout, 5000, "busy_timeout debe ser 5000");
+
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .expect("journal_mode");
+        assert_eq!(journal_mode.to_lowercase(), "wal", "journal_mode debe ser WAL");
     }
 }

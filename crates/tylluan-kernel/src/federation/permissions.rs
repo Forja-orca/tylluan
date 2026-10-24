@@ -210,9 +210,15 @@ pub fn dispatch_gate_decision(
 pub fn audit_permission_denied(peer: &str, flow: &str, guild: &str, tool: &str, reason: &str) {
     tracing::warn!("federation permissions: {flow} denied for peer '{peer}': {reason}");
     let intent = format!("peer {peer}: {flow} denied — {reason}");
-    let _ = crate::transport::server::handler_do::log_audit_entry(
+    // D-51: un fallo de la auditoría no debe ser invisible. Sigue siendo
+    // non-fatal (la denegación ya se aplicó), pero queda en el log.
+    if let Err(e) = crate::transport::server::handler_do::log_audit_entry(
         &intent, guild, tool, peer, false, reason, 0, false,
-    );
+    ) {
+        tracing::warn!(
+            "federation permissions: failed to audit denial for peer '{peer}': {e}"
+        );
+    }
 }
 
 #[cfg(test)]

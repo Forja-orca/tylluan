@@ -87,12 +87,32 @@ impl AgentProfileStore {
 
         let mut counts: serde_json::Value =
             serde_json::from_str(&competencies_json).unwrap_or(serde_json::json!({}));
-        if counts.get(guild).and_then(|v| v.as_object()).is_none() {
-            counts[guild] = serde_json::json!({"successes": 0, "total": 0});
+        // D-50: una fila con `competencies` no-objeto (DB vieja o corrupta) no
+        // puede tumbar el kernel en una ruta de request (panic="abort").
+        if !counts.is_object() {
+            tracing::warn!(
+                agent_id,
+                "agent_profile: competencies was not a JSON object; resetting before recording activity"
+            );
+            counts = serde_json::json!({});
         }
-        let stats = counts.get_mut(guild)
-            .and_then(|v| v.as_object_mut())
-            .expect("guild stats entry initialized immediately above");
+        let Some(root) = counts.as_object_mut() else {
+            return Ok(());
+        };
+        let stats_value = root
+            .entry(guild.to_string())
+            .or_insert_with(|| serde_json::json!({"successes": 0, "total": 0}));
+        if !stats_value.is_object() {
+            tracing::warn!(
+                agent_id,
+                guild,
+                "agent_profile: guild stats was not a JSON object; resetting"
+            );
+            *stats_value = serde_json::json!({"successes": 0, "total": 0});
+        }
+        let Some(stats) = stats_value.as_object_mut() else {
+            return Ok(());
+        };
         let total = stats.get("total").and_then(|v| v.as_u64()).unwrap_or(0) + 1;
         let successes = if success {
             stats.get("successes").and_then(|v| v.as_u64()).unwrap_or(0) + 1
@@ -432,6 +452,53 @@ mod tests {
         let profile = store.get_profile("agent_y").unwrap().unwrap();
         assert_eq!(profile.preferences["theme"], "dark");
         assert_eq!(profile.preferences["notifications"], true);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// D-50: una fila persistida con `competencies` no-objeto (o una entrada de
+    /// guild no-objeto) no debe hacer panic; se normaliza y se registra.
+    #[test]
+    fn test_upsert_activity_recovers_from_non_object_competencies() {
+        let dir = std::env::temp_dir().join(format!("test_agent_bad_json_{}", uuid::Uuid::new_v4().simple()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let db_path = dir.join("test_agent_profiles.db");
+        let store = AgentProfileStore::new(&db_path.to_string_lossy()).unwrap();
+
+        // Caso 1: competencies = [] (array, no objeto).
+        store.conn.execute(
+            "INSERT INTO agent_profiles (agent_id, first_seen, total_calls, competencies, role) \
+             VALUES (?1, datetime('now'), 0, '[]', 'generalist')",
+            rusqlite::params!["agent_bad_array"],
+        ).unwrap();
+        store.upsert_activity("agent_bad_array", "bash", true, Some("forced")).unwrap();
+        let raw: String = store.conn.query_row(
+            "SELECT competencies FROM agent_profiles WHERE agent_id = ?1",
+            rusqlite::params!["agent_bad_array"],
+            |row| row.get(0),
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed["bash"]["total"], 1);
+        assert_eq!(parsed["bash"]["successes"], 1);
+        let profile = store.get_profile("agent_bad_array").unwrap().unwrap();
+        assert!(profile.competencies["bash"].is_number());
+
+        // Caso 2: competencies es objeto, pero la entrada de la guild no.
+        store.conn.execute(
+            "INSERT INTO agent_profiles (agent_id, first_seen, total_calls, competencies, role) \
+             VALUES (?1, datetime('now'), 0, ?2, 'generalist')",
+            rusqlite::params!["agent_bad_guild", r#"{"bash":"not-an-object"}"#],
+        ).unwrap();
+        store.upsert_activity("agent_bad_guild", "bash", false, None).unwrap();
+        let raw: String = store.conn.query_row(
+            "SELECT competencies FROM agent_profiles WHERE agent_id = ?1",
+            rusqlite::params!["agent_bad_guild"],
+            |row| row.get(0),
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed["bash"]["total"], 1);
+        assert_eq!(parsed["bash"]["successes"], 0);
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
