@@ -183,11 +183,17 @@ pub async fn propagate_untrusted_to_summaries(
     let conn_arc = silva.conn_lock();
     let conn = conn_arc.lock().await;
     let rows: Vec<(String, String)> = {
-        let Ok(mut stmt) = conn.prepare(
+        let mut stmt = match conn.prepare(
             "SELECT id, metadata FROM nodes
              WHERE type IN ('agent_summary','session_digest') AND instr(content, ?1) > 0",
-        ) else {
-            return 0;
+        ) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                tracing::warn!(
+                    "ASI06 retroactive propagation: failed to prepare summary query: {e}"
+                );
+                return 0;
+            }
         };
         stmt.query_map([preview.as_str()], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
@@ -203,12 +209,14 @@ pub async fn propagate_untrusted_to_summaries(
         let mut value: serde_json::Value =
             serde_json::from_str(&meta).unwrap_or_else(|_| serde_json::json!({}));
         mark_untrusted(&mut value, &format!("inherited(retro): {origin}"));
-        let updated = conn.execute(
+        match conn.execute(
             "UPDATE nodes SET metadata = ?1 WHERE id = ?2",
             rusqlite::params![value.to_string(), id],
-        );
-        if updated.is_ok() {
-            marked += 1;
+        ) {
+            Ok(_) => marked += 1,
+            Err(e) => tracing::warn!(
+                "ASI06 retroactive propagation: failed to mark summary '{id}': {e}"
+            ),
         }
     }
     marked
@@ -355,5 +363,44 @@ mod tests {
             "agent_memory"
         ));
         assert_eq!(spanish[UNTRUSTED_KEY], serde_json::json!(true));
+    }
+
+    /// D-54: si el UPDATE de la marca falla, la función avisa y NO cuenta el
+    /// resumen como marcado; no debe entrar en panic (panic="abort").
+    #[tokio::test(flavor = "multi_thread")]
+    async fn propagate_untrusted_does_not_count_write_failure() {
+        let silva = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        let source_content = "source content with a marker for summary";
+        silva.upsert_node(
+            "source1",
+            "entity",
+            source_content,
+            &serde_json::json!({
+                "untrusted_content": true,
+                "untrusted_reason": "test source"
+            }).to_string(),
+        ).await.unwrap();
+        let preview: String = source_content.chars().take(80).collect();
+        silva.upsert_node_with_validity(
+            "summary1",
+            "agent_summary",
+            &format!("prefix {preview} suffix"),
+            "{}",
+            crate::memory::silva::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
+
+        // SELECT sigue funcionando; UPDATE falla con "attempt to write a
+        // readonly database" y debe quedar en warn, no en panic.
+        let conn = silva.conn_lock();
+        conn.lock().await.execute_batch("PRAGMA query_only=ON").unwrap();
+        let marked = propagate_untrusted_to_summaries(&silva, "source1").await;
+        assert_eq!(marked, 0, "un UPDATE fallido no cuenta como marcado");
+        conn.lock().await.execute_batch("PRAGMA query_only=OFF").unwrap();
+
+        let summary = silva.get_node("summary1").await.unwrap().unwrap();
+        assert!(
+            !is_untrusted_metadata(&summary.metadata),
+            "sin UPDATE no se puede afirmar que el resumen quedó marcado"
+        );
     }
 }

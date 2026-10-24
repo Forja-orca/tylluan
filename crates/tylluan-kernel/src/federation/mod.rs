@@ -149,6 +149,16 @@ impl PeerDb {
         Ok(n > 0)
     }
 
+    /// D-56: cambia solo `approved`, conservando token/secreto/pubkey. Se usa
+    /// para revertir una aprobación si falla una escritura posterior.
+    pub fn set_approved(&self, name: &str, approved: bool) -> rusqlite::Result<bool> {
+        let n = self.conn.lock().expect("peers db mutex").execute(
+            "UPDATE federation_peers SET approved=?2 WHERE name=?1",
+            params![name, approved as i64],
+        )?;
+        Ok(n > 0)
+    }
+
     pub fn update_external_address(&self, name: &str, addr: &str) -> rusqlite::Result<bool> {
         let n = self.conn.lock().expect("peers db mutex").execute(
             "UPDATE federation_peers SET external_address=?2 WHERE name=?1",
