@@ -53,6 +53,18 @@ cargo_running() {
 
 win_path() { cygpath -m "$1"; }
 
+# T-DSH-63: borrado recursivo portable. `cmd //c rd` es idioma de Git Bash y falla en
+# otros shells; MSYS2_ARG_CONV_EXCL evita que MSYS convierta /c, /s y /q en rutas.
+win_rm() { # $1 = ruta POSIX a borrar (recursivo)
+  local p="$1" wp
+  if command -v cmd.exe >/dev/null 2>&1; then
+    wp="$p"
+    command -v cygpath >/dev/null 2>&1 && wp="$(cygpath -w "$p")"
+    MSYS2_ARG_CONV_EXCL='*' cmd.exe /c rd /s /q "$wp" >/dev/null 2>&1 && return 0
+  fi
+  rm -rf -- "$p"
+}
+
 cmd_setup() {
   need_agent "${1:-}"
   local a="$1" wt tgt
@@ -105,7 +117,11 @@ cmd_reset() {
 }
 
 cmd_status() {
-  git -C "$MAIN_REPO" fetch -q origin 2>/dev/null
+  # T-DSH-63: el fetch es opt-in (AGENT_WT_FETCH=1). `status` no debe depender de la red
+  # ni pagar ~1 s de fetch en cada ejecución.
+  if [ "${AGENT_WT_FETCH:-0}" = "1" ]; then
+    git -C "$MAIN_REPO" fetch -q origin 2>/dev/null
+  fi
   local main_head
   main_head="$(git -C "$MAIN_REPO" rev-parse --short origin/main)"
   echo "origin/main = $main_head"
@@ -133,7 +149,7 @@ cmd_migrate() {
   cargo_running && die "hay cargo/rustc en marcha: espera a que acabe"
   [ -d "$wt/target" ] || { echo "OK $a: no hay target dentro del worktree"; return 0; }
   echo "borrando $wt/target (regenerable)"
-  cmd //c rd /s /q "$(cygpath -w "$wt/target")" >/dev/null 2>&1
+  win_rm "$wt/target"
   [ -d "$wt/target" ] && die "no se pudo borrar $wt/target del todo" || echo "OK migrate $a"
 }
 
@@ -159,7 +175,7 @@ cmd_gc() {
     if [ -z "$newest" ]; then
       found=1
       echo "  SIN USO: $d"
-      if [ "$apply" = 1 ]; then cmd //c rd /s /q "$(cygpath -w "$d")" >/dev/null 2>&1; echo "  borrada"; fi
+      if [ "$apply" = 1 ]; then win_rm "$d"; echo "  borrada"; fi
     fi
   done
   [ "$found" = 0 ] && echo "  (ninguna)"
