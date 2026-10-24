@@ -505,6 +505,15 @@ fn write_fingerprint_cache(path: &std::path::Path, cache: &FingerprintCache) {
     }
 }
 
+/// D-44: solo el grafo grande (mxbai ~1,34 GB) merece el aviso de "esto tarda";
+/// el `tokenizer.json` (17 MB) no. Por debajo de este tamaño el hash es tan
+/// rápido que un `info!` por arranque sería ruido.
+const FINGERPRINT_SLOW_LOG_THRESHOLD_BYTES: u64 = 64 * 1024 * 1024;
+
+fn needs_slow_fingerprint_log(size_bytes: u64) -> bool {
+    size_bytes >= FINGERPRINT_SLOW_LOG_THRESHOLD_BYTES
+}
+
 /// `sha256_file` con caché opcional. `cache_path=None` = comportamiento
 /// anterior (hash directo, sin leer/escribir nada). La huella devuelta es
 /// SIEMPRE el sha256 real del contenido: la caché solo evita recalcularlo.
@@ -512,6 +521,16 @@ fn sha256_file_cached(
     path: &std::path::Path,
     cache_path: Option<&std::path::Path>,
 ) -> Option<String> {
+    sha256_file_cached_status(path, cache_path).map(|(hash, _)| hash)
+}
+
+/// Igual que [`sha256_file_cached`] pero devuelve también si salió de la caché.
+/// D-44 usa el `false` (miss) para avisar del primer arranque: en un DATA_DIR
+/// nuevo el sha256 de 1,34 GB tarda 15-27 s y sin log parece un cuelgue.
+fn sha256_file_cached_status(
+    path: &std::path::Path,
+    cache_path: Option<&std::path::Path>,
+) -> Option<(String, bool)> {
     let key = fingerprint_cache_key(path)?;
     let mut cache = cache_path.map(read_fingerprint_cache).unwrap_or_default();
     if let Some(entry) = cache.entries.get(&key.0)
@@ -519,9 +538,25 @@ fn sha256_file_cached(
         && entry.mtime_ns == key.2
         && !entry.sha256.is_empty()
     {
-        return Some(entry.sha256.clone());
+        return Some((entry.sha256.clone(), true));
     }
+    let slow = needs_slow_fingerprint_log(key.1);
+    if slow {
+        info!(
+            "Calculating model fingerprint: hashing {} ({:.2} GB). This is normal on the first boot for this DATA_DIR and can take 15-27 s; next boots reuse the cache.",
+            path.display(),
+            key.1 as f64 / (1024.0 * 1024.0 * 1024.0)
+        );
+    }
+    let started = std::time::Instant::now();
     let hash = sha256_file(path)?;
+    if slow {
+        info!(
+            "Model fingerprint calculated in {:.1}s: {}",
+            started.elapsed().as_secs_f64(),
+            path.display()
+        );
+    }
     if let Some(cache_path) = cache_path {
         cache.version = FINGERPRINT_CACHE_VERSION;
         cache.entries.insert(
@@ -530,7 +565,7 @@ fn sha256_file_cached(
         );
         write_fingerprint_cache(cache_path, &cache);
     }
-    Some(hash)
+    Some((hash, false))
 }
 
 /// Canonical fingerprint v1 (format `sha256:<64 hex>`): deterministic parts,
@@ -1907,6 +1942,25 @@ mod tests {
         );
         write_fingerprint_cache(cache_path, &cache);
         key
+    }
+
+    #[test]
+    fn fingerprint_cache_status_reports_miss_then_hit() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = cache_test_file(dir.path(), "model.onnx", b"pesos falsos del grafo");
+        let cache_path = dir.path().join("data").join(FINGERPRINT_CACHE_FILE);
+
+        let (first, hit) = sha256_file_cached_status(&file, Some(&cache_path)).unwrap();
+        assert!(!hit, "la primera lectura es un miss (D-44 avisa del primer boot)");
+        let (second, hit) = sha256_file_cached_status(&file, Some(&cache_path)).unwrap();
+        assert!(hit, "la segunda lectura sale de la cache");
+        assert_eq!(first, second, "la cache no cambia el sha256");
+    }
+
+    #[test]
+    fn slow_fingerprint_log_threshold_covers_the_graph_not_the_tokenizer() {
+        assert!(!needs_slow_fingerprint_log(17 * 1024 * 1024));
+        assert!(needs_slow_fingerprint_log(1_340_000_000));
     }
 
     #[test]

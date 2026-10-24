@@ -61,7 +61,7 @@ cargo run -p tylluan-cli -- start
 
 ## Estado actual — v0.17.1 (v0.17.0 tagged 2026-08-23; v0.17.1 corta los fixes de seguridad e instalador del 2026-10-05/12)
 
-**Tests:** 1238 lib tests (kernel) + 75 (tylluan-link) + 12 (tylluan-fsrs) = 1325 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo (y `scripts/check_test_count.sh` ya valida esta cifra en CI).
+**Tests:** 1242 lib tests (kernel) + 75 (tylluan-link) + 12 (tylluan-fsrs) = 1329 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo (y `scripts/check_test_count.sh` ya valida esta cifra en CI).
 **HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:47004/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).
 
 ### Cerrado en v0.17.0 (2026-08-24; trabajo del 2026-08-11 al 2026-08-14): dos rondas de auditoría externa cerradas el mismo día cada una — RCE crítico de P2P (`4674f84`) con verificación real de peer añadida después (`ebbc998`, Ed25519↔X25519), ACL rediseñado fail-closed (`09b9668`), ASI06 cerrado con gate de escritura de 2 capas para `tylluan_remember` (`2bd0416`). `FrictionStore` con path inyectable, split de `api_v1.rs` (3114→3 archivos). A2A F1-F4 completo: cliente outbound real verificado contra el SDK oficial, exposición REST/intent con ACL, streaming SSE, hardening (`3f4ce1e`). Dashboard: identidad visual soberana en 4 fases verificadas (paleta con nombre propio, tipografía self-hosted, WCAG AA real, piloto de foco de teclado). Ver `CHANGELOG.md`, sección `[0.17.0]`, para el detalle completo.
@@ -160,12 +160,14 @@ cargo run -p tylluan-cli -- start
 ```bash
 cargo check -p tylluan-kernel
 cargo test -p tylluan-kernel --lib 2>&1 | tail -3
-# Esperado: 1027 lib tests passing (cifra exacta: scripts/check_test_count.sh)
+# Esperado: el recuento real de lib tests lo valida scripts/check_test_count.sh
+# (no fijar aquí una cifra: caduca en cada ciclo).
 
 cargo test -p tylluan-link --all-targets 2>&1 | Select-String "test result"
 # Esperado: 75 link tests passing
 
-# tylluan-evals es un harness de benchmark: sus tests (paired_eval) no cuentan en el total de 1127.
+# tylluan-evals es un harness de benchmark: sus tests (paired_eval) no cuentan en el
+# total kernel+link+fsrs que valida scripts/check_test_count.sh.
 ```
 
 ---
