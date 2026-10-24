@@ -184,6 +184,67 @@ if [ -n "${bench_json:-}" ] && [ -f "$bench_json" ]; then
   done
 fi
 
+# ---- 8. R2 guild count with the KERNEL's own criterion, not find|wc.
+# scan_guilds_directory (crates/tylluan-kernel/src/router/catalog.rs:536+)
+# counts: each direct subdirectory of guilds/ (skip _-prefixed), searching
+# guilds/<fam>/plugins/ when it exists else guilds/<fam>/ itself; each *.py
+# at that level whose stem does not start with '_'; the file must carry a
+# FastMCP(...) marker (extract_guild_name, catalog.rs:353 — any line with
+# FastMCP( whose inner name is non-empty and has no whitespace); then
+# guild_name = name_override(stem) or stem (name_override: catalog.rs:167,
+# scrapling_web->scrapling today) and EXCLUDED_GUILDS (catalog.rs:98, parsed
+# below — never hardcoded here) are dropped. A naive find *.py | wc gives 64
+# on this tree and would report drift where there is none AND hide drift
+# where there is (H-26 audit). The claimed counts in the READMEs must match
+# this number; "13 additional guilds" style historical lines are excluded
+# from the claim set by keyword (additional/adicionales).
+CAT="crates/tylluan-kernel/src/router/catalog.rs"
+if [ -d guilds ] && [ -f "$CAT" ]; then
+  excluded=$(grep -m1 'const EXCLUDED_GUILDS' "$CAT" | grep -oE '"[a-z0-9_]+"' | tr -d '"' | tr '\n' ' ')  # single-line const; -m1 — a /];/ range would swallow required_args from guild_overrides (real bug in first run)
+  # name overrides: match arms `"stem" => "name",` inside fn name_override
+  ov=$(sed -n '/fn name_override/,/^}/p' "$CAT" | grep -oE '"[a-z0-9_]+"[[:space:]]*=>[[:space:]]*"[a-z0-9_]+"' | sed -E 's/"([a-z0-9_]+)"[[:space:]]*=>[[:space:]]*"([a-z0-9_]+)"/\1=\2/')
+  gcount=0; gskip_excl=0; gskip_nomark=0
+  for fam in guilds/*/; do
+    fambase=${fam#guilds/}; fambase=${fambase%/}
+    case "$fambase" in _*) continue ;; esac
+    sd="$fam"; [ -d "$fam/plugins" ] && sd="$fam/plugins"
+    for p in "$sd"/*.py; do
+      [ -e "$p" ] || continue
+      stem=$(basename "$p" .py)
+      case "$stem" in _*) continue ;; esac
+      # extract_guild_name emulation: FastMCP( line with non-empty quoted-ish name
+      mark="no"
+      if grep -q "FastMCP(" "$p" && ! grep -q "FastMCP()" "$p"; then mark="yes"; fi
+      [ "$mark" = "yes" ] || { gskip_nomark=$((gskip_nomark+1)); continue; }
+      name="$stem"
+      for pair in $ov; do
+        [ "${pair%%=*}" = "$stem" ] && name="${pair#*=}"
+      done
+      hit=0
+      for e in $excluded; do [ "$e" = "$name" ] && hit=1; done
+      if [ "$hit" = "1" ]; then gskip_excl=$((gskip_excl+1)); continue; fi
+      gcount=$((gcount+1))
+    done
+  done
+  ok_r2=1
+  for f in "$README_EN" "$README_ES"; do
+    [ -f "$f" ] || continue
+    # filter historical lines FIRST (keyword), then extract leading number
+    # of each match — never grep -n: chaining -n makes ^[0-9]+ grab LINE
+    # numbers (59, 217...) instead of claim values (real bug in first run).
+    hist=$(grep -viE 'additional|adicionales' "$f" | grep -oiE '[0-9]+([[:space:]]+[a-z-]+){0,3}[[:space:]]+guilds' | grep -oE '^[0-9]+' | sort -un | tr '\n' ',' | sed 's/,$//')
+    if [ "$hist" = "$gcount" ]; then
+      report OK guildcount "$f claims exactly $gcount active guilds; kernel-criterion scan finds $gcount ($gskip_excl excluded via [$excluded], $gskip_nomark .py without FastMCP marker)"
+    else
+      report DRIFT guildcount "$f claims active-guild values {$hist} but kernel-criterion scan (scan_guilds_directory equivalent) finds $gcount"
+      ok_r2=0
+    fi
+  done
+  [ "$ok_r2" = "1" ] || true
+else
+  report DRIFT guildcount "cannot apply R2: guilds/ or $CAT missing"
+fi
+
 if [ "$drifts" -gt 0 ]; then
   echo "RESULT: $drifts DRIFT line(s) — README claims diverge from the tree."
   exit 1
