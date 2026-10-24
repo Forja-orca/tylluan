@@ -178,16 +178,41 @@ pub async fn ingest_upload_handler(
     (StatusCode::OK, Json(serde_json::json!({"status": "ingested", "file": filename, "original_name": original_name, "pipeline": if is_image { "vision" } else { "ingest" }}))).into_response()
 }
 
+/// D-55: resuelve un fichero de `data/ingest` sin permitir que el nombre
+/// sustituya la base. En Windows `C:foo` es una ruta relativa a la unidad C:,
+/// no un nombre de fichero; se rechaza `:` además de `..`, `/` y `\`.
+fn resolve_ingest_file_path_in(
+    base: &std::path::Path,
+    filename: &str,
+) -> Result<std::path::PathBuf, StatusCode> {
+    if filename.is_empty()
+        || filename.contains("..")
+        || filename.contains('/')
+        || filename.contains('\\')
+        || filename.contains(':')
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let base = base.canonicalize().map_err(|_| StatusCode::NOT_FOUND)?;
+    let resolved = base
+        .join(filename)
+        .canonicalize()
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    if !resolved.starts_with(&base) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(resolved)
+}
+
 /// GET /api/v1/ingest/files/{filename}
 /// Serves uploaded files from the data/ingest directory.
 pub async fn serve_ingested_file_handler(
     Path(filename): Path<String>,
 ) -> impl IntoResponse {
-    // Prevent directory traversal attacks
-    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
-        return (StatusCode::BAD_REQUEST, "Invalid filename").into_response();
-    }
-    let filepath = std::path::Path::new("data/ingest").join(&filename);
+    let filepath = match resolve_ingest_file_path_in(std::path::Path::new("data/ingest"), &filename) {
+        Ok(path) => path,
+        Err(status) => return (status, "Invalid filename").into_response(),
+    };
     match tokio::fs::read(&filepath).await {
         Ok(bytes) => {
             let extension = std::path::Path::new(&filename)
@@ -588,5 +613,25 @@ mod tests {
     fn test_ssrf_allows_public_https() {
         // A public IP literal: no DNS needed, so the test is hermetic.
         assert!(validate_url_for_ssrf("https://93.184.216.34/").is_ok());
+    }
+
+    #[test]
+    fn ingest_file_path_rejects_windows_drive_and_stream_names() {
+        let base = std::path::Path::new("data/ingest");
+        for bad in ["C:foo", "a:b", "..\\evil", "../evil", "", "/etc/passwd"] {
+            assert_eq!(
+                resolve_ingest_file_path_in(base, bad).unwrap_err(),
+                StatusCode::BAD_REQUEST,
+                "{bad:?} must be rejected before touching the filesystem"
+            );
+        }
+    }
+
+    #[test]
+    fn ingest_file_path_serves_benign_file_inside_base() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("ok.txt"), b"hello").unwrap();
+        let resolved = resolve_ingest_file_path_in(dir.path(), "ok.txt").unwrap();
+        assert_eq!(std::fs::read(&resolved).unwrap(), b"hello");
     }
 }

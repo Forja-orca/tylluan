@@ -300,6 +300,26 @@ fn persist_peer_pubkey(
     }
 }
 
+/// D-56: si la pubkey no se persiste, revertir `approved` para no dejar un
+/// peer aprobado sin verificación de firma.
+fn persist_peer_pubkey_or_revert(
+    peer_db: &crate::federation::PeerDb,
+    name: &str,
+    pubkey: &str,
+) -> Result<(), String> {
+    match persist_peer_pubkey(peer_db, name, pubkey) {
+        Ok(()) => Ok(()),
+        Err(pubkey_err) => {
+            let revert_msg = match peer_db.set_approved(name, false) {
+                Ok(true) => "approval reverted".to_string(),
+                Ok(false) => "approval NOT reverted: peer not found".to_string(),
+                Err(revert_err) => format!("approval NOT reverted: {revert_err}"),
+            };
+            Err(format!("{pubkey_err}; {revert_msg}"))
+        }
+    }
+}
+
 pub async fn federation_approve_peer(
     State(state): State<Arc<HttpState>>,
     Path(name): Path<String>,
@@ -323,7 +343,7 @@ pub async fn federation_approve_peer(
                             // M12-B: fetch Ed25519 public key
                             if let Some(pubkey) = body.get("public_key").and_then(|v| v.as_str())
                                 && !pubkey.is_empty() {
-                                    match persist_peer_pubkey(state.peer_db.as_ref(), &name, pubkey) {
+                                    match persist_peer_pubkey_or_revert(state.peer_db.as_ref(), &name, pubkey) {
                                         Ok(()) => {
                                             tracing::info!("🔑 Auto-fetched Ed25519 pubkey for peer '{}'", name);
                                         }
@@ -332,8 +352,14 @@ pub async fn federation_approve_peer(
                                                 "Auto-fetched Ed25519 pubkey for peer '{}' could not be persisted: {}",
                                                 name, e
                                             );
+                                            reload_peers_cache(&state).await;
+                                            let status = if e.contains("approval reverted") {
+                                                "approval_reverted"
+                                            } else {
+                                                "approval_revert_failed"
+                                            };
                                             return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                                                "status": "approved_without_identity",
+                                                "status": status,
                                                 "name": name,
                                                 "error": format!("peer approved but its Ed25519 pubkey could not be persisted: {e}")
                                             }))).into_response();
@@ -1305,6 +1331,41 @@ mod step2_unit_tests {
             err.contains("update_ed25519_pubkey failed"),
             "el error debe propagarse con contexto, got: {err}"
         );
+    }
+
+    /// D-56: si falla la pubkey, la aprobación se revierte; no queda un peer
+    /// approved=1 sin verificación de firma.
+    #[test]
+    fn failed_pubkey_update_reverts_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("peers.db");
+        let db = crate::federation::PeerDb::open(path.to_str().unwrap()).unwrap();
+        db.insert(&crate::federation::FederationPeer {
+            name: "peer-x".to_string(),
+            url: "http://127.0.0.1:1".to_string(),
+            auth_token: "tok".to_string(),
+            shared_secret: String::new(),
+            last_sync: None,
+            approved: true,
+            added_at: 1,
+            ed25519_pubkey: String::new(),
+            external_address: String::new(),
+            permissions: Default::default(),
+        }).unwrap();
+
+        // Falla solo la columna de la pubkey; approved sigue existiendo.
+        let raw = rusqlite::Connection::open(&path).unwrap();
+        raw.execute("ALTER TABLE federation_peers DROP COLUMN ed25519_pubkey", []).unwrap();
+
+        let err = persist_peer_pubkey_or_revert(&db, "peer-x", "pubkey").unwrap_err();
+        assert!(err.contains("approval reverted"), "got: {err}");
+
+        let approved: i64 = raw.query_row(
+            "SELECT approved FROM federation_peers WHERE name = ?1",
+            rusqlite::params!["peer-x"],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(approved, 0, "el peer no puede quedar aprobado sin pubkey");
     }
 
     /// T17: an ERROR reading freshness must REJECT, never fall through to upsert.
