@@ -419,6 +419,7 @@ jobs:
           cargo test -p tylluan-kernel --test mesh_audit
           cargo test -p tylluan-kernel --test audit_callsite_static_tripwire
           cargo test -p tylluan-kernel --test audit_behavior_mb7_rows
+          cargo test -p tylluan-kernel --test regression_d55_d56_outside_crate
 
   desktop-tauri-check:
     name: Desktop — Tauri shell check
