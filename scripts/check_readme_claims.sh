@@ -112,6 +112,78 @@ for f in "$README_EN" "$README_ES"; do
   report OK links "$f: $okc relative file links exist, $badc broken"
 done
 
+# ---- 6. R1 bilingual parity: the SET of claimed values per unit noun must
+# match between README.md and README.es.md. Deliberately a value SET, not a
+# frequency multiset: prose structure legitimately differs across languages
+# (word order, how often a number is repeated), and locale-formatted figures
+# (latency "ms", percentages in profile tables) are excluded to avoid false
+# positives — verified live: en/es differ on those today with no drift.
+# Catches the 1125/1329 class on ANY shared claim (tests, questions, guilds),
+# not only tests as section 2 does against AGENTS.
+claim_set() { # $1=file  -> sorted unique numeric values for claim nouns
+  # "tools/herramientas" deliberately NOT here: sovereign tool count is
+  # already gated name-by-name against tools.rs in section 1, bilingually.
+  grep -oiE '[0-9]+([[:space:]]+[a-z-]+){0,3}[[:space:]]+(tests|questions|preguntas|guilds)' "$1" \
+    | grep -oE '^[0-9]+' | sort -un | tr '\n' ','
+}
+semver_set() { grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' "$1" | sort -u | tr '\n' ','; }
+if [ -f "$README_EN" ] && [ -f "$README_ES" ]; then
+  en_n=$(claim_set "$README_EN"); es_n=$(claim_set "$README_ES")
+  if [ "$en_n" = "$es_n" ]; then
+    report OK bilingual "numeric claim values (tests/questions/guilds) identical in README.md and README.es.md: $en_n"
+  else
+    report DRIFT bilingual "README.md claims {value set: $en_n} but README.es.md claims {$es_n} — one language is stale"
+  fi
+  en_v=$(semver_set "$README_EN"); es_v=$(semver_set "$README_ES")
+  if [ "$en_v" = "$es_v" ]; then
+    report OK bilingual "version mentions match across READMEs: $en_v"
+  else
+    report DRIFT bilingual "README.md mentions versions {$en_v} but README.es.md mentions {$es_v}"
+  fi
+fi
+
+# ---- 7. R3 benchmark backing: every Recall@/Latency figure in a benchmark
+# table must exist as a number in the benchmarks/*.json cited by that README,
+# and the table must carry the historical-run disclaimer (version + date).
+# Found live 2026-10-24 (H-26 audit): numbers currently back correctly
+# (82/90/46/12.9 in benchmarks/longmemeval_v0.12.0.json); the rule exists to
+# keep fabricated or drifted figures out of future edits.
+bench_json=$(grep -hoE 'benchmarks/[A-Za-z0-9_.-]+\.json' "$README_EN" "$README_ES" 2>/dev/null | sort -u | head -1)
+if [ -n "${bench_json:-}" ] && [ -f "$bench_json" ]; then
+  claimed=0; backed=0; missing=""
+  for f in "$README_EN" "$README_ES"; do
+    [ -f "$f" ] || continue
+    while IFS='|' read -r label value; do
+      label=$(echo "$label" | tr -d ' '); value=$(echo "$value" | tr -d ' |%ms'); val=${value%%.*}
+      case "$label" in
+        Recall@*) key="" ;;                      # any Recall@K: match the number anywhere in the JSON
+        Latency*|Latencia*) key="" ;;
+        *) continue ;;
+      esac
+      claimed=$((claimed+1))
+      if grep -qE "(^|[^0-9.])${val}(\.0)?([^0-9]|$)" "$bench_json"; then
+        backed=$((backed+1))
+      else
+        missing="$missing $f:$label=$value"
+      fi
+    done < <(grep -E '^\|[[:space:]]*(Recall@|Latency|Latencia)' "$f" | sed -E 's/^\|([^|]*)\|([^|]*)\|.*/\1|\2/')
+  done
+  if [ "$claimed" -gt 0 ] && [ "$backed" -eq "$claimed" ]; then
+    report OK benchmark "$claimed benchmark table figures all present in $bench_json"
+  elif [ "$claimed" -gt 0 ]; then
+    report DRIFT benchmark "benchmark figures without backing value in $bench_json:$missing"
+  fi
+  for f in "$README_EN" "$README_ES"; do
+    [ -f "$f" ] || continue
+    grep -E '^\|[[:space:]]*(Recall@|Latency|Latencia)' "$f" >/dev/null || continue
+    if grep -B10 -E '^\|[[:space:]]*(Recall@|Latency|Latencia)' "$f" | grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+.{0,80}\(?[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
+      report OK benchmark "$f benchmark table carries version+date historical disclaimer"
+    else
+      report DRIFT benchmark "$f benchmark table lacks a version+date disclaimer within 10 lines (run provenance must be explicit)"
+    fi
+  done
+fi
+
 if [ "$drifts" -gt 0 ]; then
   echo "RESULT: $drifts DRIFT line(s) — README claims diverge from the tree."
   exit 1
