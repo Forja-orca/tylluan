@@ -69,7 +69,8 @@ fi
 # ── Gate coverage helper (MD-9): checks for unwired/orphan gate scripts ──
 # EXEMPT_GATE_HELPERS lists tools that are not run as pre-commit/CI gates
 # directly but serve as standalone developer/build utilities with documented rationale.
-EXEMPT_GATE_HELPERS="verify_portable_guild.py"
+# verify_restart.sh: operator tool run by hand after a kernel restart (T-DSH-60); not a gate.
+EXEMPT_GATE_HELPERS="verify_portable_guild.py verify_restart.sh"
 
 find_orphan_gates() {
     local root="$1"
