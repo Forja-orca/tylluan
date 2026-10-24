@@ -1700,6 +1700,12 @@ async fn nodes_unregister_handler(
 
 // ─── M31-P1: Audit Log Query ──────────────────────────────────────────────
 
+/// D-53: el endpoint de lectura debe resolver la misma DB que escribe el
+/// kernel (`TYLLUAN_AUDIT_DB` incluido), no una ruta hardcodeada.
+fn audit_read_db_path() -> std::path::PathBuf {
+    crate::transport::server::handler_do::audit_db_path()
+}
+
 /// GET /api/v1/audit — Query the audit trail with optional agent_id filter and hash-chain verification.
 async fn audit_log_handler(
     State(_state): State<Arc<HttpState>>,
@@ -1709,14 +1715,14 @@ async fn audit_log_handler(
     let limit: usize = params.get("limit").and_then(|v| v.parse().ok()).unwrap_or(50);
     let offset: usize = params.get("offset").and_then(|v| v.parse().ok()).unwrap_or(0);
 
-    let db_path = std::path::Path::new("./data/audit.db");
-    match crate::config::open_db(db_path) {
+    let db_path = audit_read_db_path();
+    match crate::config::open_db(&db_path) {
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
             "error": format!("Failed to open audit db: {e}")
         }))),
         Ok(conn) => {
             // Ensure table exists
-            let _ = conn.execute_batch(
+            if let Err(e) = conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS guild_audit_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL, guild TEXT NOT NULL,
@@ -1725,7 +1731,9 @@ async fn audit_log_handler(
                     result_preview TEXT, prev_hash TEXT NOT NULL DEFAULT '',
                     hash TEXT NOT NULL
                 );"
-            );
+            ) {
+                tracing::warn!("audit endpoint: failed to ensure guild_audit_log: {e}");
+            }
             let (sql, bind): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if !agent_id.is_empty() {
                 (
                     "SELECT id, timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash \
@@ -2105,5 +2113,32 @@ mod protocol_negotiation_tests {
             confirm: false,
         };
         assert!(!req.confirm, "Guardrail 1: default invocation must be dry-run without writing to disk");
+    }
+}
+
+#[cfg(test)]
+mod d53_audit_read_path_tests {
+    use super::audit_read_db_path;
+
+    /// D-53: el endpoint de lectura resuelve la misma ruta que el writer,
+    /// incluido `TYLLUAN_AUDIT_DB`. Usa el lock compartido con el seam de
+    /// `handler_do::audit` (env es global al proceso).
+    #[test]
+    fn audit_read_path_uses_env_seam() {
+        let _guard = crate::transport::server::handler_do::audit::AUDIT_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db = dir.path().join("audit.db");
+        unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", &db) };
+        assert_eq!(audit_read_db_path(), db);
+
+        unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
+        assert_eq!(
+            audit_read_db_path(),
+            std::path::PathBuf::from("./data/audit.db"),
+            "sin env debe conservar la ruta histórica"
+        );
     }
 }

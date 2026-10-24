@@ -1,3 +1,8 @@
+/// D-53: `TYLLUAN_AUDIT_DB` es global al proceso. Los tests que la tocan
+/// (seam de audit.rs y el endpoint de lectura de D-53) comparten este lock.
+#[cfg(test)]
+pub(crate) static AUDIT_ENV_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Deterministic failure node ID for the routing feedback loop.
 pub(crate) fn routing_failure_id(intent: &str) -> String {
     let hash: u64 = intent.bytes()
@@ -366,19 +371,14 @@ mod tests {
     /// the unset default so the migration is byte-identical when no env var
     /// is present.
     /// SAFETY (set_var): edition-2024 unsafe op. Lib-test binaries run tests
-    /// on many threads, and no other test in this binary touches
-    /// TYLLUAN_AUDIT_DB, but env is process-global — guard a static AtomicBool
-    /// so any future second user of this seam in the same binary panics in
-    /// development instead of racing silently.
+    /// on many threads, and env is process-global; this test and the D-53
+    /// endpoint test share `AUDIT_ENV_TEST_LOCK` so they cannot race.
     #[test]
     fn audit_store_seam_write_and_read_land_on_same_file() {
-        use super::{audit_db_path, log_audit_entry};
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static SEAM_TEST_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
-        assert!(
-            !SEAM_TEST_IN_FLIGHT.swap(true, Ordering::SeqCst),
-            "a second test in this binary is using TYLLUAN_AUDIT_DB concurrently — env is process-global"
-        );
+        use super::{audit_db_path, log_audit_entry, AUDIT_ENV_TEST_LOCK};
+        let _env_guard = AUDIT_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let db = std::env::temp_dir().join(format!("audit_seam_rt_{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db);
@@ -412,6 +412,5 @@ mod tests {
 
         unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
         let _ = std::fs::remove_file(&db);
-        SEAM_TEST_IN_FLIGHT.store(false, Ordering::SeqCst);
     }
 }
