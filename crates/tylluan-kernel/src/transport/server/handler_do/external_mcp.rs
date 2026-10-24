@@ -123,6 +123,15 @@ async fn dispatch_to_external(
     }
 }
 
+/// D-48: el evento `external_mcp_call` del dashboard no debe llevar el intent
+/// completo (puede contener secretos o datos personales). La auditoría ya
+/// recorta su preview; el dashboard usa el mismo límite de 200 caracteres.
+const DASHBOARD_INTENT_MAX_CHARS: usize = 200;
+
+fn dashboard_intent_preview(intent: &str) -> String {
+    intent.chars().take(DASHBOARD_INTENT_MAX_CHARS).collect()
+}
+
 async fn do_external_call(
     server: &TylluanServer,
     server_name: &str,
@@ -185,7 +194,7 @@ async fn do_external_call(
         "server": server_name,
         "tool": tool_name,
         "agent_id": agent_id.unwrap_or("anonymous"),
-        "intent": intent,
+        "intent": dashboard_intent_preview(intent),
         "ts": chrono::Utc::now().timestamp_millis()
     }));
 
@@ -195,6 +204,33 @@ async fn do_external_call(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dashboard_intent_preview_truncates_to_200_chars() {
+        let long = "a".repeat(500);
+        let preview = dashboard_intent_preview(&long);
+        assert_eq!(preview.chars().count(), DASHBOARD_INTENT_MAX_CHARS);
+        assert_eq!(preview.len(), DASHBOARD_INTENT_MAX_CHARS);
+    }
+
+    #[test]
+    fn dashboard_intent_preview_keeps_short_intent() {
+        assert_eq!(
+            dashboard_intent_preview("search the web"),
+            "search the web"
+        );
+    }
+
+    #[test]
+    fn dashboard_intent_preview_counts_chars_not_bytes() {
+        let long = "é".repeat(250);
+        let preview = dashboard_intent_preview(&long);
+        assert_eq!(preview.chars().count(), DASHBOARD_INTENT_MAX_CHARS);
+        assert!(
+            preview.len() > DASHBOARD_INTENT_MAX_CHARS,
+            "no debe cortar por bytes ni romper UTF-8"
+        );
+    }
 
     #[test]
     fn test_tokenize_intent_for_external_mcp() {
