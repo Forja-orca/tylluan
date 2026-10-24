@@ -25,6 +25,10 @@ AGENTS="deep buffy dsh antigravity codex readme hermes scratch"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+# T-DSH-62: bajo WSL (bash por defecto en algunos hosts) /e/... no existe y status pintaba
+# una tabla vacia con exit 0. Mejor fallar claro.
+[ -d "$MAIN_REPO" ] || die "MAIN_REPO=$MAIN_REPO no existe: usa Git Bash (MSYS), no WSL"
+
 wt_path() {
   case "$1" in
     hermes) echo "/d/hermes-projects/tylluan-wt-hermes" ;;
