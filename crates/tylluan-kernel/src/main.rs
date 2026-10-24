@@ -1407,6 +1407,11 @@ async fn main() -> anyhow::Result<()> {
     let coloquio_for_version_check = coloquio.clone();
     let use_http = config.nexus.transport.contains(&"http".to_string())
         || config.nexus.transport.contains(&"sse".to_string());
+    // D-46: la tarea HTTP publica aquí su resultado. Un fallo de bind debe
+    // terminar el proceso (código 1) tras el shutdown limpio; antes se quedaba
+    // vivo esperando en stdio aunque no hubiera puerto.
+    let (http_status_tx, mut http_status_rx) =
+        tokio::sync::watch::channel::<Option<String>>(None);
     if use_http {
         let host = config.nexus.host.clone();
         let port = config.nexus.port;
@@ -1419,8 +1424,14 @@ async fn main() -> anyhow::Result<()> {
         let cancel_token_clone = cancel_token.clone();
         let health_for_http = health_ready.clone();
         tokio::spawn(async move {
-            if let Err(e) = transport::http::start_http_server_with_download(&host, port, config.nexus.port_retry_secs, http_token.clone(), config.nexus.dev_mode, Some(server_clone), registry_for_http.clone(), download_clone, tunnel_wsl_url, coloquio.clone(), jobs_for_http, cancel_token_clone, health_for_http, node_identity.clone()).await {
-                error!("❌ Universal Gateway: HTTP server error: {}", e);
+            match transport::http::start_http_server_with_download(&host, port, config.nexus.port_retry_secs, http_token.clone(), config.nexus.dev_mode, Some(server_clone), registry_for_http.clone(), download_clone, tunnel_wsl_url, coloquio.clone(), jobs_for_http, cancel_token_clone, health_for_http, node_identity.clone()).await {
+                Ok(()) => {
+                    let _ = http_status_tx.send(None);
+                }
+                Err(e) => {
+                    error!("�?O Universal Gateway: HTTP server error: {}", e);
+                    let _ = http_status_tx.send(Some(e.to_string()));
+                }
             }
         });
     }
@@ -2167,24 +2178,19 @@ async fn main() -> anyhow::Result<()> {
     // tokio::spawn(routine_fut);
 
     // ─── BLOCK 2: Main Application Loop (Headless Only) ──────────────────
-    if let Some(handle) = stdio_handle {
-        info!("📡 Kernel: Operating in Stdio mode. Waiting for MCP client...");
-        tokio::select! {
-            _ = handle => {}
-            _ = cancel_token.cancelled() => {
-                info!("Shutdown request received during Stdio session.");
-            }
-        }
-    } else {
-        info!("   Press Ctrl+C to shutdown gracefully.");
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
-                info!("Ctrl+C received, shutting down...");
-            }
-            _ = cancel_token.cancelled() => {
-                info!("Shutdown request received, shutting down...");
-            }
-        }
+    // D-46: una sola espera. Si el HTTP falló, `wait_for_shutdown` vuelve con
+    // el error y se sale con código 1 después del shutdown limpio (antes el
+    // proceso se quedaba vivo en stdio aunque no hubiera puerto).
+    let http_failure = transport::http::wait_for_shutdown(
+        stdio_handle,
+        &mut http_status_rx,
+        &cancel_token,
+        use_http,
+    )
+    .await;
+    if let Some(err) = &http_failure {
+        error!("HTTP transport failed; shutting down: {err}");
+        cancel_token.cancel();
     }
 
     // ─── Graceful Shutdown ──────────────────────────────────────────
@@ -2227,6 +2233,10 @@ async fn main() -> anyhow::Result<()> {
     let _ = std::fs::remove_file(&pid_file);
 
     info!("👋 TylluanNexus stopped. No orphan processes left.");
+    // D-46: un fallo del HTTP es un fallo de arranque, no una parada normal.
+    if http_failure.is_some() {
+        std::process::exit(1);
+    }
     Ok(())
 }
 

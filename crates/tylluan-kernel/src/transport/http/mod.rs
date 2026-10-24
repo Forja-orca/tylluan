@@ -297,6 +297,63 @@ fn default_export_limit() -> usize { 5000 }
 
 // --- Initialization ---
 
+/// D-46: espera la señal que termina el proceso.
+///
+/// Se extrae de `main` para poder testear que un fallo del HTTP **termina** la
+/// espera. Antes, si el bind fallaba, la tarea HTTP logueaba el error y moría,
+/// pero `main` seguía vivo esperando en stdio (o en Ctrl+C) sin puerto: un
+/// lanzador que espera la salida se colgaba.
+///
+/// Devuelve `Some(error)` si el HTTP falló (o terminó sin resultado); `None`
+/// si la parada fue por stdio, Ctrl+C o cancelación normal.
+pub async fn wait_for_shutdown(
+    stdio: Option<tokio::task::JoinHandle<()>>,
+    http_status: &mut tokio::sync::watch::Receiver<Option<String>>,
+    cancel: &tokio_util::sync::CancellationToken,
+    http_enabled: bool,
+) -> Option<String> {
+    let has_stdio = stdio.is_some();
+    let stdio_done = async move {
+        match stdio {
+            Some(handle) => {
+                let _ = handle.await;
+            }
+            None => std::future::pending::<()>().await,
+        }
+    };
+    let ctrl_c = async move {
+        if has_stdio {
+            std::future::pending::<()>().await;
+        } else {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+    };
+    let http_failure = async {
+        if !http_enabled {
+            std::future::pending::<()>().await;
+        }
+        loop {
+            if let Some(error) = http_status.borrow().clone() {
+                break Some(error);
+            }
+            if http_status.changed().await.is_err() {
+                // La tarea HTTP desapareció sin publicar resultado (panic).
+                break Some("HTTP task ended without a result".to_string());
+            }
+        }
+    };
+
+    let mut http_failure_result = None;
+    tokio::select! {
+        _ = stdio_done => {}
+        _ = ctrl_c => {}
+        failure = http_failure => { http_failure_result = failure; }
+        _ = cancel.cancelled() => {}
+    }
+
+    http_failure_result.or_else(|| http_status.borrow().clone())
+}
+
 /// D-38: bindea el puerto configurado, reintentando mientras esté ocupado.
 /// Nunca cae a otro puerto: al agotar `retry_secs`, devuelve un error claro.
 async fn bind_http_listener(
@@ -1865,6 +1922,26 @@ mod tests {
         assert!(msg.contains("ocupado"), "mensaje poco claro: {msg}");
         assert!(msg.contains(&port.to_string()), "falta el puerto: {msg}");
         assert!(msg.contains("No arranco en otro puerto"), "falta la politica: {msg}");
+    }
+
+    #[tokio::test]
+    async fn test_http_failure_ends_shutdown_wait() {
+        let (tx, mut rx) = tokio::sync::watch::channel::<Option<String>>(None);
+        tx.send(Some("bind failed".to_string())).unwrap();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let failure = wait_for_shutdown(None, &mut rx, &cancel, true).await;
+        assert_eq!(failure.as_deref(), Some("bind failed"));
+    }
+
+    #[tokio::test]
+    async fn test_cancel_ends_shutdown_wait_without_http_failure() {
+        let (_tx, mut rx) = tokio::sync::watch::channel::<Option<String>>(None);
+        let cancel = tokio_util::sync::CancellationToken::new();
+        cancel.cancel();
+        assert!(
+            wait_for_shutdown(None, &mut rx, &cancel, true).await.is_none(),
+            "D-46: una parada normal no debe reportarse como fallo HTTP"
+        );
     }
 
     #[tokio::test]

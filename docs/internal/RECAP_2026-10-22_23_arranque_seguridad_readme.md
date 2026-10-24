@@ -53,7 +53,7 @@ Releídos los mensajes de José del 22 de octubre en el registro de la sesión:
 
 ## 5. Estado de producción
 
-- El kernel en marcha sigue en `955179f`: no tiene D-39a/a2, D-38, D-39b, T-DSH-54/55, D-29/D-30 ni las correcciones de `tokio`/certifi del Python empaquetado (esto último sí está aplicado a los ficheros en disco, no al proceso).
+- El kernel en marcha sigue reportando `955179f` y **se compiló con D-34 aplicado** (el hash es el HEAD del checkout, no prueba un árbol limpio; D-34 es `b846545`). No tiene D-39a/a2, D-38, D-39b, T-DSH-54/55, D-29/D-30 ni las correcciones de `tokio`/certifi del Python empaquetado (esto último sí está aplicado a los ficheros en disco, no al proceso).
 - Antes de reiniciar: que Deep, DSH, Buffy y Hermes paren; build release; copiar `data/silva.db`; avisar en el Coloquio; José lanza el lanzador; comprobar que el commit de `/health` coincide con `origin/main`.
 - Aviso para el reinicio: `/health` puede mostrar `starting` el primer segundo; con D-38 un puerto ocupado ya no arranca en otro.
 
