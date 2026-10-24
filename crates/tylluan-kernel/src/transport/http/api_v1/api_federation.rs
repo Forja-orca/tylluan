@@ -280,6 +280,26 @@ pub async fn federation_remove_peer(
     }
 }
 
+/// D-52: persistir la pubkey Ed25519 de un peer no puede ser best-effort. Si
+/// el UPDATE falla, `ingest_from_peer` verá `has_pubkey=false` y se saltará
+/// `verify_envelope` (fail-open silencioso). Devuelve el motivo para que el
+/// handler responda error y no loguee un éxito falso.
+fn persist_peer_pubkey(
+    peer_db: &crate::federation::PeerDb,
+    name: &str,
+    pubkey: &str,
+) -> Result<(), String> {
+    match peer_db.update_ed25519_pubkey(name, pubkey) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(format!(
+            "peer '{name}' not found in federation_peers; pubkey was not persisted"
+        )),
+        Err(e) => Err(format!(
+            "update_ed25519_pubkey failed for peer '{name}': {e}"
+        )),
+    }
+}
+
 pub async fn federation_approve_peer(
     State(state): State<Arc<HttpState>>,
     Path(name): Path<String>,
@@ -303,8 +323,22 @@ pub async fn federation_approve_peer(
                             // M12-B: fetch Ed25519 public key
                             if let Some(pubkey) = body.get("public_key").and_then(|v| v.as_str())
                                 && !pubkey.is_empty() {
-                                    let _ = state.peer_db.update_ed25519_pubkey(&name, pubkey);
-                                    tracing::info!("🔑 Auto-fetched Ed25519 pubkey for peer '{}'", name);
+                                    match persist_peer_pubkey(state.peer_db.as_ref(), &name, pubkey) {
+                                        Ok(()) => {
+                                            tracing::info!("🔑 Auto-fetched Ed25519 pubkey for peer '{}'", name);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!(
+                                                "Auto-fetched Ed25519 pubkey for peer '{}' could not be persisted: {}",
+                                                name, e
+                                            );
+                                            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                                                "status": "approved_without_identity",
+                                                "name": name,
+                                                "error": format!("peer approved but its Ed25519 pubkey could not be persisted: {e}")
+                                            }))).into_response();
+                                        }
+                                    }
                                 }
                             // M12-C: fetch external address for hole-punching
                             if let Some(addr) = body.get("external_address").and_then(|v| v.as_str())
@@ -1250,6 +1284,28 @@ pub async fn nat_external_address(
 #[cfg(test)]
 mod step2_unit_tests {
     use super::*;
+
+    /// D-52: si el UPDATE de la pubkey falla, el helper devuelve error; el
+    /// handler no debe loguear el auto-fetch como éxito ni seguir como si el
+    /// peer estuviera verificado.
+    #[test]
+    fn persist_peer_pubkey_propagates_db_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("peers.db");
+        let db = crate::federation::PeerDb::open(path.to_str().unwrap()).unwrap();
+
+        // Fuerza "no such table": el UPDATE real fallará, igual que una DB
+        // dañada o una migración incompleta.
+        let raw = rusqlite::Connection::open(&path).unwrap();
+        raw.execute("DROP TABLE federation_peers", []).unwrap();
+        drop(raw);
+
+        let err = persist_peer_pubkey(&db, "peer-x", "pubkey").unwrap_err();
+        assert!(
+            err.contains("update_ed25519_pubkey failed"),
+            "el error debe propagarse con contexto, got: {err}"
+        );
+    }
 
     /// T17: an ERROR reading freshness must REJECT, never fall through to upsert.
     #[test]
