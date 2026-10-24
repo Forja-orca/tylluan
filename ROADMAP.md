@@ -326,7 +326,7 @@ These decisions were taken by the project owner on 2026-10-15 and have started t
 - ✅ **Occupied port:** the kernel retries the configured port and fails with a clear error; it never falls back to a random port (D-38).
 - ✅ **Guild credentials:** guilds no longer receive the operator token (D-34). Corrupt `consents.json` is preserved and pending plans survive a restart (D-29, D-30).
 - ✅ **Supply chain:** `tokio` 1.54.1, certifi and pip floors, tiptap overrides, `scripts/check_supply_chain.sh` (report-only). Week-of-vulnerabilities report: `docs/internal/SEGURIDAD_semana_vulnerabilidades_2026-10-24.md`.
-- 🟡 **Production restart** pending. The running binary reports `/health` commit `955179f` and **was built with D-34 applied** (the hash is the checkout HEAD, not proof of a clean tree; the D-34 commit is `b846545`). It still predates D-38, D-39a/a2, D-39b, D-29/D-30 and this docs/security pass. Plan and next steps: `docs/internal/RECAP_2026-10-22_23_arranque_seguridad_readme.md`.
+- ✅ **Production restart** done on 2026-10-24 (`/health` commit `93d7cb1`, kernel code identical to `7b24da2`). Historical note on the previous binary: The running binary reports `/health` commit `955179f` and **was built with D-34 applied** (the hash is the checkout HEAD, not proof of a clean tree; the D-34 commit is `b846545`). It still predates D-38, D-39a/a2, D-39b, D-29/D-30 and this docs/security pass. Plan and next steps: `docs/internal/RECAP_2026-10-22_23_arranque_seguridad_readme.md`.
 
 Evidence and details: `docs/reference/adr/ADR019_team_scoped_networks.md`, `docs/reference/adr/ADR018_decision_fabric.md`, `docs/reference/research/2026-10-15_decision_models_industry_integration.md`.
 
