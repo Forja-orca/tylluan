@@ -39,7 +39,7 @@ fn live_line(src: &str, needle: &str) -> bool {
 #[test]
 fn row1_approve_action_audit_call_is_live() {
     assert!(
-        live_line(HANDLERS_RS, "let _ = handler_do::audit::log_audit_entry("),
+        live_line(HANDLERS_RS, "handler_do::audit::audit_or_warn("),
         "M-BUFFY-7: la fila 1 de T-DSH-67 (audit de approve_action, \
          handlers.rs) desapareció o quedó comentada. Si el cambio es intencional, \
          elimina/ajusta este tripwire JUNTO con la llamada y dilo en el commit."
@@ -49,7 +49,7 @@ fn row1_approve_action_audit_call_is_live() {
 #[test]
 fn row2_kernel_tool_audit_call_is_live() {
     assert!(
-        live_line(HANDLERS_RS, "let _ = handler_do::log_audit_entry(\"\", \"kernel\""),
+        live_line(HANDLERS_RS, "handler_do::audit_or_warn(\"\", \"kernel\""),
         "M-BUFFY-7: la fila 2 de T-DSH-67 (audit de tools soberanas que no \
          son tylluan_do, handlers.rs, guild='kernel') desapareció o quedó \
          comentada. Si el cambio es intencional, elimina/ajusta este tripwire \
@@ -60,7 +60,7 @@ fn row2_kernel_tool_audit_call_is_live() {
 #[test]
 fn row3_outcome_audit_call_is_live() {
     assert!(
-        live_line(OUTCOME_RS, "let _ = log_audit_entry(&audit_intent, &audit_guild"),
+        live_line(OUTCOME_RS, "audit_or_warn(&audit_intent, &audit_guild"),
         "M-BUFFY-7: la fila 3 de T-DSH-67 (audit de dispatch de tylluan_do en \
          post_process_outcome, outcome.rs) desapareció o quedó comentada. El \
          test D-28 de lib la verifica por conducto; si retiras la llamada, \
@@ -71,7 +71,7 @@ fn row3_outcome_audit_call_is_live() {
 #[test]
 fn row4_external_mcp_audit_call_is_live() {
     assert!(
-        live_line(EXTERNAL_MCP_RS, "let _ = log_audit_entry(&audit_intent, &audit_guild"),
+        live_line(EXTERNAL_MCP_RS, "audit_or_warn(&audit_intent, &audit_guild"),
         "M-BUFFY-7: la fila 4 de T-DSH-67 (audit de llamadas a MCP externos, \
          external_mcp.rs) desapareció o quedó comentada. Si el cambio es \
          intencional, elimina/ajusta este tripwire JUNTO con la llamada."
@@ -81,7 +81,7 @@ fn row4_external_mcp_audit_call_is_live() {
 #[test]
 fn row5_silva_edge_audit_call_is_live() {
     assert!(
-        live_line(API_V1_MOD_RS, "let _ = crate::transport::server::handler_do::audit::log_audit_entry("),
+        live_line(API_V1_MOD_RS, "crate::transport::server::handler_do::audit::audit_or_warn("),
         "M-BUFFY-7: la fila 5 de T-DSH-67 (excepción de operador-guild D-34 \
          en POST /api/v1/silva/edge, api_v1/mod.rs) desapareció o quedó \
          comentada. cola_d34_acceptance verifica por conducto la escritura."
