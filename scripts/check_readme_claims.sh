@@ -245,6 +245,108 @@ else
   report DRIFT guildcount "cannot apply R2: guilds/ or $CAT missing"
 fi
 
+# ---- 9. R4 anchor liveness: every `path:LINE[-LINE]` anchor cited in
+# ROADMAP.md/STATUS.md must (a) name a file that exists in the tree and
+# (b) point at line numbers within that file's length. When the citing
+# line is NOT a historical milestone entry (entries mentioning vN.N or
+# ISO dates cite where code lived AT THE TIME — graph.rs:739 for the
+# v0.10.0 degree bug is correct history, not drift), additionally (c)
+# at least one code identifier belonging to the anchor's own SENTENCE
+# segment (split on . ! ? | to avoid token bleed from neighbouring
+# claims on long lines) — snake_case, camelCase, or any word inside
+# backticks — must occur within LINE±5 of the cited file. Found live
+# 2026-10-24 (H-30 audit + H-31 build): config.rs:2100 pointed at a
+# struct while the dev_mode warning it describes lives at 2294+, and
+# main.rs:1758-1772 cited wal_checkpoint wiring that lives at 2140.
+# Ambiguous basenames (main.rs exists 5x) resolve across all tree
+# candidates: OK if ANY satisfies range(+content); finds are cached per
+# basename and prune target/.git/node_modules/dist (first run walked
+# node_modules and timed out the whole suite).
+# Test-injection override: CHECK_README_ANCHOR_DOCS replaces the docs
+# list (space-separated) so clean/drift fixtures run without touching
+# the real ROADMAP/STATUS — same injection pattern used for R2.
+ANCHOR_DOCS_DEFAULT=("ROADMAP.md" "STATUS.md")
+if [ -n "${CHECK_README_ANCHOR_DOCS:-}" ]; then
+  read -r -a ANCHOR_DOCS <<< "$CHECK_README_ANCHOR_DOCS"
+else
+  ANCHOR_DOCS=("${ANCHOR_DOCS_DEFAULT[@]}")
+fi
+anchors_total=0; anchors_bad=0; BT='`'
+declare -A find_cache=()
+for doc in "${ANCHOR_DOCS[@]}"; do
+  [ -f "$doc" ] || { report DRIFT anchors "anchor doc $doc missing"; anchors_bad=$((anchors_bad+1)); continue; }
+  ln=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    ln=$((ln+1))
+    # pure-bash guard: skip lines that cannot host an anchor (MSYS fork
+    # per pipeline is ~100ms; 600 lines x grep would time the suite out)
+    case "$line" in *.rs:*|*.toml:*|*.yml:*|*.py:*|*.md:*|*.sh:*|*.ps1:*|*.json:*) ;; *) continue ;; esac
+    hist=0
+    case "$line" in *v[0-9]*.[0-9]*|*[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*|*estaba*|*hist*|*fixed*|*was*|*fue\ un*) hist=1 ;; esac
+    for a in $(printf '%s\n' "$line" | grep -oE '[A-Za-z0-9_./-]+\.(rs|toml|yml|py|md|sh|ps1|json):[0-9]+(-[0-9]+)?'); do
+      anchors_total=$((anchors_total+1))
+      afile=${a%%:*}; rest=${a#*:}; l1=${rest%%-*}; l2=${rest##*-}
+      seg=$(printf '%s\n' "$line" | sed 's/[.!?|]/\n/g' | grep -F -- "$a" | head -1)
+      [ -n "$seg" ] || seg=$(printf '%s\n' "$line" | sed 's/[.!?|]/\n/g' | grep -F -- "$afile:" | head -1)
+      [ -n "$seg" ] || seg="$line"
+      seg=${seg//$a/}   # drop the anchor itself: its dots/slashes otherwise become junk tokens through tr/grep
+      code_toks=$( { printf '%s' "$seg" | grep -oE '[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+|[a-z]+[A-Z][A-Za-z0-9]*'
+                    printf '%s' "$seg" | grep -oE "${BT}[^${BT}]{3,150}${BT}" | grep -oE '[A-Za-z_][A-Za-z0-9_]{3,}'
+                  } 2>/dev/null | sort -u | tr '\n' ' ')
+      bkey=$(basename "$afile")
+      if [ -f "$afile" ]; then cands="$afile"
+      elif [ -n "${find_cache[$bkey]+x}" ]; then cands="${find_cache[$bkey]}"
+      else cands=$(find . \( -name target -o -name .git -o -name node_modules -o -name dist \) -prune -o -type f -name "$bkey" -print 2>/dev/null | sed 's|^\./||'); find_cache[$bkey]="$cands"; fi
+      if [ -z "$cands" ]; then
+        report DRIFT anchors "$doc:$ln $a — file $bkey not found in the tree"
+        anchors_bad=$((anchors_bad+1)); continue
+      fi
+      hit_any=0; any_inrange=0; range_note=""; voc_miss_note=""
+      for cand in $cands; do
+        nl=$(wc -l < "$cand")
+        if [ "$l1" -gt "$nl" ] || [ "$l2" -gt "$nl" ]; then range_note="$cand has only $nl lines (cited $l1-$l2)"; continue; fi
+        any_inrange=1
+        [ "$hist" = 1 ] && { hit_any=1; break; }
+        lo=$((l1>5 ? l1-5 : 1)); hi=$((l2+5))
+        window=$(sed -n "${lo},${hi}p" "$cand")
+        if [ -z "${code_toks//[[:space:]]/}" ]; then hit_any=1; break; fi
+        for t in $code_toks; do
+          if printf '%s' "$window" | grep -qw -- "$t"; then hit_any=1; break; fi
+        done
+        if [ "$hit_any" = 1 ]; then break; fi
+        # One whole-file grep (OR of tokens) decides whether this file's
+        # own vocabulary is even in play: if tokens live elsewhere in the
+        # same file, the anchor is stale (content moved away); if NO
+        # candidate contains the tokens at all, the sentence is not
+        # describing these files (absence/cross-file claims) and we do
+        # not over-claim drift. A candidate that lacks the vocabulary
+        # must never grant OK while another candidate has it (real bug
+        # caught by the H-31 drift fixture: main.rs:100 + wal_checkpoint
+        # passed via cli main.rs while kernel main.rs has it at 2140).
+        if grep -qw $(printf '%s' "$code_toks" | awk '{for(i=1;i<=NF;i++) printf "-e%s ",$i}') -- "$cand" 2>/dev/null; then
+          voc_miss_note="$voc_miss_note $cand (tokens live elsewhere in it)"
+        fi
+      done
+      if [ "$hit_any" = 1 ] && [ "$hist" = 1 ]; then
+        report OK anchors "$doc:$ln $a — file resolves, lines in range (historical line: content check skipped by design)"
+      elif [ "$hit_any" = 1 ]; then
+        report OK anchors "$doc:$ln $a — file resolves, lines in range, clause content verified near anchor"
+      elif [ "$any_inrange" = 0 ]; then
+        report DRIFT anchors "$doc:$ln $a — cited line(s) beyond EOF ($range_note)"
+        anchors_bad=$((anchors_bad+1))
+      elif [ -n "$voc_miss_note" ]; then
+        report DRIFT anchors "$doc:$ln $a — file and lines exist, but the clause tokens occur only elsewhere in the file, not near the cited lines (anchor stale, content moved):$voc_miss_note"
+        anchors_bad=$((anchors_bad+1))
+      else
+        report OK anchors "$doc:$ln $a — file resolves, lines in range; no clause token exists in any candidate file (claim is not describing these files' content — existence+range only)"
+      fi
+    done
+  done < "$doc"
+done
+if [ "$anchors_total" -gt 0 ] && [ "$anchors_bad" -eq 0 ]; then
+  report OK anchors "all $anchors_total path:line anchors in ${ANCHOR_DOCS[*]} live and content-backed"
+fi
+
 if [ "$drifts" -gt 0 ]; then
   echo "RESULT: $drifts DRIFT line(s) — README claims diverge from the tree."
   exit 1
