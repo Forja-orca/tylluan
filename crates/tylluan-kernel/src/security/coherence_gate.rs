@@ -1885,22 +1885,23 @@ mod judge_concurrency_tests {
     async fn bounded_wait_skips_and_counts_instead_of_queueing_forever() {
         use crate::security::judge_telemetry::judge_telemetry;
 
-        let permit = acquire_judge_permit(Duration::from_millis(10))
+        let permit = acquire_judge_permit(Duration::from_secs(10))
             .await
-            .expect("con el semaforo libre el permiso es inmediato");
+            .expect("el semaforo global se libera: otros tests del proceso lo sueltan en segundos");
         let before = judge_telemetry().busy_skips();
 
         let denied = acquire_judge_permit(Duration::from_millis(50)).await;
         assert!(denied.is_none(), "no existe una segunda ranura");
-        assert_eq!(
-            judge_telemetry().busy_skips(),
-            before + 1,
+        // El contador es global: otros tests pueden sumar saltos a la vez, asi
+        // que se exige al menos el nuestro (antes `== before + 1`, flaky).
+        assert!(
+            judge_telemetry().busy_skips() > before,
             "un salto por juez ocupado se cuenta, no se pierde"
         );
 
         drop(permit);
         assert!(
-            acquire_judge_permit(Duration::from_millis(50)).await.is_some(),
+            acquire_judge_permit(Duration::from_secs(5)).await.is_some(),
             "al liberarse la ranura el siguiente juicio entra"
         );
     }
