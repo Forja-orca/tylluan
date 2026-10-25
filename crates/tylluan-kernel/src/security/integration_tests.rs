@@ -134,14 +134,17 @@ async fn adv_graph_flood_dos_ppr_completes_under_budget() {
             .add_edge(&format!("fn_{i}"), &format!("fn_{i}"), "links_to", 1.0, "{}")
             .await;
     }
+    // Presupuesto 1000 ms (antes 200 ms): en reposo tarda ~100 ms, pero bajo la carga
+    // de un push (tests en paralelo + compilaciones) rozaba el limite (203 ms). Sigue
+    // detectando un bloqueo algoritmico, que tardaria segundos.
     let seeds = vec!["fn_0".to_string()];
     let start = std::time::Instant::now();
     let result = db.personalized_pagerank_local(&seeds, 0.85, 30, 50).await;
     let elapsed = start.elapsed();
     assert!(result.is_ok(), "PPR must not crash on dense graph: {:?}", result.err());
     assert!(
-        elapsed.as_millis() < 200,
-        "PPR on 200-node cyclic graph exceeded 200ms budget: {elapsed:?}"
+        elapsed.as_millis() < 1000,
+        "PPR on 200-node cyclic graph exceeded 1000ms budget: {elapsed:?}"
     );
 }
 
