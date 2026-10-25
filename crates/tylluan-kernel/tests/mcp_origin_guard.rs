@@ -178,3 +178,31 @@ async fn configurable_allow_lists_work() {
         StatusCode::FORBIDDEN
     );
 }
+
+// T-DSH-87: the mutating REST surface is guarded too.
+#[tokio::test(flavor = "multi_thread")]
+async fn rest_mutating_routes_reject_hostile_origin() {
+    for dev_mode in [true, false] {
+        let state = support::test_state_custom("t87rest", None, dev_mode).await;
+        let app = tylluan_kernel::transport::http::build_router(state);
+        for uri in [
+            "/api/v1/maintenance/purge",
+            "/api/v1/maintenance/vacuum",
+            "/api/v1/admin/reload",
+            "/api/v1/silva/graphrag-trigger",
+            "/api/v1/do",
+        ] {
+            let status = call(&app, "POST", uri, Some("http://evil.example"), None, None, None).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{uri} must reject a hostile Origin (dev_mode={dev_mode})");
+        }
+        // Hostile Origin on a read-only GET is not this guard's concern.
+        let get = call(&app, "GET", "/api/v1/health", Some("http://evil.example"), None, None, None).await;
+        assert_ne!(get, StatusCode::FORBIDDEN, "GET stays outside the REST guard (dev_mode={dev_mode})");
+        // No Origin (agents, scripts, CLI): never rejected by the guard.
+        let local = call(&app, "POST", "/api/v1/maintenance/vacuum", None, None, None, None).await;
+        assert_ne!(local, StatusCode::FORBIDDEN, "no Origin must pass the guard (dev_mode={dev_mode})");
+        // Loopback Origin (the dashboard itself) is accepted.
+        let dash = call(&app, "POST", "/api/v1/maintenance/vacuum", Some("http://127.0.0.1:47004"), None, None, None).await;
+        assert_ne!(dash, StatusCode::FORBIDDEN, "loopback Origin must pass (dev_mode={dev_mode})");
+    }
+}

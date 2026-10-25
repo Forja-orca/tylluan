@@ -754,7 +754,17 @@ pub async fn validate_mcp_origin_host_middleware(
     next: Next,
 ) -> Response {
     let path = request.uri().path().to_string();
-    if !MCP_ORIGIN_GUARD_PATHS.contains(&path.as_str()) {
+    // T-DSH-87: the mutating REST surface (`/api/v1/*`, any method but GET/HEAD)
+    // gets the same guard. A browser "simple" POST (no body or text/plain) needs
+    // no preflight, so CORS alone does not stop it from purging memory or
+    // reloading guilds. Non-browser clients send no Origin and pass untouched.
+    let guarded = MCP_ORIGIN_GUARD_PATHS.contains(&path.as_str())
+        || (path.starts_with("/api/v1/")
+            && !matches!(
+                *request.method(),
+                axum::http::Method::GET | axum::http::Method::HEAD
+            ));
+    if !guarded {
         return next.run(request).await;
     }
     let (configured_host, allowed_origins, allowed_hosts) = {
