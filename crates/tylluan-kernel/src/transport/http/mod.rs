@@ -1321,6 +1321,18 @@ fn is_static_path_contained(file_path: &std::path::Path, base: &std::path::Path)
 /// battery) can drive the real middleware stack — handlers-only tests on
 /// `api_v1_routes()` bypass auth entirely by construction.
 pub fn build_router(state: Arc<HttpState>) -> Router {
+    // T-DSH-86: Host validation is only meaningful when the kernel is bound to
+    // loopback. Warn once at startup (router build) when it is not; Origin
+    // validation stays active either way.
+    if let Ok(config) = state.config.try_read()
+        && !auth::is_loopback_hostname(&config.nexus.host)
+    {
+        tracing::warn!(
+            host = %config.nexus.host,
+            "MCP origin guard: kernel host is not loopback; Host validation disabled for \
+             /messages,/mcp,/api/v1/mcp,/sse,/sse/download (Origin validation remains active)"
+        );
+    }
     // CORS: Only known localhost origins (dashboard dev:5173, prod:3030, kernel:47004/3030)
     let cors = CorsLayer::new()
         .allow_origin([
@@ -1501,6 +1513,14 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         )
         .layer(tower_http::compression::CompressionLayer::new())
         .layer(cors)
+        // T-DSH-86: MCP/SSE Origin/Host guard. Added AFTER `cors` so it is the
+        // outermost layer (runs before CORS and before the auth layers inside
+        // `protected_routes`); the middleware itself filters by path so the rest
+        // of the API and federation/p2p are untouched.
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::validate_mcp_origin_host_middleware,
+        ))
         .layer(middleware::from_fn(force_utf8_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024))
         .with_state(state)

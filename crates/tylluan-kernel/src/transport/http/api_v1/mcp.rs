@@ -277,6 +277,41 @@ pub fn detect_mcp_dialect(
 
 // --- HANDLERS ---
 
+/// D-59: una petición POST MCP debe declarar `application/json`. Sin esto,
+/// `text/plain` es una petición CORS "simple" (sin preflight) y el handler
+/// parseaba igualmente el cuerpo, ejecutando tools desde una página web.
+/// GET/OPTIONS no se tocan.
+fn reject_non_json_content_type(
+    method: &axum::http::Method,
+    headers: &HeaderMap,
+) -> Option<axum::response::Response> {
+    if *method != axum::http::Method::POST {
+        return None;
+    }
+    let is_json = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .eq_ignore_ascii_case("application/json")
+        })
+        .unwrap_or(false);
+    if is_json {
+        None
+    } else {
+        Some((
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Json(serde_json::json!({
+                "error": "Content-Type must be application/json"
+            })),
+        ).into_response())
+    }
+}
+
 pub async fn mcp_handler(
     State(state): State<Arc<HttpState>>,
     req: axum::extract::Request,
@@ -295,6 +330,9 @@ pub async fn mcp_handler(
     
     if method_http == axum::http::Method::OPTIONS {
         return (StatusCode::OK, [("allow", "POST, OPTIONS")]).into_response();
+    }
+    if let Some(rejection) = reject_non_json_content_type(&method_http, &headers) {
+        return rejection;
     }
 
     let body = match axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await {
@@ -979,5 +1017,58 @@ pub async fn mcp_handler(
             // Modern HTTP Streamable JSON (default)
             (StatusCode::OK, Json(response_json)).into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod d59_content_type_tests {
+    use super::*;
+    use axum::http::{header::CONTENT_TYPE, HeaderMap, HeaderValue, Method};
+
+    fn headers(content_type: Option<&str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        if let Some(value) = content_type {
+            headers.insert(CONTENT_TYPE, HeaderValue::from_str(value).unwrap());
+        }
+        headers
+    }
+
+    #[test]
+    fn text_plain_is_rejected_with_415() {
+        let rejection = reject_non_json_content_type(
+            &Method::POST,
+            &headers(Some("text/plain")),
+        ).expect("text/plain must be rejected");
+        assert_eq!(rejection.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    #[test]
+    fn missing_content_type_is_rejected_with_415() {
+        let rejection = reject_non_json_content_type(&Method::POST, &headers(None))
+            .expect("missing Content-Type must be rejected");
+        assert_eq!(rejection.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    #[test]
+    fn application_json_with_charset_is_accepted() {
+        assert!(
+            reject_non_json_content_type(
+                &Method::POST,
+                &headers(Some("application/json; charset=utf-8")),
+            ).is_none(),
+            "application/json con charset no debe rechazarse"
+        );
+    }
+
+    #[test]
+    fn get_and_options_are_not_gated() {
+        assert!(
+            reject_non_json_content_type(&Method::GET, &headers(Some("text/plain"))).is_none(),
+            "GET no cambia"
+        );
+        assert!(
+            reject_non_json_content_type(&Method::OPTIONS, &headers(None)).is_none(),
+            "OPTIONS no cambia"
+        );
     }
 }
