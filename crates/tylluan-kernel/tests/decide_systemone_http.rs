@@ -225,13 +225,13 @@ async fn model_out_of_options_is_rejected_in_shadow() {
 /// NULL (fallo conservador del modelo, semántica de paired_eval).
 #[tokio::test(flavor = "multi_thread")]
 async fn shadow_timeout_leaves_rows_null() {
-    let mock = start_mock(serde_json::json!({}), StatusCode::OK, 400).await;
+    let mock = start_mock(serde_json::json!({}), StatusCode::OK, 3000).await;
     let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 60, "")).await; // shadow_timeout 60ms
 
     let t0 = std::time::Instant::now();
     let resp = svc.decide(contract_router(0.9), "test").await;
     assert!(
-        t0.elapsed() < Duration::from_millis(300),
+        t0.elapsed() < Duration::from_millis(1500),
         "la sombra no bloquea la respuesta"
     );
     assert_eq!(resp.answers["route"].value.as_deref(), Some("human"));
@@ -404,14 +404,14 @@ async fn free_question_outside_options_abstains() {
 /// con el deadline del wire respetado.
 #[tokio::test(flavor = "multi_thread")]
 async fn free_question_timeout_abstains_with_reason() {
-    let mock = start_mock(serde_json::json!({}), StatusCode::OK, 400).await;
+    let mock = start_mock(serde_json::json!({}), StatusCode::OK, 3000).await;
     let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "")).await;
 
     let mut req = free_bool();
     req.max_latency_ms = Some(60);
     let t0 = std::time::Instant::now();
     let resp = svc.decide(req, "test").await;
-    assert!(t0.elapsed() < Duration::from_millis(300));
+    assert!(t0.elapsed() < Duration::from_millis(1500));
     assert_eq!(resp.status, DecideStatus::Degraded);
     let a = &resp.answers["should_i"];
     assert!(a.abstained);
