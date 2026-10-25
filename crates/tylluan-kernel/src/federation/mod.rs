@@ -58,6 +58,13 @@ pub struct PeerDb {
     conn: Arc<std::sync::Mutex<rusqlite::Connection>>,
 }
 
+/// SQLite reports an already-applied `ALTER TABLE ... ADD COLUMN` with
+/// "duplicate column name". That is the ONLY expected error of the three safe
+/// migrations; anything else must be warned (T-DSH-75).
+fn is_duplicate_column_error(message: &str) -> bool {
+    message.contains("duplicate column name")
+}
+
 impl PeerDb {
     pub fn open(db_path: &str) -> anyhow::Result<Self> {
         let conn = crate::config::open_db(std::path::Path::new(db_path))?;
@@ -77,11 +84,26 @@ impl PeerDb {
                    permissions   TEXT NOT NULL DEFAULT '{}'
               );",
         )?;
-        // Safe migrations: add columns if they don't exist yet (existing databases)
-        let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN ed25519_pubkey TEXT NOT NULL DEFAULT '';");
-        let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN external_address TEXT NOT NULL DEFAULT '';");
-        // ADR-019 step 2: existing rows default to deny-all (DEFAULT '{}').
-        let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN permissions TEXT NOT NULL DEFAULT '{}';");
+        // Safe migrations: add columns if they don't exist yet (existing databases).
+        // T-DSH-75: "duplicate column name" is the only EXPECTED error here; any
+        // other failure (locked DB, column ceiling, corrupt schema...) is logged
+        // non-fatally instead of being discarded.
+        for alter_sql in [
+            "ALTER TABLE federation_peers ADD COLUMN ed25519_pubkey TEXT NOT NULL DEFAULT '';",
+            "ALTER TABLE federation_peers ADD COLUMN external_address TEXT NOT NULL DEFAULT '';",
+            // ADR-019 step 2: existing rows default to deny-all (DEFAULT '{}').
+            "ALTER TABLE federation_peers ADD COLUMN permissions TEXT NOT NULL DEFAULT '{}';",
+        ] {
+            if let Err(error) = conn.execute_batch(alter_sql)
+                && !is_duplicate_column_error(&error.to_string())
+            {
+                tracing::warn!(
+                    error = %error,
+                    sql = alter_sql,
+                    "federation: safe migration failed (non-fatal; continuing)"
+                );
+            }
+        }
         Ok(Self { conn: Arc::new(std::sync::Mutex::new(conn)) })
     }
 
@@ -402,5 +424,65 @@ mod tests {
         db.update_last_sync("dave", 9999).expect("update_last_sync");
         let loaded = db.load_all().expect("load");
         assert_eq!(loaded[0].last_sync, Some(9999));
+    }
+
+    #[test]
+    fn migration_error_classification() {
+        assert!(is_duplicate_column_error("duplicate column name: ed25519_pubkey"));
+        assert!(!is_duplicate_column_error("too many columns on federation_peers"));
+        assert!(!is_duplicate_column_error("database is locked"));
+        assert!(!is_duplicate_column_error("no such table: federation_peers"));
+    }
+
+    /// T-DSH-75: re-running the safe migrations on an already-migrated DB is
+    /// the normal path (all three ALTERs are "duplicate column") and must NOT
+    /// emit a warning.
+    #[test]
+    fn migration_duplicate_column_is_ignored_without_warn() {
+        let path = std::env::temp_dir().join(format!("federation_mig_dup_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let path_str = path.to_str().expect("utf8 temp path");
+
+        let captured = crate::test_support::capture_warns(|| {
+            let first = PeerDb::open(path_str).expect("first open creates the DB");
+            drop(first);
+            // Second open re-runs the three safe migrations: all duplicates.
+            let second = PeerDb::open(path_str).expect("second open re-runs migrations");
+            drop(second);
+        });
+
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            !captured.contains("safe migration failed"),
+            "duplicate-column migrations must not warn, got: {captured}"
+        );
+    }
+
+    /// T-DSH-75: a non-duplicate migration failure (here: SQLite's column
+    /// ceiling) is logged non-fatally instead of discarded; `open` still works.
+    #[test]
+    fn migration_non_duplicate_error_warns() {
+        let path = std::env::temp_dir().join(format!("federation_mig_err_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            // Pre-create `federation_peers` at SQLite's default column ceiling
+            // (2000) so ALTER ADD COLUMN fails with "too many columns".
+            let raw = rusqlite::Connection::open(&path).expect("raw sqlite open");
+            let columns: Vec<String> = (0..2000).map(|i| format!("c{i} INTEGER")).collect();
+            raw.execute_batch(&format!("CREATE TABLE federation_peers ({});", columns.join(", ")))
+                .expect("pre-create table at column ceiling");
+        }
+        let path_str = path.to_str().expect("utf8 temp path");
+
+        let captured = crate::test_support::capture_warns(|| {
+            let db = PeerDb::open(path_str).expect("migration errors are non-fatal");
+            drop(db);
+        });
+
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            captured.contains("safe migration failed"),
+            "a non-duplicate ALTER failure must warn, got: {captured}"
+        );
     }
 }

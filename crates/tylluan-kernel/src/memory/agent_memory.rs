@@ -7,6 +7,54 @@ use uuid::Uuid;
 
 const SEMANTIC_CLUSTER_THRESHOLD: f32 = 0.85;
 
+/// Best-effort read of the audit rows for the Ouroboros harvest (T-DSH-75).
+/// Returns `None` (after a warn) on open/prepare/query failure so the caller
+/// keeps its `usize` contract (0 harvested) instead of failing silently.
+fn collect_failure_rows(
+    audit_db_path: &str,
+    cutoff: &str,
+) -> Option<Vec<(String, String, String)>> {
+    let conn = match crate::config::open_db(std::path::Path::new(audit_db_path)) {
+        Ok(conn) => conn,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                path = audit_db_path,
+                "ouroboros: audit DB unavailable; nothing to harvest"
+            );
+            return None;
+        }
+    };
+    let mut stmt = match conn.prepare(
+        "SELECT agent_id, tool_name, COALESCE(intent,'') FROM guild_audit_log \
+         WHERE status = 'error' AND timestamp > ?1 \
+         AND agent_id != '' AND agent_id != 'anonymous'",
+    ) {
+        Ok(stmt) => stmt,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                path = audit_db_path,
+                "ouroboros: audit query failed to prepare; nothing to harvest"
+            );
+            return None;
+        }
+    };
+    match stmt.query_map(rusqlite::params![cutoff], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+    }) {
+        Ok(iter) => Some(iter.flatten().collect()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                path = audit_db_path,
+                "ouroboros: audit query failed; nothing to harvest"
+            );
+            None
+        }
+    }
+}
+
 /// Ouroboros Loop — autonomous harvest half. Runs on the existing
 /// NightConsolidation pulse (no new timer). Scans the guild_audit_log for
 /// REPEATED failures (same agent + tool failing >= min_failures times within
@@ -29,28 +77,11 @@ pub async fn harvest_failures_from_audit(
     let cutoff = (chrono::Utc::now() - chrono::Duration::seconds(lookback_secs)).to_rfc3339();
     // Collect (agent_id, tool, intent) error rows synchronously — a rusqlite
     // Connection is not Send across an await, so we drain into a Vec first.
-    let rows: Vec<(String, String, String)> = {
-        let conn = match crate::config::open_db(std::path::Path::new(audit_db_path)) {
-            Ok(c) => c,
-            Err(_) => return 0,
-        };
-        let stmt = conn.prepare(
-            "SELECT agent_id, tool_name, COALESCE(intent,'') FROM guild_audit_log \
-             WHERE status = 'error' AND timestamp > ?1 \
-             AND agent_id != '' AND agent_id != 'anonymous'",
-        );
-        match stmt {
-            Ok(mut s) => {
-                let mapped = s.query_map(rusqlite::params![cutoff], |r| {
-                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
-                });
-                match mapped {
-                    Ok(iter) => iter.flatten().collect(),
-                    Err(_) => return 0,
-                }
-            }
-            Err(_) => return 0,
-        }
+    // T-DSH-75: cualquier fallo deja de ser silencioso (warn) sin cambiar el
+    // contrato: el harvest sigue devolviendo 0 si no puede leer el audit.
+    let rows: Vec<(String, String, String)> = match collect_failure_rows(audit_db_path, &cutoff) {
+        Some(rows) => rows,
+        None => return 0,
     };
 
     type AgentToolGroups = std::collections::HashMap<(String, String), Vec<(String, Option<Vec<f32>>)>>;
@@ -806,5 +837,67 @@ mod tests {
 
     fn mgr_silva_clone(mgr: &AgentMemoryManager) -> Arc<SilvaDB> {
         mgr.silva.clone()
+    }
+
+    /// T-DSH-75: un fallo al abrir la audit DB deja de ser silencioso y el
+    /// contrato del harvest no cambia (0).
+    #[test]
+    fn collect_failure_rows_warns_when_audit_db_unavailable() {
+        let dir = std::env::temp_dir().join(format!("ouroboros_bad_audit_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear directorio temporal");
+
+        let captured = crate::test_support::capture_warns(|| {
+            let rows = collect_failure_rows(dir.to_str().expect("utf8 temp path"), "2026-01-01T00:00:00Z");
+            assert!(rows.is_none(), "un directorio no debe abrirse como SQLite");
+        });
+
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            captured.contains("audit DB unavailable"),
+            "el fallo de open debe avisar, got: {captured}"
+        );
+    }
+
+    /// T-DSH-75: un error de prepare (DB válida sin la tabla esperada) también
+    /// se hace visible sin cambiar el retorno.
+    #[test]
+    fn collect_failure_rows_warns_when_audit_schema_is_missing() {
+        let path = std::env::temp_dir().join(format!("ouroboros_schema_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            // DB SQLite válida, pero sin `guild_audit_log`: prepare falla.
+            let conn = crate::config::open_db(&path).expect("crear DB vacía");
+            drop(conn);
+        }
+        let captured = crate::test_support::capture_warns(|| {
+            let rows = collect_failure_rows(path.to_str().expect("utf8 temp path"), "2026-01-01T00:00:00Z");
+            assert!(rows.is_none(), "sin guild_audit_log el prepare debe fallar");
+        });
+
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            captured.contains("failed to prepare"),
+            "el error de prepare debe avisar, got: {captured}"
+        );
+    }
+
+    /// T-DSH-75: el harvest sigue devolviendo 0 cuando no puede leer el audit.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn harvest_returns_zero_when_audit_db_is_unavailable() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let dir = std::env::temp_dir().join(format!("ouroboros_harvest_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear directorio temporal");
+        let harvested = harvest_failures_from_audit(
+            &silva,
+            dir.to_str().expect("utf8 temp path"),
+            86_400,
+            3,
+            None,
+        )
+        .await;
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(harvested, 0, "sin audit legible no se cosecha nada");
     }
 }
