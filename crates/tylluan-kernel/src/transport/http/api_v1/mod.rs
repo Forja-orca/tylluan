@@ -776,7 +776,7 @@ fn audit_guild_edge_exception(p: &EdgePayload, success: bool) {
         truncate(&p.target)
     );
     drop(tokio::task::spawn_blocking(move || {
-        let _ = crate::transport::server::handler_do::audit::log_audit_entry(
+        crate::transport::server::handler_do::audit::audit_or_warn(
             "POST /api/v1/silva/edge (D-34 guild exception)",
             &guild,
             "silva/edge",

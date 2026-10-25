@@ -3,6 +3,9 @@
 #[cfg(test)]
 pub(crate) static AUDIT_ENV_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 /// Deterministic failure node ID for the routing feedback loop.
 pub(crate) fn routing_failure_id(intent: &str) -> String {
     let hash: u64 = intent.bytes()
@@ -84,6 +87,68 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
         rusqlite::params![now, guild, tool, agent_id, intent, status, preview, prev_hash, hash, latency_ms as i64, if human_intervention { 1 } else { 0 }, snapshot_json],
     ).map_err(|e| format!("audit insert: {e}"))?;
     Ok(())
+}
+
+/// Intervalo mínimo entre warns por fallo de auditoría (proceso-wide).
+const AUDIT_WARN_INTERVAL_SECS: u64 = 60;
+
+/// Limitador del warn de auditoría: como mucho un warn por minuto y un
+/// contador de fallos suprimidos entre warns. Estado propio, sin locks,
+/// porque `audit_or_warn` se llama desde `spawn_blocking`/`tokio::spawn`.
+struct AuditWarnLimiter {
+    last_warn_secs: AtomicU64,
+    suppressed: AtomicU64,
+}
+
+impl AuditWarnLimiter {
+    const fn new() -> Self {
+        Self {
+            last_warn_secs: AtomicU64::new(0),
+            suppressed: AtomicU64::new(0),
+        }
+    }
+
+    /// Registra un fallo. Devuelve `Some(suprimidos)` si toca emitir warn
+    /// (y resetea el contador), o `None` si se suprime por el rate limit.
+    fn on_failure(&self, now_secs: u64) -> Option<u64> {
+        let last = self.last_warn_secs.load(Ordering::Relaxed);
+        if now_secs.saturating_sub(last) >= AUDIT_WARN_INTERVAL_SECS
+            && self
+                .last_warn_secs
+                .compare_exchange(last, now_secs, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+        {
+            Some(self.suppressed.swap(0, Ordering::Relaxed))
+        } else {
+            self.suppressed.fetch_add(1, Ordering::Relaxed);
+            None
+        }
+    }
+}
+
+static AUDIT_WARN_LIMITER: AuditWarnLimiter = AuditWarnLimiter::new();
+
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Best-effort: escribe la entrada de auditoría y, si falla, deja un
+/// `tracing::warn!` con el error (rate limit: 1 warn/minuto + contador de
+/// suprimidos). Nunca cambia el valor de retorno del call-site: devuelve `()`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn audit_or_warn(intent: &str, guild: &str, tool: &str, agent_id: &str, success: bool, preview: &str, latency_ms: u64, human_intervention: bool) {
+    if let Err(error) = log_audit_entry(intent, guild, tool, agent_id, success, preview, latency_ms, human_intervention)
+        && let Some(suppressed) = AUDIT_WARN_LIMITER.on_failure(now_unix_secs())
+    {
+        tracing::warn!(
+            error = %error,
+            suppressed,
+            "audit write failed (best-effort; el flujo continua)"
+        );
+    }
 }
 
 /// Verify the integrity of the audit chain from oldest to newest.
@@ -412,5 +477,50 @@ mod tests {
 
         unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
         let _ = std::fs::remove_file(&db);
+    }
+
+    /// T-DSH-74: el rate limit del warn de auditoría es 1/minuto y cuenta los
+    /// fallos suprimidos entre warns. Se prueba sobre una instancia local para
+    /// no acoplar este test al estado global del proceso.
+    #[test]
+    fn audit_warn_limiter_warns_once_per_minute_and_counts_suppressed() {
+        use super::{AuditWarnLimiter, AUDIT_WARN_INTERVAL_SECS};
+        let limiter = AuditWarnLimiter::new();
+        // Primer fallo: toca warn, sin suprimidos todavía.
+        assert_eq!(limiter.on_failure(100), Some(0));
+        // Dos fallos dentro del mismo minuto: suprimidos, sin warn.
+        assert_eq!(limiter.on_failure(101), None);
+        assert_eq!(limiter.on_failure(100 + AUDIT_WARN_INTERVAL_SECS - 1), None);
+        // Pasado el intervalo: otro warn y reporta los 2 suprimidos acumulados.
+        assert_eq!(limiter.on_failure(100 + AUDIT_WARN_INTERVAL_SECS), Some(2));
+    }
+
+    /// T-DSH-74: `audit_or_warn` es best-effort y no cambia el valor de retorno
+    /// del call-site aunque la auditoría falle. Forzamos el fallo apuntando
+    /// `TYLLUAN_AUDIT_DB` a un directorio (SQLite no puede abrirlo como DB).
+    #[test]
+    fn audit_or_warn_preserves_call_site_value_when_audit_fails() {
+        use super::AUDIT_ENV_TEST_LOCK;
+        use super::audit_or_warn;
+        let _env_guard = AUDIT_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        let dir = std::env::temp_dir().join(format!("audit_or_warn_fail_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear directorio temporal");
+        // SAFETY: sección de un solo usuario protegida por el lock; restaurada abajo.
+        unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", &dir) };
+
+        let value = {
+            // El `let () = ...` fija en compilación que el helper devuelve `()`
+            // (no un `Result` que el call-site pudiera propagar por error).
+            let () = audit_or_warn("intent", "guild", "tool", "agent", true, "preview", 0, false);
+            42
+        };
+
+        unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(value, 42, "audit_or_warn no debe alterar el valor del call-site");
     }
 }

@@ -300,7 +300,7 @@ impl TylluanServer {
                     // human approved even when another agent had.
                     let human_intervention = operator;
                     tokio::task::spawn_blocking(move || {
-                        let _ = handler_do::audit::log_audit_entry(
+                        handler_do::audit::audit_or_warn(
                             &audit_intent, &audit_guild, &audit_tool, &audit_agent,
                             is_success, &audit_preview, approval_latency_ms, human_intervention,
                         );
@@ -606,7 +606,7 @@ impl TylluanServer {
             let audit_agent = agent_id.to_string();
             let audit_success = result.as_ref().map(|r| !r.is_error.unwrap_or(false)).unwrap_or(false);
             tokio::spawn(async move {
-                let _ = handler_do::log_audit_entry("", "kernel", &audit_tool, &audit_agent, audit_success, "", 0, false);
+                handler_do::audit_or_warn("", "kernel", &audit_tool, &audit_agent, audit_success, "", 0, false);
             });
         }
 

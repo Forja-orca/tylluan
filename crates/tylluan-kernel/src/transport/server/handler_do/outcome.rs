@@ -8,7 +8,7 @@ use rmcp::model::*;
 use tracing::{info, warn};
 
 use super::TylluanServer;
-use super::audit::{log_audit_entry, routing_failure_id};
+use super::audit::{audit_or_warn, routing_failure_id};
 use super::distill_for_embedding;
 use super::handle_tylluan_do;
 use super::routing::{maybe_auto_extract_triples, record_activity_trace, run_agent_handshake};
@@ -191,7 +191,7 @@ pub(super) async fn post_process_outcome(
     let audit_latency_ms = latency_ms;
     let audit_hitl = false;
     tokio::task::spawn_blocking(move || {
-        let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview, audit_latency_ms, audit_hitl);
+        audit_or_warn(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview, audit_latency_ms, audit_hitl);
         capture_friction_from_result(&audit_intent, &audit_guild, &audit_tool, &audit_preview);
     });
 
