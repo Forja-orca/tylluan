@@ -12,6 +12,23 @@ use super::SilvaDB;
 use super::jaccard_similarity;
 use anyhow::Result;
 
+/// Best-effort open of the audit DB used to resolve feedback rows. T-DSH-75:
+/// a failure is non-fatal (there may simply be no audit log yet) but it must
+/// not be silent; returns `None` so the caller keeps its `Ok((0, 0))` contract.
+fn open_audit_db_for_feedback(audit_db_path: &str) -> Option<rusqlite::Connection> {
+    match crate::config::open_db(std::path::Path::new(audit_db_path)) {
+        Ok(conn) => Some(conn),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                path = audit_db_path,
+                "recall feedback: audit DB unavailable; nothing resolvable this cycle"
+            );
+            None
+        }
+    }
+}
+
 /// Minimum word-overlap between a recalled memory's content and a subsequent
 /// intent to count as "this memory was referenced" — same order of magnitude
 /// as the pre-filter threshold `dream_cycle.rs` uses before falling back to
@@ -120,9 +137,9 @@ impl SilvaDB {
             return Ok((0, 0));
         }
 
-        let audit_conn = match crate::config::open_db(std::path::Path::new(audit_db_path)) {
-            Ok(c) => c,
-            Err(_) => return Ok((0, 0)), // no audit log yet -> nothing resolvable
+        let audit_conn = match open_audit_db_for_feedback(audit_db_path) {
+            Some(conn) => conn,
+            None => return Ok((0, 0)), // no audit log yet -> nothing resolvable
         };
 
         let mut useful_count = 0usize;
@@ -617,5 +634,55 @@ mod tests {
         assert!((affinity_a - 2.0/3.0).abs() < 0.01, "agent-a affinity should be 2/3, got {affinity_a}");
         assert!((affinity_b - 1.0).abs() < 0.01, "agent-b affinity should be 1.0, got {affinity_b}");
         assert!((affinity_c - 0.75).abs() < 0.01, "agent-c has no agent-specific data, should fall back to global 3/4, got {affinity_c}");
+    }
+
+    /// T-DSH-75: un fallo al abrir la DB de auditoría deja de ser silencioso.
+    /// Se prueba el seam síncrono (el `warn!` se emite en el hilo del test).
+    #[test]
+    fn audit_db_open_failure_warns_and_returns_none() {
+        let dir = std::env::temp_dir().join(format!("recall_fb_bad_audit_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear directorio temporal");
+
+        let captured = crate::test_support::capture_warns(|| {
+            // Un directorio no es una DB válida: `open_db` falla.
+            let opened = open_audit_db_for_feedback(dir.to_str().expect("utf8 temp path"));
+            assert!(opened.is_none(), "un directorio no debe abrirse como SQLite");
+        });
+
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            captured.contains("audit DB unavailable"),
+            "el fallo de open debe avisar, got: {captured}"
+        );
+    }
+
+    /// T-DSH-75: el contrato de retorno no cambia con el warn (sigue siendo
+    /// `Ok((0, 0))` cuando la DB de auditoría no está disponible).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolve_pending_feedback_keeps_zero_contract_when_audit_db_unavailable() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.log_recall_feedback("mem1", "agent-a", "task-1", "query text", 0, None, None, None)
+            .await
+            .unwrap();
+        // Hacer la fila "pendiente" (accessed_at antiguo) para que el flujo
+        // llegue al open de la auditoría en vez de salir por `pending.is_empty()`.
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "UPDATE recall_feedback SET accessed_at = ?1",
+                rusqlite::params![(chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339()],
+            )
+            .unwrap();
+        });
+
+        let dir = std::env::temp_dir().join(format!("recall_fb_zero_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear directorio temporal");
+        let result = db
+            .resolve_pending_feedback(dir.to_str().expect("utf8 temp path"), 0)
+            .await;
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(result.unwrap(), (0, 0), "sin audit DB el retorno sigue siendo Ok((0,0))");
     }
 }
