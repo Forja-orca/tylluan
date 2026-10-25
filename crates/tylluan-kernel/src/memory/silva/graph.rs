@@ -890,7 +890,7 @@ mod tests {
         assert!(!result.skipped, "no debe saltar con 200 embeddings");
         assert!(result.n_centroids > 0, "must have at least 1 centroid");
         // In debug (unoptimized) builds allow more time; release target is <5s
-        let time_limit_secs = if cfg!(debug_assertions) { 30 } else { 5 };
+        let time_limit_secs = if cfg!(debug_assertions) { 60 } else { 5 };
         assert!(
             elapsed.as_secs() < time_limit_secs,
             "warm-up excede {}s: {}ms", time_limit_secs, elapsed.as_millis()

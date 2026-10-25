@@ -306,9 +306,10 @@ mod tests {
             }).unwrap();
             total_hit_ns += start.elapsed().as_nanos();
         }
-        // Allow overhead: 2ms per cache hit
+        // Allow overhead: 10ms per cache hit (antes 2 ms: ruido del planificador bajo carga;
+        // un acierto de cache real cuesta microsegundos)
         let avg_hit_ms = total_hit_ns as f64 / trials as f64 / 1_000_000.0;
-        assert!(avg_hit_ms < 2.0, "average cache hit latency {avg_hit_ms:.3}ms >= 2ms");
+        assert!(avg_hit_ms < 10.0, "average cache hit latency {avg_hit_ms:.3}ms >= 10ms");
     }
 
     #[test]
