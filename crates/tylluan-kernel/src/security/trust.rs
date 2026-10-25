@@ -32,10 +32,23 @@ pub const UNTRUSTED_REASON_KEY: &str = "untrusted_reason";
 /// Mejor esfuerzo: metadata ilegible, sin la clave, o con un valor que no sea
 /// booleano no marca nada (la ruta caliente del recall no puede fallar aquí).
 pub fn is_untrusted_metadata(metadata: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(metadata)
-        .ok()
-        .and_then(|m| m.get(UNTRUSTED_KEY).and_then(|v| v.as_bool()))
-        .unwrap_or(false)
+    match serde_json::from_str::<serde_json::Value>(metadata) {
+        Ok(m) => m.get(UNTRUSTED_KEY).and_then(|v| v.as_bool()).unwrap_or(false),
+        Err(error) => {
+            // T-DSH-79: solo avisar cuando la metadata "debería" ser JSON y no
+            // lo es; "" y "{}" son los casos normales. NO se cambia el retorno
+            // (tratar ilegible como no confiable es decisión de José).
+            let trimmed = metadata.trim();
+            if !trimmed.is_empty() && trimmed != "{}" {
+                tracing::warn!(
+                    error = %error,
+                    metadata_len = metadata.len(),
+                    "ASI06: metadata no parseable; no se puede comprobar untrusted_content (se trata como confiable, comportamiento actual)"
+                );
+            }
+            false
+        }
+    }
 }
 
 /// Igual que [`is_untrusted_metadata`] pero sobre un nodo ya cargado.
@@ -198,7 +211,20 @@ pub async fn propagate_untrusted_to_summaries(
         stmt.query_map([preview.as_str()], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
         })
-        .map(|it| it.filter_map(|r| r.ok()).collect())
+        .map(|it| {
+            it.filter_map(|row| match row {
+                Ok(value) => Some(value),
+                // T-DSH-79: una fila ilegible se omite pero deja rastro.
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "ASI06 retroactive propagation: fila de resumen ilegible; se omite"
+                    );
+                    None
+                }
+            })
+            .collect()
+        })
         .unwrap_or_default()
     };
     let mut marked = 0usize;
@@ -206,8 +232,19 @@ pub async fn propagate_untrusted_to_summaries(
         if is_untrusted_metadata(&meta) {
             continue;
         }
-        let mut value: serde_json::Value =
-            serde_json::from_str(&meta).unwrap_or_else(|_| serde_json::json!({}));
+        let mut value: serde_json::Value = match serde_json::from_str(&meta) {
+            Ok(value) => value,
+            Err(error) => {
+                // T-DSH-79: metadata ilegible: warn y no reescribir (antes se
+                // sustituía por `{}`, perdiendo provenance y otras claves).
+                tracing::warn!(
+                    node_id = %id,
+                    error = %error,
+                    "ASI06 retroactive propagation: metadata ilegible; no se reescribe"
+                );
+                continue;
+            }
+        };
         mark_untrusted(&mut value, &format!("inherited(retro): {origin}"));
         match conn.execute(
             "UPDATE nodes SET metadata = ?1 WHERE id = ?2",
@@ -401,6 +438,33 @@ mod tests {
         assert!(
             !is_untrusted_metadata(&summary.metadata),
             "sin UPDATE no se puede afirmar que el resumen quedó marcado"
+        );
+    }
+
+    /// T-DSH-79: metadata no parseable avisa, pero el retorno no cambia (sigue
+    /// tratándose como confiable, comportamiento actual).
+    #[test]
+    fn is_untrusted_metadata_warns_on_unparsable_but_keeps_false() {
+        let captured = crate::test_support::capture_warns(|| {
+            assert!(!is_untrusted_metadata("{not-json"));
+        });
+        assert!(
+            captured.contains("metadata no parseable"),
+            "la metadata ilegible debe avisar, got: {captured}"
+        );
+    }
+
+    /// T-DSH-79: "" y "{}" son los casos normales y no deben avisar.
+    #[test]
+    fn is_untrusted_metadata_silent_for_empty_and_empty_object() {
+        let captured = crate::test_support::capture_warns(|| {
+            assert!(!is_untrusted_metadata(""));
+            assert!(!is_untrusted_metadata("{}"));
+            assert!(is_untrusted_metadata(r#"{"untrusted_content":true}"#));
+        });
+        assert!(
+            !captured.contains("metadata no parseable"),
+            "vacío/objeto vacío no deben avisar: {captured}"
         );
     }
 }

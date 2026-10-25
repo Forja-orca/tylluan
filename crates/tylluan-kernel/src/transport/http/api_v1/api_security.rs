@@ -21,8 +21,10 @@ pub async fn coherence_gate_stats() -> impl axum::response::IntoResponse {
 /// LightReranker training threshold.
 pub async fn recall_feedback_stats(State(state): State<Arc<HttpState>>) -> impl axum::response::IntoResponse {
     const THRESHOLD: i64 = 5000;
-    let resolved = state.silva.resolved_feedback_count().await.unwrap_or(0);
-    let pending = state.silva.pending_feedback_count().await.unwrap_or(0);
+    let (resolved, pending) = feedback_counts(
+        state.silva.resolved_feedback_count().await,
+        state.silva.pending_feedback_count().await,
+    );
     let pct = if THRESHOLD > 0 {
         (resolved as f64 / THRESHOLD as f64 * 100.0).min(100.0)
     } else {
@@ -35,6 +37,29 @@ pub async fn recall_feedback_stats(State(state): State<Arc<HttpState>>) -> impl 
         "threshold": THRESHOLD,
         "pct": pct,
     }))
+}
+
+/// T-DSH-79: los fallos de lectura de los contadores dejan de ser silenciosos;
+/// el contrato de la respuesta (0) no cambia.
+fn feedback_counts(
+    resolved: anyhow::Result<i64>,
+    pending: anyhow::Result<i64>,
+) -> (i64, i64) {
+    let resolved = resolved.unwrap_or_else(|error| {
+        tracing::warn!(
+            error = %error,
+            "recall_feedback_stats: no se pudo contar 'resolved'; mostrando 0"
+        );
+        0
+    });
+    let pending = pending.unwrap_or_else(|error| {
+        tracing::warn!(
+            error = %error,
+            "recall_feedback_stats: no se pudo contar 'pending'; mostrando 0"
+        );
+        0
+    });
+    (resolved, pending)
 }
 
 /// Friction log observability: aggregate friction stats across all sessions.
@@ -55,4 +80,36 @@ pub async fn friction_stats_handler() -> impl axum::response::IntoResponse {
         "avg_round_trips_per_workflow": stats.avg_round_trips_per_workflow,
         "total_friction_score": stats.total_friction_score,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::feedback_counts;
+
+    /// T-DSH-79: los fallos de los contadores avisan y el contrato (0) no cambia.
+    #[test]
+    fn feedback_counts_warns_and_keeps_zero_contract() {
+        let captured = crate::test_support::capture_warns(|| {
+            let counts = feedback_counts(
+                Err(anyhow::anyhow!("boom-resolved")),
+                Err(anyhow::anyhow!("boom-pending")),
+            );
+            assert_eq!(counts, (0, 0));
+        });
+        assert!(
+            captured.contains("mostrando 0"),
+            "el fallo debe avisar, got: {captured}"
+        );
+    }
+
+    #[test]
+    fn feedback_counts_does_not_warn_on_success() {
+        let captured = crate::test_support::capture_warns(|| {
+            assert_eq!(feedback_counts(Ok(7), Ok(3)), (7, 3));
+        });
+        assert!(
+            !captured.contains("mostrando 0"),
+            "un éxito no debe avisar, got: {captured}"
+        );
+    }
 }

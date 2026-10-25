@@ -182,9 +182,17 @@ pub fn peer_by_x25519<'a>(
     peers.iter().find(|p| {
         p.approved
             && !p.ed25519_pubkey.is_empty()
-            && tylluan_link::noise::x25519_from_ed25519_hex(&p.ed25519_pubkey)
-                .map(|k| k == remote)
-                .unwrap_or(false)
+            && match tylluan_link::noise::x25519_from_ed25519_hex(&p.ed25519_pubkey) {
+                Some(key) => key == remote,
+                None => {
+                    // T-DSH-79: la denegación sigue siendo fail-closed, pero ya no silenciosa.
+                    tracing::warn!(
+                        peer = %p.name,
+                        "P2P: pubkey Ed25519 no decodificable; peer aprobado no resuelto"
+                    );
+                    false
+                }
+            }
     })
 }
 
@@ -398,5 +406,35 @@ mod tests {
         let json = permissions_to_json(&p);
         let back: PeerPermissions = serde_json::from_str(&json).unwrap();
         assert_eq!(back, p);
+    }
+
+    /// T-DSH-79: una pubkey Ed25519 indescifrable no resuelve al peer
+    /// (fail-closed) y ahora deja warn.
+    #[test]
+    fn peer_by_x25519_warns_on_undecodable_pubkey() {
+        use crate::federation::FederationPeer;
+        let peer = FederationPeer {
+            name: "bad-key".into(),
+            url: "http://bad".into(),
+            auth_token: "t".into(),
+            shared_secret: String::new(),
+            last_sync: None,
+            approved: true,
+            added_at: 0,
+            ed25519_pubkey: "no-es-hex".into(),
+            external_address: String::new(),
+            permissions: PeerPermissions::default(),
+        };
+        let remote: String = std::iter::repeat_n("aa", 32).collect();
+        let captured = crate::test_support::capture_warns(|| {
+            assert!(
+                peer_by_x25519(std::slice::from_ref(&peer), &remote).is_none(),
+                "una pubkey inválida nunca resuelve al peer"
+            );
+        });
+        assert!(
+            captured.contains("no decodificable"),
+            "la pubkey ilegible debe avisar, got: {captured}"
+        );
     }
 }

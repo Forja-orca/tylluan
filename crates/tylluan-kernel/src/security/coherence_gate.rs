@@ -129,7 +129,34 @@ pub(crate) fn resolve_self_auth_token() -> Option<String> {
         && !token.trim().is_empty() {
             return Some(token);
         }
-    std::fs::read_to_string(".tylluan-token").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    let token = std::fs::read_to_string(".tylluan-token")
+        .map_err(|error| {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(
+                    error = %error,
+                    path = ".tylluan-token",
+                    "Layer 4: no se pudo leer el token self para la self-call del juez"
+                );
+            }
+        })
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if token.is_none() {
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        warn_missing_self_token_once(&WARNED);
+    }
+    token
+}
+
+/// T-DSH-79: avisa UNA sola vez por proceso de que Layer 4 se quedará sin auth
+/// (la self-call al juez devolverá 401 y la capa no actuará).
+fn warn_missing_self_token_once(warned: &std::sync::Once) {
+    warned.call_once(|| {
+        tracing::warn!(
+            "Layer 4: sin TYLLUAN_TOKEN ni .tylluan-token legible; la self-call del juez saldrá sin auth (401) y la capa quedará inactiva"
+        );
+    });
 }
 
 /// Token budget for a grammar-constrained judge verdict. It was 3, which cut the
@@ -2106,6 +2133,21 @@ mod judge_dedup_tests {
         assert!(
             captured.contains("quarantine UPDATE failed"),
             "el fallo de cuarentena debe avisar, got: {captured}"
+        );
+    }
+
+    /// T-DSH-79: sin token self se avisa UNA sola vez (Once inyectable).
+    #[test]
+    fn missing_self_token_warns_once() {
+        let warned = std::sync::Once::new();
+        let captured = crate::test_support::capture_warns(|| {
+            warn_missing_self_token_once(&warned);
+            warn_missing_self_token_once(&warned);
+        });
+        assert_eq!(
+            captured.matches("sin TYLLUAN_TOKEN").count(),
+            1,
+            "el aviso de token ausente debe emitirse una sola vez, got: {captured}"
         );
     }
 }

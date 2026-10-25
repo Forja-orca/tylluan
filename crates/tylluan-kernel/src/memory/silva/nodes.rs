@@ -176,7 +176,22 @@ impl super::SilvaDB {
             );
         }
 
-        let parsed_meta = serde_json::from_str::<serde_json::Value>(metadata).ok();
+        let parsed_meta = match serde_json::from_str::<serde_json::Value>(metadata) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                // T-DSH-79: metadata ilegible no debe perderse en silencio
+                // (implicaría guardar el nodo sin federation_source/topic).
+                let trimmed = metadata.trim();
+                if !trimmed.is_empty() && trimmed != "{}" {
+                    tracing::warn!(
+                        node_id = %id,
+                        error = %error,
+                        "upsert_node: metadata JSON inválida; se guarda sin federation_source/topic"
+                    );
+                }
+                None
+            }
+        };
         let topic_key: Option<String> = if metadata.trim().starts_with('{') {
             parsed_meta.as_ref().and_then(|v| v.get("topic").and_then(|t| t.as_str().map(|s| self.normalize_topic_key(s))))
         } else if metadata.trim().starts_with('"') {
@@ -1138,15 +1153,42 @@ impl super::SilvaDB {
     pub async fn delete_node(&self, id: &str) -> Result<bool> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let protected: bool = conn.query_row(
+            let protected: bool = match conn.query_row(
                 "SELECT protected FROM nodes WHERE id = ?1",
                 params![id], |r| r.get(0),
-            ).unwrap_or(false);
+            ) {
+                Ok(protected) => protected,
+                // Nodo inexistente: mismo comportamiento que antes (nada que borrar).
+                Err(rusqlite::Error::QueryReturnedNoRows) => false,
+                // T-DSH-79: cualquier otro error (DB bloqueada/corrupta/columna
+                // rota) es fail-closed: no se borra y se avisa.
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        node_id = %id,
+                        "delete_node: no se pudo leer 'protected'; fail-closed (no se borra)"
+                    );
+                    return Ok(false);
+                }
+            };
             if protected { return Ok(false); }
-            let fts_rowid: Option<i64> = conn.query_row(
+            let fts_rowid: Option<i64> = match conn.query_row(
                 "SELECT rowid FROM nodes WHERE id = ?1",
                 params![id], |r| r.get(0),
-            ).ok();
+            ) {
+                Ok(rowid) => Some(rowid),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                // T-DSH-79: warn, pero NO abortar el borrado (D-23 solo quería
+                // abortar si la limpieza FTS en sí falla).
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        node_id = %id,
+                        "delete_node: no se pudo leer el rowid FTS; posible documento huérfano"
+                    );
+                    None
+                }
+            };
             let tx = conn.unchecked_transaction()?;
             tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![id])?;
             tx.execute("DELETE FROM node_traces WHERE node_id = ?1", params![id])?;
@@ -2103,5 +2145,80 @@ mod tests {
             "missing node must be reported as not-found, got: {err}"
         );
         assert!(db.get_node("missing:node").await.unwrap().is_none());
+    }
+
+    /// T-DSH-79: si la comprobación de `protected` falla (columna rota), el
+    /// borrado es fail-closed (no se borra) y deja warn.
+    #[test]
+    fn delete_node_protected_check_failure_is_fail_closed_and_warns() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime multi-thread");
+        let db = runtime
+            .block_on(async { crate::memory::silva::SilvaDB::in_memory().await })
+            .expect("silva in-memory");
+        runtime
+            .block_on(db.upsert_node("n1", "concept", "contenido", "{}"))
+            .expect("upsert");
+        runtime.block_on(async {
+            let conn = db.conn_lock();
+            let c = conn.lock().await;
+            c.execute_batch("ALTER TABLE nodes RENAME COLUMN protected TO protected_old;")
+                .expect("romper la columna protected");
+        });
+
+        let captured = crate::test_support::capture_warns(|| {
+            let deleted = runtime
+                .block_on(db.delete_node("n1"))
+                .expect("delete_node no debe fallar con un error de lectura");
+            assert!(!deleted, "fail-closed: un fallo de la comprobación no borra");
+        });
+        assert!(
+            captured.contains("fail-closed"),
+            "el fallo de la comprobación de protected debe avisar, got: {captured}"
+        );
+        let count: i64 = runtime.block_on(async {
+            let conn = db.conn_lock();
+            let c = conn.lock().await;
+            c.query_row("SELECT COUNT(*) FROM nodes WHERE id = 'n1'", [], |r| r.get(0))
+                .expect("contar nodos")
+        });
+        assert_eq!(count, 1, "el nodo debe seguir existiendo tras el fail-closed");
+    }
+
+    /// T-DSH-79: un id inexistente conserva el comportamiento actual (Ok(false),
+    /// sin warn de fail-closed).
+    #[test]
+    fn delete_node_missing_id_stays_ok_without_failclosed_warn() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime multi-thread");
+        let db = runtime
+            .block_on(async { crate::memory::silva::SilvaDB::in_memory().await })
+            .expect("silva in-memory");
+        let captured = crate::test_support::capture_warns(|| {
+            let deleted = runtime
+                .block_on(db.delete_node("no-existe"))
+                .expect("delete_node no debe fallar");
+            assert!(!deleted);
+        });
+        assert!(
+            !captured.contains("fail-closed"),
+            "un id inexistente no debe disparar el warn de fail-closed: {captured}"
+        );
+    }
+
+    /// T-DSH-79: metadata inválida en el upsert deja warn (no se pierde en silencio).
+    #[test]
+    fn upsert_node_invalid_metadata_warns() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime multi-thread");
+        let db = runtime
+            .block_on(async { crate::memory::silva::SilvaDB::in_memory().await })
+            .expect("silva in-memory");
+        let captured = crate::test_support::capture_warns(|| {
+            runtime
+                .block_on(db.upsert_node("n2", "concept", "contenido", "{not-json"))
+                .expect("el upsert no debe fallar por metadata inválida");
+        });
+        assert!(
+            captured.contains("metadata JSON inválida"),
+            "la metadata ilegible debe avisar, got: {captured}"
+        );
     }
 }
