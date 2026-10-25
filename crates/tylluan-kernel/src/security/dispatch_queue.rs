@@ -161,8 +161,16 @@ pub struct DispatchQueue {
 impl DispatchQueue {
     /// Open (or create) the queue DB and ensure the schema.
     pub fn open(db_path: &str) -> Result<Self> {
-        if let Some(parent) = Path::new(db_path).parent() {
-            std::fs::create_dir_all(parent).ok();
+        if let Some(parent) = Path::new(db_path).parent()
+            && let Err(error) = std::fs::create_dir_all(parent)
+        {
+            // T-DSH-77: la causa raíz (no poder crear el directorio) deja de
+            // descartarse; el `open` de abajo fallará igualmente con contexto.
+            tracing::warn!(
+                error = %error,
+                path = db_path,
+                "dispatch queue: could not create parent dir for the queue DB"
+            );
         }
         let conn = crate::config::open_db(Path::new(db_path))
             .with_context(|| format!("Failed to open dispatch queue DB: {db_path}"))?;
