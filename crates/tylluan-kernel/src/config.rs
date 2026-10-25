@@ -1526,18 +1526,74 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     // their own open_db() call. Setting these PRAGMAs twice on those two is
     // harmless (idempotent) -- left as-is rather than touched, to avoid
     // colliding with concurrent M21-P0 work on the same files.
+    //
+    // T-DSH-81: `PRAGMA journal_mode=WAL` NO va en este batch. En un fichero
+    // nuevo, dos aperturas concurrentes chocan y la que pierde recibe
+    // SQLITE_BUSY/LOCKED **inmediato** en ese PRAGMA (el busy_timeout no cubre
+    // ese camino): la apertura fallaba y las escrituras best-effort (la
+    // auditoría de mb7/t15) se perdían. Ahora se consulta el modo actual, solo
+    // se cambia si no es ya WAL, y el cambio se reintenta.
     conn.execute_batch(
         // D-51: busy_timeout ANTES de journal_mode. En un fichero nuevo, el
         // cambio a WAL puede devolver "database is locked" si otra conexión
         // está abriendo la BD; sin el busy_timeout ya armado no espera. No se
         // cambia ningún valor, solo el orden.
         "PRAGMA busy_timeout=5000; \
-         PRAGMA journal_mode=WAL; \
          PRAGMA synchronous=NORMAL; \
          PRAGMA cache_size=-65536; \
          PRAGMA mmap_size=268435456;"
     )?;
+    enable_wal_best_effort(&conn, path);
     Ok(conn)
+}
+
+/// T-DSH-81: activa WAL solo si la conexión no está ya en WAL, y hace
+/// best-effort ante la carrera de apertura concurrente de un fichero nuevo:
+/// hasta 5 intentos con 20 ms de backoff; si sigue bloqueado, avisa y continúa
+/// en el modo actual (no devuelve error: la firma y el contrato de `open_db`
+/// no cambian).
+fn enable_wal_best_effort(conn: &rusqlite::Connection, path: &std::path::Path) {
+    let current_mode: String = match conn.query_row("PRAGMA journal_mode", [], |row| row.get(0)) {
+        Ok(mode) => mode,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                path = %path.display(),
+                "open_db: no se pudo consultar journal_mode; se intenta WAL igualmente"
+            );
+            String::new()
+        }
+    };
+    if current_mode.eq_ignore_ascii_case("wal") {
+        return;
+    }
+    for attempt in 1..=5u32 {
+        match conn.query_row("PRAGMA journal_mode=WAL", [], |row| row.get::<_, String>(0)) {
+            Ok(_) => return,
+            Err(rusqlite::Error::SqliteFailure(err, _))
+                if matches!(
+                    err.code,
+                    rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+                ) =>
+            {
+                if attempt < 5 {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    path = %path.display(),
+                    "open_db: no se pudo cambiar a WAL; se continua en el modo actual"
+                );
+                return;
+            }
+        }
+    }
+    tracing::warn!(
+        path = %path.display(),
+        "open_db: WAL sigue bloqueado tras 5 reintentos; se continua en el modo actual (no fatal)"
+    );
 }
 
 // Resolve the DB encryption key with priority:
@@ -3049,5 +3105,54 @@ code = "permissive"
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
         assert_eq!(journal_mode.to_lowercase(), "wal", "journal_mode debe ser WAL");
+    }
+
+    /// T-DSH-81: 16 hilos abriendo el MISMO fichero nuevo en paralelo no deben
+    /// ver error en `open_db` (antes, la carrera del `PRAGMA journal_mode=WAL`
+    /// sobre un fichero nuevo perdía con SQLITE_BUSY/LOCKED y la apertura
+    /// fallaba; de ahí los tests de auditoría inestables). 50 iteraciones con
+    /// fichero limpio en cada una.
+    #[test]
+    fn concurrent_open_db_of_new_file_never_fails() {
+        use std::sync::{Arc, Barrier};
+
+        fn remove_db_files(path: &std::path::Path) {
+            for suffix in ["", "-wal", "-shm"] {
+                let mut candidate = path.to_path_buf().into_os_string();
+                candidate.push(suffix);
+                let _ = std::fs::remove_file(std::path::PathBuf::from(candidate));
+            }
+        }
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        for iteration in 0..50u32 {
+            let path = dir.path().join(format!("concurrent_open_{iteration}.db"));
+            remove_db_files(&path);
+            let barrier = Arc::new(Barrier::new(16));
+            let handles: Vec<_> = (0..16)
+                .map(|_| {
+                    let path = path.clone();
+                    let barrier = Arc::clone(&barrier);
+                    std::thread::spawn(move || {
+                        barrier.wait();
+                        open_db(&path).map(|_| ())
+                    })
+                })
+                .collect();
+            let mut errors: Vec<String> = Vec::new();
+            for handle in handles {
+                match handle.join() {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => errors.push(error.to_string()),
+                    Err(_) => errors.push("el hilo entro en panico".to_string()),
+                }
+            }
+            remove_db_files(&path);
+            assert!(
+                errors.is_empty(),
+                "iteracion {iteration}: {} de 16 open_db fallaron: {errors:?}",
+                errors.len()
+            );
+        }
     }
 }
