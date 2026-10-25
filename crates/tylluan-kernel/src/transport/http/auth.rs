@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Request, State},
-    http::{StatusCode, HeaderMap, header::WWW_AUTHENTICATE},
+    http::{StatusCode, HeaderMap, header::{HOST, ORIGIN, WWW_AUTHENTICATE}},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -661,6 +661,135 @@ pub async fn bearer_auth_middleware(
     }).await
 }
 
+// ── T-DSH-86: DNS-rebinding defense for the MCP/SSE HTTP endpoints ──────────
+//
+// The MCP spec (2025-06-18) requires servers to validate the `Origin` header on
+// incoming connections. Only `/messages`, `/mcp`, `/api/v1/mcp`, `/sse` and
+// `/sse/download` are guarded; federation/p2p and the rest of the API keep
+// their existing behavior. This runs before the CORS layer and before auth.
+
+/// Endpoints covered by [`validate_mcp_origin_host_middleware`].
+pub const MCP_ORIGIN_GUARD_PATHS: [&str; 5] =
+    ["/messages", "/mcp", "/api/v1/mcp", "/sse", "/sse/download"];
+
+/// Host part of an `Origin`/`Host` authority (`[::1]:3030` → `::1`,
+/// `127.0.0.1:47004` → `127.0.0.1`).
+fn hostname_from_authority(authority: &str) -> &str {
+    if let Some(stripped) = authority.strip_prefix('[') {
+        stripped.split(']').next().unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    }
+}
+
+/// `127.0.0.1`, `localhost` or `::1` (case-insensitive).
+pub(crate) fn is_loopback_hostname(host: &str) -> bool {
+    matches!(
+        host.to_ascii_lowercase().as_str(),
+        "127.0.0.1" | "localhost" | "::1"
+    )
+}
+
+/// `http(s)://<loopback>[:port][/...]` — any port is accepted.
+fn is_loopback_origin(origin: &str) -> bool {
+    let Some((scheme, rest)) = origin.split_once("://") else {
+        return false;
+    };
+    if !matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https") {
+        return false;
+    }
+    let authority = rest.split('/').next().unwrap_or("");
+    !authority.is_empty() && is_loopback_hostname(hostname_from_authority(authority))
+}
+
+/// Loopback origins are always accepted; `allowed_origins` entries are an
+/// explicit escape hatch for non-loopback callers (default: empty). `null`
+/// (sandboxed page / opaque origin) is never accepted, not even if listed.
+fn origin_is_allowed(origin: &str, allowed: &[String]) -> bool {
+    let origin = origin.trim();
+    if origin.is_empty() || origin.eq_ignore_ascii_case("null") {
+        return false;
+    }
+    is_loopback_origin(origin)
+        || allowed
+            .iter()
+            .any(|entry| entry.trim().eq_ignore_ascii_case(origin))
+}
+
+/// Loopback hosts and the configured host are accepted, plus `allowed_hosts`
+/// entries (hostname or authority form). Only called when the kernel itself is
+/// bound to loopback.
+fn host_is_allowed(host_header: &str, configured_host: &str, allowed: &[String]) -> bool {
+    let host = hostname_from_authority(host_header);
+    is_loopback_hostname(host)
+        || host.eq_ignore_ascii_case(configured_host.trim())
+        || allowed.iter().any(|entry| {
+            let entry = entry.trim();
+            entry.eq_ignore_ascii_case(host_header)
+                || hostname_from_authority(entry).eq_ignore_ascii_case(host)
+        })
+}
+
+fn forbidden_origin_host(code: &str, message: &str) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(serde_json::json!({ "error": code, "message": message })),
+    )
+        .into_response()
+}
+
+/// T-DSH-86: rejects DNS-rebinding attempts against the MCP/SSE endpoints.
+///
+/// - `Origin` present and not loopback → 403 (also covers `OPTIONS` preflight
+///   and `Origin: null`).
+/// - `Host` present and not loopback/configured/allowed while the kernel is
+///   bound to loopback → 403.
+/// - No `Origin` (Claude Code, mcp-remote, agents, curl) → passes untouched.
+///
+/// No exemption for authenticated callers: a valid bearer token does not make
+/// an arbitrary web origin safe.
+pub async fn validate_mcp_origin_host_middleware(
+    State(state): State<Arc<HttpState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let path = request.uri().path().to_string();
+    if !MCP_ORIGIN_GUARD_PATHS.contains(&path.as_str()) {
+        return next.run(request).await;
+    }
+    let (configured_host, allowed_origins, allowed_hosts) = {
+        let config = state.config.read().await;
+        (
+            config.nexus.host.clone(),
+            config.nexus.allowed_origins.clone(),
+            config.nexus.allowed_hosts.clone(),
+        )
+    };
+    if let Some(origin) = request.headers().get(ORIGIN) {
+        let origin = origin.to_str().unwrap_or("");
+        if !origin_is_allowed(origin, &allowed_origins) {
+            warn!("MCP origin guard: rejected Origin '{origin}' on {path}");
+            return forbidden_origin_host(
+                "forbidden_origin",
+                "Origin not allowed for MCP/SSE endpoints",
+            );
+        }
+    }
+    if is_loopback_hostname(&configured_host)
+        && let Some(host) = request.headers().get(HOST)
+    {
+        let host = host.to_str().unwrap_or("");
+        if !host_is_allowed(host, &configured_host, &allowed_hosts) {
+            warn!("MCP origin guard: rejected Host '{host}' on {path}");
+            return forbidden_origin_host(
+                "forbidden_host",
+                "Host not allowed for loopback-bound MCP/SSE endpoints",
+            );
+        }
+    }
+    next.run(request).await
+}
+
 /// Sanitizes query string to prevent token leakage in logs.
 pub fn sanitize_query(query: &str) -> String {
     if query.contains("token=") || query.contains("Authorization=") {
@@ -1264,5 +1393,75 @@ mod fase3_scope_tests {
         let c = insufficient_scope_challenge(&oauth(), &HeaderMap::new(), &[SCOPE_OPERATOR, "federation:admin"]);
         assert!(c.contains("scope=\"operator federation:admin\""), "{c}");
         assert_eq!(c.matches("resource_metadata=").count(), 1, "{c}");
+    }
+}
+
+/// T-DSH-86 tests: Origin/Host rules for the MCP/SSE DNS-rebinding guard.
+#[cfg(test)]
+mod mcp_origin_guard_tests {
+    use super::*;
+
+    #[test]
+    fn loopback_origins_are_accepted_any_port() {
+        for origin in [
+            "http://127.0.0.1:47004",
+            "http://localhost",
+            "https://[::1]:3030",
+            "http://LOCALHOST:5173",
+        ] {
+            assert!(is_loopback_origin(origin), "{origin}");
+            assert!(origin_is_allowed(origin, &[]), "{origin}");
+        }
+    }
+
+    #[test]
+    fn hostile_origins_are_rejected() {
+        for origin in [
+            "http://evil.example",
+            "https://127.0.0.1.evil.example",
+            "null",
+            "",
+            "http://[::2]:3030",
+            "file:///tmp/x",
+        ] {
+            assert!(!is_loopback_origin(origin), "{origin}");
+            assert!(!origin_is_allowed(origin, &[]), "{origin}");
+        }
+    }
+
+    #[test]
+    fn allowed_origins_list_is_an_explicit_escape_hatch() {
+        let allowed = vec!["http://app.example".to_string()];
+        assert!(origin_is_allowed("http://app.example", &allowed));
+        assert!(!origin_is_allowed("http://other.example", &allowed));
+        assert!(!origin_is_allowed("null", &["null".to_string()]));
+    }
+
+    #[test]
+    fn host_validation_accepts_loopback_configured_and_allowed() {
+        let none: Vec<String> = Vec::new();
+        assert!(host_is_allowed("127.0.0.1:47004", "127.0.0.1", &none));
+        assert!(host_is_allowed("localhost:3030", "127.0.0.1", &none));
+        assert!(host_is_allowed("[::1]:47004", "127.0.0.1", &none));
+        assert!(host_is_allowed("127.0.0.1", "localhost", &none));
+        assert!(!host_is_allowed("evil.example", "127.0.0.1", &none));
+        assert!(!host_is_allowed("127.0.0.1.evil.example", "127.0.0.1", &none));
+        let allowed = vec!["tunnel.example".to_string()];
+        assert!(host_is_allowed("tunnel.example:47004", "127.0.0.1", &allowed));
+    }
+
+    #[test]
+    fn authority_hostname_strips_ipv6_brackets_and_port() {
+        assert_eq!(hostname_from_authority("[::1]:3030"), "::1");
+        assert_eq!(hostname_from_authority("127.0.0.1:47004"), "127.0.0.1");
+        assert_eq!(hostname_from_authority("localhost"), "localhost");
+    }
+
+    #[test]
+    fn guard_covers_exactly_the_mcp_sse_paths() {
+        assert_eq!(
+            MCP_ORIGIN_GUARD_PATHS,
+            ["/messages", "/mcp", "/api/v1/mcp", "/sse", "/sse/download"]
+        );
     }
 }

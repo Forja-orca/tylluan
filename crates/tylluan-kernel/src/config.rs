@@ -609,6 +609,18 @@ pub struct NexusConfig {
     /// health, doctor, memory_search, graph ops directly without tylluan_do routing.
     #[serde(default)]
     pub expose_guild_tools: bool,
+
+    /// T-DSH-86: orígenes adicionales permitidos en los endpoints MCP/SSE
+    /// (`/messages`, `/mcp`, `/api/v1/mcp`, `/sse`, `/sse/download`). Por
+    /// defecto vacía: solo se aceptan orígenes loopback (`127.0.0.1`,
+    /// `localhost`, `[::1]`, cualquier puerto).
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
+
+    /// T-DSH-86: hosts adicionales permitidos en esos mismos endpoints cuando
+    /// el kernel escucha en loopback (p. ej. el hostname de un túnel WSL).
+    #[serde(default)]
+    pub allowed_hosts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -639,6 +651,8 @@ impl Default for NexusConfig {
             timeouts: TimeoutsConfig::default(),
             dev_mode: false,
             expose_guild_tools: false,
+            allowed_origins: Vec::new(),
+            allowed_hosts: Vec::new(),
         }
     }
 }
