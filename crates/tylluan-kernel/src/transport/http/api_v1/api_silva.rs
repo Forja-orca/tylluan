@@ -41,7 +41,13 @@ pub async fn agents_list_handler(State(state): State<Arc<HttpState>>) -> impl In
         let srv = srv_arc.read().await;
         if let Some(ref ap) = srv.agent_profiles {
             if let Ok(p) = ap.lock() {
-                p.list_profiles().unwrap_or_default()
+                p.list_profiles().unwrap_or_else(|error| {
+                    tracing::warn!(
+                        error = %error,
+                        "agents_list: no se pudieron listar los perfiles de agente; devolviendo vacío"
+                    );
+                    Vec::new()
+                })
             } else { vec![] }
         } else { vec![] }
     } else { vec![] };
@@ -50,7 +56,13 @@ pub async fn agents_list_handler(State(state): State<Arc<HttpState>>) -> impl In
         let srv = srv_arc.read().await;
         if let Some(ref ap) = srv.agent_profiles {
             match ap.lock() {
-                Ok(g) => g.get_domain_reputation().unwrap_or_default(),
+                Ok(g) => g.get_domain_reputation().unwrap_or_else(|error| {
+                    tracing::warn!(
+                        error = %error,
+                        "agents_list: no se pudo leer la reputación por dominio; devolviendo vacío"
+                    );
+                    Vec::new()
+                }),
                 Err(_) => vec![],
             }
         } else { vec![] }
