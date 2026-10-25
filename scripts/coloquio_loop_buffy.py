@@ -33,6 +33,11 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from kernel_token import kernel_headers  # noqa: E402  (path bootstrap above)
+
 READER_ID = "buffy"
 DEFAULT_BASE_URL = "http://127.0.0.1:47004"
 DEFAULT_LIMIT = 50
@@ -51,7 +56,9 @@ def log(msg: str) -> None:
 
 
 def http_json(base_url: str, path: str, timeout: float = 10.0) -> dict:
-    req = urllib.request.Request(f"{base_url}{path}", method="GET")
+    req = urllib.request.Request(
+        f"{base_url}{path}", method="GET", headers=kernel_headers()
+    )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8"))
 
