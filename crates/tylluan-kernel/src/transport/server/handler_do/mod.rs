@@ -55,6 +55,7 @@ pub use audit::audit_db_path;
 pub use audit::check_dangerous_intent;
 pub(crate) use audit::routing_failure_id;
 pub(crate) use audit::log_audit_entry;
+pub(crate) use audit::audit_or_warn;
 pub(crate) use skill::handle_skill_prefix;
 pub(crate) use correct::handle_correct_prefix;
 pub(crate) use coloquio::handle_coloquio_prefix;

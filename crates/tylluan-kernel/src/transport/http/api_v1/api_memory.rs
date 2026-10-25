@@ -303,12 +303,13 @@ pub async fn quarantine_release_handler(
                 crate::transport::http::auth::current_auth_kind(),
                 Some(crate::transport::http::auth::AclAuthKind::MasterToken)
             );
-            // Fire-and-forget on purpose: `log_audit_entry` opens a second
-            // SQLite file and must never sit in the request path (a blocking
-            // write there deadlocks the test harness and stalls the caller).
+            // Fire-and-forget on purpose: `audit_or_warn` escribe la auditoría
+            // (un SQLite aparte) y no debe sentarse en el request path (a
+            // blocking write there deadlocks the test harness and stalls the
+            // caller).
             let node_id = id.clone();
             tokio::task::spawn_blocking(move || {
-                crate::transport::server::handler_do::log_audit_entry(
+                crate::transport::server::handler_do::audit_or_warn(
                     "quarantine:release",
                     "memory",
                     "quarantine_release",

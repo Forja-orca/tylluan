@@ -99,7 +99,7 @@ Out of scope (v1.0.0):
 
 - [x] P5 — Config-driven embedding model: `mxbai-embed-large` (1024, the default since 2026-09-30), `bge-m3` (1024), `nomic-embed-text` (768), `bge-small`/`minilm` (384), `none` (BM25-only). `resolve_model()` / `resolve_dimension()` in embeddings.rs. `vector_dimensions` is now derived dynamically from the model.
 - [x] P6 — Installation profiles: `tylluan-cli install --profile=clinic|server|portable` writes the correct `tylluan.toml` at install time (different embedding_model, fanout, timeouts per profile). Dashboard shows active profile chip (Portable·BM25 / Clinic·BGE-Small / Server·mxbai-embed-large).
-- [x] P7 — Reindex endpoint + dashboard progress: `POST /api/v1/memory/reindex` triggers immediate background reindex when switching models. Dashboard shows reindex progress bar (stale/total nodes). Context: the system already reindexes stale nodes automatically every 10 min in `main.rs:1235` via `get_stale_embeddings()` — P7 adds manual trigger + visibility.
+- [x] P7 — Reindex endpoint + dashboard progress: `POST /api/v1/memory/reindex` triggers immediate background reindex when switching models. Dashboard shows reindex progress bar (stale/total nodes). Context: the system already reindexes stale nodes automatically every 10 min in `reindex_interval` en `main.rs` del kernel via `get_stale_embeddings()` — P7 adds manual trigger + visibility.
 
 ## v0.7.0 — Intelligence Foundation
 
@@ -110,7 +110,7 @@ Out of scope (v1.0.0):
 **Execution order (approved by research team 2026-07-01):**
 
 - [x] M6-minimal — Deterministic Simulation Testing (DST) foundation: `MeshTransport` trait + `InMemoryTransport` (mpsc-based) + `TcpTransport` (length-prefixed). `GossipEngine::perform_sync/handle_incoming_message` generic over transport. 4 integration tests. Prerequisite for validating all mesh milestones.
-- [x] M3 — Guild Auto-Discovery: scan `guilds/` at startup, eliminate manual `catalog.rs` registry. `scan_guilds_directory()` extracts name + trigger phrases from FastMCP docstrings. 34 `description_override()` entries for routing-critical guilds. Zero-config for new guilds.
+- [x] M3 — Guild Auto-Discovery: scan `guilds/` at startup, eliminate manual `catalog.rs` registry. `scan_guilds_directory()` extracts name + trigger phrases from FastMCP docstrings. 46 `description_override()` entries (recuento 2026-10-25) for routing-critical guilds. Zero-config for new guilds.
 - [x] M7 — Single Binary: bundle `dashboard/dist/` into `tylluan-nexus` binary via `rust-embed`. `--features bundled-dashboard` embeds assets at compile time; disk fallback preserved for dev. (~0.5 days)
 - [x] Contextual Retrieval: `build_contextual_text()` prepends `[source_file > heading_path]` before embedding. Applied in background reindex loop and manual reindex endpoint. Zero overhead when metadata is absent.
 - [x] M1 — Memory Decay: exponential half-life `weight * 0.5^(hours/half_life)` computed in Rust (no SQL POWER() dependency). Type-specific effective half-lives (lesson/experience/concept). Configurable `decay_half_life_hours` in `[silva]` tylluan.toml (default 336h = 14 days). Protected nodes exempt.
@@ -239,7 +239,7 @@ Delivered:
 
 **Goal:** Interoperate with external agent frameworks over an open standard, and close the first real recall-path memory-poisoning defense.
 
-Delivered (269 commits since v0.13.0, including a week of production dogfooding — "vivir Tylluan"):
+Delivered (275 commits since v0.13.0, including a week of production dogfooding — "vivir Tylluan"):
 - [x] **M38 — A2A (Agent2Agent, Linux Foundation) interoperability** — real Agent Card + JSON-RPC 2.0 server (`message/send`, `tasks/get`, `tasks/cancel`); orthogonal to Tylluan's own P2P mesh (which is for trusted Tylluan-to-Tylluan sync; A2A is for delegating to/from external frameworks like LangGraph/CrewAI). HITL grant coverage for `input-required` states + mitigation for `client_agent_id` spoofing.
 - [x] **ADR-011 — Signal Loop + Coherence Gate + LightReranker** — `recall_feedback` table (SilvaDB v18) logs which memories are returned per agent, resolved via Jaccard word-overlap against later calls. `CoherenceGate`: 3-layer recall-path defense against memory poisoning (known patterns, untrusted provenance, semantic drift), wired into both live-query and cache-hit paths. `LightReranker` scaffolded, deliberately not cut over yet (needs ≥5,000 resolved feedback rows).
 - [x] **ADR-010 — Embedded SLM research spike, closed NO-GO** — sep-CMA-ES trained coordinator vs fixed role assignment: 33.3% win rate on real HTTP fitness, below the 60% threshold — honest null result, not shipped.
@@ -249,7 +249,7 @@ Delivered (269 commits since v0.13.0, including a week of production dogfooding 
 
 **Goal:** Verify what earlier milestones claimed was "wired" against a live running kernel, not just code review — several real bugs only surfaced this way.
 
-Delivered (155 commits since v0.14.0):
+Delivered (157 commits since v0.14.0):
 - [x] Full connection audit — 5 guilds found defaulting IPC to ForjaMCPo3's port `3030` instead of Tylluan's `4000`, dead code (`memory_bridge.py`) removed, Python guild writes bypassing kernel embedding generation fixed, 3 dashboard panels showing fabricated/stuck data replaced with honest empty states.
 - [x] Mandatory Noise NK encryption for mesh gossip — previously sent `GossipEntry` payloads over plain HTTP; `GossipEntry`/`KBucketEntry` now carry an optional Ed25519 pubkey, upgrading to real Noise NK once known; plaintext remains last-resort fallback for peers without the fix yet.
 - [x] CoherenceGate Layer 4 live in production — hybrid deterministic+LLM classifier wired into both real recall call sites in observation mode. A 3-model SLM debate alternative was tried and NO-GO'd (sub-2B models converge to a constant answer regardless of prompt).
@@ -262,7 +262,7 @@ Delivered (155 commits since v0.14.0):
 
 **Goal:** Adopt the latest MCP spec honestly, and give agents a real continuity/trust/action layer — not speculative feature work, closing gaps found live in production.
 
-Delivered (85 commits since v0.15.0):
+Delivered (88 commits since v0.15.0):
 - [x] **M39 — MCP spec 2026-07-28** — honest `protocolVersion` negotiation, `tasks/get`/`update`/`cancel` over a closed 5-state `JobQueue` enum, a real MCP App (`ui://tylluan/knowledge-graph-canvas`, self-contained SVG+JS, no external fetch), stateless-core request handling verified live with curl (legacy negotiation unaffected).
 - [x] **M40 — Continuity/Trust/Action layer** (8 phases) — self-documenting guild contracts, unified `agent_bootstrap` (identity + last session + pending approvals + repo-map in one call), full `tylluan_do` action cycle with tested `undo_last_action`, evidence/provenance fields on memory (`confidence`/`status`/`source`/`author`/`evidence_url`), unified session continuity across MCP/HTTP/CLI, Trust Console dashboard panel, 8-parallel-agent concurrency test suite, near-invisible setup (startup banner + opt-in MCP auto-configurator).
 - [x] 3 real bugs found live and fixed end-to-end: multi-word `explore` queries returning zero results, `doctor_diagnose`/`doctor_repair` with no deterministic routing, and the headline fix — `sse_handler` discarding every real client header on `POST /sse`, forcing the wrong MCP dialect regardless of what the client asked for (root cause of a long-standing client hang).

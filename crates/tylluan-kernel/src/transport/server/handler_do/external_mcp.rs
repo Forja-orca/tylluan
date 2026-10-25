@@ -5,7 +5,7 @@ use crate::config::TylluanConfig;
 use super::TylluanServer;
 use crate::router::matcher::{tokenize, keyword_score};
 use super::routing::record_activity_trace;
-use super::log_audit_entry;
+use super::audit_or_warn;
 
 /// After resolve_guild_name fails, attempt dispatch to a registered external MCP server.
 ///
@@ -185,7 +185,7 @@ async fn do_external_call(
     let audit_success = !is_error;
     let audit_preview = result_text.chars().take(200).collect::<String>();
     tokio::task::spawn_blocking(move || {
-        let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview, 0, false);
+        audit_or_warn(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview, 0, false);
     });
 
     // Notify dashboard about external routing
