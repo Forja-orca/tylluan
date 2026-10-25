@@ -156,7 +156,7 @@ Delivered:
 Delivered:
 - [x] P0 — Extended Retrieval Benchmark: 44 nodes + 40 edges + 10 queries (5 original + 5 multi-hop), `skip_graph` A/B flag in `search_hybrid` (internal). Graph ON vs OFF: +2.5% Recall@5, +5% Recall@10, −0.1% MRR (pre-fix), +4ms latency. Results in `benchmarks/benchmark_v0.10.0.json`.
 - [x] P1 — M6-full Fault DST: `fault_dst.rs` — 4 new tests exercising all 5 `PartitionableTransport<T>` modes: partition+heal convergence, latency injection, drop-rate eventual convergence, error mode graceful failure.
-- [x] P2-fix — LinearRAG Degree Bias Fix: `local_query_graph` (`graph.rs:739`) and `dual_retrieval.rs` (lines 30, 69) inverted from multiply to divide — penalizes hub nodes. New test `test_local_query_graph_degree_penalty`. Root cause: degree boost promoted generic hub concepts to top MRR positions.
+- [x] P2-fix — LinearRAG Degree Bias Fix: `local_query_graph` (`graph.rs:769`) and `dual_retrieval.rs` (lines 30, 69) inverted from multiply to divide — penalizes hub nodes. New test `test_local_query_graph_degree_penalty`. Root cause: degree boost promoted generic hub concepts to top MRR positions.
 - [x] P3-spec — ADR-004 M14-D Guild Dispatch spec: `docs/reference/adr/M14D_dispatch_spec.md` — Capability-Aware + Latency-Based Hybrid Routing, 4-phase plan (~8 sessions), CONTRACT-01 preserved.
 
 **273 kernel lib tests + 61 link tests + 2 evals = 336 total** · 0 failures.
