@@ -128,8 +128,14 @@ fn spawn_fixed_argv(dispatch: &PendingDispatch) -> ExecutionReport {
             );
             // Reap asynchronously so long-lived kernels don't accumulate
             // zombies; we never block the executor loop on a child.
+            // T-DSH-77: un fallo del reaper deja de ser invisible.
             std::thread::spawn(move || {
-                let _ = child.wait();
+                if let Err(error) = child.wait() {
+                    tracing::warn!(
+                        error = %error,
+                        "dispatch-executor reaper: child.wait() failed (posible zombie)"
+                    );
+                }
             });
             ExecutionReport::Spawned
         }

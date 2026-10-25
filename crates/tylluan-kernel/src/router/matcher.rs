@@ -533,7 +533,8 @@ impl GuildMatcher {
                 t2.0.guild_name, t2.2, t1.0.guild_name, t1.2, t1.1, t2.1
             );
             // Log friction: semantic tiebreaker was needed (routing was ambiguous)
-            let _ = crate::security::friction_log::log_friction_event_standalone(
+            // T-DSH-77: el helper avisa (rate-limited) si el write de fricción falla.
+            crate::security::friction_log::friction_or_warn(
                 "routing_ambiguous",
                 &format!("'{}' vs '{}' both within 0.15 — semantic tiebreak chose '{}'", t1.0.guild_name, t2.0.guild_name, t2.0.guild_name)
             );

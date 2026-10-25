@@ -17,6 +17,8 @@
 
 use rusqlite::params;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
 // FrictionStore — owns a connection to a specific friction DB
@@ -379,22 +381,83 @@ pub fn log_friction_event_standalone(event_type: &str, description: &str) -> Res
     Ok(store.conn().last_insert_rowid())
 }
 
+/// Intervalo mínimo entre warns por fallo al escribir un evento de fricción.
+const FRICTION_WARN_INTERVAL_SECS: u64 = 60;
+
+/// Rate limiter del warn de fricción (mismo patrón que `audit_or_warn` de
+/// `handler_do/audit.rs`): como mucho 1 warn/minuto + contador de suprimidos.
+struct FrictionWarnLimiter {
+    last_warn_secs: AtomicU64,
+    suppressed: AtomicU64,
+}
+
+impl FrictionWarnLimiter {
+    const fn new() -> Self {
+        Self {
+            last_warn_secs: AtomicU64::new(0),
+            suppressed: AtomicU64::new(0),
+        }
+    }
+
+    /// Registra un fallo. `Some(suprimidos)` si toca warn (resetea contador),
+    /// `None` si se suprime por el rate limit.
+    fn on_failure(&self, now_secs: u64) -> Option<u64> {
+        let last = self.last_warn_secs.load(Ordering::Relaxed);
+        if now_secs.saturating_sub(last) >= FRICTION_WARN_INTERVAL_SECS
+            && self
+                .last_warn_secs
+                .compare_exchange(last, now_secs, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+        {
+            Some(self.suppressed.swap(0, Ordering::Relaxed))
+        } else {
+            self.suppressed.fetch_add(1, Ordering::Relaxed);
+            None
+        }
+    }
+}
+
+static FRICTION_WARN_LIMITER: FrictionWarnLimiter = FrictionWarnLimiter::new();
+
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Best-effort: escribe un evento de fricción y, si falla, deja un
+/// `tracing::warn!` rate-limited (1/minuto + `suppressed`). No cambia el
+/// retorno `()` de los helpers públicos que lo usan.
+pub(crate) fn friction_or_warn(event_type: &str, description: &str) {
+    if let Err(error) = log_friction_event_standalone(event_type, description)
+        && let Some(suppressed) = FRICTION_WARN_LIMITER.on_failure(now_unix_secs())
+    {
+        tracing::warn!(
+            error = %error,
+            event_type,
+            suppressed,
+            "friction event write failed (best-effort; el flujo continua)"
+        );
+    }
+}
+
 /// Shorthand: log a routing mismatch (wrong guild selected, tool call failed).
 pub fn log_routing_mismatch(intent: &str, guild: &str, tool: &str, error: &str) {
     let desc = format!("intent='{intent}' routed to guild={guild} tool={tool} — {error:.100}");
-    let _ = log_friction_event_standalone("routing_mismatch", &desc);
+    friction_or_warn("routing_mismatch", &desc);
 }
 
 /// Shorthand: log a command blocklist rejection.
 pub fn log_blocklist_rejection(intent: &str, command: &str) {
     let desc = format!("intent='{intent}' blocked: '{command}' not in allowed command list");
-    let _ = log_friction_event_standalone("command_blocklist_rejection", &desc);
+    friction_or_warn("command_blocklist_rejection", &desc);
 }
 
 /// Shorthand: log a semantic precision failure (retrieval returned noise).
 pub fn log_semantic_noise(intent: &str, expected_guild: &str, actual_guild: &str) {
     let desc = format!("intent='{intent}' expected guild={expected_guild} but semantic similarity routed to guild={actual_guild}");
-    let _ = log_friction_event_standalone("semantic_precision_failure", &desc);
+    friction_or_warn("semantic_precision_failure", &desc);
 }
 
 pub fn log_friction_event(
@@ -972,5 +1035,46 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM friction_sessions", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count_a, 1, "store A still has exactly 1 session after both threads ran");
+    }
+
+    /// T-DSH-77: el rate limit del warn de fricción es 1/minuto y cuenta los
+    /// fallos suprimidos. Instancia local para no tocar el estado global.
+    #[test]
+    fn friction_warn_limiter_warns_once_per_minute_and_counts_suppressed() {
+        use super::{FrictionWarnLimiter, FRICTION_WARN_INTERVAL_SECS};
+        let limiter = FrictionWarnLimiter::new();
+        assert_eq!(limiter.on_failure(100), Some(0));
+        assert_eq!(limiter.on_failure(101), None);
+        assert_eq!(limiter.on_failure(100 + FRICTION_WARN_INTERVAL_SECS - 1), None);
+        assert_eq!(limiter.on_failure(100 + FRICTION_WARN_INTERVAL_SECS), Some(2));
+    }
+
+    /// T-DSH-77: si la escritura del evento falla, el helper avisa y los
+    /// call-sites conservan su retorno `()`. Fuerza el fallo apuntando el path
+    /// thread-local de la DB de fricción a un directorio.
+    #[test]
+    fn friction_or_warn_warns_on_failure_and_keeps_unit_return() {
+        use super::{friction_or_warn, log_routing_mismatch, TEST_DB_MUTEX, TEST_DB_PATH};
+        let _guard = TEST_DB_MUTEX
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let dir = std::env::temp_dir().join(format!("friction_or_warn_fail_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear directorio temporal");
+        TEST_DB_PATH.with(|cell| *cell.borrow_mut() = Some(dir.clone()));
+
+        let captured = crate::test_support::capture_warns(|| {
+            // Un directorio no es una DB válida: `open_friction_db` falla.
+            let () = friction_or_warn("test_event", "descripcion");
+            // Los helpers públicos mantienen su retorno `()`.
+            log_routing_mismatch("intent", "guild", "tool", "err");
+        });
+
+        TEST_DB_PATH.with(|cell| *cell.borrow_mut() = None);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            captured.contains("friction event write failed"),
+            "el fallo debe avisar, got: {captured}"
+        );
     }
 }

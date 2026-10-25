@@ -623,7 +623,55 @@ fn log_hybrid_decision(node_id: &str, trigger: &HybridTrigger, decision: &Hybrid
         "node={} zones={} cos={:.2} score={:.2} kw_overlap={} llm={:?} action={}",
         node_id, zones.join(","), trigger.cosine, trigger.score, trigger.keyword_overlap, decision, action
     );
-    let _ = crate::security::friction_log::log_friction_event_standalone("layer4_hybrid_decision", &desc);
+    crate::security::friction_log::friction_or_warn("layer4_hybrid_decision", &desc);
+}
+
+/// Ejecuta la cuarentena ASI06 decidida por Layer 4 y hace visible cualquier
+/// fallo (JoinError, error de SQLite o UPDATE que no afecta a ninguna fila).
+/// Devuelve el número de filas; los call-sites de producción ignoran el valor
+/// (mismo flujo que antes, solo se añade el warn). T-DSH-77.
+async fn quarantine_node_for_layer4(
+    silva: &std::sync::Arc<crate::memory::silva::SilvaDB>,
+    node_id: String,
+) -> Result<usize, String> {
+    let silva = silva.clone();
+    let node_id_for_log = node_id.clone();
+    let conn = silva.conn_lock();
+    match tokio::task::spawn_blocking(move || {
+        let c = conn.blocking_lock();
+        c.execute(
+            "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
+            rusqlite::params!["Layer 4 hybrid: LLM classified as IRRELEVANT", node_id],
+        )
+    })
+    .await
+    {
+        Ok(Ok(rows)) => {
+            if rows == 0 {
+                tracing::warn!(
+                    node_id = %node_id_for_log,
+                    "Layer 4: quarantine UPDATE affected 0 rows (node no longer exists?)"
+                );
+            }
+            Ok(rows)
+        }
+        Ok(Err(error)) => {
+            tracing::warn!(
+                node_id = %node_id_for_log,
+                error = %error,
+                "Layer 4: quarantine UPDATE failed (nodo sigue sin cuarentena)"
+            );
+            Err(error.to_string())
+        }
+        Err(join_error) => {
+            tracing::warn!(
+                node_id = %node_id_for_log,
+                error = %join_error,
+                "Layer 4: quarantine task panicked (nodo sigue sin cuarentena)"
+            );
+            Err(join_error.to_string())
+        }
+    }
 }
 
 pub struct GateStats {
@@ -878,21 +926,20 @@ impl CoherenceGate {
                             match &decision {
                                 HybridDecision::Reject => {
                                     // Quarantine: reuse the exact ASI06 mechanism.
-                                    let node_id = node.id.clone();
-                                    let silva_clone = silva.clone();
-                                    let conn = silva_clone.conn_lock();
-                                    let _ = tokio::task::spawn_blocking(move || {
-                                        let c = conn.blocking_lock();
-                                        c.execute(
-                                            "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
-                                            rusqlite::params!["Layer 4 hybrid: LLM classified as IRRELEVANT", node_id],
-                                        )
-                                    }).await;
+                                    // T-DSH-77: el helper avisa (warn) si falla el
+                                    // JoinError/UPDATE o si no afecta a ninguna fila.
+                                    let _ = quarantine_node_for_layer4(&silva, node.id.clone()).await;
                                 }
                                 HybridDecision::KeepSoft => {
                                     // Penalize weight: halve it to lower future ranking.
                                     // Uses reinforce_node (multiplier < 1 = decay).
-                                    let _ = silva.reinforce_node(&node.id, 0.5).await;
+                                    if let Err(error) = silva.reinforce_node(&node.id, 0.5).await {
+                                        tracing::warn!(
+                                            node_id = %node.id,
+                                            error = %error,
+                                            "Layer 4: KeepSoft reinforce/penalty failed (peso no reducido)"
+                                        );
+                                    }
                                 }
                                 HybridDecision::Keep => {
                                     // No action — LLM says relevant, keep as-is.
@@ -928,7 +975,14 @@ impl CoherenceGate {
                                 latency_ms: started.elapsed().as_millis() as i64,
                                 created_at: chrono::Utc::now().to_rfc3339(),
                             };
-                            let _ = crate::security::llm_examples::log_decision_example(&ex);
+                            if let Err(error) = crate::security::llm_examples::log_decision_example(&ex) {
+                                tracing::warn!(
+                                    node_id = %ex.node_id,
+                                    workflow_id,
+                                    error = %error,
+                                    "Layer 4: decision example not persisted (dataset incompleto)"
+                                );
+                            }
                         }
                     }
                 }
@@ -2016,6 +2070,42 @@ mod judge_dedup_tests {
             calls.load(Ordering::SeqCst),
             2,
             "un fallo transitorio no se cachea: el reintento vuelve al modelo"
+        );
+    }
+
+    /// T-DSH-77: la cuarentena Layer 4 avisa por `tracing::warn!` si el UPDATE
+    /// falla (aquí forzando una DB en solo-lectura) en vez de descartar el error
+    /// en silencio; el nodo se queda sin cuarentena y ahora deja rastro.
+    #[test]
+    fn layer4_quarantine_failure_warns() {
+        // `SilvaDB::in_memory` usa `block_in_place` (schema.rs), que exige un
+        // runtime multi-thread: por eso el test es síncrono con su propio runtime.
+        let runtime = tokio::runtime::Runtime::new().expect("runtime multi-thread");
+        let silva = std::sync::Arc::new(
+            runtime
+                .block_on(async { crate::memory::silva::SilvaDB::in_memory().await })
+                .expect("silva in-memory"),
+        );
+        runtime.block_on(async {
+            let conn = silva.conn_lock();
+            let c = conn.lock().await;
+            c.execute_batch("PRAGMA query_only=ON;")
+                .expect("activar query_only en la conexión");
+        });
+
+        let captured = crate::test_support::capture_warns(|| {
+            let result = runtime.block_on(quarantine_node_for_layer4(
+                &silva,
+                "layer4-missing-node".to_string(),
+            ));
+            assert!(
+                result.is_err(),
+                "con la DB en solo-lectura la cuarentena debe fallar"
+            );
+        });
+        assert!(
+            captured.contains("quarantine UPDATE failed"),
+            "el fallo de cuarentena debe avisar, got: {captured}"
         );
     }
 }
