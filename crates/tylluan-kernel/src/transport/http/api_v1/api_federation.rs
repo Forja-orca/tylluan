@@ -333,8 +333,18 @@ pub async fn federation_approve_peer(
     match state.peer_db.update_approved(&name, &req.auth_token, secret, true) {
         Ok(true) => {
             reload_peers_cache(&state).await;
-            // M12-B: auto-fetch peer's Ed25519 identity pubkey
-            if let Some(peer) = state.config.read().await.federation_peers.iter().find(|p| p.name == name).cloned() {
+            // M12-B: auto-fetch peer's Ed25519 identity pubkey.
+            // D-58: el guard de lectura NO puede ser un temporal del scrutinee:
+            // dentro se llama a reload_peers_cache(), que pide config.write().
+            // Con tokio::sync::RwLock (no reentrante) el handler se colgaba.
+            let peer = {
+                let config = state.config.read().await;
+                config.federation_peers
+                    .iter()
+                    .find(|p| p.name == name)
+                    .cloned()
+            };
+            if let Some(peer) = peer {
                 let identity_url = format!("{}/api/v1/federation/identity", peer.url.trim_end_matches('/'));
                 let client = reqwest::Client::new();
                 match client.get(&identity_url).bearer_auth(&peer.auth_token).send().await {

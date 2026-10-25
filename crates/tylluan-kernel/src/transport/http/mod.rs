@@ -713,10 +713,15 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     }
 
     // Bootstrap work contracts from SQLite into the in-memory registry.
-    if let Ok(active) = state.contract_db.load_active() {
-        for c in active {
-            state.contract_registry.contracts.insert(c.id.clone(), c);
+    match state.contract_db.load_active() {
+        Ok(active) => {
+            for c in active {
+                state.contract_registry.contracts.insert(c.id.clone(), c);
+            }
         }
+        Err(e) => tracing::warn!(
+            "failed to load active work contracts from SQLite: {e}"
+        ),
     }
 
     // Spawn background federation auto-sync loop task

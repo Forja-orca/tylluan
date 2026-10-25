@@ -164,7 +164,6 @@ fn happy_identity_app(pubkey: &'static str) -> axum::Router {
 // IMPL_M-BUFFY-8. Quitar `#[ignore]` cuando el fix de src aterrice; la
 // verificacion con D-52 revertido ya quedó documentada (rojo con
 // `approved_without_identity` + caché obsoleta + 599).
-#[ignore = "bloqueado por deadlock RwLock en federation_approve_peer (IMPL_M-BUFFY-8)"]
 async fn d56_failed_pubkey_persist_never_leaves_an_approved_peer() {
     let state = support::test_state_custom("mb8d56", Some(MASTER.into()), false).await;
 
