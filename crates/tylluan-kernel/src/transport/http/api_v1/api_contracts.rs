@@ -235,6 +235,24 @@ fn now_unix() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
+/// D-57: la persistencia de un contrato no puede fallar en silencio. La
+/// respuesta HTTP no cambia; el error queda en el log con el id.
+fn persist_contract(
+    contract_db: &ContractDb,
+    entry: &WorkContract,
+) -> rusqlite::Result<()> {
+    match contract_db.persist(entry) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            tracing::error!(
+                "work_contract.persist failed for '{}': {e}",
+                entry.id
+            );
+            Err(e)
+        }
+    }
+}
+
 // --- Handlers ---------------------------------------------------------------
 
 pub async fn contract_create_handler(
@@ -262,7 +280,7 @@ pub async fn contract_create_handler(
     state.contract_registry.contracts.insert(id.clone(), contract);
 
     if let Some(c) = state.contract_registry.contracts.get(&id) {
-        let _ = state.contract_db.persist(&c);
+        let _ = persist_contract(&state.contract_db, &c);
     }
 
     (
@@ -296,7 +314,7 @@ pub async fn contract_tick_handler(
                 "ts": now_unix()
             }));
         }
-        let _ = state.contract_db.persist(&entry);
+        let _ = persist_contract(&state.contract_db, &entry);
         return (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -311,7 +329,7 @@ pub async fn contract_tick_handler(
         entry.status = "in_progress".to_string();
     }
 
-    let _ = state.contract_db.persist(&entry);
+    let _ = persist_contract(&state.contract_db, &entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -380,7 +398,7 @@ pub async fn contract_deliver_handler(
     let team_count = entry.team.len();
     let all_delivered = delivered_count >= team_count;
 
-    let _ = state.contract_db.persist(&entry);
+    let _ = persist_contract(&state.contract_db, &entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -430,7 +448,7 @@ pub async fn contract_vote_handler(
             "extensions": entry.extensions,
             "ts": now_unix()
         }));
-        let _ = state.contract_db.persist(&entry);
+        let _ = persist_contract(&state.contract_db, &entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -440,7 +458,7 @@ pub async fn contract_vote_handler(
             }))
         )
     } else if majority {
-        let _ = state.contract_db.persist(&entry);
+        let _ = persist_contract(&state.contract_db, &entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -449,7 +467,7 @@ pub async fn contract_vote_handler(
             }))
         )
     } else {
-        let _ = state.contract_db.persist(&entry);
+        let _ = persist_contract(&state.contract_db, &entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -486,7 +504,7 @@ pub async fn contract_close_handler(
         "ts": now_unix()
     }));
 
-    let _ = state.contract_db.persist(&entry);
+    let _ = persist_contract(&state.contract_db, &entry);
 
     // TCC-3 (bwc-58310353): close hook — if a task-context capsule exists,
     // synthesize it into SilvaDB memory (structured node, not a raw JSON
@@ -1008,5 +1026,23 @@ mod tests {
         assert!(store.delete(id).expect("delete").eq(&true), "row must be reported as released");
         assert!(store.get(id).expect("get after delete").is_none(), "capsule must be gone after release");
         assert!(store.delete(id).expect("delete again").eq(&false), "second delete is a no-op");
+    }
+
+    /// D-57: persistir un contrato con una BD rota devuelve Err (y el helper
+    /// loguea), sin panic; la respuesta HTTP no depende de este Result.
+    #[test]
+    fn persist_contract_reports_db_failure_without_panicking() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("contracts.db");
+        let db = ContractDb::open(path.to_str().unwrap()).unwrap();
+
+        let raw = rusqlite::Connection::open(&path).unwrap();
+        raw.execute("DROP TABLE work_contracts", []).unwrap();
+
+        let contract = make_contract("bwc-d57-fail");
+        assert!(
+            persist_contract(&db, &contract).is_err(),
+            "una tabla ausente debe devolver Err, no panic"
+        );
     }
 }
