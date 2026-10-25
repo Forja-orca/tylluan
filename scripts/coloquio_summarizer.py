@@ -25,6 +25,11 @@ import hashlib, json, os, re, sqlite3, time, urllib.request, urllib.error, urlli
 from datetime import datetime, timezone
 from pathlib import Path
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from kernel_token import kernel_headers  # noqa: E402  (path bootstrap above)
+
 KERNEL_BASE = "http://127.0.0.1:47004"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKPOINT_DB = REPO_ROOT / "data" / "summarizer_checkpoints.db"
@@ -99,7 +104,10 @@ def _store_hash(hash_hex: str, channel_id: str):
 
 
 def _get(path: str, timeout: int = 10) -> dict:
-    with urllib.request.urlopen(f"{KERNEL_BASE}{path}", timeout=timeout) as r:
+    req = urllib.request.Request(
+        f"{KERNEL_BASE}{path}", headers=kernel_headers(), method="GET"
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
 
@@ -115,7 +123,7 @@ def _post_tylluan_remember(content: str, agent_id: str = "coloquio-summarizer",
     req = urllib.request.Request(
         f"{KERNEL_BASE}/api/v1/do",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=kernel_headers({"Content-Type": "application/json"}),
         method="POST",
     )
     try:

@@ -136,6 +136,9 @@ enum Commands {
     Sandbox {
         #[command(subcommand)]
         action: SandboxCommand,
+        /// Bearer token for authenticated instances (or set TYLLUAN_TOKEN)
+        #[arg(long, short)]
+        token: Option<String>,
     },
     /// Resume a previous agent session — retrieve the last session summary from memory
     Resume {
@@ -871,7 +874,11 @@ def test_{snake}_tool_registered():
                 println!("   3. Your guild auto-registers on next kernel restart");
             }
         },
-        Commands::Sandbox { action } => {
+        Commands::Sandbox { action, token } => {
+            // T-DSH-83: same bearer pattern as `stop` (main.rs stop_instance),
+            // but with the env/file fallback the operator asked for. No token
+            // resolved => no Authorization header (dev_mode=true behaviour).
+            let token = resolve_cli_token(token);
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
@@ -879,7 +886,7 @@ def test_{snake}_tool_registered():
             match action {
                 SandboxCommand::Status => {
                     let url = format!("{base}/api/v1/config");
-                    match client.get(&url).send().await {
+                    match with_optional_bearer(client.get(&url), &token).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             let config: serde_json::Value = resp.json().await?;
                             let sb = &config["security"]["sandbox"];
@@ -900,7 +907,7 @@ def test_{snake}_tool_registered():
                 }
                 SandboxCommand::Set { profile } => {
                     let url = format!("{base}/api/v1/config/sandbox-profile");
-                    match client.post(&url).json(&serde_json::json!({ "profile": profile })).send().await {
+                    match with_optional_bearer(client.post(&url).json(&serde_json::json!({ "profile": profile })), &token).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             let json: serde_json::Value = resp.json().await?;
                             println!("✅ Global sandbox profile set to: {}", json["profile"]);
@@ -914,7 +921,7 @@ def test_{snake}_tool_registered():
                 }
                 SandboxCommand::Guild { name, profile } => {
                     let url = format!("{base}/api/v1/config/sandbox-profile/guild");
-                    match client.post(&url).json(&serde_json::json!({ "guild": name, "profile": profile })).send().await {
+                    match with_optional_bearer(client.post(&url).json(&serde_json::json!({ "guild": name, "profile": profile })), &token).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             let json: serde_json::Value = resp.json().await?;
                             println!("✅ Guild '{}' sandbox override set to: {}", name, json["profile"]);
@@ -928,7 +935,7 @@ def test_{snake}_tool_registered():
                 }
                 SandboxCommand::Session { agent_id, profile } => {
                     let url = format!("{base}/api/v1/config/sandbox-profile/session");
-                    match client.post(&url).json(&serde_json::json!({ "agent_id": agent_id, "profile": profile })).send().await {
+                    match with_optional_bearer(client.post(&url).json(&serde_json::json!({ "agent_id": agent_id, "profile": profile })), &token).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             println!("✅ Session override for agent '{agent_id}' set to: {profile} (in-memory, lost on restart)");
                         }
@@ -941,7 +948,7 @@ def test_{snake}_tool_registered():
                 }
                 SandboxCommand::UnsetGuild { name } => {
                     let url = format!("{base}/api/v1/config/sandbox-profile/guild/{name}");
-                    match client.delete(&url).send().await {
+                    match with_optional_bearer(client.delete(&url), &token).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             println!("✅ Guild '{name}' override removed — falls back to global profile");
                         }
@@ -954,7 +961,7 @@ def test_{snake}_tool_registered():
                 }
                 SandboxCommand::UnsetSession { agent_id } => {
                     let url = format!("{base}/api/v1/config/sandbox-profile/session/{agent_id}");
-                    match client.delete(&url).send().await {
+                    match with_optional_bearer(client.delete(&url), &token).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             println!("✅ Session override for '{agent_id}' cleared");
                         }
@@ -1596,6 +1603,82 @@ mod installer_flag_tests {
             !server.contains("reranker_enabled"),
             "server must not override the SilvaConfig reranker default"
         );
+    }
+}
+
+/// Resolve the bearer token for a CLI HTTP call: explicit `--token` flag wins
+/// over `TYLLUAN_TOKEN`, which wins over `.tylluan-token` in the current
+/// directory (the same file the kernel reads at startup). `None` means "send
+/// no Authorization header", preserving the dev_mode=true behaviour.
+fn resolve_cli_token(flag: Option<String>) -> Option<String> {
+    let env = std::env::var("TYLLUAN_TOKEN").ok();
+    let file = std::fs::read_to_string(".tylluan-token").ok();
+    pick_token(flag, env, file)
+}
+
+/// Pure precedence helper (unit-tested): first non-empty value wins after trim.
+fn pick_token(flag: Option<String>, env: Option<String>, file: Option<String>) -> Option<String> {
+    [flag, env, file]
+        .into_iter()
+        .flatten()
+        .map(|value| value.trim().to_string())
+        .find(|value| !value.is_empty())
+}
+
+/// Attach `Authorization: Bearer <token>` only when a token was resolved.
+fn with_optional_bearer(
+    req: reqwest::RequestBuilder,
+    token: &Option<String>,
+) -> reqwest::RequestBuilder {
+    match token {
+        Some(t) => req.bearer_auth(t),
+        None => req,
+    }
+}
+
+#[cfg(test)]
+mod sandbox_token_tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn pick_token_prefers_flag_then_env_then_file() {
+        assert_eq!(
+            pick_token(Some("flag".into()), Some("env".into()), Some("file".into())).as_deref(),
+            Some("flag")
+        );
+        assert_eq!(
+            pick_token(None, Some("env".into()), Some("file".into())).as_deref(),
+            Some("env"),
+            "el env debe ganar al fichero"
+        );
+        assert_eq!(
+            pick_token(None, None, Some("file".into())).as_deref(),
+            Some("file")
+        );
+        assert_eq!(pick_token(None, None, None), None, "sin fichero ni env => None");
+    }
+
+    #[test]
+    fn pick_token_ignores_empty_and_whitespace() {
+        assert_eq!(
+            pick_token(Some("   ".into()), Some(" env \n".into()), None).as_deref(),
+            Some("env")
+        );
+        assert_eq!(pick_token(Some(String::new()), None, None), None);
+        assert_eq!(pick_token(None, Some("\t\n".into()), None), None);
+    }
+
+    #[test]
+    fn sandbox_subcommand_accepts_token_flag() {
+        let cmd = Cli::command();
+        let sandbox = cmd
+            .find_subcommand("sandbox")
+            .expect("el CLI debe conservar el subcomando sandbox");
+        let has_token = sandbox
+            .get_arguments()
+            .any(|arg| arg.get_long() == Some("token"));
+        assert!(has_token, "`tylluan sandbox` debe aceptar --token");
     }
 }
 
