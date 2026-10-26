@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="960" height="500" role="img" aria-labelledby="t d">
+  <title id="t">How Tylluan fits between your AI clients and your machine</title>
+  <desc id="d">AI clients connect over MCP or REST to one local binary, tylluan-nexus, which holds six tools, guards, memory and guilds. It uses local models and can optionally sync with other approved Tylluan instances.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .h { font-size: 19px; font-weight: 700; }
+    .b { font-size: 16px; }
+    .s { font-size: 14px; fill: #57606a; }
+    .lbl { font-size: 14px; fill: #57606a; }
+  </style>
+  <rect x="1" y="1" width="958" height="498" rx="14" fill="#f6f8fa" stroke="#d0d7de"/>
+
+  <!-- clients -->
+  <rect x="40" y="150" width="210" height="200" rx="12" fill="#ffffff" stroke="#8c959f"/>
+  <text x="145" y="188" text-anchor="middle" class="h">Your AI clients</text>
+  <text x="145" y="226" text-anchor="middle" class="b">Claude Code</text>
+  <text x="145" y="254" text-anchor="middle" class="b">Cursor</text>
+  <text x="145" y="282" text-anchor="middle" class="b">VS Code</text>
+  <text x="145" y="310" text-anchor="middle" class="b">any MCP client</text>
+  <text x="145" y="334" text-anchor="middle" class="s">or plain REST (curl)</text>
+
+  <line x1="252" y1="250" x2="318" y2="250" stroke="#57606a" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="285" y="238" text-anchor="middle" class="lbl">MCP</text>
+  <text x="285" y="272" text-anchor="middle" class="lbl">REST</text>
+
+  <!-- nexus -->
+  <rect x="320" y="40" width="340" height="420" rx="14" fill="#ffffff" stroke="#0f766e" stroke-width="2.5"/>
+  <text x="490" y="76" text-anchor="middle" class="h">tylluan-nexus</text>
+  <text x="490" y="98" text-anchor="middle" class="s">one local binary, on 127.0.0.1</text>
+
+  <rect x="340" y="118" width="300" height="76" rx="9" fill="#e6f4f1" stroke="#0f766e"/>
+  <text x="356" y="146" class="h" style="font-size:17px">Six tools</text>
+  <text x="356" y="172" class="s">do · remember · recall · think · graph · decide</text>
+
+  <rect x="340" y="206" width="300" height="76" rx="9" fill="#e6f4f1" stroke="#0f766e"/>
+  <text x="356" y="234" class="h" style="font-size:17px">Guards</text>
+  <text x="356" y="260" class="s">token auth · Origin/Host check · audit log</text>
+
+  <rect x="340" y="294" width="300" height="76" rx="9" fill="#e6f4f1" stroke="#0f766e"/>
+  <text x="356" y="322" class="h" style="font-size:17px">Memory</text>
+  <text x="356" y="348" class="s">SQLite · keyword (+ vector, graph)</text>
+
+  <rect x="340" y="382" width="300" height="62" rx="9" fill="#e6f4f1" stroke="#0f766e"/>
+  <text x="356" y="408" class="h" style="font-size:17px">Guilds (45)</text>
+  <text x="356" y="430" class="s">shell, git, files, web… as child processes</text>
+
+  <!-- models -->
+  <line x1="662" y1="150" x2="728" y2="150" stroke="#57606a" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect x="730" y="80" width="200" height="140" rx="12" fill="#ffffff" stroke="#8c959f"/>
+  <text x="830" y="114" text-anchor="middle" class="h">Local models</text>
+  <text x="830" y="148" text-anchor="middle" class="b">Optional ONNX embeddings</text>
+  <text x="830" y="170" text-anchor="middle" class="b">in-process (clinic, server)</text>
+  <text x="830" y="198" text-anchor="middle" class="s">separate: llama.cpp / Ollama</text>
+
+  <!-- peers -->
+  <line x1="662" y1="350" x2="728" y2="350" stroke="#57606a" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <rect x="730" y="280" width="200" height="140" rx="12" fill="#ffffff" stroke="#8c959f" stroke-dasharray="6 5"/>
+  <text x="830" y="314" text-anchor="middle" class="h">Other instances</text>
+  <text x="830" y="346" text-anchor="middle" class="b">optional, encrypted</text>
+  <text x="830" y="368" text-anchor="middle" class="b">sync with peers</text>
+  <text x="830" y="396" text-anchor="middle" class="s">only the ones you approve</text>
+</svg>

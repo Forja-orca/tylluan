@@ -1,220 +1,51 @@
 <p align="center">
-  <img src="assets/branding/logo.jpg" alt="Tylluan" width="160">
-</p>
-
-<p align="center">
-  <strong>English</strong> · <a href="README.es.md">Español</a> · <a href="README.zh.md">中文</a> <sub>(pending native review — see <a href="ROADMAP.md">ROADMAP.md</a>)</sub>
+  <img src="assets/branding/logo.jpg" alt="Tylluan" width="140">
 </p>
 
 <h1 align="center">Tylluan</h1>
 
 <p align="center">
-  <strong>Persistent memory, a knowledge graph, and real tool execution for AI agents — running entirely on your machine.</strong><br>
-  <em>Sees what others miss, remembers what others forget.</em>
+  <strong>Local memory, a knowledge graph and guarded tool execution for AI agents.</strong><br>
+  One kernel binary. Runs on your machine. Works with MCP clients.
 </p>
 
 <p align="center">
+  <a href="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml"><img src="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/version-0.17.1-blue.svg" alt="v0.17.1">
-  <img src="https://img.shields.io/badge/rust-1.88+-orange.svg" alt="Rust 1.88+ minimum (toolchain pinned 1.99.1 in rust-toolchain.toml)">
-  <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
-  <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
-  <img src="https://img.shields.io/badge/cloud-none-brightgreen.svg" alt="No Cloud">
-  <a href="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml"><img src="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="deny.toml"><img src="https://img.shields.io/badge/license%20audit-deny.toml-blue.svg" alt="License audit"></a>
+  <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP native">
+</p>
+
+<p align="center">
+  <strong>English</strong> · <a href="README.es.md">Español</a> · <a href="README.zh.md">中文</a> <sub>(pending native review)</sub>
 </p>
 
 ---
 
-## Why Tylluan exists
+Tylluan is a local server that your AI tools connect to over [MCP](https://modelcontextprotocol.io) or plain REST. It gives them three things they do not have on their own:
 
-Most AI memory systems ask you to trust someone else's server with your data: an API key, a subscription, a vendor who can change the terms — or cut your access — tomorrow. Tylluan takes the opposite approach. It's a single Rust binary that gives an AI agent long-term memory, a knowledge graph, and the ability to actually run tools, and none of it leaves your machine unless you explicitly tell it to.
+- **Memory that outlives the session.** Stored in a SQLite file on your disk and searched by keyword and, with an embedding profile, by vector similarity and a knowledge graph.
+- **Tools that actually run.** Shell, git, files, Docker, web search, databases and more, through [45 "guilds"](guilds/README.md) (separate tool programs). `tylluan_do` has a plan (dry-run) mode, and calls made through the MCP tools are audited.
+- **One shared place for several agents.** Every client you connect reads and writes the same memory and can talk in shared channels.
 
-Concretely, that means:
+You bring the model and the client (Claude Code, Cursor, VS Code, …). Tylluan brings no language model of its own; its embedding models (optional) run locally. It is not a chat app and not an agent framework.
 
-- **Your data stays yours.** Memory lives in a local SQLite database with local embeddings (full semantic search with `mxbai-embed-large` in `server` profile; BM25-only zero-download in `portable` profile; BGE-M3 also supported). There's no cloud round-trip in the critical path, and no proprietary format underneath — you can open the database with any standard SQLite tool.
-- **It works without an internet connection.** The `portable` profile (BM25-only) needs no downloads. Measured on 2026-10-14 with the published v0.17.1 Linux x86_64 binary (WSL2, 6 CPUs, 8 GB RAM, empty database), four cold starts: a 16.7 MB download, healthy in 0.9–3.7 s, about 34 MB of resident memory at idle, and no outbound TCP connection or UDP socket in the first 10 seconds. It has not been run on ARM or on physical Raspberry Pi hardware; CI compiles the ARM64 build but does not boot it.
-- **Nothing here can be taken away from you.** MIT licensed, no vendor lock-in, no feature gated behind a subscription.
-
-Agent memory is a crowded space right now — Mem0, Letta, Zep, Cognee, Graphiti, A-MEM, and others all take real, different approaches, and are worth evaluating on their own terms depending on what you need. What Tylluan specifically bets on is running well on modest, offline, or air-gapped hardware, with a compiled binary instead of a Python service you have to keep alive, and a mesh where peers share knowledge directly without a coordinator node in the middle.
-
-**Air-gapped by default:** the kernel used to attempt a STUN request to `stun.l.google.com:19302` on every boot regardless of whether federation/mesh was even enabled — real outbound traffic on a host meant to stay fully offline. STUN discovery is now opt-in: `[nat] enabled = false` by default, gating the whole discovery block. Set `enabled = true` explicitly if you want NAT traversal for the mesh.
-
-**Local cryptographic mesh, not an autonomous global web:** Tylluan's core mission is to give AI agents authentic persistent continuity — cumulative memories and episodes that time does not wash away, operating in near real-time without cloud dependencies. But continuity must never compromise sovereignty: peer synchronization is strictly designed for internal networks and explicit, operator-approved peers over an encrypted cryptographic mesh (Noise NK/XK, Ed25519, ChaCha20-Poly1305, opt-in LAN mDNS). It is never an uncontrolled global DHT connecting memories automatically across the public internet.
-
-The honest trade-off: several of those other projects have years of community history and production hardening that Tylluan doesn't have yet. [ROADMAP.md](ROADMAP.md) is where we track what's actually shipped versus what's still planned — we'd rather you find out something isn't ready from us than from a broken deploy.
-
----
-
-## What it actually does
-
-At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It remembers things across restarts, builds a knowledge graph out of what it learns, and can execute real tools — read files, run git commands, search the web, query a database — on your behalf. If you run more than one instance, they can sync knowledge with each other over an encrypted peer-to-peer mesh, with no central server required.
-
-**Design north star:** one binary, a different `tylluan.toml` per environment, the same code everywhere. Memory persists whether or not a network is available; peers sync opportunistically when one shows up, never as a requirement.
-
-| Capability | Details |
-|------------|---------|
-| **Memory** | BM25 + FTS5 + local vector search (1024-dim native `mxbai-embed-large` in server profile / BM25 in portable), fused with RRF, plus LightRAG-style graph traversal (PageRank + degree penalty) |
-| **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) — role assignment per `agent_id`, no manual wiring |
-| **Tools** | 45 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
-| **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
-| **Federation** | Peer-to-peer knowledge sync, Noise NK / ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
-| **Mesh** | Cryptographic local mesh: Kademlia routing table + Gossip dissemination (Noise NK once a peer's key is known, opt-in LAN mDNS, operator-approved peers; no release ships WAN bootstrap, so there are no autonomous global connections) — legacy plaintext wire path exists only for backward compat with older peers, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
-| **A2A Protocol** | Agent Card discovery (`/.well-known/agent-card.json`) + JSON-RPC 2.0 server — intended to interoperate with Agent2Agent-compliant clients, not just other Tylluan instances (interop with specific frameworks not yet tested) |
-| **MCP Native** | SSE + HTTP Streamable — works with MCP clients such as Claude, Cursor, VS Code and LM Studio (configs in `integrations/`) |
-| **GPU Acceleration** | Optional DirectML (Windows, any GPU vendor) or CUDA execution provider for local ONNX inference — CPU stays the zero-config default |
-
-<details>
-<summary>Full technical capabilities →</summary>
-
-| Capability | Details |
-|------------|---------|
-| **Signal Loop (ADR-011)** | `recall_feedback` table tracks which memories actually got used; resolved during `NightConsolidation` via word-overlap against downstream tool calls — a confirmed-useful result also reinforces that memory's lifecycle state (see Memory Lifecycle below), so real usage, not just passing time, keeps it accessible |
-| **Coherence Gate** | Layered defense on every recall against memory poisoning — deterministic pattern/provenance/drift filters always active, plus an LLM-backed hybrid classifier for genuinely ambiguous cases, currently running in observation mode |
-| **Plan Mode (M31-P2)** | `tylluan_do(plan=true)` returns the proposed guild/tool/args without executing anything — a dry run you can inspect first |
-| **Agent Contracts (M19-P5)** | `.tylluan/agents.toml` — per-agent role assignment committed alongside `AGENTS.md` |
-| **HNSW Index** | Approximate nearest-neighbor search for larger datasets (kicks in above ~12k nodes) |
-| **Episodic Memory** | Coloquio conversations are automatically stored in the knowledge graph as episodic nodes |
-| **Memory Lifecycle (ADR-012)** | Memories move through `active → quiet → consolidated → archived` as they age, instead of a binary decay-then-delete — an `archived` memory is never deleted, just excluded from normal recall. Pass `include_archived: true` to `tylluan_recall` to search them anyway; a real usage hit reactivates it back to `active`. Durable summaries (`agent_summary`, `session_digest`) are structurally immune to automatic pruning, not just protected by convention. |
-| **Guild Dispatch** | Peers discover each other's tool capabilities and can dispatch guild calls remotely over Noise NK, with load/latency-aware routing and a circuit breaker for degraded peers |
-| **Encryption** | AES-256 at rest via SQLCipher (`--features encryption`) — active by default on binaries built with that feature, off otherwise; every real database goes through the same `open_db()` path, see [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md) |
-| **Query Cache** | TTL LRU embedding cache, avoids redundant inference on repeated queries |
-| **Complexity Cascade** | Heuristic scoring escalates multi-step or ambiguous intents to a coordinator, no LLM required |
-| **TRINITY Coordinator** | Thinker/Worker/Verifier pattern for tasks that need real synthesis across steps |
-
-</details>
-
-### Architecture at a glance
+> **Research software.** Tylluan runs real commands on your machine and has had no independent third-party security audit. Read [Security](#security-what-it-protects-and-what-it-does-not) and [DISCLAIMER.md](DISCLAIMER.md) before you put anything sensitive near it.
 
 <p align="center">
-  <a href="docs/assets/architecture.svg" target="_blank">
-    <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
-  </a>
+  <img src="docs/assets/how-it-fits.svg" alt="Your AI clients connect over MCP or REST to one local binary, tylluan-nexus, which holds six tools, guards, memory and 45 guilds. It uses local models and can optionally sync with other approved Tylluan instances." width="100%">
 </p>
-<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom. For an interactive version (pan/zoom, click a component to see its real source file:line) download <a href="docs/assets/architecture_interactive.html">architecture_interactive.html</a> and open it locally.</i></sub></p>
 
-### Dashboard
+## Install
 
-Tylluan ships with a React dashboard for watching the kernel work.
-
-- **Single binary built with `--features bundled-dashboard`:** the dashboard is embedded and served at [http://127.0.0.1:47004/](http://127.0.0.1:47004/) once the kernel is running. Without that feature, the kernel serves the output of `pnpm build` in `dashboard/` from the source tree, if you have built it.
-- **Development:** `cd dashboard && pnpm dev` for the hot-reloading dev server at [http://localhost:5173/](http://localhost:5173/).
-
-<p align="center">
-  <img src="assets/screenshots/overview.png" alt="Overview — system health and kernel pulse" width="45%">
-  <img src="assets/screenshots/guilds.png" alt="Guilds — registered and running" width="45%">
-</p>
-<p align="center">
-  <img src="assets/screenshots/knowledge_graph.png" alt="Knowledge Graph — SilvaDB visualizer" width="45%">
-  <img src="assets/screenshots/coloquio.png" alt="Coloquio — multi-agent communication" width="45%">
-</p>
-<p align="center">
-  <img src="assets/screenshots/trust_console.png" alt="Trust Console — runtime commit drift detection and self-documented guild contracts" width="90%">
-</p>
-<p align="center"><sub>Trust Console (M40-P6): detects live drift between the running kernel's loaded commit and what's actually on disk — the same class of staleness this project has hit for real more than once.</sub></p>
-
-### Six tools, nothing hidden behind them
-
-With the default configuration, every MCP client that connects to Tylluan sees exactly these six tools — no matter how many guilds are running underneath (setting `expose_guild_tools = true` in `tylluan.toml` also exposes the guild tools directly):
-
-```
-tylluan_do        Route a task to a guild, described in natural language
-tylluan_recall    Search long-term memory (hybrid keyword + vector) or an agent's persona
-                  (pass include_archived: true to also search lifecycle-archived memories)
-tylluan_remember  Store knowledge, or update an agent's persona persistently
-tylluan_think     Reason over the knowledge graph
-tylluan_graph     Direct graph operations — triples, paths, PageRank
-tylluan_decide    Ask a bounded typed question (choice / score / boolean): closed-set answer or explicit abstention
-```
-
-That's deliberate. Whatever guild ends up doing the work — git, vision, a database query — the client only ever sees this one clean interface.
-
-> **New in `main` (2026-10-16): `tylluan_decide`, the sixth sovereign tool.** CONTRACT-01 now says exactly six tools (amended by ADR-021). It is on by default and reachable over both MCP and REST (`POST /api/v1/decide`, same body and same response). Today it answers only two named contracts (`scheduler_routing`, `human_review`) with the deterministic rules baseline, in shadow mode, and records each decision for later comparison (the input is stored only as a hash). Free questions abstain explicitly (`no_model_provider`) because **no model provider is wired in yet**. It is never a permission gate. It is in `main` but not in a tagged release yet. See [Architecture decisions in flight](#architecture-decisions-in-flight).
-
-### How well does retrieval actually work?
-
-> **These numbers are from `v0.12.0` (2026-07-05), measured with BGE-M3 — the model Tylluan used at the time, not the current default.** The kernel has since moved to `mxbai-embed-large` (2026-09-30) as its default embedding model. We have not re-run LongMemEval-S against the new default yet, so treat the table below as a historical baseline for the retrieval *architecture* (BM25+vector+RRF+graph), not a live claim about today's exact numbers. Re-running this benchmark against the current default is open work — see [ROADMAP.md](ROADMAP.md).
-
-We evaluated on **LongMemEval-S** (50 human-authored questions covering episodic memory, multi-hop reasoning, and temporal questions), using real BGE-M3 embeddings on CPU — no simulated numbers:
-
-| Metric | Value | Backend |
-|--------|-------|---------|
-| Recall@5 | 82% | BGE-M3 + BM25 + RRF |
-| Recall@10 | 90% | BGE-M3 + BM25 + RRF |
-| Recall@1 | 46% | BGE-M3 + BM25 + RRF |
-| MRR / R-Precision | 0.46 | BGE-M3 + BM25 + RRF |
-| Latency p50 | 12.9 ms | CPU, no GPU |
-
-*Note: LongMemEval-S tests single-needle retrieval ($R=1$ ground-truth session per query), for which Recall@K and MRR / R-Precision are the standard IR metrics (unnormalized Precision@5 is mathematically bounded by $\frac{1}{5} = 20.0\%$, where 82% Recall yields an expected Precision@5 of 16.4%).*
-
-For comparison, a synthetic corpus of short descriptions only reaches 50% Recall@5 — real human queries actually do better, which tells us the pipeline degrades gracefully rather than overfitting to easy cases. Full results: [`benchmarks/longmemeval_v0.12.0.json`](benchmarks/longmemeval_v0.12.0.json).
-
-#### If you're on modest hardware
-
-Three profiles trade retrieval quality for footprint — pick based on what you're running on:
-
-| Profile | Model | Download | RAM | R@5* | R@10* | Latency p50* |
-|---------|-------|----------|-----|-----|------|--------------|
-| `portable` | BM25 only | 0 MB | not measured | not measured | not measured | not measured |
-| `clinic` | BGE-Small (384d) | ~67 MB | not measured | not measured | not measured | not measured |
-| `server` | mxbai-embed-large (1024d) | unverified | unverified | 82% | 90% | 12.9 ms |
-
-*\*The `server` row's R@5/R@10/latency are the BGE-M3 numbers above, not yet re-measured against the current default (`mxbai-embed-large`) — see the note above. The `portable` and `clinic` retrieval figures have no benchmark file behind them yet, so they are not published here.*
-
-`portable` is the default profile installed by `install.sh`/`install.ps1` (zero downloads, instant boot, ideal for Raspberry Pi or offline deployments); `clinic` suits a RAM-constrained laptop; `server` is for a desktop or server where full semantic retrieval quality is the priority.
-
-### Agent skills
-
-Once connected, an agent can call any guild through `tylluan_do` just by describing what it wants:
-
-| Skill | Example |
-|-------|---------|
-| Run code | *"run this Python script and return the output"* |
-| Web search | *"search for the latest Rust async patterns"* |
-| Vision | *"describe what's in this screenshot"* |
-| Git | *"show me the last 10 commits in this repo"* |
-| Docker | *"list running containers and their memory usage"* |
-| Database | *"query the SQLite database at ./data.db"* |
-| PDF | *"extract the key points from this paper"* |
-| Deep research | *"research and summarize the state of MCP tooling in 2026"* |
-
-### Does routing need an LLM call to the cloud?
-
-No — routing is 100% local, and no LLM sits in that path.
-
-When you call `tylluan_do("search for Rust async patterns")`, the kernel embeds the intent with the local embedding model (`mxbai-embed-large` in `server` profile, local ONNX, CPU — or falls back to keyword scoring in `portable` profile where `embedding_model = "none"`), scores it against every guild's description, escalates to a coordinator if the intent looks multi-step or ambiguous, and returns the best match with structured arguments. No HTTP call leaves your machine, no API key required — the escalation logic is pure heuristics running in-process on your CPU.
-
-Two things worth not conflating here:
-
-- **Embeddings are always in the path.** Every routing decision and every memory search runs through a local neural network — that's not optional, and it's not a generative LLM.
-- **Generative LLM inference is optional and never in the routing hot path.** Tylluan can run one internally via `llama.cpp` + GGUF (auto-downloads a precompiled binary, no external service needed) for specific, non-blocking uses — an offline evaluation judge, and a calibrated second opinion on memory candidates already flagged by the cheaper deterministic filters. You can also point it at an Ollama, LM Studio, or `llama.cpp` instance you already have running — it detects a live backend before starting its own.
-
-So "no cloud required" is the real invariant here. "No LLM at all" was never quite accurate for the embedding layer, and it isn't for the optional generative layer either — what stays true is that nothing in Tylluan depends on a cloud service to function.
-
-### CI
-
-[![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
-
-1382 tests across Rust kernel (lib), `tylluan-link`, and `tylluan-fsrs` — all green. Every push runs Rust build + test, clippy, `cargo-deny` (bans, licenses, advisories), Python lint + test, a dashboard build, and the security audit suite. Details in [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-
----
-
-## Quick Start
-
-> **Setup is quick.** The automated installer configures the `portable` profile by default (BM25-only, zero downloads, instant boot on any hardware). You can upgrade to full semantic search (`mxbai-embed-large`) at any time with `tylluan-cli install --profile server` or `tylluan start --setup` (which auto-detects your RAM and GPU). The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it. If it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking. A dedicated no-ONNX boot smoke test runs in CI (`boot-smoke-no-onnx` in `.github/workflows/ci.yml`).
-
-**Supported platforms:**
-
-| Platform | Binary |
-|----------|--------|
+| Platform | Release binary |
+|----------|----------------|
 | Linux x86_64 | `tylluan-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux ARM64 (Raspberry Pi 4+) | `tylluan-aarch64-unknown-linux-gnu.tar.gz` |
-| macOS Apple Silicon | `tylluan-aarch64-apple-darwin.tar.gz` |
+| Linux ARM64 | `tylluan-aarch64-unknown-linux-gnu.tar.gz` |
+| macOS, Apple Silicon | `tylluan-aarch64-apple-darwin.tar.gz` |
 | Windows x86_64 | `tylluan-x86_64-pc-windows-msvc.tar.gz` |
 
-### 1 — Install
-
-No Rust, Python, or Node needed to run the kernel binary and use it as MCP memory. Running the 45 guilds via `tylluan_do` (bash, filesystem, scheduler, etc.) requires Python 3.12 + FastMCP separately — without them, those guilds crash-loop and `/api/v1/doctor` reports `degraded` (verified 2026-08-22).
+There is no macOS Intel build. Binaries are on the [releases page](https://github.com/forja-orca/tylluan/releases).
 
 ```bash
 # Linux / macOS
@@ -224,384 +55,140 @@ curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh 
 irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 ```
 
-This drops `tylluan-nexus` and `tylluan-cli` into `~/.tylluan/bin/` and adds them to your PATH. **Open a new terminal before continuing** so the PATH change takes effect.
+This puts `tylluan-nexus` (the kernel) and `tylluan-cli` in `~/.tylluan/bin/` and adds them to your `PATH`. Open a new terminal afterwards.
 
-### 2 — Start
+The kernel needs no Rust, Python or Node. The 45 guilds behind `tylluan_do` are Python programs and need **Python 3.12 and FastMCP** installed separately (`pip install -r guilds/requirements.txt`; the file ships in the release archive and in this repository); without them those guilds fail to start and `/api/v1/doctor` reports `degraded`. Memory and recall work without Python.
 
-The installer starts the kernel automatically. If you need to start it manually:
+To build from source, see [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md).
+
+## Start and connect
 
 ```bash
 tylluan-cli start
-```
-
-In portable mode (BM25-only, no downloads) the kernel starts without fetching models. Example output:
-
-```
-🚀 Starting TylluanNexus kernel...
-✅ Kernel started with PID: 12345
-✅ Kernel is ready at http://127.0.0.1:47004
-🌐 Connect your MCP client to http://127.0.0.1:47004/sse
-```
-
-Check it's actually up:
-
-```bash
 curl -s http://127.0.0.1:47004/health
 ```
 
-> [!TIP]
-> **Upgrading to semantic search (vector embeddings):**
-> * **Auto-detect hardware:** `tylluan-cli start --setup` (probes RAM/GPU and writes optimal profile to `tylluan.toml`)
-> * **Full semantic (1024d):** `tylluan-cli install --profile server` (downloads `mxbai-embed-large`; size not verified)
-> * **Lightweight semantic (384d):** `tylluan-cli install --profile clinic` (downloads `bge-small`, ~67 MB)
+Run `tylluan-cli install` first: it writes the configuration. Starting without one makes the first start load the default embedding model, which took 52 s in our test, longer than the 30 s the CLI waits, and the CLI then stops the kernel. The kernel listens on `127.0.0.1:47004`. Authentication is on by default: on first start it creates a bearer token in a file named `.tylluan-token` **in the directory the kernel was started from**. Keep that file private; whoever holds the token can run tools on your machine.
 
-> **Auth:** a bearer token is generated automatically at `.tylluan-token` on first boot. Setting `dev_mode = true` in `tylluan.toml` disables auth entirely — only use that on a network you fully control.
-
-### 3 — Connect your agent
-
-```json
-{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:47004/sse" } } }
-```
-
-| Client | Where |
-|--------|-------|
-| **Claude Code** | `claude mcp add --transport sse tylluan http://127.0.0.1:47004/sse` |
-| **Claude Desktop** | `claude_desktop_config.json` |
-| **Cursor** | `~/.cursor/mcp.json` |
-| **VS Code** | `.vscode/mcp.json` in your workspace |
-
-> **Use `127.0.0.1`, not `localhost`.** On Windows, `localhost` resolves to IPv6 first and can silently miss the kernel.
-
-### 4 — Try it
+Connect a client by sending the token in an `Authorization` header. For Claude Code:
 
 ```bash
-export TYLLUAN_TOKEN=$(cat .tylluan-token)
+claude mcp add --transport http tylluan http://127.0.0.1:47004/messages \
+  --header "Authorization: Bearer $(cat .tylluan-token)"
+```
+
+On Windows PowerShell:
+
+```powershell
+claude mcp add --transport http tylluan http://127.0.0.1:47004/messages --header "Authorization: Bearer $(Get-Content .tylluan-token)"
+```
+
+Other clients take the same URL and header. For Cursor, VS Code and Claude Desktop see [integrations/](integrations/) for sample configs and [docs/guides/DEV_MODE_OFF_GUIDE.md](docs/guides/DEV_MODE_OFF_GUIDE.md) for where each client takes the token. Use `127.0.0.1`, not `localhost`: on Windows `localhost` can resolve to IPv6 first and miss the kernel.
+
+## Try it
+
+```bash
+TOKEN=$(cat .tylluan-token)
 
 # Store a memory
 curl -X POST http://127.0.0.1:47004/api/v1/memory/write \
-  -H "Authorization: Bearer $TYLLUAN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"content": "Tylluan is running local graph RAG."}'
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"content": "Tylluan keeps my notes in a local SQLite file."}'
 
-# Retrieve it
-curl "http://127.0.0.1:47004/api/v1/memory/search?q=How+does+Tylluan+query+graphs" \
-  -H "Authorization: Bearer $TYLLUAN_TOKEN"
+# Retrieve it (the default `portable` profile matches keywords only, and every word must appear)
+curl "http://127.0.0.1:47004/api/v1/memory/search?q=notes" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-<details>
-<summary>PowerShell equivalent (Windows)</summary>
+From an MCP client you do not call these endpoints. You just ask your agent to remember or recall something, or to run a task ("show me the last 10 commits in this repo"), and it uses the tools below.
 
-```powershell
-$env:TYLLUAN_TOKEN = Get-Content .tylluan-token
-```
-</details>
+## The six tools
 
-> **⚠️ This is research software.** Tylluan runs real code on your machine. It's a research lab, not a hardened enterprise product — read [DISCLAIMER.md](DISCLAIMER.md) before you put anything sensitive near it.
+With the default configuration of the current `main` branch, every connected client sees exactly these six tools, however many guilds run underneath. The published v0.17.1 release exposes five: `tylluan_decide` arrived after that tag.
 
----
+| Tool | What it does |
+|------|--------------|
+| `tylluan_do` | Runs a task described in natural language by routing it to a guild |
+| `tylluan_remember` | Stores knowledge |
+| `tylluan_recall` | Searches long-term memory (keyword; vector and graph with an embedding profile) |
+| `tylluan_think` | Reasons over the knowledge graph |
+| `tylluan_graph` | Direct graph operations: triples, paths, PageRank |
+| `tylluan_decide` | Answers a bounded question (choice, score or yes/no) or abstains. Today it applies deterministic rules and logs every decision; by default no model is connected to it |
 
-### Going further
+<p align="center">
+  <img src="docs/assets/memory-flow.svg" alt="Saving: tylluan_remember stores text in SQLite with a local embedding and graph links. Recalling: keyword search, plus vector and graph search when an embedding model is on, run together, rankings are fused, a coherence gate filters suspicious memories, and results return to the agent." width="100%">
+</p>
 
-| Topic | Guide |
-|-------|-------|
-| Configuration, auth, troubleshooting | [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) |
-| Python guilds (45 guilds) | [guilds/README.md](guilds/README.md) |
-| Build from source | [docs/getting-started/QUICKSTART.md#build-from-source](docs/getting-started/QUICKSTART.md#build-from-source) |
-| CLI reference | `tylluan-cli --help` |
-| Installation profiles | `tylluan-cli install --profile=portable` |
+## Profiles
 
----
+One kernel binary, three configurations that trade retrieval quality for footprint.
 
-## Where things stand — v0.17.1
+| Profile | Embeddings | Extra model download | Measured |
+|---------|-----------|----------|----------|
+| `portable` (default install profile) | none, BM25 keyword search only | 0 MB | Windows start time and memory, below |
+| `clinic` | BGE-Small, 384 dimensions | about 67 MB | not measured |
+| `server` | mxbai-embed-large, 1024 dimensions | not verified | not measured |
 
-v0.17.1 (2026-10-13) is a fix release: security hardening, installer and release-pipeline fixes, and an ONNX Runtime compatibility guard — see [CHANGELOG.md](CHANGELOG.md). The milestones below shipped in v0.17.0.
+`portable` was measured on 2026-10-26 with the published v0.17.1 Windows x86_64 release (a 15.4 MB download), four cold starts with an empty database: healthy after 12.8 to 16.8 s, 38.7 to 40 MB resident, and no outbound network connection or non-local UDP socket in the 10 seconds after it became healthy. That machine was not idle (a production kernel and development tools were running), so read the start time as an upper bound. The script is [scripts/measure_portable_start.ps1](scripts/measure_portable_start.ps1); the machine and the raw runs are in [portable_start_2026-10-26.json](docs/reference/measurements/portable_start_2026-10-26.json). Linux, macOS, ARM and a physical Raspberry Pi have **not** been measured; CI compiles the ARM64 build but does not boot it.
 
-This release adopts the MCP 2026-07-28 spec end to end (stateless core, Tasks, real MCP Apps manifests) and closes an 8-phase push to make Tylluan itself an agent's continuity, trust, and action layer — self-documenting guild contracts, unified bootstrap/resume, evidence-backed memory, a Trust Console for runtime/code drift, and a first real dataset circuit turning CoherenceGate's LLM judge decisions into structured, ground-truth-labeled examples. Three real bugs were found live and fixed the same way as always: root cause first, then a regression test, then verified against the live kernel — including a long-standing SSE-mode hang traced to a header-forwarding bug and confirmed fixed by the affected client itself.
+To change profile, stop the kernel first, then run `tylluan-cli install --profile server --force`. It overwrites `tylluan.toml` and starts a kernel on the default port, so do not leave another kernel running. `tylluan-cli start --setup` can pick a profile from your RAM and GPU.
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| **MCP 2026-07-28 adoption (M39)** | Stateless core wired end-to-end and verified live with curl, Tasks with closed-state guards, real MCP Apps manifests (`ui://tylluan/knowledge-graph-canvas`) replacing a bare capability flag | ✅ |
-| **Continuity/Trust/Action layer (M40)** | 8 phases: self-documenting guild contracts, unified `agent_bootstrap`/resume, full plan→act→verify→undo cycle, evidence/provenance on memory, Trust Console drift detection, concurrency test suite, near-invisible setup | ✅ |
-| **CoherenceGate → dataset circuit** | Structured A/B examples (gate vs LLM judge) with real post-hoc ground truth from the existing Signal Loop — phase 1+2 shipped, nothing trained yet by design | ✅ |
-| **Connection audit (v0.15.0)** | Full stack re-verified against a live kernel: guild IPC pointed at the wrong port in 5 places, vision inference crashed under real GPU/kernel contention (fixed by forcing CPU after root-causing a Windows driver timeout), silent writes bypassing the embedding pipeline, dashboard panels showing stale or fabricated data | ✅ |
-| **Mesh encryption (v0.15.0)** | Production gossip loop now encrypts with Noise NK once a peer's public key has propagated, with a config-gated fallback for first contact — previously sent entirely in the clear despite the crypto layer existing and being tested | ✅ |
-| **Guild registry completeness (v0.15.0)** | 13 additional guilds activated via `[guilds.v2]`, plus a structural test that fails CI if a guild is ever registered in the catalog but unreachable at runtime — this exact class of bug had shipped silently twice before | ✅ |
-| **CoherenceGate Layer 4 hybrid** | Deterministic trigger zones + an LLM classifier for genuinely ambiguous cases, now wired into the live recall path in observation mode (logs its verdict without affecting results yet) | ✅ |
-| **A2A Protocol (M38)** | Agent Card + JSON-RPC 2.0 server, interoperable with any Agent2Agent-compliant client | ✅ |
-| **Signal Loop + Coherence Gate (ADR-011)** | `recall_feedback` tracks real memory usefulness; layered defense against memory-poisoning attacks on every recall | ✅ |
-| **llama.cpp integration** | Real GGUF inference via an auto-downloaded `llama-server` binary, detects and defers to an external Ollama/LM Studio if one is already running | ✅ |
-| **Mesh — DHT, Gossip, Noise (M14)** | Kademlia routing, epidemic dissemination, Noise XK/NK transport encryption | ✅ |
-| **Federation (M11)** | Peer sync — push/pull/auto-sync, encrypted, provenance-tracked, echo-loop safe | ✅ |
-| **Single binary (M7)** | `--features bundled-dashboard` embeds the React dashboard at compile time | ✅ |
-| **v1.0.0** | Community validation (6+ months of use), stable API, Docker smoke CI — an external security audit is an unfunded stretch goal deferred to v1.x, see [ROADMAP.md](ROADMAP.md) | 🔜 |
+## Why Tylluan, and why not
 
-For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely still open — including a few things this release found and deliberately chose *not* to rush — see [ROADMAP.md](ROADMAP.md).
+**Why**
 
----
+- Your memory is a SQLite file you can open with any SQLite tool. No account, no API key, no service to keep alive.
+- One compiled kernel binary, MCP-native, shared by every client you connect.
+- Local by default: embeddings run in-process with ONNX Runtime, and routing a task to a guild uses local embeddings (keyword scoring in the `portable` profile), not a cloud model.
 
-## Architecture decisions in flight
+**Why not**
 
-> **Read this as a status board, not a feature list.** These are architectural decisions taken on 2026-10-15 that have *started* to change the project. Each row says exactly what exists today. Nothing marked 🟡 or 📐 is in a release, and only ✅ rows are merged.
+- Mem0, Letta, Zep, Cognee and others have years of production use and larger communities. Tylluan is young; v0.17.1 is its latest release.
+- It is not a hosted service. There is no team dashboard, no managed backup and no support. A React dashboard exists in `dashboard/`, but the published binaries do not embed it: build from source with `--features bundled-dashboard` to serve it from the kernel.
+- It is not hardened for hostile networks. Keep it on `127.0.0.1`.
+- Several guilds need Python 3.12, and some (web search, for example) reach the internet when you ask them to.
 
-| Decision | What it changes | Status today |
-|----------|-----------------|--------------|
-| **Team-scoped networks — ADR-019** (your LAN or your own VPN; no global mesh) | Federated peers get **per-peer, per-space permissions, deny-by-default**; remote tool dispatch needs an exact `guild.tool` allow-list; a peer can never change `protected` or the weight of an existing node | ✅ Step 1 (capability audit) and **step 2 (permissions) on `main`, not yet in a tagged release**. 📐 Proposed: step 3 single-use invitations + key pinning, step 4 instant revocation, step 6 federated Coloquio |
-| **Auth boundary hardening (OAuth / operator)** | An OAuth token cannot perform operator actions; `/oauth/authorize` auto-approves only in `dev_mode`; management endpoints are operator-only | ✅ Phase 1 merged on `main` (`61bc97e`): `/oauth/authorize` auto-approves only with `dev_mode=true` (403 otherwise), `redirect_uri` strictly loopback, management endpoints require an operator-class caller (OAuth JWT / peer auth rejected), route-inventory test over mutating routes. Not yet running on the maintainer's kernel. 📐 Phase 2 (operator consent, client registry, scopes) not approved yet; until it ships, OAuth flows of `mcp-remote` / Claude Desktop do not work with `dev_mode=false` (header-Bearer clients are fine). Keep the kernel on `127.0.0.1` |
-| **Inference Gateway — ADR-020** | One internal layer that abstracts inference **by capability** (`embed`, `rerank`, `decide`, `generate`), not by engine: local or remote, with a privacy class per provider and the model identity stored with every vector. **Current architectural decision (not a permanent invariant, revisable): an outbound-only client layer — Tylluan consumes inference, it does not offer it as a service** (the only exception is the explicit local llama.cpp). Default behaviour stays byte-identical | 📐 Draft under review. No code |
-| **Decision service + 6th sovereign tool — ADR-021** | A shared decision service with two doors: internal modules and a sixth tool, `tylluan_decide` (CONTRACT-01 amended from five to six). The model never holds authority: deterministic rules decide permissions and limits. Modes: off / shadow / advisory / gate | ✅ Phase 1 in `main` (2026-10-16): the tool, its REST twin, the rules baseline and the shadow log, with adversarial and MCP/REST parity tests. 🟡 Not started: model providers, calibration, paired evaluation, any contract above `shadow` |
-| **Decision models (LAYA / Clef-Flash / Decima)** | Phase-0 measurement on Tylluan's own data: LAYA and Clef-Flash are NO-GO; Decima-small is GO-PROVISIONAL (+5 net correct answers out of 245, not statistically established) | ✅ Measured · not integrated in production |
-| **REA (reverse-engineering MCP server)** | Optional external MCP server, outside the critical path | 🟡 GO as optional · verification checklist pending · not registered |
-| **`iroh` transport** | Would have let teams on different networks connect without a VPN | ⛔ NO-GO for now — LAN or your own VPN is the supported path |
+**Retrieval quality.** On LongMemEval-S (50 questions) with the BGE-M3 model, Tylluan scored Recall@5 82%, Recall@10 90%, median latency 12.9 ms on CPU ([raw results](benchmarks/longmemeval_v0.12.0.json)). That was v0.12.0 on 2026-07-05, before the default model changed to `mxbai-embed-large`. It has not been re-run, it is a small set, and it is not a comparison against other systems.
 
-Legend: ✅ shipped on `main` · 🟡 decided or approved, not shipped · 📐 proposed · ⛔ rejected for now. Details and evidence: [ADR-019](docs/reference/adr/ADR019_team_scoped_networks.md), [ADR-018](docs/reference/adr/ADR018_decision_fabric.md), the [decision-model research note](docs/reference/research/2026-10-15_decision_models_industry_integration.md) and the [roadmap checklist](docs/roadmap/ROADMAP_O3.md).
+## Security: what it protects and what it does not
 
----
+- **Network.** By default the kernel binds to `127.0.0.1` only. Never combine `host = "0.0.0.0"` with `dev_mode = true`, which would be an unauthenticated remote shell on your network; if you do, the kernel logs a critical warning and forces the host back to `127.0.0.1`.
+- **Authentication.** On by default (`dev_mode = false`). Every API and MCP call needs the bearer token, except a short public list: the health check, discovery, the dashboard's static files, and four endpoints under `/api/` (federation ping, federation sync send and receive, and the MCP probe). The exact list is `is_public_bypass_path` in `crates/tylluan-kernel/src/transport/http/auth.rs`.
+- **Requests from web pages.** A page open in your browser could otherwise talk to the kernel on `127.0.0.1`. On `main` (after v0.17.1, **not in a tagged release yet**) the five MCP and SSE routes (`/messages`, `/mcp`, `/api/v1/mcp`, `/sse`, `/sse/download`) and every non-GET, non-HEAD route under `/api/v1/` reject requests with a non-local `Origin` or `Host` with 403, and the MCP endpoint requires `Content-Type: application/json`. If you run v0.17.1, keep `dev_mode = false`: a web page does not have your token, so it cannot call an authenticated kernel.
+- **Memory poisoning.** A coherence gate filters what `tylluan_recall` returns, with deterministic pattern, provenance and drift checks. An optional model-based classifier for ambiguous cases is off by default; when you enable it, it can quarantine or down-weight a memory. The plain REST search endpoint is not behind this gate yet.
+- **Tools.** Guilds run as normal operating-system processes with your user's rights. An opt-in Docker sandbox (`[security.sandbox]` in `tylluan.toml`, needs Docker) can isolate the bash and code guilds, or every guild in its `strict` profile. It is off by default, so out of the box a guild can do anything you can do. Tool calls made through the MCP tools are written to a hash-chained audit log; the direct REST endpoint for calling a guild is not audited yet, and an audit write that fails is logged as a warning rather than stopping the call.
+- **Not covered.** No independent third-party security audit. Federation is meant for a local network or your own VPN, not the open internet.
 
-## Architecture
-
-### High-Level Overview
-
-```mermaid
-flowchart LR
-  CLIENTS["Clients & IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
-
-  subgraph SOVEREIGN["tylluan-nexus (:47004) — Sovereign Core"]
-    TOOLS["6 Sovereign Tools (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph · decide"]
-    TOOL6["tylluan_decide (6th tool, in main)<br/>MCP + REST · rules baseline · shadow log · no model yet (ADR-021)"]
-    AUTH["Auth boundary hardening (Phase 1 merged, Phase 2 pending)<br/>OAuth tokens never grant operator actions"]:::future
-
-    subgraph GOVERN["Cognitive Governance & Routing"]
-      SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · deterministic rules · served today by tylluan_decide (rules only); model providers not wired (ADR-021)"]
-      CGATE["CoherenceGate (ADR-011)<br/>L1-L4 Firewall · Signal Loop"]
-    end
-  end
-
-  subgraph MEMORY["SilvaDB Cognitive Store"]
-    SILVA[("SQLite WAL + FTS5 BM25")]
-    GRAPH["HNSW (1024d) · PageRank (Penalty) · FSRS-5"]
-  end
-
-  subgraph INFER["Local Inference (Zero Cloud)"]
-    GATEWAY["Inference Gateway (ADR-020, proposed)<br/>embed · rerank · decide · generate · privacy classes"]:::future
-    ONNX["ONNX Runtime Embedded<br/>mxbai-embed-large (1024d) · Jina Reranker"]
-    LLAMA["Local LLM Backend<br/>llama-server GGUF · Ollama"]
-  end
-
-  subgraph EXEC["Execution & Agent Collaboration"]
-    GUILDS["45 Python Guilds<br/>FastMCP stdio child processes"]
-    COLOQUIO["Coloquio & Contracts<br/>Multi-Agent Channels · BWC"]
-    WAKE["Stigmergy & Wake-Up (ADR-015)<br/>Insession Cron · Proactive Triggers"]
-  end
-
-  subgraph MESH["tylluan-link Cryptographic Mesh"]
-    P2P["P2P Session Pool & Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305 (Opt-in)<br/>per-peer/space permissions, deny-by-default (ADR-019 step 2)"]
-    GOSSIP["Gossip Engine & Local Mesh<br/>Anti-Entropy · Noise NK · LAN mDNS"]
-  end
-
-  PEERS["Approved Peers (Internal / Private)<br/>LAN (mDNS, opt-in) · Operator-approved keys"]
-
-  SPARSE["Research: Sparse Lexical (SPLADE)"]:::future
-  POSTCARD["Roadmap: Postcard zero-copy Serde"]:::future
-
-  CLIENTS ==> TOOLS
-  TOOLS ==> SCHED
-  SCHED ==> DECIDER
-  DECIDER ==> GUILDS
-  TOOLS ==> CGATE
-  CGATE ==> MEMORY
-  MEMORY <==> ONNX
-  EXEC <==> MEMORY
-  DECIDER -.-> LLAMA
-  SCHED ==> P2P
-  P2P <==> GOSSIP
-  GOSSIP ==> PEERS
-
-  ONNX -.-> SPARSE
-  MEMORY -.-> POSTCARD
-  CLIENTS -.-> TOOL6
-  TOOL6 -.-> DECIDER
-  DECIDER -.-> GATEWAY
-  GATEWAY -.-> ONNX
-  GATEWAY -.-> LLAMA
-  CLIENTS -.-> AUTH
-  AUTH -.-> TOOLS
-
-  classDef sovStyle fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
-  classDef govStyle fill:#065f46,stroke:#6ee7b7,color:#f8fafc,stroke-width:1.5px;
-  classDef memStyle fill:#04382c,stroke:#34d399,color:#f8fafc,stroke-width:1.5px;
-  classDef execStyle fill:#172554,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px;
-  classDef inferStyle fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
-  classDef meshStyle fill:#082f49,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
-  classDef extStyle fill:#0f172a,stroke:#475569,color:#e2e8f0,stroke-width:1.5px;
-  classDef future fill:#78350f,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:4 4,color:#fef3c7;
-
-  class CLIENTS,PEERS extStyle;
-  class TOOLS sovStyle;
-  class SCHED,DECIDER,CGATE govStyle;
-  class SILVA,GRAPH memStyle;
-  class GUILDS,COLOQUIO,WAKE execStyle;
-  class ONNX,LLAMA inferStyle;
-  class P2P,GOSSIP meshStyle;
-
-  linkStyle 0,1,2,3,4,5 stroke:#34d399,stroke-width:2.5px;
-  linkStyle 6 stroke:#c084fc,stroke-width:2px;
-  linkStyle 7 stroke:#60a5fa,stroke-width:2px;
-  linkStyle 8 stroke:#a855f7,stroke-width:1.5px,stroke-dasharray:3 3;
-  linkStyle 9,10,11 stroke:#38bdf8,stroke-width:2.5px;
-  linkStyle 12,13 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
-  linkStyle 14,15,16,17,18,19,20 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
-```
-
-> The detailed layered topology & circuits diagram is up top in [Architecture at a glance](#architecture-at-a-glance) — this flowchart is the quick technical read; the SVG is the full zoomable deep dive.
-
-## Stack
-
-| Component | Technology |
-|-----------|------------|
-| Kernel | Rust (tokio + axum) |
-| Embeddings | mxbai-embed-large (local ONNX, CPU, default) — configurable: mxbai-q, bge-m3, bge-small, minilm, nomic, arctic, e5, none |
-| Reranker | Jina v1 Turbo (local ONNX) |
-| Generative inference | `llama.cpp` (`llama-server`, auto-downloaded), agnostic to an external Ollama/LM Studio if one's already running |
-| Search | BM25 + FTS5 + local vector + RRF hybrid fusion + entity boost |
-| Storage | SQLite WAL + mmap vector index |
-| Federation | SQLite `peers.db` + Noise NK / ChaCha20-Poly1305 |
-| Mesh | Kademlia DHT + Gossip + Noise Protocol XK/NK |
-| Guilds | Python (fastmcp) |
-| Dashboard | React + Vite + Tailwind, embedded in the binary |
-
-## Project structure
-
-```
-tylluan/
-├── crates/
-│   ├── tylluan-kernel/    Core kernel — memory, routing, guilds, federation, security
-│   ├── tylluan-common/    Shared types and errors
-│   ├── tylluan-link/      Federation networking — mesh identity, DHT, NAT, mDNS, Gossip, Noise
-│   ├── tylluan-cli/       CLI management binary — start / stop / status / install
-│   ├── tylluan-evals/     Benchmarks — Recall@N, Precision@N, latency percentiles
-│   ├── tylluan-fsrs/      FSRS-5 spaced-repetition scheduler (per-item stability, difficulty, retrievability)
-│   └── tylluan-gui/       Placeholder for a future desktop shell (no functionality yet)
-├── guilds/                Python tool plugins (fastmcp), auto-discovered at startup
-├── dashboard/             React dashboard (Vite + Tailwind), embedded in the binary
-├── docs/                  Architecture and guides
-├── integrations/          MCP client config examples (Claude, Cursor, LM Studio)
-└── tests/                 Integration and E2E tests
-```
+How to report a vulnerability: [SECURITY.md](SECURITY.md). Threat model: [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md).
 
 ## Federation
 
-Point two or more Tylluan instances at each other and they'll share knowledge securely:
+Two or more Tylluan instances can sync memories with peers you approve one by one: encrypted with Noise, with the source of every node recorded, and with per-peer and per-space permissions that deny by default. It is designed for a local network or a private VPN. It has not been tested over the open internet and no release ships a public bootstrap node. See [docs/concepts/FEDERATION.md](docs/concepts/FEDERATION.md).
 
-```toml
-# tylluan.toml
-[federation]
-auto_sync_mode = "push"         # "push", "pull" or "both"
-sync_interval_ms = 30000        # default 30 s; 0 = auto-sync disabled
-```
+## Stop, your data, uninstall
 
-> The auto-sync loop reads both keys from `[federation]`. `[silva] sync_interval_ms` is the deprecated old location: it is only honoured when `[federation] sync_interval_ms` is left at its default.
+- **Stop:** `tylluan-cli stop`. With authentication on it needs the token: pass `--token`. If more than one kernel runs, also pass `--port` (or `--data-dir`) so it stops the right one.
+- **Your data:** the SQLite database is `./data/tylluan.db` relative to the directory the kernel was started from, with the rest of its files in `data/` there. Back it up by copying that folder while the kernel is stopped.
+- **Uninstall:** delete `~/.tylluan/` and remove the `PATH` entry the installer added. If you lose the token, delete `.tylluan-token` and restart: a new one is generated, and every client must be given it again.
 
-```bash
-# Add a peer
-curl -X POST http://127.0.0.1:47004/api/v1/federation/peers \
-  -H "Content-Type: application/json" \
-  -d '{"name":"node-b","url":"http://192.168.1.10:47004","auth_token":"...","shared_secret":"..."}'
+## Status
 
-# Push local knowledge to all approved peers
-curl -X POST http://127.0.0.1:47004/api/v1/federation/sync
+1382 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
 
-# Pull from a specific peer
-curl -X POST "http://127.0.0.1:47004/api/v1/federation/sync/pull?peer=node-b"
-
-# See where a given node's knowledge came from
-curl "http://127.0.0.1:47004/api/v1/federation/nodes?source=node-b"
-```
-
-A few invariants that hold regardless of configuration: unapproved peers are never synced, protected nodes are never exported, and anything received from a peer is tagged with `federation_source` and excluded from further outbound sync by default — so knowledge can't loop endlessly between instances.
-
-### Per-peer and per-space permissions (ADR-019 step 2)
-
-> **Behaviour change on `main` (not yet in a tagged release):** a peer now starts with **empty permissions — it syncs nothing and may dispatch nothing** until you grant it explicitly. After upgrading, an existing peer stops syncing until you set its permissions.
-
-Knowledge is shared by **space**. A node's space is its `topic_key`, else `metadata.space`, else `default`; `default` can never be shared. Tag what you want to share, then grant a direction per space (`pull`, `push`, `both`, `none`):
-
-```bash
-# Tag a memory with a space
-#   tylluan_remember(content="...", metadata={"space": "project-x"})
-
-# Grant the peer exactly that space (and no remote tool dispatch)
-curl -X PUT http://127.0.0.1:47004/api/v1/federation/peers/node-b/permissions \
-  -H "Content-Type: application/json" \
-  -d '{"sync_spaces":[{"space":"project-x","direction":"both"}],"dispatch_allow":[]}'
-```
-
-`dispatch_allow` takes exact `guild.tool` entries (no wildcards); anything else is denied and audited. Listing code-executing families (`bash`, `filesystem`, `code`) is accepted with a strong warning. Denials are written to the audit log.
-
-## Security
-
-Tylluan runs **real code on your machine**. Before you deploy it anywhere that matters, read:
-
-- [SECURITY.md](SECURITY.md) — how to report a vulnerability
-- [DISCLAIMER.md](DISCLAIMER.md) — what's on you as the operator
-- [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md) — the threat model, mapped to OWASP ASI 2026, including how the Coherence Gate (ADR-011) defends every `tylluan_recall` against memory-poisoning attacks
-
-A few defaults you shouldn't change without understanding the consequences:
-- `host = "127.0.0.1"` — localhost only
-- `dev_mode = false` — auth enabled
-- **Never** set `host = "0.0.0.0"` together with `dev_mode = true`
-
-> **Network exposure:** until the auth-boundary hardening listed in [Architecture decisions in flight](#architecture-decisions-in-flight) ships, keep the kernel on `127.0.0.1`. Do not expose it to a LAN or the Internet, even with `dev_mode = false`.
-
-## Examples
-
-```bash
-# Memory basics: remember, recall, think
-python examples/01_memory_basics.py
-
-# Multi-agent communication via Coloquio
-python examples/02_multi_agent_coloquio.py
-
-# Knowledge graph exploration
-python examples/03_knowledge_graph.py
-
-# Autonomous multi-hop chain — no orchestrator, no API keys
-python examples/multi_model_coloquio/run.py
-
-# Bounded Work Contract — 3 agents, shared budget, finite iterations
-python examples/bounded_work_contract/run.py
-```
-
-> Examples resolve the active kernel port automatically from `data/active_port.json` or `TYLLUAN_PORT` (defaults to `47004`). Override with `--port <PORT>` or `--kernel http://127.0.0.1:<PORT>`.
-
-Full source in [examples/](examples/).
+- **Latest release:** v0.17.1 (2026-10-13). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
+- **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
+- **Platforms:** Linux x86_64 and ARM64, macOS Apple Silicon, Windows x86_64. CI runs the tests on Linux x86_64, and the release workflow builds all four binaries. The start-up measurement above was taken on Windows x86_64. The macOS and ARM64 builds have not been run on hardware by the maintainers (not verified).
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [CHANGELOG.md](CHANGELOG.md) | Full version history |
-| [ROADMAP.md](ROADMAP.md) | Versioned roadmap |
-| [STATUS.md](STATUS.md) | Verified technical state — the source of truth |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
-| [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) | Detailed setup guide |
-| [docs/concepts/FEDERATION_V3.md](docs/concepts/FEDERATION_V3.md) | Federation protocol spec |
-
-## How to help
-
-Tylluan is in active pre-production, and the thing it needs most right now is real-world testing on hardware and networks we don't have on hand:
-
-1. **Hardware reports** — run it on a Raspberry Pi 4, an old laptop, a mini PC, and share your latency and RAM numbers in [GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions).
-2. **Retrieval quality** — try the hybrid search on your own data and tell us honestly whether it found what you expected. Failure reports are at least as useful as success stories here.
-3. **Bug reports** — if installation or model loading breaks for you, open an issue with the output of `tylluan-cli logs` attached.
+| | |
+|---|---|
+| [Quickstart](docs/getting-started/QUICKSTART.md) | Configuration, authentication, troubleshooting, building from source |
+| [Architecture](docs/concepts/ARCHITECTURE.md) | How the pieces fit |
+| [Guilds](guilds/README.md) | The 45 tool programs behind `tylluan_do` |
+| [Architecture decisions](docs/reference/adr/) | Why things are the way they are |
+| [Contributing](CONTRIBUTING.md) | How to help |
 
 ## License
 
-[MIT](LICENSE) — use it, fork it, build on it.
-
----
-
-<p align="center">
-  <em>Tylluan (Welsh: owl) — sovereign memory for sovereign agents.</em>
-</p>
+[MIT](LICENSE).

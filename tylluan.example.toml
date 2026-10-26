@@ -3,7 +3,7 @@
 
 [nexus]
 host = "127.0.0.1"
-port = 47004  # canonical default (CONTRACT-01) -- matches config.rs's default_port(), kept in sync 2026-10-09
+port = 47004  # canonical default (CONTRACT-01) -- matches config.rs's default_port(), kept in sync 2026-10-09; README quick start uses the same 47004 (checked 2026-10-26)
 # D-42: precedencia de arranque: --port/--host (CLI) > TYLLUAN_PORT/TYLLUAN_HOST
 # (entorno) > este fichero. `--config` elige el fichero, pero ya no puede borrar
 # los overrides de CLI/env (antes recargaba el TOML y perdía --port).
