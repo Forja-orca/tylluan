@@ -1,11 +1,56 @@
 use anyhow::Result;
 use tracing::info;
 
+/// T-DSH-94: una migración idempotente que falla con un error *esperado*
+/// ("duplicate column name" / "already exists") es silenciosa; cualquier otro
+/// fallo deja un warning en vez de perderse en un `let _ =`.
+#[inline]
+fn is_expected_migration_error(error: &rusqlite::Error) -> bool {
+    let message = error.to_string();
+    message.contains("duplicate column name") || message.contains("already exists")
+}
+
+macro_rules! migration_execute {
+    ($conn:expr, $sql:expr $(,)?) => {{
+        let sql = $sql;
+        if let Err(error) = $conn.execute(sql, []) {
+            if !is_expected_migration_error(&error) {
+                tracing::warn!(error = %error, sql = %sql, "silva schema: migracion fallida (no esperada)");
+            }
+        }
+    }};
+}
+
+macro_rules! migration_execute_params {
+    ($conn:expr, $sql:expr, $params:expr $(,)?) => {{
+        let sql = $sql;
+        if let Err(error) = $conn.execute(sql, $params) {
+            if !is_expected_migration_error(&error) {
+                tracing::warn!(error = %error, sql = %sql, "silva schema: migracion fallida (no esperada)");
+            }
+        }
+    }};
+}
+
+macro_rules! migration_batch {
+    ($conn:expr, $sql:expr $(,)?) => {{
+        let sql = $sql;
+        if let Err(error) = $conn.execute_batch(sql) {
+            if !is_expected_migration_error(&error) {
+                tracing::warn!(error = %error, "silva schema: execute_batch fallido (no esperado)");
+            }
+        }
+    }};
+}
+
 impl super::SilvaDB {
     pub(super) async fn init_schema(&self) -> Result<()> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            conn.execute_batch("PRAGMA journal_mode = WAL;")?;
+            // T-DSH-94: WAL best-effort (reutiliza el helper de `open_db`) en vez
+            // de un `?` que aborta `init_schema` si otra conexión está abriendo el
+            // fichero en ese instante.
+            crate::config::enable_wal_best_effort(&conn, None);
 
             conn.execute_batch(
                 "PRAGMA synchronous = NORMAL;
@@ -51,15 +96,15 @@ impl super::SilvaDB {
             const SCHEMA_VERSION: i32 = 29;
 
             if schema_version < 1 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN topic_key TEXT", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN protected INTEGER NOT NULL DEFAULT 0", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN last_touched INTEGER", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN topic_key TEXT");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN protected INTEGER NOT NULL DEFAULT 0");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN last_touched INTEGER");
             }
             if schema_version < 2 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN last_accessed INTEGER", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN last_touched INTEGER", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN last_accessed INTEGER");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN last_touched INTEGER");
             }
             if schema_version < 3 {
                 conn.execute_batch("
@@ -79,18 +124,18 @@ impl super::SilvaDB {
                 ").ok();
             }
             if schema_version < 5 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN valid_from INTEGER", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN valid_until INTEGER", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN valid_from INTEGER");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN valid_until INTEGER");
             }
             if schema_version < 6 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN shareable INTEGER NOT NULL DEFAULT 0", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN shareable INTEGER NOT NULL DEFAULT 0");
             }
             if schema_version < 7 {
-                let _ = conn.execute("ALTER TABLE edges ADD COLUMN valid_from INTEGER", []);
-                let _ = conn.execute("ALTER TABLE edges ADD COLUMN valid_until INTEGER", []);
+                migration_execute!(conn, "ALTER TABLE edges ADD COLUMN valid_from INTEGER");
+                migration_execute!(conn, "ALTER TABLE edges ADD COLUMN valid_until INTEGER");
             }
             if schema_version < 8 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN salience_score REAL NOT NULL DEFAULT 1.0", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN salience_score REAL NOT NULL DEFAULT 1.0");
                 tracing::info!("🌲 SilvaDB: added salience_score column");
             }
             if schema_version < 9 {
@@ -104,7 +149,7 @@ impl super::SilvaDB {
                 tracing::info!("🌲 SilvaDB: added silva_kv table (v9)");
             }
             if schema_version < 10 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN federation_source TEXT", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN federation_source TEXT");
                 // Backfill from metadata JSON for nodes already tagged via the old approach
                 conn.execute_batch(
                     "UPDATE nodes
@@ -129,13 +174,13 @@ impl super::SilvaDB {
                 tracing::info!("🌲 SilvaDB: created nodes_fts FTS5 table + backfill (v11)");
             }
             if schema_version < 13 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_stability REAL NOT NULL DEFAULT 14.0", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_difficulty REAL NOT NULL DEFAULT 0.3", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_last_review INTEGER NOT NULL DEFAULT 0", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN fsrs_stability REAL NOT NULL DEFAULT 14.0");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN fsrs_difficulty REAL NOT NULL DEFAULT 0.3");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN fsrs_last_review INTEGER NOT NULL DEFAULT 0");
                 tracing::info!("🌲 SilvaDB: added FSRS columns (v13)");
             }
             if schema_version < 14 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN content_hash TEXT DEFAULT ''", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN content_hash TEXT DEFAULT ''");
                 // Backfill content_hash for existing nodes using Rust-side SHA-256
                 {
                     let nodes: Vec<(String, String)> = {
@@ -161,13 +206,13 @@ impl super::SilvaDB {
                 tracing::info!("🌲 SilvaDB: added content_hash column (v14)");
             }
             if schema_version < 15 {
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN provenance TEXT NOT NULL DEFAULT 'unverified'", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN provenance TEXT NOT NULL DEFAULT 'unverified'");
                 tracing::info!("🌲 SilvaDB: added provenance column (v15)");
             }
             if schema_version < 16 {
                 // J-8: hierarchical scope tag, format "user:<id>/session:<id>/agent:<id>"
                 // (any level may be omitted). NULL = unscoped (visible to all, current behavior).
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN owner_scope TEXT", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN owner_scope TEXT");
                 conn.execute_batch(
                     "CREATE INDEX IF NOT EXISTS idx_nodes_owner_scope ON nodes(owner_scope);"
                 ).ok();
@@ -217,16 +262,16 @@ impl super::SilvaDB {
                 // no node has ever recorded how sure the system is about its own
                 // content. Defaults to 1.0 (fully confident) so existing nodes don't
                 // silently become "provisional" the moment this column appears.
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0");
                 tracing::info!("🌲 SilvaDB: added confidence column (v19, M40-P4)");
             }
             if schema_version < 20 {
                 // M40-P4 (second cut): explicit source/author/evidence beyond
                 // generic `provenance`. Nullable — NULL means "not specified",
                 // backward compatible with all existing nodes.
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN source TEXT", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN author TEXT", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN evidence_url TEXT", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN source TEXT");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN author TEXT");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN evidence_url TEXT");
                 tracing::info!("🌲 SilvaDB: added source/author/evidence_url columns (v20, M40-P4)");
             }
             if schema_version < 21 {
@@ -237,8 +282,8 @@ impl super::SilvaDB {
                 // answer different questions. Defaults to 0 (not quarantined) so existing
                 // nodes are unaffected. `quarantine_reason` is nullable: NULL means never
                 // quarantined or reason not recorded.
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0", []);
-                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN quarantine_reason TEXT", []);
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN quarantine_reason TEXT");
                 tracing::info!("🌲 SilvaDB: added quarantined/quarantine_reason columns (v21, ASI06)");
             }
             if schema_version < 22 {
@@ -265,18 +310,9 @@ impl super::SilvaDB {
                 // lifecycle_state: active | quiet | consolidated | archived (4 estados, ADR-012 §2 Decision 1)
                 // last_agent_access: unix timestamp del último acceso REAL de agente (recall/ingest), NO touch_node interno
                 // reactivation_count: contador de reactivaciones archived→active (RAE barata §2.5)
-                let _ = conn.execute(
-                    "ALTER TABLE nodes ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'",
-                    [],
-                );
-                let _ = conn.execute(
-                    "ALTER TABLE nodes ADD COLUMN last_agent_access INTEGER NOT NULL DEFAULT 0",
-                    [],
-                );
-                let _ = conn.execute(
-                    "ALTER TABLE nodes ADD COLUMN reactivation_count INTEGER NOT NULL DEFAULT 0",
-                    [],
-                );
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN last_agent_access INTEGER NOT NULL DEFAULT 0");
+                migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN reactivation_count INTEGER NOT NULL DEFAULT 0");
                 // Backfill DERIVADO: no DEFAULT 'active' ciego.
                 // Nodos con updated_at > 30 días → quiet, resto active.
                 // Nodos protected/identity NUNCA se degradan a quiet — son
@@ -341,10 +377,7 @@ impl super::SilvaDB {
                 // Dirección #2 (memoria explicable): separar "utilidad" de otras
                 // señales en recall_feedback — signal_kind permite registrar
                 // utility|reuse|action_success|human_feedback como señales distintas.
-                let _ = conn.execute(
-                    "ALTER TABLE recall_feedback ADD COLUMN signal_kind TEXT NOT NULL DEFAULT 'utility'",
-                    [],
-                );
+                migration_execute!(conn, "ALTER TABLE recall_feedback ADD COLUMN signal_kind TEXT NOT NULL DEFAULT 'utility'");
                 tracing::info!("🌲 SilvaDB: added recall_feedback.signal_kind (v26, señales separadas)");
             }
             if schema_version < 27 {
@@ -357,9 +390,9 @@ impl super::SilvaDB {
                 // would look like a real measurement to the trainer. Consumers
                 // (train_light_reranker.py, light_reranker_train_phase.rs) fall
                 // back to the documented proxies only for NULL rows.
-                let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN score_rrf REAL", []);
-                let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN score_graph REAL", []);
-                let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN recency_score REAL", []);
+                migration_execute!(conn, "ALTER TABLE recall_feedback ADD COLUMN score_rrf REAL");
+                migration_execute!(conn, "ALTER TABLE recall_feedback ADD COLUMN score_graph REAL");
+                migration_execute!(conn, "ALTER TABLE recall_feedback ADD COLUMN recency_score REAL");
                 tracing::info!("🌲 SilvaDB: added recall_feedback score_rrf/score_graph/recency_score (v27, ADR-011 §Fase 3)");
             }
             if schema_version < 28 {
@@ -368,7 +401,8 @@ impl super::SilvaDB {
                 // en claro (§1217 + matriz de privacidad ADR-020).
                 // `model_value`/`model_probs_json`/`agreed` quedan NULL hasta
                 // que exista proveedor de modelo y comparación en sombra.
-                let _ = conn.execute_batch(
+                migration_batch!(
+                    conn,
                     "CREATE TABLE IF NOT EXISTS decision_shadow_log (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         ts TEXT NOT NULL,
@@ -392,14 +426,8 @@ impl super::SilvaDB {
                 // del modelo y latencia de la llamada al modelo — NULL hasta
                 // que un proveedor de modelo responda (diseño aprobado
                 // 2026-10-16; sin cambios del esquema de respuesta).
-                let _ = conn.execute(
-                    "ALTER TABLE decision_shadow_log ADD COLUMN model_identity TEXT",
-                    [],
-                );
-                let _ = conn.execute(
-                    "ALTER TABLE decision_shadow_log ADD COLUMN model_latency_ms INTEGER",
-                    [],
-                );
+                migration_execute!(conn, "ALTER TABLE decision_shadow_log ADD COLUMN model_identity TEXT");
+                migration_execute!(conn, "ALTER TABLE decision_shadow_log ADD COLUMN model_latency_ms INTEGER");
                 tracing::info!("SilvaDB: added decision_shadow_log model_identity/model_latency_ms (v29, ADR-020 Fase 2)");
             }
             if schema_version < SCHEMA_VERSION {
@@ -502,10 +530,10 @@ impl super::SilvaDB {
                  );"
             )?;
 
-            let _ = conn.execute("ALTER TABLE nodes ADD COLUMN cluster_id INTEGER", []);
-            let _ = conn.execute("ALTER TABLE node_embeddings ADD COLUMN model_name TEXT DEFAULT 'bge-m3'", []);
-            let _ = conn.execute("ALTER TABLE node_embeddings ADD COLUMN model_hash TEXT", []);
-            let _ = conn.execute("ALTER TABLE node_embeddings ADD COLUMN dimensions INTEGER DEFAULT 1024", []);
+            migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN cluster_id INTEGER");
+            migration_execute!(conn, "ALTER TABLE node_embeddings ADD COLUMN model_name TEXT DEFAULT 'bge-m3'");
+            migration_execute!(conn, "ALTER TABLE node_embeddings ADD COLUMN model_hash TEXT");
+            migration_execute!(conn, "ALTER TABLE node_embeddings ADD COLUMN dimensions INTEGER DEFAULT 1024");
             // Pre-traceability vectors (TL decision 2026-10-05): mark them
             // explicitly instead of inventing provenance. Idempotent — only
             // still-NULL rows are stamped; everything written after this fix
@@ -513,7 +541,8 @@ impl super::SilvaDB {
             // deliberately does NOT count this sentinel as a hash mismatch,
             // so the reindexer never re-processes history because of this
             // migration (see the stale_embeddings regression test).
-            let _ = conn.execute(
+            migration_execute_params!(
+                conn,
                 "UPDATE node_embeddings SET model_hash = ?1 WHERE model_hash IS NULL",
                 rusqlite::params![crate::memory::silva::nodes::MODEL_HASH_UNKNOWN],
             );

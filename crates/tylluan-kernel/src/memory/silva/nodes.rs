@@ -290,6 +290,25 @@ impl super::SilvaDB {
         Ok(())
     }
 
+    /// T-DSH-95: reemplaza el `content` de un nodo existente (fusión DCR).
+    /// Recalcula `content_hash` y refresca `updated_at`; no toca peso, metadata
+    /// ni procedencia. Devuelve error si el nodo no existe.
+    pub async fn update_node_content(&self, id: &str, content: &str) -> Result<()> {
+        use sha2::Digest as _;
+        let content_hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
+        tokio::task::block_in_place(|| {
+            let conn = self.conn_timed();
+            let changed = conn.execute(
+                "UPDATE nodes SET content = ?1, content_hash = ?2, updated_at = datetime('now') WHERE id = ?3",
+                rusqlite::params![content, content_hash, id],
+            )?;
+            if changed == 0 {
+                anyhow::bail!("Node not found: {id}");
+            }
+            Ok::<(), anyhow::Error>(())
+        })
+    }
+
     /// Get a node by ID. Applies lazy weight decay before returning.
     pub async fn get_node(&self, id: &str) -> Result<Option<GraphNode>> {
         match self.apply_node_decay(id).await {
@@ -464,8 +483,15 @@ impl super::SilvaDB {
         if let Some(engine) = self.sparse_engine_ref()
             && let Some(Some(node)) = self.get_node(node_id).await.ok()
             && let Ok(sv) = tokio::task::block_in_place(|| engine.embed(&node.content))
+            && let Err(error) = self.save_sparse_embedding(node_id, &sv).await
         {
-            let _ = self.save_sparse_embedding(node_id, &sv).await;
+            // T-DSH-94: best-effort, pero un fallo degrada el recall híbrido
+            // de ese nodo y ya no se pierde en silencio.
+            tracing::warn!(
+                error = %error,
+                node_id = %node_id,
+                "sparse embedding: no se pudo persistir la firma dispersa"
+            );
         }
         Ok(())
     }

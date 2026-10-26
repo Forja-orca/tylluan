@@ -1557,7 +1557,7 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
          PRAGMA cache_size=-65536; \
          PRAGMA mmap_size=268435456;"
     )?;
-    enable_wal_best_effort(&conn, path);
+    enable_wal_best_effort(&conn, Some(path));
     Ok(conn)
 }
 
@@ -1566,13 +1566,21 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
 /// hasta 5 intentos con 20 ms de backoff; si sigue bloqueado, avisa y continúa
 /// en el modo actual (no devuelve error: la firma y el contrato de `open_db`
 /// no cambian).
-fn enable_wal_best_effort(conn: &rusqlite::Connection, path: &std::path::Path) {
+///
+/// T-DSH-94: `path` es opcional para que otros llamadores que no conocen la
+/// ruta (p. ej. `SilvaDB::init_schema`, que solo tiene la conexión) puedan
+/// reutilizar el mismo comportamiento best-effort en vez de un `?` que aborta
+/// el arranque del esquema cuando WAL está bloqueado.
+pub(crate) fn enable_wal_best_effort(conn: &rusqlite::Connection, path: Option<&std::path::Path>) {
+    let path_label = path
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "<unknown>".to_string());
     let current_mode: String = match conn.query_row("PRAGMA journal_mode", [], |row| row.get(0)) {
         Ok(mode) => mode,
         Err(error) => {
             tracing::warn!(
                 error = %error,
-                path = %path.display(),
+                path = %path_label,
                 "open_db: no se pudo consultar journal_mode; se intenta WAL igualmente"
             );
             String::new()
@@ -1597,7 +1605,7 @@ fn enable_wal_best_effort(conn: &rusqlite::Connection, path: &std::path::Path) {
             Err(error) => {
                 tracing::warn!(
                     error = %error,
-                    path = %path.display(),
+                    path = %path_label,
                     "open_db: no se pudo cambiar a WAL; se continua en el modo actual"
                 );
                 return;
@@ -1605,7 +1613,7 @@ fn enable_wal_best_effort(conn: &rusqlite::Connection, path: &std::path::Path) {
         }
     }
     tracing::warn!(
-        path = %path.display(),
+        path = %path_label,
         "open_db: WAL sigue bloqueado tras 5 reintentos; se continua en el modo actual (no fatal)"
     );
 }
