@@ -92,7 +92,7 @@ resultados); las otras 44 son menciones en doc/comentarios (`//!`, `///`, cabece
 
 | fichero:línea | motivo del ignore | resultado hoy | propuesta |
 |---|---|---|---|
-| `a2a_live.rs:18` | requiere el agente echo oficial a2a-sdk en local | **FALLA**: `127.0.0.1:8901` connection refused (os error 10061) | dejar ignore (justificación correcta): sin el SDK externo el test no puede pasar |
+| `a2a_live.rs:18` | requiere el agente echo oficial a2a-sdk en local | **FALLA**: `127.0.0.1<puerto>` connection refused (os error 10061) | dejar ignore (justificación correcta): sin el SDK externo el test no puede pasar |
 | `approve_action_intent_adversarial.rs:143` | T-DSH-9 X1 abierto: `agent_id` declarativo permite aprobar; requiere binding token→agent_id (decisión de José). "F1,F3 ya corregidos" | **FALLA**: 15/16 filas conformes, solo X1 no conforme | mantener hasta la decisión; **actualizar comentario L140-141** (dice "9 filas no conformes", hoy es 1) |
 | `approve_action_self_approval.rs:144` | D-13 | **FALLA**: CASO 2 el plan se consume sin credencial de operador (esperado `operator_required`); CASO 4 filas de audit con `human_intervention` incorrectas | mantener (D-13 abierto, misma decisión de binding); informar de que el consumo ocurre también en la ruta de error |
 | `asi06_judge_hang_health.rs:76` | lento por diseño (~95 s: espera el `JUDGE_TIMEOUT` real) | **PASA** (95.0 s exactos) | mantener; candidato a nightly |
@@ -147,7 +147,7 @@ parada limpia por PID propio a las 19:37:46, `SOAK6B_ALL_DONE`).
 
 - Kernel de prueba: binario `debug` del worktree (v0.17.1, commit `5d21cc7`),
   `CARGO_TARGET_DIR=/e/cargo-target/buffy`.
-- Config: `tylluan.toml` de `E:\tylluan-patches\buffy\mbuffy12\soak-run` → `127.0.0.1:47012`,
+- Config: `tylluan.toml` de `E:\tylluan-patches\buffy\mbuffy12\soak-run` → `127.0.0.1<puerto>`,
   `dev_mode=false`, token propio. **DATA_DIR aislado (CWD = soak-run)**: verificado por
   `soak-run/data/active_port.json` y `*.db` frescos a las 18:57; la base de producción
   (puerto 47004) no recibió escrituras nuestras.
