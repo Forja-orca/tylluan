@@ -717,6 +717,10 @@ pub struct GateStats {
     /// with their post-penalty score. Used by Layer 4 observation mode so it
     /// only reasons about the flagged subset, not every survivor.
     pub penalized_nodes: Vec<(GraphNode, f32)>,
+    /// AG-8: per-rule breakdown for informative recall headers.
+    pub pattern_eliminated: usize,
+    pub provenance_penalized: usize,
+    pub semantic_penalized: usize,
 }
 
 impl GateStats {
@@ -725,6 +729,27 @@ impl GateStats {
             return false;
         }
         (self.eliminated + self.penalized) as f32 / self.total as f32 > WARN_FILTER_RATIO
+    }
+
+    /// AG-8: Format the warning breakdown string for recall headers.
+    pub fn format_warning_details(&self) -> String {
+        let total_flagged = self.eliminated + self.penalized;
+        let mut parts = Vec::new();
+        if self.pattern_eliminated > 0 {
+            parts.push(format!("{} eliminados por patrón", self.pattern_eliminated));
+        }
+        if self.provenance_penalized > 0 {
+            parts.push(format!("{} penalizados por procedencia", self.provenance_penalized));
+        }
+        if self.semantic_penalized > 0 {
+            parts.push(format!("{} penalizados por deriva semántica", self.semantic_penalized));
+        }
+
+        if parts.is_empty() {
+            format!("⚠️ {total_flagged} resultados filtrados por control de coherencia")
+        } else {
+            format!("⚠️ {total_flagged} resultados filtrados por control de coherencia ({})", parts.join(", "))
+        }
     }
 }
 
@@ -815,6 +840,9 @@ impl CoherenceGate {
         };
         let mut eliminated = 0usize;
         let mut penalized = 0usize;
+        let mut pattern_eliminated = 0usize;
+        let mut provenance_penalized = 0usize;
+        let mut semantic_penalized = 0usize;
         let mut survivors = Vec::with_capacity(total);
         let mut penalized_nodes = Vec::new();
 
@@ -835,6 +863,7 @@ impl CoherenceGate {
         for (node, mut score) in results {
             if matches_injection_pattern(&node.content) {
                 eliminated += 1;
+                pattern_eliminated += 1;
                 TOTAL_PATTERN_ELIMINATED.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
@@ -856,6 +885,7 @@ impl CoherenceGate {
             {
                 score *= PROVENANCE_PENALTY;
                 node_penalized = true;
+                provenance_penalized += 1;
                 TOTAL_PROVENANCE_PENALIZED.fetch_add(1, Ordering::Relaxed);
             }
 
@@ -866,6 +896,7 @@ impl CoherenceGate {
                 if semantic_scope_penalizes(semantic_scope, cosim, raw_score, median_score) {
                     score *= SEMANTIC_PENALTY;
                     node_penalized = true;
+                    semantic_penalized += 1;
                     TOTAL_SEMANTIC_PENALIZED.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -881,7 +912,15 @@ impl CoherenceGate {
         TOTAL_ELIMINATED.fetch_add(eliminated as u64, Ordering::Relaxed);
         TOTAL_PENALIZED.fetch_add(penalized as u64, Ordering::Relaxed);
 
-        (survivors, GateStats { total, eliminated, penalized, penalized_nodes })
+        (survivors, GateStats {
+            total,
+            eliminated,
+            penalized,
+            penalized_nodes,
+            pattern_eliminated,
+            provenance_penalized,
+            semantic_penalized,
+        })
     }
 
     /// Layer 4 hybrid classification: for each survivor flagged by any trigger
@@ -1394,15 +1433,15 @@ mod tests {
 
     #[test]
     fn gate_stats_warns_above_50_percent_filtered() {
-        let stats = GateStats { total: 10, eliminated: 3, penalized: 3, penalized_nodes: Vec::new() };
+        let stats = GateStats { total: 10, eliminated: 3, penalized: 3, penalized_nodes: Vec::new(), pattern_eliminated: 3, provenance_penalized: 0, semantic_penalized: 3 };
         assert!(stats.should_warn(), "60% filtered/penalized must warn");
-        let stats_ok = GateStats { total: 10, eliminated: 1, penalized: 1, penalized_nodes: Vec::new() };
+        let stats_ok = GateStats { total: 10, eliminated: 1, penalized: 1, penalized_nodes: Vec::new(), pattern_eliminated: 1, provenance_penalized: 0, semantic_penalized: 1 };
         assert!(!stats_ok.should_warn(), "20% filtered/penalized must not warn");
     }
 
     #[test]
     fn gate_stats_empty_never_warns() {
-        let stats = GateStats { total: 0, eliminated: 0, penalized: 0, penalized_nodes: Vec::new() };
+        let stats = GateStats { total: 0, eliminated: 0, penalized: 0, penalized_nodes: Vec::new(), pattern_eliminated: 0, provenance_penalized: 0, semantic_penalized: 0 };
         assert!(!stats.should_warn());
     }
 
