@@ -61,3 +61,11 @@ GO si, medido en nuestro harness (40 preguntas más una tarea real de agente de 
 3. Prototipo de política "agente de memoria al lado" en el kernel, detrás de un flag desactivado por defecto.
 4. Extender el harness de evaluación a una tarea real y a "inyectar siempre" como línea de comparación.
 5. Medición de utilidad de lo inyectado (RQ5).
+
+## 8. Orden de las tres vías (aclaración de José, 2026-10-26)
+
+1. Vía 1, investigación de frontera ("Recuerda"): averiguar, desde todos los ángulos científicos y lógicos, cómo conseguir que un agente recuerde SIN modificar los IDE ni los harnesses conectados. Es el núcleo del pilar y va primero.
+2. Vía 2, preparación: construir Tylluan de modo que, una vez acabado, convertirlo en plugin de cada laboratorio, de cada marketplace o en servidor MCP sea fácil (límites limpios entre núcleo de decisión y capa de transporte). Es una restricción de diseño desde ahora, no una fase aparte.
+3. Vía 3, plugin por IDE (interceptar y enviar recuerdos desde dentro del harness): es la ÚLTIMA opción, solo si se descartan las vías 1 y 2 con datos. Los adaptadores por harness de las secciones 5 y 7 y de la nota de síntesis pertenecen a esta vía: no se prototipan todavía.
+
+Consecuencia: el prototipo propuesto en la nota de síntesis (adaptadores con hooks) queda APLAZADO. Lo que toca es agotar la vía 1 (qué canales dentro del propio protocolo MCP, de las instrucciones del servidor y de los recursos permiten recordar sin tocar el cliente) y mantener la vía 2 como criterio de arquitectura.
