@@ -205,6 +205,52 @@ enum NewWhat {
     },
 }
 
+/// How long `start` keeps polling /health before declaring the kernel
+/// un-ready. The kernel can legitimately take ~52s to boot when it preloads
+/// its default embedding model (measured 2026-10-26, H-35: cold `start` with
+/// no installer profile, Xeon E5-2680 v4). The old fixed 30s window declared
+/// such kernels failed while they were still booting normally, and the CLI
+/// returned as if it had given up on a healthy boot.
+/// Raising the CLI-side window is safe by design: it never lowers any
+/// kernel-side or guild-side timeout — polling stays 1s apart with a 2s
+/// per-request HTTP timeout, so a kernel that answers is still reported
+/// ready on the first successful poll.
+const STARTUP_WAIT_SECS: u64 = 180;
+
+// Compile-time guard (H-37 regression): the window must exceed the measured
+// cold-preload boot of ~52s or `start` gives up on a healthy kernel again.
+const _: () = assert!(STARTUP_WAIT_SECS > 60);
+
+/// Poll `url` every second until it answers 2xx or `cap_secs` elapses.
+/// Returns true on ready. Pure in its timing contract so it can be tested
+/// against a port with nothing listening.
+async fn wait_for_health(client: &reqwest::Client, url: &str, cap_secs: u64) -> bool {
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_secs(cap_secs);
+    let mut next_report = std::time::Instant::now()
+        + std::time::Duration::from_secs(15);
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        match client.get(url).send().await {
+            Ok(resp) if resp.status().is_success() => return true,
+            _ => {
+                let now = std::time::Instant::now();
+                if now >= next_report && now < deadline {
+                    let remaining =
+                        deadline.checked_duration_since(now).map(|d| d.as_secs());
+                    if let Some(rem) = remaining {
+                        println!("   … still waiting for /health ({rem}s left)");
+                    }
+                    next_report = now + std::time::Duration::from_secs(15);
+                }
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -236,19 +282,15 @@ async fn main() -> Result<()> {
             let port = port.unwrap_or(DEFAULT_PORT);
             let url = format!("http://127.0.0.1:{port}/health");
 
-            for i in 1..=30 {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                match client.get(&url).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        println!("✅ Kernel is ready at http://127.0.0.1:{port}");
-                        println!("🌐 Connect your MCP client to http://127.0.0.1:{port}/sse");
-                        break;
-                    }
-                    _ if i == 30 => {
-                        println!("⚠️ Kernel started but not ready within 30s. Check logs.");
-                    }
-                    _ => {}
-                }
+            if wait_for_health(&client, &url, STARTUP_WAIT_SECS).await {
+                println!("✅ Kernel is ready at http://127.0.0.1:{port}");
+                println!("🌐 Connect your MCP client to http://127.0.0.1:{port}/sse");
+            } else {
+                println!(
+                    "⚠️ Kernel started but not ready within {STARTUP_WAIT_SECS}s. Check logs \
+                     (a cold preload of the embedding model can legitimately exceed a minute — \
+                     the kernel may still be booting; `tylluan-cli status` re-checks /health)."
+                );
             }
         }
         Commands::Stop { port, data_dir, token } => {
@@ -1679,6 +1721,62 @@ mod sandbox_token_tests {
             .get_arguments()
             .any(|arg| arg.get_long() == Some("token"));
         assert!(has_token, "`tylluan sandbox` debe aceptar --token");
+    }
+}
+
+#[cfg(test)]
+mod startup_wait_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn wait_for_health_honors_cap_when_nothing_listens() {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let ready = wait_for_health(&client, "http://127.0.0.1:9/health", 2).await;
+        let elapsed = started.elapsed();
+        assert!(!ready, "no listener => never ready");
+        assert!(elapsed.as_secs() >= 2, "must wait the full cap (got {elapsed:?})");
+        assert!(elapsed.as_secs() <= 5, "must stop at the cap (got {elapsed:?})");
+    }
+
+    #[tokio::test]
+    async fn wait_for_health_turns_ready_once_the_server_answers() {
+        // One-shot std server: answers a single GET with 200, then done.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            if let Ok((mut sock, _)) = listener.accept() {
+                // Drain the request first: closing with unread request bytes
+                // pending makes Windows send RST and the response is lost.
+                let mut req_buf = [0u8; 1024];
+                let _ = sock.read(&mut req_buf);
+                let mut resp = Vec::new();
+                for part in [b"HTTP/1.1 200 OK".as_slice(), b"content-length: 0",
+                    b"connection: close", b""]
+                {
+                    resp.extend_from_slice(part);
+                    resp.extend_from_slice(&[13u8, 10u8]);
+                }
+                let _ = sock.write_all(&resp);
+                let _ = sock.flush();
+                // Stay alive briefly so the client can read before FIN.
+                std::thread::sleep(std::time::Duration::from_millis(400));
+            }
+        });
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let ready = wait_for_health(&client, &format!("http://{addr}/health"), 30).await;
+        assert!(ready, "a server answering 200 must flip the wait to ready");
+        let elapsed = started.elapsed();
+        assert!(elapsed.as_secs() >= 1, "first poll happens after the 1s sleep");
+        assert!(elapsed.as_secs() <= 3, "ready must be reported on the first 200, got {elapsed:?}");
     }
 }
 
