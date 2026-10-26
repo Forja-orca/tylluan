@@ -715,7 +715,7 @@ if let Some(cached) = cached_docs {
 
         let header = if gate_warning {
             format!(
-                "### Recall Results (Found {total_found}, Showing top {showing})\n\nâš ï¸ {} resultados filtrados por control de coherencia\n\n",
+                "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
                 gate_stats.eliminated + gate_stats.penalized
             )
         } else {
@@ -756,7 +756,7 @@ if let Some(cached) = cached_docs {
                 }
                 line
             }).collect::<Vec<_>>().join("\n");
-        let summary = format!("{header}{summary_body}\n\n---\nðŸ” Cache hit");
+        let summary = format!("{header}{summary_body}\n\n---\n🔍 Cache hit");
         if rec_agent_id.is_some() && !scored.is_empty() {
             let now = chrono::Utc::now().timestamp();
             for (node, _) in &scored {
@@ -901,7 +901,7 @@ if let Some(cached) = cached_docs {
 
             if gate_stats.eliminated > 0 || gate_stats.penalized > 0 {
                 tracing::info!(
-                    "ðŸ›¡ï¸ Coherence Gate: {} eliminated, {} penalized of {} candidates",
+                    "🛡️ Coherence Gate: {} eliminated, {} penalized of {} candidates",
                     gate_stats.eliminated, gate_stats.penalized, gate_stats.total
                 );
             }
@@ -1048,7 +1048,7 @@ if let Some(cached) = cached_docs {
 
             let header = if gate_warning {
                 format!(
-                    "### Recall Results (Found {total_found}, Showing top {showing})\n\nâš ï¸ {} resultados filtrados por control de coherencia\n\n",
+                    "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
                     gate_stats.eliminated + gate_stats.penalized
                 )
             } else {
@@ -1133,9 +1133,9 @@ if let Some(cached) = cached_docs {
 
             let using_embeddings = server.matcher.engine().is_some();
             let footer = if using_embeddings {
-                "\n\n---\nðŸ” BÃºsqueda: semÃ¡ntica (BGE-M3)"
+                "\n\n---\n🔍 Búsqueda: semántica (BGE-M3)"
             } else {
-                "\n\n---\nâš ï¸ BÃºsqueda: solo texto (embeddings no cargados)"
+                "\n\n---\n⚠️ Búsqueda: solo texto (embeddings no cargados)"
             };
             let prefix = session_context.unwrap_or_default();
             let full_summary = format!("{prefix}{summary}{footer}");
@@ -1584,5 +1584,32 @@ mod tests {
 
         // Eager embedding should NOT have been evaluated into query_embed_cache on cache hit
         assert!(server.silva.query_embed_cache.get(query).is_none(), "query_embed_cache must not have an entry because eager embed was skipped on cache hit");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_recall_output_encoding_no_mojibake() {
+        let server = test_server().await;
+        let query = "encoding regression test query";
+
+        // Upsert a test node matching query
+        server.silva.upsert_node("enc_node_1", "concept", "encoding regression test query content probando codificacion UTF-8", "{}").await.unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String(query.to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        assert!(!result.is_error.unwrap_or(false));
+        let text = result.content[0].as_text().unwrap();
+        let content = &text.text;
+
+        // Verify absence of double-encoded mojibake artifacts
+        assert!(!content.contains("âš"), "Output must not contain mojibake 'âš': {content}");
+        assert!(!content.contains("BÃºsqueda"), "Output must not contain mojibake 'BÃºsqueda': {content}");
+        assert!(!content.contains("ðŸ"), "Output must not contain mojibake 'ðŸ': {content}");
+
+        // Verify presence of clean UTF-8 strings
+        assert!(content.contains("Búsqueda"), "Output must contain clean 'Búsqueda': {content}");
+        // When embeddings are not loaded in in-memory test_server, footer contains clean warning emoji and text
+        assert!(content.contains("⚠️"), "Output must contain clean warning emoji ⚠️: {content}");
+        assert!(content.contains("solo texto"), "Output should indicate text-only search when matcher engine is None");
     }
 }
