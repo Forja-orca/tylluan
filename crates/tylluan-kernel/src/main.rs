@@ -2286,14 +2286,17 @@ async fn run_night_consolidation_loop(
         matcher,
     };
 
-    // .max(1): a configured 0 would make tokio::time::interval panic on a
-    // zero-duration interval, silently killing this loop for the process
-    // lifetime — same guard as max_parallel_override.max(1) applied above.
-    let mut interval = tokio::time::interval(Duration::from_secs(night_config.interval_secs.max(1)));
-    loop {
-        interval.tick().await;
-        orchestrator.run_all(&ctx).await;
-    }
+    // AG-9: Subsequent cycles must not start until interval_secs (with a safe minimum
+    // repose floor of 60s) has elapsed DESDE EL FIN del ciclo anterior, preventing the
+    // continuous chaining of heavy phases in the same second without repose.
+    let repose = Duration::from_secs(
+        night_config.interval_secs.max(tylluan_kernel::memory::night::MIN_NIGHT_CONSOLIDATION_REPOSE_SECS)
+    );
+    tylluan_kernel::memory::night::run_night_consolidation_loop_with_repose(
+        orchestrator,
+        ctx,
+        repose,
+    ).await;
 }
 
 /// Check if a fastembed model is already cached locally (avoids blocking startup on download).
