@@ -62,7 +62,7 @@ cargo run -p tylluan-cli -- start
 
 ### Process Isolation Rule
 **Never start a second kernel from the same working directory as an active running kernel.**
-If the default port (`47004`) is occupied, the kernel detects `data/active_port.json` and manages port binding. For multiple instances or isolated testing environments, assign an independent directory, distinct config (`tylluan.toml`), explicit `TYLLUAN_DATA_DIR`, and dedicated `--port`.
+If the configured port (`47004` by default) is occupied, the kernel retries that port for the configured window and then **fails with a clear error**; it does not silently choose another port. For multiple instances or isolated testing environments, assign an independent directory, distinct config (`tylluan.toml`), explicit `TYLLUAN_DATA_DIR`, and dedicated `--port`.
 
 ---
 
@@ -91,11 +91,13 @@ tylluan-cli install --profile server
 Tylluan natively speaks MCP over HTTP Server-Sent Events (`/sse`) and Streamable HTTP (`/messages`).
 
 ### Authentication
-With `dev_mode = false` (the default), the kernel generates a random bearer token on first boot if none is set and writes it to `.tylluan-token` in the kernel directory:
+With `dev_mode = false` (the default), the kernel generates a random bearer token on first boot if none is set and writes it to `.tylluan-token` in the **current working directory of the kernel process** (the directory you started it from):
 
 ```bash
 cat .tylluan-token
 ```
+
+If you started the kernel from `~/.tylluan`, the file is `~/.tylluan/.tylluan-token`.
 
 ### Client Configuration (Claude Desktop, OpenCode, Cursor)
 

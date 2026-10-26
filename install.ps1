@@ -3,7 +3,8 @@
 # Usage: irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
 param(
-    [string]$Version = "latest"
+    [string]$Version = "latest",
+    [switch]$NoStart
 )
 
 # Execution Policy guard - detect Restricted/AllSigned before anything else
@@ -27,8 +28,8 @@ function Write-Err($Text)  { Write-Host "FAIL $Text" -ForegroundColor Red; exit 
 $Arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 switch ($Arch) {
     "AMD64"  { $Target = "x86_64-pc-windows-msvc" }
-    "ARM64"  { $Target = "aarch64-pc-windows-msvc" }
-    default { Write-Err "Unsupported architecture: $Arch. Tylluan supports x86_64 and ARM64 on Windows." }
+    "ARM64"  { Write-Err "Windows ARM64 is not supported by the published releases yet. Use an x86_64 Windows machine or build from source: docs/getting-started/QUICKSTART.md" }
+    default { Write-Err "Unsupported architecture: $Arch. Tylluan releases support x86_64 on Windows." }
 }
 
 Write-Host "=== Tylluan Installer ===" -ForegroundColor White
@@ -134,12 +135,40 @@ try {
     Write-Err "Download failed: $_"
 }
 
-Write-Step "Extracting..."
+Write-Step "Extracting and verifying..."
+$Stage = Join-Path ([System.IO.Path]::GetTempPath()) ("tylluan-stage-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $Stage -Force | Out-Null
 try {
-    tar -xzf $OutFile -C $BinDir --strip-components=1
+    tar -xzf $OutFile -C $Stage --strip-components=1
 } catch {
+    Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
     Write-Err "Extraction failed. Ensure tar is available (Windows 10 1803+ or install 7zip)."
 }
+$Checks = Join-Path $Stage "checksums.txt"
+if (-not (Test-Path $Checks)) {
+    Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Err "Release archive has no checksums.txt; refusing to install unverified binaries."
+}
+$BadChecksum = $false
+foreach ($Line in Get-Content $Checks) {
+    if ($Line -match '^([0-9A-Fa-f]{64})\s+\*?(.+)$') {
+        $Want = $Matches[1].ToLowerInvariant()
+        $Name = $Matches[2].Trim()
+        $File = Join-Path $Stage $Name
+        if (-not (Test-Path $File)) {
+            $BadChecksum = $true
+            continue
+        }
+        $Got = (Get-FileHash -Algorithm SHA256 -LiteralPath $File).Hash.ToLowerInvariant()
+        if ($Got -ne $Want) { $BadChecksum = $true }
+    }
+}
+if ($BadChecksum) {
+    Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Err "SHA-256 verification failed; refusing to install."
+}
+Copy-Item -Path (Join-Path $Stage "*") -Destination $BinDir -Recurse -Force
+Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $OutFile -Force
 
 $UserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
@@ -157,55 +186,94 @@ if ($PathEntries -notcontains $BinDir) {
 # config already exists it refuses without --force, so start directly --
 # from the config dir, otherwise the kernel would not discover the file.
 $ConfigPath = Join-Path $DataDir "tylluan.toml"
-if (Test-Path $ConfigPath) {
-    Write-Step "Existing tylluan.toml found - keeping it. Starting kernel..."
-    try {
-        $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start" -WorkingDirectory $DataDir -NoNewWindow -PassThru -ErrorAction Stop
-    } catch {
-        Write-Err "Failed to start Tylluan: $_"
-    }
-} else {
-    Write-Step "Installing portable profile (writes tylluan.toml + starts kernel)..."
-    & "$BinDir\tylluan-cli" install --profile portable
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
-    }
-}
-
-Write-Step "Waiting for kernel to be ready..."
-$Ready = $false
-$ErrorCount = 0
-for ($i = 0; $i -lt 30; $i++) {
-    try {
-        $Response = Invoke-WebRequest -Uri "http://127.0.0.1:47004/health" -UseBasicParsing -ErrorAction Stop
-        if ($Response.StatusCode -eq 200) {
-            $Ready = $true
-            break
-        }
-    } catch {
-        $ErrorCount++
-    }
-    Write-Host "." -NoNewline
-    Start-Sleep -Seconds 1
-}
-Write-Host ""
-if (-not $Ready) {
-    Write-Err "Kernel did not start within 30 seconds. Check $DataDir\logs\"
-}
-
-# Verify the binary responds
-$Status = & "$BinDir\tylluan-cli" status 2>&1
 $DisplayVer = if ($Version -eq "latest" -or -not $Version) { "latest" } else { "v$Version" }
-if ($LASTEXITCODE -eq 0) {
-    Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:47004"
-    Write-Host ""
-    Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
-    Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
-    Write-Host "  Config:    $ConfigPath" -ForegroundColor Cyan
-    Write-Host "  Logs:      $DataDir\logs\" -ForegroundColor Cyan
+$KernelDataDir = if ($env:TYLLUAN_DATA_DIR) { $env:TYLLUAN_DATA_DIR } else { Join-Path $DataDir "data" }
+$PidFile = Join-Path $KernelDataDir "tylluan-nexus.pid"
+$OldPid = $null
+if (Test-Path $PidFile) {
+    $OldRaw = Get-Content $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($OldRaw -match '^\d+$') { $OldPid = [int]$OldRaw }
+}
+if ($NoStart) {
+    if (Test-Path $ConfigPath) {
+        Write-Step "Existing tylluan.toml found - keeping it. Kernel not started (--no-start)."
+    } else {
+        Write-Step "Installing portable profile (writes tylluan.toml, no start)..."
+        & "$BinDir\tylluan-cli" install --profile portable --no-start
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
+        }
+    }
+    Write-OK "Tylluan $DisplayVer installed to $BinDir (kernel not started, --no-start)"
 } else {
-    Write-Warning "'tylluan-cli status' returned error (try in a new terminal): $Status"
-    Write-OK "Tylluan $DisplayVer installed to $BinDir (kernel may need manual start)"
+    if (Test-Path $ConfigPath) {
+        Write-Step "Existing tylluan.toml found - keeping it. Starting kernel..."
+        try {
+            $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start" -WorkingDirectory $DataDir -NoNewWindow -PassThru -ErrorAction Stop
+        } catch {
+            Write-Err "Failed to start Tylluan: $_"
+        }
+    } else {
+        Write-Step "Installing portable profile (writes tylluan.toml + starts kernel)..."
+        & "$BinDir\tylluan-cli" install --profile portable
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
+        }
+    }
+
+    $KernelPid = $null
+    for ($i = 0; $i -lt 30; $i++) {
+        if (Test-Path $PidFile) {
+            $RawPid = Get-Content $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($RawPid -match '^\d+$') {
+                $KernelPid = [int]$RawPid
+                if (Get-Process -Id $KernelPid -ErrorAction SilentlyContinue) { break }
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $KernelPid) {
+        Write-Err "Kernel did not write a live PID file at $PidFile. Check $DataDir\logs\"
+    }
+    if ($OldPid -and $KernelPid -eq $OldPid) {
+        Write-Err "PID file still points to the previous kernel (PID $OldPid); refusing to report success."
+    }
+
+    Write-Step "Waiting for kernel to be ready..."
+    $Ready = $false
+    $ErrorCount = 0
+    for ($i = 0; $i -lt 30; $i++) {
+        try {
+            $Response = Invoke-WebRequest -Uri "http://127.0.0.1:47004/health" -UseBasicParsing -ErrorAction Stop
+            if ($Response.StatusCode -eq 200) {
+                if (-not (Get-Process -Id $KernelPid -ErrorAction SilentlyContinue)) {
+                    Write-Err "Port 47004 answers but PID $KernelPid is not alive: another kernel is occupying it."
+                }
+                Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:47004 (PID $KernelPid)"
+                $Ready = $true
+                break
+            }
+        } catch {
+            $ErrorCount++
+        }
+        Write-Host "." -NoNewline
+        Start-Sleep -Seconds 1
+    }
+    Write-Host ""
+    if (-not $Ready) {
+        Write-Err "Kernel did not start within 30 seconds. Check $DataDir\logs\"
+    }
+
+    $Status = & "$BinDir\tylluan-cli" status 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ""
+        Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
+        Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
+        Write-Host "  Config:    $ConfigPath" -ForegroundColor Cyan
+        Write-Host "  Logs:      $DataDir\logs\" -ForegroundColor Cyan
+    } else {
+        Write-Warning "'tylluan-cli status' returned error (try in a new terminal): $Status"
+    }
 }
 
 Write-Host ""
@@ -232,11 +300,11 @@ Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
 Write-Host "  tylluan-cli download-models"
 Write-Host ""
 
-# -- Python guilds (optional - the 46 Python tool plugins) --------------
+# -- Python guilds (optional - the 45 Python tool plugins) --------------
 # Detection only: NEVER pip-install into the user's system Python from an
 # installer (it mutates the user's environment without consent, and PEP 668
 # blocks it on major Linux distros anyway). Print the exact command instead.
-Write-Host "Python guilds (46 tools, optional):" -ForegroundColor White
+Write-Host "Python guilds (45 tools, optional):" -ForegroundColor White
 $GuildPy = $null
 foreach ($Cand in @("python", "python3")) {
     $Cmd = Get-Command $Cand -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -263,8 +331,8 @@ if (-not $GuildPy) {
         if ($LASTEXITCODE -eq 0) {
             Write-Host "  $Ver + guild deps OK" -ForegroundColor Green
         } else {
-            $ReqDir = "https://raw.githubusercontent.com/Forja-orca/tylluan/main/guilds"
-            if (Test-Path "guilds\requirements.txt") { $ReqDir = "guilds" }
+            $ReqDir = Join-Path $BinDir "guilds"
+            if (-not (Test-Path (Join-Path $ReqDir "requirements.txt"))) { $ReqDir = "guilds" }
             Write-Host "  $Ver found, guild deps missing. Install them with:" -ForegroundColor Yellow
             Write-Host "    $GuildPy -m pip install -r $ReqDir/requirements.txt" -ForegroundColor Yellow
         }

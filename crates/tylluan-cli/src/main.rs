@@ -120,6 +120,9 @@ enum Commands {
         /// Overwrite existing tylluan.toml if present
         #[arg(long)]
         force: bool,
+        /// Write the config but do not start the kernel
+        #[arg(long)]
+        no_start: bool,
     },
     /// Check for updates and auto-update Tylluan binary
     Update {
@@ -640,7 +643,7 @@ async fn main() -> Result<()> {
                 }
             }
         },
-        Commands::Install { profile, dir, force } => {
+        Commands::Install { profile, dir, force, no_start } => {
             let install_dir = dir.unwrap_or_else(|| {
                 let home = std::env::var_os("HOME")
                     .or_else(|| std::env::var_os("USERPROFILE"))
@@ -684,6 +687,11 @@ async fn main() -> Result<()> {
                 println!("✅ Model download complete.");
             } else {
                 println!("   BM25-only mode. No downloads needed.");
+            }
+
+            if no_start {
+                println!("Kernel not started (--no-start).");
+                return Ok(());
             }
 
             println!("🚀 Starting Tylluan kernel...");
