@@ -8,7 +8,7 @@
       "nombre": "Seguridad",
       "frente": "seguridad",
       "estado": "ambar",
-      "falta": "Cierre: ADR-024 (A4, D1, B1, A1, C3), C1 y dev_mode=false, trust.rs:34, release v0.17.2. Congelada salvo hallazgo critico.",
+      "falta": "Cierre: ADR-024 (A4, D1, B1, A1, C3), C1 y dev_mode=false, trust.rs:34, release v0.17.2. NO congelada: frente activo. Deep y Buffy son los agentes de seguridad, el TL y Jose los mueven; cada tarea por Coloquio Y cola.",
       "dueno": "Buffy y Deep; decide Jose"
     },
     {
