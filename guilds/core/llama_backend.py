@@ -176,6 +176,11 @@ def _read_external_providers():
     return results
 
 
+def _autodiscovery_enabled():
+    """Legacy port auto-discovery is opt-in (TYLLUAN_LLM_AUTODISCOVER=1)."""
+    return os.environ.get("TYLLUAN_LLM_AUTODISCOVER", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _reload_external_providers():
     """Reload external provider config from tylluan.toml at most once per 60s."""
     global _EXTERNAL_PROVIDERS, _EXTERNAL_API_BASE, _EXTERNAL_PROVIDERS_LOADED_TS
@@ -206,7 +211,14 @@ def _reload_external_providers():
                 return
             sys.stderr.write(f"[llama_backend] {env_var}={val} set but not reachable at {normalized}, ignoring\n")
 
-    # Auto-discovery on common ports (legacy)
+    # Auto-discovery on common ports (legacy). OFF by default: it silently
+    # hooked Tylluan onto another app's server (e.g. a user's LM Studio on
+    # 1234), polling it and sending the kernel judge's prompts to whatever
+    # model it had loaded first. Opt in with TYLLUAN_LLM_AUTODISCOVER=1 or
+    # configure [[external_providers]] / the env vars above.
+    if not _autodiscovery_enabled():
+        _EXTERNAL_PROVIDERS_LOADED_TS = now
+        return
     import urllib.request as _urllib
     for port in [11434, 1234, 8000]:
         try:
@@ -346,7 +358,7 @@ def _detect_external_backend():
     Priority order:
     1. [[external_providers]] from tylluan.toml (first reachable provider)
     2. Legacy env vars (OPENAI_BASE_URL, LITELLM_API_BASE, OLLAMA_HOST)
-    3. Auto-discovery on common ports (11434, 1234, 8000)
+    3. Auto-discovery on common ports (11434, 1234, 8000) -- OPT-IN only (TYLLUAN_LLM_AUTODISCOVER=1)
     """
     _reload_external_providers()
     return _EXTERNAL_API_BASE
