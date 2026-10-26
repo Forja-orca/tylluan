@@ -424,6 +424,7 @@ jobs:
           cargo test -p tylluan-kernel --test regression_origin_host_outside_crate
           cargo test -p tylluan-kernel --test whoami_endpoint_test
           cargo test -p tylluan-kernel --test cycle_closeout_memory
+          cargo test -p tylluan-kernel --test mojibake_tripwire_test
 
   desktop-tauri-check:
     name: Desktop — Tauri shell check

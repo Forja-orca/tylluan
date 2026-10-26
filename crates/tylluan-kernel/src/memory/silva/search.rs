@@ -43,7 +43,7 @@ pub struct SearchMeta {
 
 impl super::SilvaDB {
     /// Pure Rust vector cosine similarity search on the graph.
-    /// Fast path: HNSW â†’ IVF â†’ linear fallback.
+    /// Fast path: HNSW → IVF → linear fallback.
     pub async fn search_vector(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(GraphNode, f32)>> {
         // Fast path: HNSW if index is built (approximate, best for large datasets)
         let hnsw_result = self.search_vector_hnsw(query_embedding, limit).await;
@@ -186,7 +186,7 @@ impl super::SilvaDB {
     }
 
     /// Linear vector search (fallback when IVF not available)
-    /// Protected by circuit breaker â€” records success/failure for resilience.
+    /// Protected by circuit breaker — records success/failure for resilience.
     async fn search_vector_linear(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(GraphNode, f32)>> {
         if self.cb_vector.check("vector_search").open {
             return Err(anyhow::anyhow!("Vector search circuit breaker is open"));
@@ -290,7 +290,7 @@ impl super::SilvaDB {
     }
 
     /// Optimized IVF (Inverted File Index) search using the in-memory mmap store.
-    /// Protected by circuit breaker â€” falls back to linear search on open, and
+    /// Protected by circuit breaker — falls back to linear search on open, and
     /// records success/failure to prevent cascading ONNX/search failures.
     pub async fn search_vector_ivf(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(GraphNode, f32)>> {
         if self.cb_vector.check("vector_search").open {
@@ -420,7 +420,7 @@ impl super::SilvaDB {
         let mut vector_results = Vec::new();
         if let Some(emb) = query_embedding {
             // Embedding caching lives at the callers (api_memory, think,
-            // autolink...) via query_embed_cache.get_or_embed BEFORE embed() â€”
+            // autolink...) via query_embed_cache.get_or_embed BEFORE embed() —
             // a post-hoc cache here can't skip the ONNX cost (see ff205b1
             // history). search_hybrid just consumes the passed embedding.
             vector_results = self.search_vector_ivf(emb, limit).await.unwrap_or_default();
@@ -463,7 +463,7 @@ impl super::SilvaDB {
 
         // Learned-sparse source (BGE-M3 sparse head, opt-in via hybrid_sparse_enabled).
         // Works even without a query embedding (text-only mode) since it needs only
-        // the raw query. Nodes with no stored sparse vector are simply absent â€”
+        // the raw query. Nodes with no stored sparse vector are simply absent —
         // graceful degradation to the pre-existing 3-source fusion.
         if let Some(sparse_engine) = self.sparse_engine_ref()
             && let Ok(qsv) = tokio::task::block_in_place(|| sparse_engine.embed(query))
@@ -573,7 +573,7 @@ impl super::SilvaDB {
         // Honest abstention (opt-in): if the floor is set and even the top
         // fused score is below it, return "no sufficiently relevant memory"
         // instead of forcing noise through as memory. Logged with its own
-        // reason so negative memory distinguishes empty from weak â€” guarded
+        // reason so negative memory distinguishes empty from weak — guarded
         // below so the generic 'empty' insert doesn't also fire and blur
         // that distinction.
         let mut abstained = false;
@@ -598,14 +598,14 @@ impl super::SilvaDB {
                         )
                     });
                     tracing::info!(gen_ai.operation.name = "retrieval",
-                        "recall: honest abstention â€” top fused score {top:.4} below floor {:.3}", floor as f64 / 1000.0);
+                        "recall: honest abstention — top fused score {top:.4} below floor {:.3}", floor as f64 / 1000.0);
                     results.clear();
                     abstained = true;
                 }
             }
         }
-        // Memoria negativa: record that this query found nothing. Hash only â€”
-        // raw queries may carry personal data (soberanÃ­a). This is the seed of
+        // Memoria negativa: record that this query found nothing. Hash only —
+        // raw queries may carry personal data (soberanía). This is the seed of
         // "what was searched and not found" so learning isn't biased toward
         // what survived the pipeline. Skipped when abstention already logged
         // its own more specific reason above, so one recall never writes two
@@ -632,7 +632,7 @@ impl super::SilvaDB {
 
     /// Stage-1 body shared by the cascade and the diagnostic probe: fuse
     /// FTS5 + learned-sparse lexically with per-source bits (1=fts, 2=sparse,
-    /// 3=both), sorted by fused score desc, truncated to 2Ã—limit.
+    /// 3=both), sorted by fused score desc, truncated to 2×limit.
     async fn lexical_stage1_fuse(
         &self,
         query: &str,
@@ -694,11 +694,11 @@ impl super::SilvaDB {
     /// Stage 2 (full): embed via the installed dense engine (query_embed_cache-
     /// backed) and run the standard 4-source `search_hybrid_for_recall`.
     ///
-    /// Returns (results, Option<embedding>) â€” callers forward the embedding to
+    /// Returns (results, Option<embedding>) — callers forward the embedding to
     /// downstream consumers (CoherenceGate) so a stage-2 hit keeps full parity.
     /// A stage-1 hit returns None there; that matches BM25-only-mode behavior.
     ///
-    /// Degraded mode: cascade enabled but dense engine never installed â†’ warn +
+    /// Degraded mode: cascade enabled but dense engine never installed → warn +
     /// lexical-only results (resilient; visible in logs, opt-in feature).
     pub async fn search_recall_cascade(
         &self,
@@ -726,7 +726,7 @@ impl super::SilvaDB {
         type_filter: Option<&str>,
         include_archived: bool,
     ) -> Result<(Vec<(GraphNode, f32)>, Option<Vec<f32>>)> {
-        // â”€â”€ Stage 1: lexical-only fusion with per-source agreement tracking â”€â”€
+        // ── Stage 1: lexical-only fusion with per-source agreement tracking ──
         let lexical = self.lexical_stage1_fuse(query, qsv, limit).await?;
 
         let agreement = lexical.iter().filter(|(_, _, src)| *src == 3).count();
@@ -737,14 +737,14 @@ impl super::SilvaDB {
             results.truncate(limit);
             tracing::info!(
                 gen_ai.operation.name = "retrieval",
-                "cascade: stage-1 hit (agreement={agreement}, total={}) â€” dense embed skipped", results.len()
+                "cascade: stage-1 hit (agreement={agreement}, total={}) — dense embed skipped", results.len()
             );
             return Ok((results, None));
         }
 
-        // â”€â”€ Stage 2: full fusion with a freshly-obtained dense embedding â”€â”€
+        // ── Stage 2: full fusion with a freshly-obtained dense embedding ──
         let Some(engine) = self.dense_engine_ref() else {
-            tracing::warn!("cascade enabled but no dense engine installed â€” degrading to lexical-only results");
+            tracing::warn!("cascade enabled but no dense engine installed — degrading to lexical-only results");
             let mut results: Vec<(GraphNode, f32)> =
                 lexical.into_iter().map(|(n, s, _)| (n, s)).collect();
             self.apply_recall_filters(&mut results, type_filter, include_archived).await?;
@@ -760,7 +760,7 @@ impl super::SilvaDB {
     }
 
     /// Shared post-fusion filters for the cascade paths (quarantine ASI06 +
-    /// lifecycle archived + optional type filter) â€” same policy as the
+    /// lifecycle archived + optional type filter) — same policy as the
     /// standard recall path.
     async fn apply_recall_filters(
         &self,
@@ -1062,7 +1062,7 @@ impl super::SilvaDB {
 /// Stage-1 gate for the recall cascade: pass to lexical-only results iff the
 /// two independent lexical signals (FTS5 + learned-sparse) agree on at least
 /// `CASCADE_MIN_AGREEMENT` nodes AND stage 1 filled at least half the budget.
-/// Agreement of independent signals is the relevance proxy â€” this is why RRF
+/// Agreement of independent signals is the relevance proxy — this is why RRF
 /// works at all; a single-source hit is never trusted to skip the dense path.
 pub(crate) const CASCADE_MIN_AGREEMENT: usize = 3;
 
@@ -1161,13 +1161,13 @@ mod cascade_tests {
 
     #[test]
     fn cascade_gate_requires_both_conditions() {
-        // Fewer than CASCADE_MIN_AGREEMENT dual-source hits â†’ never pass.
+        // Fewer than CASCADE_MIN_AGREEMENT dual-source hits → never pass.
         assert!(!cascade_gate(0, 20, 10));
         assert!(!cascade_gate(2, 20, 10));
-        // Enough agreement but stage 1 did not fill half the budget â†’ no pass.
+        // Enough agreement but stage 1 did not fill half the budget → no pass.
         assert!(!cascade_gate(3, 2, 10));
         assert!(!cascade_gate(4, 4, 10));
-        // Both conditions met â†’ pass.
+        // Both conditions met → pass.
         assert!(cascade_gate(3, 5, 10));
         assert!(cascade_gate(4, 10, 8));
         // Tiny limit: total >= max(limit/2, 1).
@@ -1194,7 +1194,7 @@ mod cascade_tests {
     async fn cascade_stage1_hit_skips_dense_and_returns_none_embedding() {
         let db = SilvaDB::in_memory().await.unwrap();
         seed_agreeing_nodes(&db).await;
-        // Manual sparse signatures that all overlap the canned query vector â€”
+        // Manual sparse signatures that all overlap the canned query vector —
         // no ONNX model needed: agreement comes from injected vectors.
         let sv = SparseVec { indices: vec![10, 11, 12], values: vec![1.0, 1.0, 1.0] };
         for i in 0..4 {
@@ -1217,7 +1217,7 @@ mod cascade_tests {
     async fn cascade_without_sparse_agreement_degrades_gracefully_without_dense_engine() {
         let db = SilvaDB::in_memory().await.unwrap();
         seed_agreeing_nodes(&db).await;
-        // Disjoint sparse signature: FTS matches but sparse never agrees â†’ gate fails.
+        // Disjoint sparse signature: FTS matches but sparse never agrees → gate fails.
         let disjoint = SparseVec { indices: vec![777], values: vec![1.0] };
         for i in 0..4 {
             db.save_sparse_embedding(&format!("q{i}"), &disjoint).await.unwrap();

@@ -1660,7 +1660,7 @@ pub async fn maintenance_export_handler(State(state): State<Arc<HttpState>>) -> 
 }
 
 pub async fn maintenance_purge_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    tracing::warn!("âš ï¸ MANUAL PURGE REQUESTED via dashboard.");
+    tracing::warn!("⚠️ MANUAL PURGE REQUESTED via dashboard.");
     let conn = Arc::clone(&state.silva.conn_lock());
     let result = tokio::task::spawn_blocking(move || {
         let conn = conn.blocking_lock();
@@ -1672,8 +1672,8 @@ pub async fn maintenance_purge_handler(State(state): State<Arc<HttpState>>) -> i
         Ok::<_, anyhow::Error>(())
     }).await;
     match result {
-        Ok(Ok(_)) => { tracing::info!("âœ… SilvaDB purged successfully."); StatusCode::OK }
-        _ => { tracing::error!("âŒ SilvaDB purge failed"); StatusCode::INTERNAL_SERVER_ERROR }
+        Ok(Ok(_)) => { tracing::info!("✅ SilvaDB purged successfully."); StatusCode::OK }
+        _ => { tracing::error!("❌ SilvaDB purge failed"); StatusCode::INTERNAL_SERVER_ERROR }
     }
 }
 

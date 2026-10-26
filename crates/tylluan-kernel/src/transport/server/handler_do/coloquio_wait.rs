@@ -6,15 +6,15 @@
 //! early-return prefix in `handler_do`.
 //!
 //! Design per Antigravity's research (docs/architecture/coloquio_long_poll_research.md):
-//! 1. Fast path â€” DB cursor check (`since_turn`): messages that already exist
+//! 1. Fast path — DB cursor check (`since_turn`): messages that already exist
 //!    answer immediately (anti-race, 0ms).
-//! 2. Subscription â€” `TylluanServer.notifier` (the same broadcast channel the
+//! 2. Subscription — `TylluanServer.notifier` (the same broadcast channel the
 //!    HTTP post handler publishes `coloquio:new_turn` on).
-//! 3. Race â€” `tokio::select!` between broadcast recv (filtered) and the
+//! 3. Race — `tokio::select!` between broadcast recv (filtered) and the
 //!    timeout. Graceful timeout: structured JSON, never an error result.
-//! 4. Lagged recovery â€” a missed batch is re-read from SQLite, never lost.
+//! 4. Lagged recovery — a missed batch is re-read from SQLite, never lost.
 //!
-//! Zero orphan tasks: the whole wait lives inside the request Future â€” if the
+//! Zero orphan tasks: the whole wait lives inside the request Future — if the
 //! client disconnects, the runtime drops it and the subscription dies with it.
 
 use super::coloquio_utils::parse_coloquio_wait;
@@ -87,7 +87,7 @@ pub async fn coloquio_wait_core(
     mentions_only: bool,
     agent_id: Option<&str>,
 ) -> CallToolResult {
-    // Phase 1 â€” fast path: messages that already exist answer immediately.
+    // Phase 1 — fast path: messages that already exist answer immediately.
     match coloquio.get_messages_since(channel, since_turn, WAIT_MESSAGES_LIMIT).await {
         Ok(msgs) if !msgs.is_empty() => {
             let last = msgs.last().map(|m| m.turn).unwrap_or(since_turn);
@@ -110,13 +110,13 @@ pub async fn coloquio_wait_core(
         }
     }
 
-    // Phase 2 â€” subscription; no notifier wired means the wait cannot fire.
+    // Phase 2 — subscription; no notifier wired means the wait cannot fire.
     let Some(tx) = notifier else {
         return super::error_result("coloquio wait: no broadcast notifier wired in this kernel build");
     };
     let mut rx = tx.subscribe();
 
-    // Phase 3 â€” race between filtered broadcast events and the timeout.
+    // Phase 3 — race between filtered broadcast events and the timeout.
     let deadline = tokio::time::Instant::now() + timeout_dur;
     loop {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
@@ -195,7 +195,7 @@ pub async fn coloquio_wait_core(
         }
     }
 
-    // Phase 4 â€” graceful timeout: structured JSON, never an error result.
+    // Phase 4 — graceful timeout: structured JSON, never an error result.
     let payload = serde_json::json!({
         "status": "timeout",
         "channel_id": channel,

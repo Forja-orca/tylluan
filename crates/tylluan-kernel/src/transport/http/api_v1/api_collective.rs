@@ -80,7 +80,7 @@ pub async fn collective_timeline_handler(
         Ok(serde_json::json!({
             "id": format!("{}_{}", node_id, ts),
             "type": trace_type,
-            "content": format!("Agente {} interactuÃ³ con {} ({})", agent_id, node_id, trace_type),
+            "content": format!("Agente {} interactuó con {} ({})", agent_id, node_id, trace_type),
             "weight": 1.0,
             "updated_at": chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.to_rfc3339()).unwrap_or_default(),
         }))
