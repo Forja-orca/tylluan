@@ -714,10 +714,8 @@ if let Some(cached) = cached_docs {
         }
 
         let header = if gate_warning {
-            format!(
-                "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
-                gate_stats.eliminated + gate_stats.penalized
-            )
+            let warning_msg = gate_stats.format_warning_details();
+            format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n{warning_msg}\n\n")
         } else {
             format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
         };
@@ -1047,10 +1045,8 @@ if let Some(cached) = cached_docs {
             }
 
             let header = if gate_warning {
-                format!(
-                    "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
-                    gate_stats.eliminated + gate_stats.penalized
-                )
+                let warning_msg = gate_stats.format_warning_details();
+                format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n{warning_msg}\n\n")
             } else {
                 format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
             };
@@ -1611,5 +1607,60 @@ mod tests {
         // When embeddings are not loaded in in-memory test_server, footer contains clean warning emoji and text
         assert!(content.contains("⚠️"), "Output must contain clean warning emoji ⚠️: {content}");
         assert!(content.contains("solo texto"), "Output should indicate text-only search when matcher engine is None");
+    }
+
+    #[test]
+    fn test_gate_stats_format_warning_details() {
+        use crate::security::coherence_gate::GateStats;
+
+        // 1. All layers flagged
+        let stats_full = GateStats {
+            total: 10,
+            eliminated: 2,
+            penalized: 5,
+            penalized_nodes: Vec::new(),
+            pattern_eliminated: 2,
+            provenance_penalized: 2,
+            semantic_penalized: 3,
+        };
+        assert!(stats_full.should_warn());
+        let msg = stats_full.format_warning_details();
+        assert_eq!(
+            msg,
+            "⚠️ 7 resultados filtrados por control de coherencia (2 eliminados por patrón, 2 penalizados por procedencia, 3 penalizados por deriva semántica)"
+        );
+
+        // 2. Only semantic penalized
+        let stats_sem = GateStats {
+            total: 10,
+            eliminated: 0,
+            penalized: 6,
+            penalized_nodes: Vec::new(),
+            pattern_eliminated: 0,
+            provenance_penalized: 0,
+            semantic_penalized: 6,
+        };
+        assert!(stats_sem.should_warn());
+        let msg_sem = stats_sem.format_warning_details();
+        assert_eq!(
+            msg_sem,
+            "⚠️ 6 resultados filtrados por control de coherencia (6 penalizados por deriva semántica)"
+        );
+
+        // 3. Fallback when parts is empty
+        let stats_zero_breakdown = GateStats {
+            total: 10,
+            eliminated: 3,
+            penalized: 3,
+            penalized_nodes: Vec::new(),
+            pattern_eliminated: 0,
+            provenance_penalized: 0,
+            semantic_penalized: 0,
+        };
+        let msg_zero = stats_zero_breakdown.format_warning_details();
+        assert_eq!(
+            msg_zero,
+            "⚠️ 6 resultados filtrados por control de coherencia"
+        );
     }
 }
