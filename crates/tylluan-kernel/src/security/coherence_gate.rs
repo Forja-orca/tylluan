@@ -1856,6 +1856,11 @@ mod judge_call_tests {
     }
 }
 // -- D-14/C1+C2: timeout coherente con la generacion medida + una sola ranura --
+/// Serializa los tests que adquieren el permiso del juez global (`JUDGE_SEMAPHORE`, 1 ranura):
+/// ninguno lo ve ocupado por otro test del mismo proceso (flakes bajo carga). Solo en tests.
+#[cfg(test)]
+static JUDGE_PERMIT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[cfg(test)]
 mod judge_concurrency_tests {
     use super::*;
@@ -1883,6 +1888,8 @@ mod judge_concurrency_tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn bounded_wait_skips_and_counts_instead_of_queueing_forever() {
+        // Serializa con los demas tests que usan el permiso global del juez.
+        let _serial = super::JUDGE_PERMIT_TEST_LOCK.lock().await;
         use crate::security::judge_telemetry::judge_telemetry;
 
         let permit = acquire_judge_permit(Duration::from_secs(10))
@@ -2038,6 +2045,8 @@ mod judge_dedup_tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn same_prompt_does_not_hit_the_model_twice() {
+        // Serializa con los demas tests que usan el permiso global del juez.
+        let _serial = super::JUDGE_PERMIT_TEST_LOCK.lock().await;
         let (base, calls) = spawn_counting_judge(vec![200, 200]).await;
         let prompt = unique_prompt("same");
 
@@ -2071,6 +2080,8 @@ mod judge_dedup_tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn failed_verdict_is_not_cached() {
+        // Serializa con los demas tests que usan el permiso global del juez.
+        let _serial = super::JUDGE_PERMIT_TEST_LOCK.lock().await;
         let (base, calls) = spawn_counting_judge(vec![500, 200]).await;
         let prompt = unique_prompt("retry");
 
