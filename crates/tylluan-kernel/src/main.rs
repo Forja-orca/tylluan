@@ -1356,6 +1356,7 @@ async fn main() -> anyhow::Result<()> {
     server.low_memory_mode = low_memory_mode;
     server.recall_cascade_enabled = config.silva.cascade_enabled;
     server.coherence_gate_hybrid_enabled = config.security.coherence_gate_hybrid_enabled;
+    server.coherence_gate_semantic_scope = config.security.coherence_semantic_scope.clone();
     server.deep_eval_enabled = config.eval.deep_eval_enabled;
     server.deep_eval_interval_hours = config.eval.deep_eval_interval_hours;
     server.slm_society_eval_enabled = config.eval.slm_society_eval_enabled;

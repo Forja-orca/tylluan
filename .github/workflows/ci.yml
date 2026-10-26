@@ -422,6 +422,7 @@ jobs:
           cargo test -p tylluan-kernel --test regression_d55_d56_outside_crate
           cargo test -p tylluan-kernel --test mcp_origin_guard
           cargo test -p tylluan-kernel --test regression_origin_host_outside_crate
+          cargo test -p tylluan-kernel --test whoami_endpoint_test
 
   desktop-tauri-check:
     name: Desktop — Tauri shell check

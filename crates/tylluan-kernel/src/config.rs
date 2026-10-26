@@ -1425,6 +1425,13 @@ pub struct SecurityConfig {
     /// default, "aunque demos 10000 opciones mÃ¡s".
     #[serde(default = "default_coherence_gate_hybrid_enabled")]
     pub coherence_gate_hybrid_enabled: bool,
+    /// T-DSH-96: alcance de la penalización semántica del CoherenceGate.
+    /// `"all"` (default) = comportamiento histórico (penaliza todo candidato
+    /// con coseno menor que 0.85); `"conflicting_top"` = solo candidatos con
+    /// score mayor o igual que la mediana del set, es decir "fuerte pero en
+    /// desacuerdo semántico con la query". Perfil nuevo opt-in: default igual.
+    #[serde(default = "default_coherence_semantic_scope")]
+    pub coherence_semantic_scope: String,
     /// D-32 — marca por PROCEDENCIA, apagada por defecto.
     ///
     /// Con `true`, todo nodo que entre por `POST /api/v1/silva/node` (la ruta de
@@ -1467,6 +1474,7 @@ fn default_encrypt_at_rest() -> bool {
 fn default_intent_filter() -> bool { true }
 fn default_capabilities_enforce() -> bool { false }
 fn default_coherence_gate_hybrid_enabled() -> bool { false }
+fn default_coherence_semantic_scope() -> String { "all".to_string() }
 fn default_mark_uploads_untrusted() -> bool { false }
 fn default_judge_dedup_window_secs() -> u64 { 60 }
 fn default_judge_dedup_max_entries() -> usize { 256 }
@@ -1480,6 +1488,7 @@ impl Default for SecurityConfig {
             acl: AclConfig::default(),
             encrypt_at_rest: default_encrypt_at_rest(),
             coherence_gate_hybrid_enabled: default_coherence_gate_hybrid_enabled(),
+            coherence_semantic_scope: default_coherence_semantic_scope(),
             mark_uploads_untrusted: default_mark_uploads_untrusted(),
             judge_model: None,
             judge_dedup_window_secs: default_judge_dedup_window_secs(),

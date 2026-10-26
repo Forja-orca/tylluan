@@ -78,6 +78,10 @@ pub struct TylluanServer {
     /// agent. Contributed to a 4-day Unsloth training run being killed
     /// (Jose, 2026-08-28).
     pub coherence_gate_hybrid_enabled: bool,
+    /// T-DSH-96: alcance de la penalización semántica del CoherenceGate
+    /// ([security] coherence_semantic_scope). Default `"all"` = comportamiento
+    /// histórico; `"conflicting_top"` es opt-in (solo fuertes en desacuerdo).
+    pub coherence_gate_semantic_scope: String,
     /// Opt-in gate for the DeepEvalPhase night phase ([eval] deep_eval_enabled).
     /// Defaults to false: the phase runs the J-6/J-7 DeepEval pilot as a
     /// subprocess whose llama_backend judge can auto-start a real
@@ -169,6 +173,7 @@ impl TylluanServer {
             low_memory_mode: false,
             recall_cascade_enabled: false,
             coherence_gate_hybrid_enabled: false,
+            coherence_gate_semantic_scope: "all".to_string(),
             deep_eval_enabled: false,
             deep_eval_interval_hours: 24,
             slm_society_eval_enabled: false,
