@@ -312,5 +312,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // already written against these exact field names.
         .route("/api/v1/memory/quarantine", get(quarantine_list_handler))
         .route("/api/v1/memory/quarantine/{id}/release", post(quarantine_release_handler))
+
+        // AG-4 (2026-10-26): GET /api/v1/whoami (read-only identity introspection,
+        // symmetric with tylluan_do whoami).
+        .route("/api/v1/whoami", get(api_agents::whoami_handler))
 }
 

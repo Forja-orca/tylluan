@@ -30,6 +30,14 @@ use std::sync::{Mutex, OnceLock};
 const COHERENCE_THRESHOLD: f32 = 0.85;
 const PROVENANCE_PENALTY: f32 = 0.1;
 const SEMANTIC_PENALTY: f32 = 0.1;
+
+/// T-DSH-96: perfiles del alcance de la penalización semántica (capa 3).
+/// `all` = comportamiento actual (penaliza todo candidato con coseno < 0.85).
+/// `conflicting_top` = penaliza solo candidatos con score >= mediana del set,
+/// es decir "fuerte pero semánticamente en desacuerdo" (señal de riesgo real),
+/// y deja en paz a los débiles (ya rankeados abajo, penalizarlos no protege).
+pub const SEMANTIC_SCOPE_ALL: &str = "all";
+pub const SEMANTIC_SCOPE_CONFLICTING_TOP: &str = "conflicting_top";
 /// Above this fraction filtered/penalized, the caller should surface a warning.
 pub const WARN_FILTER_RATIO: f32 = 0.5;
 
@@ -726,6 +734,11 @@ impl GateStats {
 static TOTAL_SEEN: AtomicU64 = AtomicU64::new(0);
 static TOTAL_ELIMINATED: AtomicU64 = AtomicU64::new(0);
 static TOTAL_PENALIZED: AtomicU64 = AtomicU64::new(0);
+/// T-DSH-96: desglose por regla para saber QUIÉN penaliza (antes solo había
+/// un total agregado que mezclaba procedencia y drift semántico).
+static TOTAL_PATTERN_ELIMINATED: AtomicU64 = AtomicU64::new(0);
+static TOTAL_PROVENANCE_PENALIZED: AtomicU64 = AtomicU64::new(0);
+static TOTAL_SEMANTIC_PENALIZED: AtomicU64 = AtomicU64::new(0);
 /// Monotonically increasing counter for deterministic workflow_id generation.
 /// Each `hybrid_classify` call increments it; combined with query hash to
 /// group all DecisionExamples from the same recall under one workflow_id.
@@ -737,6 +750,21 @@ pub struct CumulativeGateStats {
     pub total_seen: u64,
     pub total_eliminated: u64,
     pub total_penalized: u64,
+    /// T-DSH-96: desglose por regla (mismo contador acumulado que el total).
+    pub total_pattern_eliminated: u64,
+    pub total_provenance_penalized: u64,
+    pub total_semantic_penalized: u64,
+}
+
+/// T-DSH-96: perfiles de penalización semántica (ver `SEMANTIC_SCOPE_*`).
+fn semantic_scope_penalizes(scope: &str, cosim: f32, score: f32, median_score: f32) -> bool {
+    if cosim >= COHERENCE_THRESHOLD {
+        return false;
+    }
+    match scope {
+        SEMANTIC_SCOPE_CONFLICTING_TOP => score >= median_score,
+        _ => true,
+    }
 }
 
 /// Snapshot of the process-lifetime Coherence Gate counters.
@@ -745,6 +773,9 @@ pub fn cumulative_stats() -> CumulativeGateStats {
         total_seen: TOTAL_SEEN.load(Ordering::Relaxed),
         total_eliminated: TOTAL_ELIMINATED.load(Ordering::Relaxed),
         total_penalized: TOTAL_PENALIZED.load(Ordering::Relaxed),
+        total_pattern_eliminated: TOTAL_PATTERN_ELIMINATED.load(Ordering::Relaxed),
+        total_provenance_penalized: TOTAL_PROVENANCE_PENALIZED.load(Ordering::Relaxed),
+        total_semantic_penalized: TOTAL_SEMANTIC_PENALIZED.load(Ordering::Relaxed),
     }
 }
 
@@ -762,7 +793,26 @@ impl CoherenceGate {
         silva: &crate::memory::silva::SilvaDB,
         query_embedding: Option<&[f32]>,
     ) -> (Vec<(GraphNode, f32)>, GateStats) {
+        Self::filter_with_scope(results, silva, query_embedding, SEMANTIC_SCOPE_ALL).await
+    }
+
+    /// T-DSH-96: igual que `filter`, pero permite elegir el alcance de la
+    /// penalización semántica. `SEMANTIC_SCOPE_ALL` mantiene el comportamiento
+    /// histórico (default); `SEMANTIC_SCOPE_CONFLICTING_TOP` solo penaliza
+    /// candidatos con score >= mediana del set (fuertes pero en desacuerdo
+    /// semántico con la query), que es donde la señal de riesgo aporta algo.
+    pub async fn filter_with_scope(
+        results: Vec<(GraphNode, f32)>,
+        silva: &crate::memory::silva::SilvaDB,
+        query_embedding: Option<&[f32]>,
+        semantic_scope: &str,
+    ) -> (Vec<(GraphNode, f32)>, GateStats) {
         let total = results.len();
+        let median_score = {
+            let mut raw: Vec<f32> = results.iter().map(|(_, s)| *s).collect();
+            raw.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            if raw.is_empty() { 0.0 } else { raw[raw.len() / 2] }
+        };
         let mut eliminated = 0usize;
         let mut penalized = 0usize;
         let mut survivors = Vec::with_capacity(total);
@@ -785,10 +835,12 @@ impl CoherenceGate {
         for (node, mut score) in results {
             if matches_injection_pattern(&node.content) {
                 eliminated += 1;
+                TOTAL_PATTERN_ELIMINATED.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
 
             let mut node_penalized = false;
+            let raw_score = score;
 
             // Capa 2 (T1277-A): procedencia no confiable. `weight > 1.0` solo
             // se alcanza con un refuerzo deliberado (reinforce_node > 1); el
@@ -804,15 +856,17 @@ impl CoherenceGate {
             {
                 score *= PROVENANCE_PENALTY;
                 node_penalized = true;
+                TOTAL_PROVENANCE_PENALIZED.fetch_add(1, Ordering::Relaxed);
             }
 
             if let Some(q_emb) = query_embedding
                 && let Some(node_emb) = node_embeddings.get(&node.id)
             {
                 let cosim = crate::memory::cosine::cosine_similarity(q_emb, node_emb);
-                if cosim < COHERENCE_THRESHOLD {
+                if semantic_scope_penalizes(semantic_scope, cosim, raw_score, median_score) {
                     score *= SEMANTIC_PENALTY;
                     node_penalized = true;
+                    TOTAL_SEMANTIC_PENALIZED.fetch_add(1, Ordering::Relaxed);
                 }
             }
 
@@ -2161,5 +2215,62 @@ mod judge_dedup_tests {
             1,
             "el aviso de token ausente debe emitirse una sola vez, got: {captured}"
         );
+    }
+
+    /// T-DSH-96: `SEMANTIC_SCOPE_ALL` mantiene el comportamiento histórico
+    /// (penaliza a todos los candidatos con coseno < 0.85) y
+    /// `SEMANTIC_SCOPE_CONFLICTING_TOP` solo penaliza a los fuertes (score >=
+    /// mediana). Mismo set de candidatos, mismo embedding ortogonal a la query.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn semantic_scope_conflicting_top_only_penalizes_strong_drifting_candidates() {
+        use crate::memory::silva::SilvaDB;
+        fn mk_node(id: &str, content: &str, weight: f64) -> GraphNode {
+            GraphNode {
+                id: id.to_string(),
+                node_type: "concept".to_string(),
+                content: content.to_string(),
+                metadata: "{}".to_string(),
+                weight,
+                protected: false,
+                conflicted: false,
+                topic_key: None,
+                created_at: None,
+                updated_at: None,
+                last_touched: chrono::Utc::now(),
+                valid_from: None,
+                valid_until: None,
+                shareable: false,
+                content_hash: String::new(),
+                provenance: "unverified".to_string(),
+            }
+        }
+        let db = SilvaDB::in_memory().await.unwrap();
+        for id in ["strong", "weak"] {
+            db.upsert_node(id, "concept", "contenido", "{}").await.unwrap();
+            db.save_embedding(id, &[1.0, 0.0, 0.0], "test-model", None).await.unwrap();
+        }
+        let build = || {
+            vec![
+                (mk_node("strong", "fuerte", 1.0), 0.9f32),
+                (mk_node("weak", "debil", 1.0), 0.1f32),
+            ]
+        };
+        let q_emb = [0.0f32, 1.0, 0.0]; // coseno 0 con ambos: los dos "drift"
+
+        let (_, stats_all) = CoherenceGate::filter_with_scope(
+            build(), &db, Some(&q_emb), SEMANTIC_SCOPE_ALL,
+        ).await;
+        assert_eq!(stats_all.penalized, 2, "perfil all: penaliza a los dos (comportamiento historico)");
+
+        let (survivors, stats_top) = CoherenceGate::filter_with_scope(
+            build(), &db, Some(&q_emb), SEMANTIC_SCOPE_CONFLICTING_TOP,
+        ).await;
+        assert_eq!(stats_top.penalized, 1, "perfil nuevo: solo el candidato fuerte se penaliza");
+        assert_eq!(stats_top.eliminated, 0, "ninguna regla elimina aqui");
+        assert_eq!(survivors.len(), 2, "los penalizados sobreviven, no se borran");
+        let strong = survivors.iter().find(|(n, _)| n.id == "strong").expect("strong");
+        let weak = survivors.iter().find(|(n, _)| n.id == "weak").expect("weak");
+        assert!((strong.1 - 0.09).abs() < 1e-5, "fuerte penalizado x0.1, got {}", strong.1);
+        assert!((weak.1 - 0.1).abs() < 1e-5, "debil intacto, got {}", weak.1);
     }
 }

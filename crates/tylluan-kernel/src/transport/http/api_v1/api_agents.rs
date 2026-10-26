@@ -273,3 +273,59 @@ pub async fn agent_heartbeat_handler(
         "ttl_remaining_secs": (entry.started_at_unix + state.agent_registry.ttl_secs).saturating_sub(now),
     }))).into_response()
 }
+
+#[derive(Deserialize, Default)]
+pub struct WhoamiQuery {
+    pub agent_id: Option<String>,
+    pub timezone: Option<String>,
+}
+
+/// GET /api/v1/whoami (read-only identity inspection, symmetric with tylluan_do whoami).
+pub async fn whoami_handler(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Query(q): axum::extract::Query<WhoamiQuery>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let agent_id = q.agent_id
+        .or_else(|| {
+            headers.get("X-Agent-Id")
+                .or_else(|| headers.get("x-agent-id"))
+                .and_then(|v| v.to_str().ok())
+                .map(String::from)
+        })
+        .unwrap_or_else(|| "anonymous".to_string());
+
+    let server_arc = match state.server.as_ref() {
+        Some(s) => s,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "Sovereign server not initialized"
+        }))).into_response(),
+    };
+
+    let server = server_arc.read().await;
+    let mut args = serde_json::Map::new();
+    args.insert("agent_id".to_string(), serde_json::Value::String(agent_id));
+    if let Some(tz) = q.timezone {
+        args.insert("timezone".to_string(), serde_json::Value::String(tz));
+    }
+
+    match server.handle_kernel_tool("whoami", Some(args)).await {
+        Ok(res) => {
+            let is_error = res.is_error.unwrap_or(false);
+            let text = res.content.iter()
+                .find_map(|c| c.as_text().map(|t| t.text.as_str()))
+                .unwrap_or("{}");
+            let val: serde_json::Value = serde_json::from_str(text)
+                .unwrap_or_else(|_| serde_json::json!({ "raw": text }));
+            if is_error {
+                (StatusCode::BAD_REQUEST, Json(val)).into_response()
+            } else {
+                (StatusCode::OK, Json(val)).into_response()
+            }
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))).into_response(),
+    }
+}
+

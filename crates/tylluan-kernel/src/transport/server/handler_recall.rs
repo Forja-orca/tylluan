@@ -635,8 +635,9 @@ if let Some(cached) = cached_docs {
         // so a cache hit must still be gated — otherwise a poisoned node
         // that made it into the cache once would bypass the gate forever.
         let gate_t0 = std::time::Instant::now();
-        let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
+        let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter_with_scope(
             scored, &server.silva, query_embedding.as_deref(),
+            server.coherence_gate_semantic_scope.as_str(),
         ).await;
         let (sq_w_gate, sq_a_gate) = sqlite_wait_delta(&server.silva, sqlite_w0, sqlite_a0);
         tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, sqlite_wait_ms = sq_w_gate, sqlite_acqs = sq_a_gate, "recall stage: coherence gate");
@@ -872,8 +873,9 @@ if let Some(cached) = cached_docs {
             // (stigmergy reinforcement, hot context, eventual generative consumption)
             // trusts these nodes further.
             let gate_t0 = std::time::Instant::now();
-            let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
+            let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter_with_scope(
                 scored, &server.silva, query_embedding.as_deref(),
+                server.coherence_gate_semantic_scope.as_str(),
             ).await;
             let (sq_w_gate2, sq_a_gate2) = sqlite_wait_delta(&server.silva, sqlite_w0, sqlite_a0);
             tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, sqlite_wait_ms = sq_w_gate2, sqlite_acqs = sq_a_gate2, "recall stage: coherence gate (cache-miss path)");
