@@ -347,6 +347,62 @@ if [ "$anchors_total" -gt 0 ] && [ "$anchors_bad" -eq 0 ]; then
   report OK anchors "all $anchors_total path:line anchors in ${ANCHOR_DOCS[*]} live and content-backed"
 fi
 
+# ---- 10. R5 MCP/SSE route coverage (H-33): every MCP/SSE transport route
+# registered in the router MUST be listed in MCP_ORIGIN_GUARD_PATHS (the
+# T-DSH-86 Origin/Host guard in auth.rs) and the guard MUST stay wired into
+# the top-level router. Read-only static twin of the Rust route inventory in
+# auth.rs mcp_origin_guard_tests: CI can stay green while a new
+# `.route("...", any(api_v1::mcp_handler))` lands without extending the
+# guard set — that silently grows the browser-driven DNS-rebinding surface,
+# the exact hole T-DSH-85 found. A guard entry with no registered route is
+# reported too (hidden rename). Vacuous extraction is DRIFT, never OK
+# (H-31 lesson: an empty candidate must not grant OK).
+# Test-injection overrides (same pattern as R4's CHECK_README_ANCHOR_DOCS):
+#   CHECK_README_R5_ROUTE_FILES  space-separated files holding .route(...) lines
+#   CHECK_README_R5_GUARD_FILE   file holding the MCP_ORIGIN_GUARD_PATHS const
+#   CHECK_README_R5_MOD_FILE     file holding the middleware wiring
+R5_GUARD_FILE_DEF="crates/tylluan-kernel/src/transport/http/auth.rs"
+R5_MOD_FILE_DEF="crates/tylluan-kernel/src/transport/http/mod.rs"
+r5_guard="${CHECK_README_R5_GUARD_FILE:-$R5_GUARD_FILE_DEF}"
+r5_mod="${CHECK_README_R5_MOD_FILE:-$R5_MOD_FILE_DEF}"
+if [ -n "${CHECK_README_R5_ROUTE_FILES:-}" ]; then
+  read -r -a r5_route_files <<< "$CHECK_README_R5_ROUTE_FILES"
+else
+  mapfile -t r5_route_files < <(find crates/tylluan-kernel/src/transport/http -name '*.rs' -type f | sort)
+fi
+mcp_routes=$(grep -rh 'route("' "${r5_route_files[@]}" 2>/dev/null \
+  | grep -E 'mcp_handler|sse_handler' \
+  | grep -oE 'route\("[^"]+"' | sed 's/route("//; s/"$//' | sort -u)
+guarded=$(sed -n '/MCP_ORIGIN_GUARD_PATHS: \[/,/];/p' "$r5_guard" 2>/dev/null \
+  | grep -oE '"[^"]+"' | tr -d '"' | sort -u)
+r5_bad=0
+[ -z "$mcp_routes" ] && { report DRIFT r5 "no MCP/SSE transport routes extracted from ${r5_route_files[*]} — extraction guard tripped, refusing vacuous OK"; r5_bad=$((r5_bad+1)); }
+[ -z "$guarded" ] && { report DRIFT r5 "MCP_ORIGIN_GUARD_PATHS not parsed in $r5_guard — refusing vacuous OK"; r5_bad=$((r5_bad+1)); }
+gl=" $(printf '%s ' $guarded) "; ml=" $(printf '%s ' $mcp_routes) "
+for r in $mcp_routes; do
+  case "$gl" in *" $r "*) ;; *)
+    report DRIFT r5 "route $r is registered on an MCP/SSE handler but is NOT in MCP_ORIGIN_GUARD_PATHS — the Origin/Host guard misses it"
+    r5_bad=$((r5_bad+1));;
+  esac
+done
+for g in $guarded; do
+  case "$ml" in *" $g "*) ;; *)
+    report DRIFT r5 "guarded path $g has no registered MCP/SSE route — stale guard entry (route renamed or removed)"
+    r5_bad=$((r5_bad+1));;
+  esac
+done
+if grep -q 'validate_mcp_origin_host_middleware' "$r5_mod" 2>/dev/null \
+   && grep -B2 'validate_mcp_origin_host_middleware' "$r5_mod" 2>/dev/null | grep -q 'from_fn'; then
+  r5_wired=1
+else
+  r5_wired=0
+  report DRIFT r5 "validate_mcp_origin_host_middleware is not wired via middleware::from_fn in $r5_mod — the guard never runs"
+  r5_bad=$((r5_bad+1))
+fi
+if [ "$r5_bad" = 0 ]; then
+  report OK r5 "$(printf '%s\n' $mcp_routes | wc -l | tr -d ' ') registered MCP/SSE routes all covered by MCP_ORIGIN_GUARD_PATHS ($gl); middleware wired in $r5_mod"
+fi
+
 if [ "$drifts" -gt 0 ]; then
   echo "RESULT: $drifts DRIFT line(s) — README claims diverge from the tree."
   exit 1
