@@ -39,6 +39,28 @@ pub use lifecycle_phase::LifecyclePhase;
 pub use deep_eval_phase::DeepEvalPhase;
 pub use slm_society_phase::SlmSocietyPhase;
 
+/// Minimum repose period in seconds between NightConsolidation cycles.
+/// Guaranteed rest after any cycle ends, even if `night_config.interval_secs` is set lower.
+pub const MIN_NIGHT_CONSOLIDATION_REPOSE_SECS: u64 = 60;
+
+/// Executes the NightConsolidation loop.
+///
+/// Crucial architectural invariant (AG-9): To avoid continuous, unyielding CPU contention
+/// and starvation of SQLite/SilvaDB connections, subsequent consolidation cycles MUST NOT
+/// start until `repose` has elapsed **after** the previous cycle completes.
+/// Using a fixed `tokio::time::interval` causes missed-tick bursts if a consolidation
+/// cycle takes longer than the interval, restarting heavy phases in the exact same second without rest.
+pub async fn run_night_consolidation_loop_with_repose(
+    orchestrator: PhaseOrchestrator,
+    ctx: PhaseContext,
+    repose: std::time::Duration,
+) {
+    loop {
+        orchestrator.run_all(&ctx).await;
+        tokio::time::sleep(repose).await;
+    }
+}
+
 #[derive(Clone)]
 pub struct PhaseContext {
     pub silva: Arc<SilvaDB>,
@@ -646,5 +668,61 @@ mod tests {
             "SlmSocietyPhase must self-gate as disabled by default: {}",
             report.detail
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_night_consolidation_loop_waits_after_cycle() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Instant;
+        use tokio::time::Duration;
+
+        let run_count = Arc::new(AtomicUsize::new(0));
+        let rc = run_count.clone();
+
+        struct FastCountingPhase {
+            counter: Arc<AtomicUsize>,
+        }
+        #[async_trait::async_trait]
+        impl Phase for FastCountingPhase {
+            fn name(&self) -> &'static str { "fast_counting" }
+            async fn run(&self, _ctx: &PhaseContext) -> PhaseReport {
+                self.counter.fetch_add(1, Ordering::SeqCst);
+                // Simulate phase taking 40ms of work
+                tokio::time::sleep(Duration::from_millis(40)).await;
+                PhaseReport {
+                    name: self.name(),
+                    duration_ms: 40,
+                    ok: true,
+                    detail: "".into(),
+                }
+            }
+        }
+
+        let phases: Vec<Box<dyn Phase>> = vec![Box::new(FastCountingPhase { counter: rc })];
+        let orch = PhaseOrchestrator::new(phases, Some(1));
+        let ctx = test_phase_context().await;
+
+        let loop_handle = tokio::spawn(run_night_consolidation_loop_with_repose(
+            orch,
+            ctx,
+            Duration::from_millis(400),
+        ));
+
+        let start = Instant::now();
+        // Wait 20ms: first run started, run_count should be 1
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(run_count.load(Ordering::SeqCst), 1);
+
+        // Wait until 250ms from start: run finished (~40ms), now inside the 400ms repose.
+        // It must STILL be 1!
+        tokio::time::sleep(Duration::from_millis(230)).await;
+        assert_eq!(run_count.load(Ordering::SeqCst), 1, "Run count must still be 1 during repose period");
+
+        // Wait until ~700ms: repose elapsed (40 + 400 = 440ms), second run started, third not yet (~880ms).
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        assert_eq!(run_count.load(Ordering::SeqCst), 2, "Second run must start after repose elapsed");
+
+        loop_handle.abort();
+        assert!(start.elapsed() >= Duration::from_millis(440));
     }
 }
