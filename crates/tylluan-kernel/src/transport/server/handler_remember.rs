@@ -115,7 +115,10 @@ pub async fn handle_tylluan_remember(
     arguments: Option<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<CallToolResult, McpError> {
     let raw_content = arguments.as_ref()
-        .and_then(|a| a.get("content")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        .and_then(|a| a.get("content").or_else(|| a.get("intent")))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if raw_content.trim().is_empty() {
         return Ok(error_result("tylluan_remember requires a non-empty 'content' argument."));
     }
@@ -639,5 +642,45 @@ mod embedding_failure_tests {
         let node = silva.get_node("n-dcr").await.unwrap().expect("el nodo debe existir");
         assert!(node.content.contains("y=2"), "el contenido fusionado debe persistir");
         assert_ne!(node.content_hash, "", "el hash debe recalcularse");
+    }
+
+    /// AG-6: tylluan_remember accepts 'intent' as an ergonomic fallback alias when 'content' is omitted.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remember_accepts_intent_alias() {
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use crate::memory::mailbox::Mailbox;
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let matcher = GuildMatcher::new(builtin_catalog());
+        let (tx, _) = broadcast::channel(16);
+        let node_router = AgentNodeRouter::new(tx);
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(matcher),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            node_router,
+        );
+
+        let mut args = serde_json::Map::new();
+        args.insert("intent".to_string(), serde_json::Value::String("guardar aprendizaje via intent".to_string()));
+        let res = handle_tylluan_remember(&server, Some(args)).await.unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+        let text = res.content[0].as_text().unwrap();
+        assert!(text.text.contains("Stored node"), "Debe guardar con éxito pasando 'intent': {text:?}");
     }
 }
