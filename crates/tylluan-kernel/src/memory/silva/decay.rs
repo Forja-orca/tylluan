@@ -378,10 +378,17 @@ impl super::SilvaDB {
                     fsrs_stability, fsrs_difficulty, fsrs_last_review,
                 );
                 item.review(rating, now);
-                let _ = conn.execute(
+                if let Err(error) = conn.execute(
                     "UPDATE nodes SET fsrs_stability = ?1, fsrs_difficulty = ?2, fsrs_last_review = ?3 WHERE id = ?4",
                     params![item.stability, item.difficulty, item.last_review, node_id],
-                );
+                ) {
+                    // T-DSH-94: un fallo de decaimiento no puede ser silencioso.
+                    tracing::warn!(
+                        error = %error,
+                        node_id = %node_id,
+                        "FSRS: no se pudo persistir el repaso del nodo"
+                    );
+                }
             }
             // Stigmergy: propagate heat to direct neighbors (1 hop, up to 10).
             // Each neighbor gets a "stigmergy_propagation" trace — lighter signal than
@@ -396,10 +403,18 @@ impl super::SilvaDB {
                 .filter_map(|r| r.ok())
                 .collect();
             for neighbor_id in neighbors {
-                let _ = conn.execute(
+                if let Err(error) = conn.execute(
                     "INSERT INTO node_traces (node_id, agent_id, touched_at, trace_type) VALUES (?1, ?2, ?3, 'stigmergy_propagation')",
                     params![neighbor_id, agent_id, now],
-                );
+                ) {
+                    // T-DSH-94: traza perdida = propagación incompleta, pero visible.
+                    tracing::warn!(
+                        error = %error,
+                        node_id = %neighbor_id,
+                        source_node = %node_id,
+                        "stigmergy: no se pudo registrar la traza de propagación"
+                    );
+                }
             }
 
             // Semantic heat propagation: find embedding-similar nodes
@@ -432,11 +447,19 @@ impl super::SilvaDB {
                     // sim 0.85→1.0 mapea a 1→3 traces (heat difuso proporcional)
                     let trace_count = (((sim - 0.85) / 0.15 * 2.0).round() as u32 + 1).min(3);
                     for _ in 0..trace_count {
-                        let _ = conn.execute(
+                        if let Err(error) = conn.execute(
                             "INSERT INTO node_traces (node_id, agent_id, touched_at, trace_type)
                              VALUES (?1, ?2, ?3, 'diffuse_heat')",
                             params![similar_id, agent_id, now],
-                        );
+                        ) {
+                            // T-DSH-94: heat difuso perdido, pero visible.
+                            tracing::warn!(
+                                error = %error,
+                                node_id = %similar_id,
+                                source_node = %node_id,
+                                "diffuse_heat: no se pudo registrar la traza"
+                            );
+                        }
                     }
                 }
             }

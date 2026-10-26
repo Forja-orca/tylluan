@@ -1166,7 +1166,7 @@ async def generate_wan_video(
         frames = 53 if mode == "shorts" else 121
         logging.info("Submitting Wan2.2 video [%s]: %s…", dims, prompt[:60])
         prompt_id = await asyncio.to_thread(_submit_prompt, workflow)
-        result = await asyncio.to_thread(_poll_until_done, prompt_id, timeout=3600)  # TODO(bug pre-existente): kwarg invalido (timeout vs timeout_secs) - TypeError hoy, preservado tal cual
+        result = await asyncio.to_thread(_poll_until_done, prompt_id, timeout_secs=3600)
         saved = _save_outputs(prompt_id, result.get("outputs", {}))
         if not saved:
             return f"⚠️ Video generation completed (ID: {prompt_id}) but no output files found."

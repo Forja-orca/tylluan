@@ -7,6 +7,74 @@ use super::TylluanServer;
 use crate::memory::mailbox::BlackboardMessage;
 use rusqlite::params;
 
+/// T-DSH-95: tope de tamaño del contenido fusionado por DCR. Si la fusión
+/// supera este tamaño se mantiene el comportamiento anterior (no se fusiona)
+/// para no crecer sin límite.
+pub(crate) const DCR_MERGE_MAX_CHARS: usize = 16_000;
+
+/// T-DSH-95: el DCR (umbral 0.87) fusionaba una nota nueva en la vieja
+/// reforzando el nodo existente, pero **descartaba el texto entrante**: la
+/// información nueva no se guardaba en ningún sitio. Esta función construye el
+/// contenido fusionado (append con marca) o `None` si el texto ya está
+/// contenido o el resultado excede el tope.
+pub(crate) fn merge_near_duplicate_content(existing: &str, incoming: &str) -> Option<String> {
+    let incoming = incoming.trim();
+    if incoming.is_empty() || existing.contains(incoming) {
+        return None;
+    }
+    let merged = format!("{existing}\n\n[actualización] {incoming}");
+    if merged.chars().count() > DCR_MERGE_MAX_CHARS {
+        return None;
+    }
+    Some(merged)
+}
+
+/// T-DSH-94: contador visible de embeddings que no se pudieron persistir.
+/// El nodo YA está guardado (la memoria no se pierde); solo el recall semántico
+/// de ese nodo queda degradado, y eso ya no puede ser silencioso.
+pub(crate) static EMBEDDING_SAVE_FAILURES: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+/// Nº de `save_embedding` fallidos desde el arranque (visible para tests y para
+/// telemetría interna; no cambia el contrato de `tylluan_remember`).
+pub(crate) fn embedding_save_failures() -> u64 {
+    EMBEDDING_SAVE_FAILURES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Registra el fallo de persistencia del embedding de un recuerdo.
+pub(crate) fn record_embedding_save_failure(node_id: &str, agent_id: &str, error: &str) {
+    EMBEDDING_SAVE_FAILURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    tracing::warn!(
+        node_id = %node_id,
+        agent_id = %agent_id,
+        error = %error,
+        total_failures = embedding_save_failures(),
+        "tylluan_remember: el embedding no se pudo persistir; el nodo queda guardado y el recall BM25 no se ve afectado"
+    );
+}
+
+/// T-DSH-94: persiste el embedding best-effort sin perder el fallo.
+/// Devuelve `true` si se guardó; ante error avisa y cuenta.
+pub(crate) async fn persist_memory_embedding(
+    silva: &crate::memory::silva::SilvaDB,
+    node_id: &str,
+    agent_id: &str,
+    embedding: &[f32],
+    model_id: &str,
+    model_hash: Option<&str>,
+) -> bool {
+    match silva
+        .save_embedding(node_id, embedding, model_id, model_hash)
+        .await
+    {
+        Ok(()) => true,
+        Err(error) => {
+            record_embedding_save_failure(node_id, agent_id, &error.to_string());
+            false
+        }
+    }
+}
+
 fn clean_operational_wrapper(content: &str) -> String {
     let trimmed = content.trim();
     if trimmed.starts_with("tylluan_do episode") {
@@ -150,6 +218,71 @@ pub async fn handle_tylluan_remember(
     if let Some((ref emb, _)) = early_embedding
         && let Ok(candidates) = server.silva.search_vector(emb, 3).await
             && let Some((existing_node, sim)) = candidates.into_iter().find(|(_, s)| *s >= DCR_THRESHOLD) {
+                // T-DSH-95: si el texto entrante aporta información nueva, se
+                // fusiona en el nodo existente en vez de descartarlo (bug: el
+                // DCR reforzaba el nodo y perdía lo nuevo).
+                if let Some(merged) = merge_near_duplicate_content(&existing_node.content, &content) {
+                    let aid = rem_agent_id.as_deref().unwrap_or("anonymous");
+                    let merged_embedding = server.matcher.engine().and_then(|e| {
+                        tokio::task::block_in_place(|| e.embed_batch_coalesced_routing(&merged))
+                            .ok()
+                            .map(|emb| (emb, e.engine_id()))
+                    });
+                    match server.silva.update_node_content(&existing_node.id, &merged).await {
+                        Ok(()) => {
+                            if let Some((emb2, model_id)) = merged_embedding {
+                                persist_memory_embedding(
+                                    &server.silva,
+                                    &existing_node.id,
+                                    aid,
+                                    &emb2,
+                                    &model_id,
+                                    None,
+                                )
+                                .await;
+                            }
+                            let _ = server.silva.reinforce_node(&existing_node.id, 1.05).await;
+                            if rem_agent_id.is_some() {
+                                let _ = server
+                                    .silva
+                                    .record_agent_access(
+                                        &existing_node.id,
+                                        chrono::Utc::now().timestamp(),
+                                    )
+                                    .await;
+                            }
+                            crate::security::write_gate::spawn_write_gate_judge(
+                                server.silva.clone(),
+                                existing_node.id.clone(),
+                                merged.clone(),
+                            );
+                            tracing::info!(
+                                "DCR: near-duplicate merged (sim={:.3}) existing={} added_chars={}",
+                                sim,
+                                existing_node.id,
+                                content.trim().chars().count()
+                            );
+                            let preview = merged.chars().take(120).collect::<String>();
+                            return Ok(CallToolResult {
+                                content: vec![Content::text(format!(
+                                    "DCR: near-duplicate merged (similarity={:.0}%) into node '{}' — new content appended ({} chars) instead of being discarded.\nMerged: \"{}\"",
+                                    sim * 100.0,
+                                    existing_node.id,
+                                    content.trim().chars().count(),
+                                    preview
+                                ))],
+                                is_error: Some(false),
+                            });
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                node_id = %existing_node.id,
+                                error = %error,
+                                "DCR: fallo al fusionar contenido nuevo; se mantiene el nodo existente"
+                            );
+                        }
+                    }
+                }
                 tracing::info!(
                     "🔄 DCR: near-duplicate blocked (sim={:.3}) existing={} agent={}",
                     sim, existing_node.id,
@@ -372,7 +505,8 @@ pub async fn handle_tylluan_remember(
         .and_then(|e| tokio::task::block_in_place(|| e.embed_batch_coalesced_routing(&tagged_content)).ok()
             .map(|emb| (emb, e.engine_id()))));
     if let Some((emb, model_id)) = embedding.as_ref() {
-        let _ = server.silva.save_embedding(&node_id, emb, model_id, None).await;
+        // T-DSH-94: best-effort, pero un fallo ya no es invisible (warn + contador).
+        persist_memory_embedding(server.silva.as_ref(), &node_id, aid, emb, model_id, None).await;
 
         // TMS: deprecate contradictions after storing
         if let Ok(deprecated_count) = server.silva.deprecate_contradictions(&node_id, emb, &tagged_content).await
@@ -431,4 +565,79 @@ pub async fn handle_tylluan_remember(
         content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\""))],
         is_error: Some(false),
     })
+}
+
+#[cfg(test)]
+mod embedding_failure_tests {
+    use super::*;
+
+    /// T-DSH-94: el fallo se avisa (con node_id y agent_id) y suma al contador.
+    #[test]
+    fn embedding_save_failure_warns_and_counts() {
+        let before = embedding_save_failures();
+        let captured = crate::test_support::capture_warns(|| {
+            record_embedding_save_failure("node-42", "agent-7", "disk full");
+        });
+        assert!(captured.contains("node-42"), "warn debe nombrar el nodo: {captured}");
+        assert!(captured.contains("agent-7"), "warn debe nombrar el agente: {captured}");
+        assert!(captured.contains("embedding"), "warn debe explicar el embedding: {captured}");
+        assert_eq!(embedding_save_failures(), before + 1);
+    }
+
+    /// T-DSH-94: aunque el embedding falle, el nodo sigue guardado (BM25).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn embedding_save_failure_keeps_the_node_stored() {
+        let silva = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        silva
+            .upsert_node("n-embed-94", "fact", "contenido persistente", "{}")
+            .await
+            .unwrap();
+        // Fuerza el error de escritura sin tocar el disco del usuario.
+        {
+            let conn = silva.conn.lock().await;
+            conn.execute_batch("PRAGMA query_only=ON;").unwrap();
+        }
+        let before = embedding_save_failures();
+        let saved =
+            persist_memory_embedding(&silva, "n-embed-94", "agent-7", &[0.1f32; 1024], "test-model", None)
+                .await;
+        assert!(!saved, "con la DB en solo-lectura el embedding no se persiste");
+        assert_eq!(embedding_save_failures(), before + 1);
+        assert!(
+            silva.get_node("n-embed-94").await.unwrap().is_some(),
+            "el nodo debe seguir guardado aunque falle el embedding (recall BM25 intacto)"
+        );
+    }
+
+    /// T-DSH-95: el DCR (umbral 0.87) ya no descarta el texto nuevo; lo añade.
+    #[test]
+    fn dcr_merge_keeps_new_information() {
+        let old = "estado: x=1; sin novedades";
+        let incoming = "estado: x=1; sin novedades; y=2 (nota nueva del 2026-10-26)";
+        let merged = merge_near_duplicate_content(old, incoming)
+            .expect("con similitud >= 0.87 el DCR debe fusionar, no descartar");
+        assert!(merged.contains("x=1"), "el contenido viejo se conserva: {merged}");
+        assert!(merged.contains("y=2"), "la información nueva NO se pierde: {merged}");
+        assert!(merged.contains("[actualización]"));
+    }
+
+    #[test]
+    fn dcr_merge_does_not_duplicate_exact_text() {
+        assert!(merge_near_duplicate_content("misma nota", " misma nota ").is_none());
+        assert!(merge_near_duplicate_content("vieja", "   ").is_none());
+    }
+
+    /// T-DSH-95: `update_node_content` persiste la fusión y recalcula el hash.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn update_node_content_persists_merged_text() {
+        let silva = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        silva.upsert_node("n-dcr", "fact", "estado: x=1", "{}").await.unwrap();
+        silva
+            .update_node_content("n-dcr", "estado: x=1\n\n[actualización] y=2")
+            .await
+            .unwrap();
+        let node = silva.get_node("n-dcr").await.unwrap().expect("el nodo debe existir");
+        assert!(node.content.contains("y=2"), "el contenido fusionado debe persistir");
+        assert_ne!(node.content_hash, "", "el hash debe recalcularse");
+    }
 }

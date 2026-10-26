@@ -1,0 +1,117 @@
+{
+  "actualizado": "2026-10-26T02:18:07Z",
+  "criterio": "verde = verificado y sin pendientes. ambar = funciona pero con defectos conocidos o una decision pendiente. rojo = roto en lo esencial, sin verificar, o lo que ve primero el usuario sin publicar. El mod lee este fichero; el TL lo actualiza al cerrar cada ciclo.",
+  "regla_atencion": "Ningun bloque se lleva la mayor parte del esfuerzo del TL mas de 2 ciclos seguidos mientras otro este en rojo.",
+  "bloques": [
+    {
+      "id": "SEG",
+      "nombre": "Seguridad",
+      "frente": "seguridad",
+      "estado": "ambar",
+      "falta": "Cierre: ADR-024 (A4, D1, B1, A1, C3), C1 y dev_mode=false, trust.rs:34, release v0.17.2. Congelada salvo hallazgo critico.",
+      "dueno": "Buffy y Deep; decide Jose"
+    },
+    {
+      "id": "MEM",
+      "nombre": "Memoria y recuperacion",
+      "frente": "producto",
+      "estado": "ambar",
+      "falta": "save_embedding ignorado en remember; recall filtra 30 de 33 resultados; salida con codificacion rota; sin evaluar con nuestra propia memoria.",
+      "dueno": "DSH, Hermes, Antigravity, TL"
+    },
+    {
+      "id": "HER",
+      "nombre": "Herramientas (guilds)",
+      "frente": "producto",
+      "estado": "ambar",
+      "falta": "TypeError en comfy_ui.py:1169; paso a Python 3.12.15 sin hacer.",
+      "dueno": "DSH, TL"
+    },
+    {
+      "id": "FED",
+      "nombre": "Federacion y malla",
+      "frente": "producto",
+      "estado": "verde",
+      "falta": "Solo mantenimiento. Red controlada y federacion segura; la red global esta descartada.",
+      "dueno": "-"
+    },
+    {
+      "id": "DAS",
+      "nombre": "Dashboard",
+      "frente": "producto",
+      "estado": "ambar",
+      "falta": "Existe y pasa sus 151 tests, pero los binarios publicados no lo incluyen.",
+      "dueno": "Jose decide"
+    },
+    {
+      "id": "PUB",
+      "nombre": "Cara publica",
+      "frente": "producto",
+      "estado": "rojo",
+      "falta": "README nuevo en la rama readme-pro-2026-10-25 sin empujar; falta ronda 2 (H-35, M-BUFFY-11), chino (D-61) y tu visto bueno.",
+      "dueno": "TL y equipo; decide Jose"
+    },
+    {
+      "id": "INS",
+      "nombre": "Instalacion y release",
+      "frente": "seguridad",
+      "estado": "rojo",
+      "falta": "tylluan-cli install lanza un kernel; install.sh ofrece macOS Intel sin binario; token en el cwd; v0.17.1 sin los arreglos de main.",
+      "dueno": "Deep (D-62)"
+    },
+    {
+      "id": "TST",
+      "nombre": "Tests y CI",
+      "frente": "seguridad",
+      "estado": "ambar",
+      "falta": "67 #[ignore] sin auditar; suite x10 sin hacer; pnpm test del dashboard fallo una vez bajo carga.",
+      "dueno": "Buffy (M-BUFFY-12)"
+    },
+    {
+      "id": "PRO",
+      "nombre": "Proceso de flota",
+      "frente": "producto",
+      "estado": "ambar",
+      "falta": "Dos frentes en marcha. Producto: AG-1, T-DSH-93 hecho, T-DSH-94, H-36. Mod tylluan-map v0.2 cargado en la sesion (fase visual pendiente).",
+      "dueno": "TL",
+      "ignoraAtencion": true
+    }
+  ],
+  "decisiones": [
+    {
+      "id": "J-1",
+      "texto": "ADR-024: aprobar A4, D1, B1, A1 y C3",
+      "recomendacion": "Aprobar los cinco ya"
+    },
+    {
+      "id": "J-2",
+      "texto": "C1 + dev_mode=false + quitar default_role=admin y tokens de prueba de la config de prod",
+      "recomendacion": "Una sesion conmigo"
+    },
+    {
+      "id": "J-3",
+      "texto": "trust.rs:34: metadata ilegible como no confiable",
+      "recomendacion": "Si"
+    },
+    {
+      "id": "J-4",
+      "texto": "Publicar release v0.17.2 con los arreglos de seguridad",
+      "recomendacion": "Si, tras D-62"
+    },
+    {
+      "id": "J-5",
+      "texto": "README nuevo: visto bueno final y empujar",
+      "recomendacion": "Tras la ronda 2 del equipo"
+    },
+    {
+      "id": "J-6",
+      "texto": "Dashboard embebido en los binarios publicados",
+      "recomendacion": "Decidir"
+    },
+    {
+      "id": "J-7",
+      "texto": "Orca, ADR-023 (MCP concentrador), enmienda ADR-020",
+      "recomendacion": "Pendientes de antes"
+    }
+  ]
+}

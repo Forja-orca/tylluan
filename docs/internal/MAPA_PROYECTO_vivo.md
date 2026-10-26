@@ -2,26 +2,42 @@
 
 Documento de estado para no perder nada. Lo actualiza el TL al final de cada ciclo y lo contrasta cada pocos ciclos un subagente de solo lectura (Haiku). Cada afirmación se puede comprobar con el comando o el fichero citado; lo no comprobado se marca «no verificado». **Última actualización:** 24-oct-2026, ciclo de las 03:xx (reloj de la máquina; los informes de los agentes llevan fecha 2026-10-24).
 
-## 1. Estado de un vistazo
+## 0. Imagen global por bloques (leer ESTO primero; actualizada 2026-10-26)
 
-| Qué | Valor | Cómo se comprueba |
-|-----|-------|-------------------|
-| `origin/main` | ver `git log -1 origin/main` | `git fetch && git log -1 --format=%h origin/main` |
-| Producción (kernel en marcha) | commit `955179f`, sin D-39a/a2, D-38, D-39b, T-DSH-54/55, D-29/D-30, D-40/D-41/D-36 | `curl http://127.0.0.1:47004/health` |
-| Tests | 1316 (1229 kernel + 75 link + 12 fsrs) | `bash scripts/check_test_count.sh` |
-| Cadena de suministro | `cargo deny` ok, `npm audit` 0, certifi y pip al día en `.venv` y guilds | `bash scripts/check_supply_chain.sh` |
-| Reinicio de producción | pendiente: lo lanza José; el cambio de Python de los guilds (3.12.15) va en ese reinicio | recap, paso 5b y 7 |
+Regla de atención: ningún bloque recibe la mayor parte del esfuerzo del TL más de dos ciclos seguidos mientras otro bloque esté en rojo. Reparto real de los últimos 30 días: `python scripts/project_balance.py 30` (el 26-oct: 791 commits; seguridad 9 %, memoria 12 %, herramientas 6 %, dashboard 5 %, instalación y release 2 %, cara pública 20 %, tests y CI 14 %, proceso de flota 61 %; un commit cuenta en cada bloque que toca).
 
-## 2. Equipo y colas
+| Bloque | Estado verificado | Qué falta | Quién |
+|--------|-------------------|-----------|-------|
+| Seguridad (frente de cierre) | Guard Origin/Host en MCP, SSE y REST mutante, 415 sin JSON, fail-closed en `delete_node`, avisos en errores de SQLite, bloqueo D-58 arreglado, carrera de WAL arreglada. Verificado en vivo en el kernel `31b965c` | ADR-024 (A4, D1, B1, A1, C3), C1 y `dev_mode=false`, `trust.rs:34`, release v0.17.2. Congelada: nada nuevo salvo hallazgo crítico | Buffy y Deep; decide José |
+| Memoria y recuperación (para qué existe Tylluan) | 1374 tests; recall con BM25, vector y grafo; LongMemEval-S v0.12.0 con BGE-M3 (82 % R@5), no repetido con el modelo actual | T-DSH-93: `save_embedding` ignorado en `tylluan_remember`; evaluar nuestra propia memoria (40 preguntas); registro de pérdidas (H-36) | DSH, Hermes, Antigravity, TL |
+| Herramientas / guilds | 45 guilds; necesitan Python 3.12 y FastMCP aparte | Bug `TypeError` en `comfy_ui.py:1169`; paso a Python 3.12.15 (decide el TL) | DSH, TL |
+| Federación y malla | Red controlada y federación segura (permisos deny-by-default). La red global quedó descartada (José, 26-oct) | Solo mantenimiento | — |
+| Dashboard | Existe en `dashboard/`, 151 tests; los binarios publicados NO lo incluyen (se compilan sin `bundled-dashboard`) | Decidir si se publica embebido | José |
+| Cara pública | README nuevo (181 líneas EN/ES, 2 diagramas, medición propia) en la rama local `readme-pro-2026-10-25`, SIN empujar; revisado por DSH, Antigravity y Deep | Ronda 2 (Hermes H-35, Buffy M-BUFFY-11), chino (Deep D-61), tu visto bueno | TL, equipo; decide José |
+| Instalación y release | v0.17.1 es la última; `main` lleva arreglos sin publicar | `tylluan-cli install` lanza un kernel; `install.sh` ofrece macOS Intel sin binario; el token se crea en el cwd (D-62) | Deep |
+| Tests y CI | 1374 tests; flaky arreglados (WAL, semáforo del juez, tiempos); CI verde en `5d21cc7` | 67 `#[ignore]` sin auditar y repetir la suite ×10 (M-BUFFY-12); `pnpm test` del dashboard falló una vez bajo carga | Buffy |
+| Proceso de flota | Dos frentes desde el 26-oct: seguridad = Buffy + Deep; producto = Antigravity + DSH + Hermes + TL | Bucle de dogfooding: medir fricción propia, arreglar lo peor, remedir | TL |
 
-| Agente | Hace ahora | Siguiente | Cómo se le habla |
-|--------|------------|-----------|------------------|
-| Deep | cola nueva D-42 a D-45 (puerto con `--config`, `/api/v1/skills`, `device=auto`, mensaje del primer arranque, contradicciones) | relevo de José | `docs/internal/COLA_deep_2026-10-24.md` |
-| Buffy | anunciar su trabajo pendiente, M-BUFFY-5 y M-BUFFY-6 (corpus de herramientas envenenadas) | relevo de José | `docs/internal/COLA_buffy_2026-10-24_noche.md` |
-| DSH | T-DSH-57 entregada; espera tarea | proponer T-DSH-58 | Coloquio |
-| Hermes | H-21 entregada; espera tarea | proponer H-22 | Coloquio |
-| Antigravity y Codex | sin trabajo asignado (worktrees atrasados 165 y 298 commits) | decisión de José | — |
-| TL | integra, empuja, verifica el CI | ver §5 | — |
+## 1. Hechos que caducan (comprobar siempre antes de citar)
+
+| Qué | Cómo se comprueba |
+|-----|-------------------|
+| `origin/main` | `git fetch && git log -1 --format=%h origin/main` |
+| Producción en marcha | `curl http://127.0.0.1:47004/health` (26-oct: `31b965c`) |
+| Tests | `bash scripts/check_test_count.sh` (26-oct: 1374 = 1287 kernel + 75 link + 12 fsrs) |
+| Cadena de suministro | `bash scripts/check_supply_chain.sh` |
+| Reparto del esfuerzo | `python scripts/project_balance.py 30` |
+
+## 2. Equipo y colas (26-oct)
+
+| Agente | Hace ahora | Cómo se le habla |
+|--------|------------|------------------|
+| Buffy | M-BUFFY-11 (red-team del README) y M-BUFFY-12 (suite ×10, 67 ignorados, soak) | colas en `E:/tylluan-patches/cola/` y la rama del README; las relaya José |
+| Deep | D-60 hecho, D-61 (chino sobre la rama actual), D-62 (instalación y release) | ídem |
+| DSH | T-DSH-94 (que la memoria no falle en silencio) | Coloquio |
+| Hermes | H-35 (ejecutar los comandos del README), H-36 (registro de pérdidas) | Coloquio |
+| Antigravity | AG-1 (viaje de un agente nuevo contra el kernel vivo) | Coloquio |
+| TL | integra y empuja; protocolo de dogfooding; este mapa | — |
 
 ## 3. Registro de ideas e investigaciones (para no perder ninguna)
 
@@ -48,7 +64,7 @@ Documento de estado para no perder nada. Lo actualiza el TL al final de cada cic
 |---|----------|----------------------|
 | J-01 | Ventana de mantenimiento de herramientas (`winget`, Python, Node) y reinicio de producción | con los agentes parados; yo dejo el build, el respaldo de `silva.db` y el Python 3.12.15 preparados |
 | J-02 | Paso a Windows 25H2 (paquete de habilitación, un reinicio) | en el mantenimiento de la workstation |
-| J-03 | README: aprobar o corregir `readme-draft` | fusionar tras tu visto bueno y con el guardián del README |
+| J-03 | README: aprobar el borrador nuevo (rama `readme-pro-2026-10-25`) | tras la ronda 2 del equipo |
 | J-04 | ADR-023 (MCP como concentrador): ¿lo redacto? | sí, empezando por paso directo con argumentos tipados |
 | J-05 | Enmienda del ADR-020 (cliente de inferencia, nube opcional, tope de gasto) | redactar y aprobar por partes |
 | J-06 | Alcance de Whisper en Tylluan (nativo o vía el MCP) | vía el MCP primero |
@@ -57,10 +73,11 @@ Documento de estado para no perder nada. Lo actualiza el TL al final de cada cic
 
 ## 5. Siguientes pasos del TL
 
-1. Comprobar el CI del push en curso y asignar tareas a DSH y Hermes.
-2. Que cada agente haga `reset` y `migrate` (método nuevo); después `gc` en modo informe.
-3. Ventana de reinicio cuando José lo diga.
-4. Guardián del README (I-03) y ADR-023 (I-01) si José lo aprueba.
+1. Recibir AG-1, T-DSH-93 (hecho), H-36 y T-DSH-94; fijar las tres peores fricciones de la semana y arreglarlas.
+2. Ronda 2 del README y tu visto bueno; después empujar la rama.
+3. Con tu aprobación de ADR-024, que Deep implemente y Buffy pruebe; luego la release v0.17.2.
+4. Protocolo de dogfooding y prueba de continuidad (¿se puede reanudar solo con Tylluan?).
+5. Actualizar ESTE mapa al final de cada ciclo y cuando algo cambie de bloque.
 
 ## 6. Riesgos conocidos
 

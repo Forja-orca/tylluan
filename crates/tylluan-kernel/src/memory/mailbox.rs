@@ -218,8 +218,21 @@ impl Mailbox {
                 );"
             )?;
 
-            // 2. Migration: Add new columns if they don't exist
-            let _ = conn.execute("ALTER TABLE agent_mail ADD COLUMN ttl_secs INTEGER DEFAULT 3600", []);
+            // 2. Migration: Add new columns if they don't exist.
+            // T-DSH-94: "duplicate column name" es esperado; cualquier otro
+            // fallo deja warning (antes se perdía en un `let _ =`).
+            if let Err(error) = conn.execute(
+                "ALTER TABLE agent_mail ADD COLUMN ttl_secs INTEGER DEFAULT 3600",
+                [],
+            ) {
+                let message = error.to_string();
+                if !(message.contains("duplicate column name") || message.contains("already exists")) {
+                    tracing::warn!(
+                        error = %error,
+                        "agent_mail: migracion ttl_secs fallida (no esperada)"
+                    );
+                }
+            }
             
             // 3. Ensure indexes exist (now we are sure columns exist)
             conn.execute_batch(
@@ -287,7 +300,7 @@ impl Mailbox {
             let receiver = receiver_id.to_string();
             let payload = payload.to_string();
             let params: Vec<&dyn rusqlite::ToSql> = vec![&msg_id, &sender, &receiver, &payload, &ttl];
-            let _ = execute_with_retry(
+            execute_with_retry(
                 &conn,
                 "INSERT INTO agent_mail (message_id, sender_id, receiver_id, payload, ttl_secs, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, unixepoch())",
@@ -328,7 +341,7 @@ impl Mailbox {
             let receiver = receiver_id.to_string();
             let payload = payload.to_string();
             let params: Vec<&dyn rusqlite::ToSql> = vec![&msg_id, &sender, &receiver, &payload, &ttl];
-            let _ = execute_with_retry(
+            execute_with_retry(
                 &conn,
                 "INSERT INTO agent_mail (message_id, sender_id, receiver_id, payload, ttl_secs, status, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, 'PENDING', unixepoch())",
@@ -396,14 +409,14 @@ impl Mailbox {
                     let placeholders: Vec<String> = std::iter::repeat_n("?".to_string(), rows.len()).collect();
                     let ids: Vec<String> = rows.iter().map(|m| m.message_id.clone()).collect();
                     let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
-                    let _ = execute_with_retry(
+                    execute_with_retry(
                         &conn,
                         &format!("UPDATE agent_mail SET status = 'READ' WHERE message_id IN ({})", placeholders.join(",")),
                         &params,
                         5,
                     )?;
                 }
-                let _ = execute_with_retry(&conn, "COMMIT", &[], 5)?;
+                execute_with_retry(&conn, "COMMIT", &[], 5)?;
                 rows
             } else {
                 let mut attempt = 0;
