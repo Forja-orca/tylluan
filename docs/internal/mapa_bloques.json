@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-10-26T02:18:07Z",
+  "actualizado": "2026-10-26T17:30:00Z",
   "criterio": "verde = verificado y sin pendientes. ambar = funciona pero con defectos conocidos o una decision pendiente. rojo = roto en lo esencial, sin verificar, o lo que ve primero el usuario sin publicar. El mod lee este fichero; el TL lo actualiza al cerrar cada ciclo.",
   "regla_atencion": "Ningun bloque se lleva la mayor parte del esfuerzo del TL mas de 2 ciclos seguidos mientras otro este en rojo.",
   "bloques": [
@@ -10,6 +10,14 @@
       "estado": "ambar",
       "falta": "Cierre: ADR-024 (A4, D1, B1, A1, C3), C1 y dev_mode=false, trust.rs:34, release v0.17.2. Congelada salvo hallazgo critico.",
       "dueno": "Buffy y Deep; decide Jose"
+    },
+    {
+      "id": "REC",
+      "nombre": "Pilar Recordar (investigacion)",
+      "frente": "producto",
+      "estado": "ambar",
+      "falta": "Programa abierto 2026-10-26: revision bibliografica profunda, mapa de canales por harness, prototipo de politica, go/no-go medido. Decide Jose si es columna vertebral.",
+      "dueno": "TL, Qwen, DSH, Hermes, Antigravity"
     },
     {
       "id": "MEM",
