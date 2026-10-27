@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml"><img src="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="Licencia MIT"></a>
-  <img src="https://img.shields.io/badge/version-0.17.1-blue.svg" alt="v0.17.1">
+  <img src="https://img.shields.io/badge/version-0.17.2-blue.svg" alt="v0.17.2">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP nativo">
 </p>
 
@@ -143,7 +143,7 @@ Para cambiar de perfil, para primero el kernel y ejecuta `tylluan-cli install --
 
 **Por qué no**
 
-- Mem0, Letta, Zep, Cognee y otros llevan años en producción y tienen comunidades más grandes. Tylluan es joven; v0.17.1 es su última release.
+- Mem0, Letta, Zep, Cognee y otros llevan años en producción y tienen comunidades más grandes. Tylluan es joven; v0.17.2 es su última release.
 - No es un servicio alojado. No hay panel de equipo, ni copias de seguridad gestionadas, ni soporte. Existe un dashboard en React en `dashboard/`, pero los binarios publicados no lo incluyen: compila desde el código con `--features bundled-dashboard` para servirlo desde el kernel.
 - No está endurecido para redes hostiles. Mantenlo en `127.0.0.1`.
 - Varios gremios necesitan Python 3.12, y algunos (la búsqueda web, por ejemplo) salen a internet cuando se lo pides.
@@ -154,7 +154,7 @@ Para cambiar de perfil, para primero el kernel y ejecuta `tylluan-cli install --
 
 - **Red.** Por defecto el kernel escucha solo en `127.0.0.1`. No combines nunca `host = "0.0.0.0"` con `dev_mode = true`, que sería una shell remota sin autenticación en tu red; si lo haces, el kernel registra una advertencia crítica y fuerza el host de vuelta a `127.0.0.1`.
 - **Autenticación.** Activada por defecto (`dev_mode = false`). Toda llamada a la API y a MCP necesita el token, salvo una lista pública corta: la comprobación de salud, el descubrimiento, los ficheros estáticos del dashboard y cuatro endpoints bajo `/api/` (ping de federación, envío y recepción de sincronización de federación, y el sondeo MCP). La lista exacta es `is_public_bypass_path` en `crates/tylluan-kernel/src/transport/http/auth.rs`.
-- **Peticiones desde páginas web.** Una página abierta en tu navegador podría hablar con el kernel en `127.0.0.1`. En `main` (posterior a v0.17.1, **todavía no en una release etiquetada**) las cinco rutas MCP y SSE (`/messages`, `/mcp`, `/api/v1/mcp`, `/sse`, `/sse/download`) y toda ruta bajo `/api/v1/` que no sea GET ni HEAD rechazan con 403 las peticiones con un `Origin` o `Host` no local, y el endpoint MCP exige `Content-Type: application/json`. Si usas v0.17.1, mantén `dev_mode = false`: una página web no tiene tu token, así que no puede llamar a un kernel autenticado.
+- **Peticiones desde páginas web.** Una página abierta en tu navegador podría hablar con el kernel en `127.0.0.1`. Desde v0.17.2 las cinco rutas MCP y SSE (`/messages`, `/mcp`, `/api/v1/mcp`, `/sse`, `/sse/download`) y toda ruta bajo `/api/v1/` que no sea GET ni HEAD rechazan con 403 las peticiones con un `Origin` o `Host` no local, y el endpoint MCP exige `Content-Type: application/json`. Si usas v0.17.1, mantén `dev_mode = false`: una página web no tiene tu token, así que no puede llamar a un kernel autenticado.
 - **Envenenamiento de memoria.** Una puerta de coherencia filtra lo que devuelve `tylluan_recall`, con comprobaciones deterministas de patrones, procedencia y deriva. Un clasificador opcional basado en un modelo, para los casos ambiguos, está desactivado por defecto; si lo activas, puede poner en cuarentena o rebajar una memoria. El endpoint REST de búsqueda simple todavía no pasa por esa puerta.
 - **Herramientas.** Los gremios se ejecutan como procesos normales del sistema operativo con los permisos de tu usuario. Existe un sandbox opcional de Docker (`[security.sandbox]` en `tylluan.toml`, necesita Docker) que puede aislar los gremios bash y code, o todos en su perfil `strict`. Está desactivado por defecto, así que de fábrica un gremio puede hacer todo lo que puedes hacer tú. Las llamadas a herramientas hechas a través de las herramientas MCP se escriben en un registro de auditoría encadenado por hash; el endpoint REST directo para llamar a un gremio todavía no se audita, y una escritura de auditoría que falla se registra como advertencia en lugar de detener la llamada.
 - **No cubierto.** No hay auditoría de seguridad independiente de terceros. La federación está pensada para una red local o tu propia VPN, no para internet abierto.
@@ -173,7 +173,7 @@ Dos o más instancias de Tylluan pueden sincronizar memorias con pares que aprue
 
 ## Estado
 
-- **Última release:** v0.17.1 (2026-10-13). El trabajo posterior vive en `main`; consulta [CHANGELOG.md](CHANGELOG.md).
+- **Última release:** v0.17.2 (2026-10-27). El trabajo posterior vive en `main`; consulta [CHANGELOG.md](CHANGELOG.md).
 - **Tests:** 1388 tests entre el kernel de Rust (lib), `tylluan-link` y `tylluan-fsrs`, que CI ejecuta en cada push junto con clippy, `cargo-deny`, el lint de Python y la suite de auditoría de seguridad.
 - **Qué está planificado y qué no:** [ROADMAP.md](ROADMAP.md). Estado actual de cada afirmación: [STATUS.md](STATUS.md).
 - **Plataformas:** Linux x86_64 y ARM64, macOS Apple Silicon, Windows x86_64. CI ejecuta los tests en Linux x86_64 y el workflow de release construye los cuatro binarios. La medición de arranque de arriba se tomó en Windows x86_64. Las versiones de macOS y ARM64 no las han ejecutado los mantenedores en hardware (sin verificar).

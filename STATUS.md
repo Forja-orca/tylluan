@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-10-14 · HEAD `0c0b7a7` · v0.17.1 (Cargo.toml)
+> Last updated: 2026-10-27 · HEAD `0c0b7a7` · v0.17.2 (Cargo.toml)
 
 ## Estado verificado — 2026-10-14
 
@@ -154,7 +154,7 @@ cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 
 ## Version
 
-**v0.17.1** (Cargo.toml, current; publicada 2026-10-13) — arreglos de seguridad e instaladores y de la tubería de release, ver `CHANGELOG.md`.
+**v0.17.2** (Cargo.toml, current; preparada 2026-10-27) — corrige el cierre a los ~66 s del v0.17.1 publicado, más los guards Origin/Host, la limpieza de guilds huérfanos y los arreglos de instalador; ver `CHANGELOG.md`. v0.17.1 se publicó el 2026-10-13.
 **v0.17.0** (taggeada 2026-08-23) — federation auto-sync robustness (concurrent per-peer JoinSet + overlap guard + timeout), SQL interpolation whitelisting, drift_guard/silva_db canary fixes, unwrap() production audit (2026-09). **v0.16.0** — MCP 2026-07-28 adoption (M39) + continuity/trust/action layer (M40), CoherenceGate→dataset circuit phase 1+2; **v0.15.0** — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
 **v0.12.0** (tag) — Single binary target release and automated installer profiles.
 **v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.

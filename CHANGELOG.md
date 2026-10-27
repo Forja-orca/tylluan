@@ -6,13 +6,28 @@ All notable changes to Tylluan are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.17.2] — 2026-10-27
+
+**Fixes the published v0.17.1 shutting itself down about 66 seconds after start** when it had no terminal (see the default-transport change below), plus guild-process, installer and CLI fixes found while using the kernel daily.
+
 **Upgrade note — federation (behaviour change).** Peers now start with empty permissions: they sync nothing and may dispatch nothing until you grant them explicitly with `PUT /api/v1/federation/peers/{name}/permissions`. After upgrading, an existing peer stops syncing until you set its permissions. See the README "Per-peer and per-space permissions" section.
 
 **Behaviour change — default transport.** A kernel started without a `tylluan.toml` (or with a `[nexus]` table that omits `transport`) now serves `http` and `sse` only; `stdio` is enabled with `--stdio` or an explicit `transport` entry. Before, the default included `stdio`, so a kernel started without a terminal (service, `nohup`, CI, `tylluan start` from a script) read end-of-input and shut down, HTTP included. Configs that list `stdio` explicitly are unchanged.
 
+**Behaviour change — judge backend.** The `llama_backend` guild no longer probes ports 11434, 1234 and 8000 for another program's OpenAI-compatible server (a user's LM Studio, for example) and no longer sends the kernel judge's prompts to the first model that server lists. Auto-discovery is now opt-in with `TYLLUAN_LLM_AUTODISCOVER=1`; configure `[[external_providers]]` or the usual environment variables to use an external backend on purpose. Without either, the judge uses Tylluan's own `llama-server`.
+
+**Fixes**
+- Guild processes: a healthy guild process that outlived its proxy was never reaped (only direct children and stubs under 10 MB were), and every respawn spawned another; one kernel accumulated 10 `llama_backend` processes in 6 hours. Orphans of a guild are now recognised by module name, and a spawn cleans up before launching.
+- NightConsolidation waits for its interval after a cycle ends (60 s floor) instead of re-firing at once when a cycle overran the interval.
+- `tylluan-cli start` waits up to 180 s for `/health` (a cold start that loads the embedding model took about 52 s). No kernel or guild timeout was changed.
+- Installers: macOS Intel and Windows ARM64 are no longer offered (the release has no binary for them); the health check requires the process just started; the archive's SHA-256 is verified against its `checksums.txt` and installation aborts if it cannot be; `requirements.txt` comes from the installed release; `--no-start` writes the config without launching a kernel (default unchanged).
+- README: new diagrams (process map and memory write/recall pipeline) and corrected statements about what the published binaries include (they do not embed the dashboard).
+
 **Security**
 - ADR-019 step 2 (`742eacf`): per-peer and per-space permissions, deny-by-default. One ingestion path for all four peer-ingest entry points and one send-side builder for all three push flows; exports are filtered by space and direction. A peer write can no longer change `protected` or the weight of an existing node, and an error while reading freshness now rejects the write instead of upserting. Remote dispatch (P2P) is gated by an exact `guild.tool` allow-list (empty = deny) and denials are audited.
-- Auth boundary hardening, Phase 1 (`61bc97e`, on `main`, not in a tagged release): `/oauth/authorize` auto-approves only when `dev_mode=true` (403 otherwise), `redirect_uri` must be loopback, management endpoints require an operator-class caller (OAuth JWT and peer auth are rejected there), and a route-inventory test covers the mutating routes. Behaviour change: `mcp-remote` / Claude Desktop OAuth flows do not work with `dev_mode=false` until Phase 2 (operator consent, client registry, scopes; not approved yet); clients that send a header Bearer token are unaffected. Keep the kernel on `127.0.0.1`.
+- Auth boundary hardening, Phase 1 (`61bc97e`): `/oauth/authorize` auto-approves only when `dev_mode=true` (403 otherwise), `redirect_uri` must be loopback, management endpoints require an operator-class caller (OAuth JWT and peer auth are rejected there), and a route-inventory test covers the mutating routes. Behaviour change: `mcp-remote` / Claude Desktop OAuth flows do not work with `dev_mode=false` until Phase 2 (operator consent, client registry, scopes; not approved yet); clients that send a header Bearer token are unaffected. Keep the kernel on `127.0.0.1`.
 - Tests: fixed a `RECALL_COUNTER` race in the kernel tests and an intermittent `FleetHealthPanel` dashboard test; temporary test databases are now cleaned up.
 
 **Architecture decisions (not shipped)** — see the README "Architecture decisions in flight": Inference Gateway (ADR-020, proposed), decision service with a sixth sovereign tool named `tylluan_decide` (ADR-021, decided), `iroh` transport rejected for now.
