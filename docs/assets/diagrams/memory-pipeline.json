@@ -48,9 +48,10 @@
       "id": "embed",
       "type": "backend",
       "label": "Embed",
-      "sublabel": "BGE-M3, 1024-d, ONNX",
+      "sublabel": "mxbai-embed-large, 1024-d, ONNX",
       "stage": 2,
-      "row": 0
+      "row": 0,
+      "width": 150
     },
     {
       "id": "silva",

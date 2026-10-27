@@ -327,8 +327,8 @@ rect.c-bg-rect { fill: var(--bg); }
 
         <!-- Flow paths -->
         <path data-edge-from="remember" data-edge-to="l1" data-edge-label="text" data-edge-key="0" data-edge-id="f1" data-composition-points="156,157;259,157" d="M 156 157 L 259 157" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="l1" data-edge-to="embed" data-edge-label="clean" data-edge-key="1" data-edge-id="f2" data-composition-points="371,157;474,157" d="M 371 157 L 474 157" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="embed" data-edge-to="silva" data-edge-label="node + vector" data-edge-key="2" data-edge-id="f3" data-composition-points="586,157;637.5,157;637.5,264;689,264" d="M 586 157 L 637.5 157 L 637.5 264 L 689 264" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="l1" data-edge-to="embed" data-edge-label="clean" data-edge-key="1" data-edge-id="f2" data-composition-points="371,157;455,157" d="M 371 157 L 455 157" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="embed" data-edge-to="silva" data-edge-label="node + vector" data-edge-key="2" data-edge-id="f3" data-composition-points="605,157;647,157;647,264;689,264" d="M 605 157 L 647 157 L 647 264 L 689 264" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="silva" data-edge-to="judge" data-edge-label="new node, async" data-edge-key="3" data-edge-id="f4" data-composition-points="801,264;848,264;848,157;895,157" d="M 801 264 L 848 264 L 848 157 L 895 157" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
         <path data-edge-from="recall" data-edge-to="tier" data-edge-label="query" data-edge-key="4" data-edge-id="f6" data-composition-points="156,385;259,385" d="M 156 385 L 259 385" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="tier" data-edge-to="hybrid" data-edge-label="budget" data-edge-key="5" data-edge-id="f7" data-composition-points="371,385;474,385" d="M 371 385 L 474 385" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
@@ -364,15 +364,15 @@ rect.c-bg-rect { fill: var(--bg); }
         <text x="315" y="175" class="t-security" font-size="7" text-anchor="middle">reject</text>
         </g>
 
-        <g id="node-embed" data-node-id="embed" data-node-label="Embed" tabindex="0" role="button" aria-label="Focus Embed, BGE-M3, 1024-d, ONNX, 03 / Index and retrieve" aria-pressed="false" data-node-kind="backend" data-node-sublabel="BGE-M3, 1024-d, ONNX" data-node-context="03 / Index and retrieve">
-          <title>Embed · BGE-M3, 1024-d, ONNX · 03 / Index and retrieve</title>
-          <rect x="474" y="128" width="112" height="58" rx="6" class="c-mask"/>
-          <rect x="474" y="128" width="112" height="58" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(480 134) scale(0.6875)">
+        <g id="node-embed" data-node-id="embed" data-node-label="Embed" tabindex="0" role="button" aria-label="Focus Embed, mxbai-embed-large, 1024-d, ONNX, 03 / Index and retrieve" aria-pressed="false" data-node-kind="backend" data-node-sublabel="mxbai-embed-large, 1024-d, ONNX" data-node-context="03 / Index and retrieve">
+          <title>Embed · mxbai-embed-large, 1024-d, ONNX · 03 / Index and retrieve</title>
+          <rect x="455" y="128" width="150" height="58" rx="6" class="c-mask"/>
+          <rect x="455" y="128" width="150" height="58" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(461 134) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" x="530" y="149" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Embed</text>
-          <text x="530" y="165" class="t-muted" font-size="7" text-anchor="middle">BGE-M3, 1024-d, ONNX</text>
+          <text x="530" y="165" class="t-muted" font-size="7" text-anchor="middle">mxbai-embed-large, 1024-d, ONNX</text>
         </g>
 
         <g id="node-silva" data-node-id="silva" data-node-label="SilvaDB" tabindex="0" role="button" aria-label="Focus SilvaDB, SQLite WAL, FTS5, graph, 04 / Store" aria-pressed="false" data-node-kind="database" data-node-sublabel="SQLite WAL, FTS5, graph" data-node-tag="silva.db" data-node-context="04 / Store">
@@ -468,12 +468,12 @@ rect.c-bg-rect { fill: var(--bg); }
           <text x="207.5" y="147" class="t-backend" font-size="8" text-anchor="middle">text</text>
         </g>
         <g data-edge-from="l1" data-edge-to="embed" data-edge-label="clean" data-edge-key="1" data-edge-id="f2">
-          <rect x="404.25" y="136" width="36.5" height="16" rx="4" class="c-mask"/>
-          <text x="422.5" y="147" class="t-muted" font-size="8" text-anchor="middle">clean</text>
+          <rect x="394.75" y="136" width="36.5" height="16" rx="4" class="c-mask"/>
+          <text x="413" y="147" class="t-muted" font-size="8" text-anchor="middle">clean</text>
         </g>
         <g data-edge-from="embed" data-edge-to="silva" data-edge-label="node + vector" data-edge-key="2" data-edge-id="f3">
-          <rect x="599.65" y="189.5" width="75.7" height="16" rx="4" class="c-mask"/>
-          <text x="637.5" y="200.5" class="t-muted" font-size="8" text-anchor="middle">node + vector</text>
+          <rect x="609.15" y="189.5" width="75.7" height="16" rx="4" class="c-mask"/>
+          <text x="647" y="200.5" class="t-muted" font-size="8" text-anchor="middle">node + vector</text>
         </g>
         <g data-edge-from="silva" data-edge-to="judge" data-edge-label="new node, async" data-edge-key="3" data-edge-id="f4">
           <rect x="805.25" y="189.5" width="85.5" height="16" rx="4" class="c-mask"/>

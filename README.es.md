@@ -116,7 +116,7 @@ Con la configuración por defecto de la rama `main` actual, cada cliente conecta
 | `tylluan_decide` | Responde una pregunta acotada (elección, puntuación o sí/no) o se abstiene. Hoy aplica reglas deterministas y registra cada decisión; por defecto no tiene ningún modelo conectado |
 
 <p align="center">
-  <img src="docs/assets/memory-flow.svg" alt="Escritura: tylluan_remember pasa el filtro L1 de patrones de inyección, se vectoriza con BGE-M3 (1024 dimensiones, ONNX) y se guarda en SilvaDB; un juez L2 asíncrono clasifica el nodo nuevo como SAFE o SUSPICIOUS y marca la cuarentena. Recuperación: tylluan_recall elige un nivel (rápido, equilibrado o profundo), ejecuta FTS5 BM25 más coseno fusionados con RRF con k igual a 60, y la puerta de coherencia (L1 patrones, L2 procedencia, L3 coseno por debajo de 0,85, L4 juez opcional) filtra los candidatos antes de devolver memorias ordenadas y la cabecera de estadísticas." width="100%">
+  <img src="docs/assets/memory-flow.svg" alt="Escritura: tylluan_remember pasa el filtro L1 de patrones de inyección, se vectoriza con mxbai-embed-large (1024 dimensiones, ONNX) y se guarda en SilvaDB; un juez L2 asíncrono clasifica el nodo nuevo como SAFE o SUSPICIOUS y marca la cuarentena. Recuperación: tylluan_recall elige un nivel (rápido, equilibrado o profundo), ejecuta FTS5 BM25 más coseno fusionados con RRF con k igual a 60, y la puerta de coherencia (L1 patrones, L2 procedencia, L3 coseno por debajo de 0,85, L4 juez opcional) filtra los candidatos antes de devolver memorias ordenadas y la cabecera de estadísticas." width="100%">
 </p>
 
 ## Perfiles

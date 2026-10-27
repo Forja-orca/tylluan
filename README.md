@@ -116,7 +116,7 @@ With the default configuration of the current `main` branch, every connected cli
 | `tylluan_decide` | Answers a bounded question (choice, score or yes/no) or abstains. Today it applies deterministic rules and logs every decision; by default no model is connected to it |
 
 <p align="center">
-  <img src="docs/assets/memory-flow.svg" alt="Write path: tylluan_remember passes the L1 injection-pattern filter, is embedded with BGE-M3 (1024 dimensions, ONNX) and stored in SilvaDB; an asynchronous L2 judge classifies the new node as SAFE or SUSPICIOUS and sets a quarantine flag. Recall path: tylluan_recall picks a retrieval tier (fast, balanced or deep), runs FTS5 BM25 plus cosine search fused with RRF at k equal to 60, then the coherence gate (L1 patterns, L2 provenance, L3 cosine below 0.85, optional L4 judge) filters candidates before ranked memories and a gate-stats header return to the agent." width="100%">
+  <img src="docs/assets/memory-flow.svg" alt="Write path: tylluan_remember passes the L1 injection-pattern filter, is embedded with mxbai-embed-large (1024 dimensions, ONNX) and stored in SilvaDB; an asynchronous L2 judge classifies the new node as SAFE or SUSPICIOUS and sets a quarantine flag. Recall path: tylluan_recall picks a retrieval tier (fast, balanced or deep), runs FTS5 BM25 plus cosine search fused with RRF at k equal to 60, then the coherence gate (L1 patterns, L2 provenance, L3 cosine below 0.85, optional L4 judge) filters candidates before ranked memories and a gate-stats header return to the agent." width="100%">
 </p>
 
 ## Profiles
