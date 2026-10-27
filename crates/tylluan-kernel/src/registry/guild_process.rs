@@ -130,7 +130,7 @@ pub fn cpu_inference_guilds() -> &'static [&'static str] {
 }
 
 /// Possible ways to launch a guild.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GuildLauncher {
     /// Native Python guild (FastMCP)
     Python { module_path: String },
@@ -1062,6 +1062,29 @@ enum GuildTimeoutCategory {
     Heavy,
 }
 
+/// T-DSH-107: acción a tomar al re-registrar un guild (ver `reregistration_action`).
+#[derive(Debug, PartialEq, Eq)]
+enum ReregistrationAction {
+    /// No existe o no está en marcha: insertar el descriptor nuevo.
+    Replace,
+    /// Ya corre con el MISMO descriptor: ignorar, conservar el proceso vivo.
+    IgnoreIdentical,
+    /// Ya corre con descriptor DISTINTO: matar el proceso antiguo y sustituir.
+    KillThenReplace,
+}
+
+/// T-DSH-107: decisión pura (testeable sin proxy) para el re-registro.
+fn reregistration_action_for(existing_running: bool, same_descriptor: bool) -> ReregistrationAction {
+    if !existing_running {
+        ReregistrationAction::Replace
+    } else if same_descriptor {
+        ReregistrationAction::IgnoreIdentical
+    } else {
+        ReregistrationAction::KillThenReplace
+    }
+}
+
+
 pub struct GuildRegistry {
     /// All known guilds, keyed by name
     pub guilds: HashMap<String, GuildProcess>,
@@ -1310,13 +1333,46 @@ impl GuildRegistry {
         Ok(discovered)
     }
 
+    /// T-DSH-107: re-registrar un guild **en marcha** reemplazaba la entrada del
+    /// mapa (`guilds.insert`) y dropeaba el `GuildProcess` antiguo SIN matar su
+    /// proceso: fuga de `llama_backend` vía `POST /api/v1/guilds/register`
+    /// (`api_guilds.rs:24`) y vía `RegistryMessage::Register` (`actor.rs:124`).
+    ///
+    /// T-DSH-107 CAMBIO PEDIDO (T1890): ignorar siempre el re-registro podía
+    /// ocultar un cambio legítimo de descriptor. Ahora se compara el descriptor
+    /// (módulo/comando/args/env/urls/headers) y:
+    /// - descriptor IDÉNTICO → ignorar (se conserva el proceso, no se filtra);
+    /// - descriptor DISTINTO → matar el proceso antiguo (mismo camino que
+    ///   T-DSH-106: `kill_abandoned_child` por nombre/módulo) y sustituir.
+    fn reregistration_action(&self, name: &str, next: &GuildLauncher) -> ReregistrationAction {
+        match self.guilds.get(name) {
+            Some(existing) => reregistration_action_for(
+                existing.is_running(),
+                existing.launcher == *next,
+            ),
+            None => reregistration_action_for(false, false),
+        }
+    }
+
     /// Register a Python guild descriptor (does not spawn it).
     pub fn register(&mut self, name: &str, module_path: &str, always_on: bool, timeout_ms: Option<u64>) {
+        let launcher = GuildLauncher::Python { module_path: module_path.to_string() };
+        match self.reregistration_action(name, &launcher) {
+            ReregistrationAction::IgnoreIdentical => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con el mismo descriptor — re-registro ignorado", name);
+                return;
+            }
+            ReregistrationAction::KillThenReplace => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con descriptor DISTINTO — matando proceso antiguo y sustituyendo", name);
+                crate::registry::proxy::McpProxy::kill_abandoned_child(name);
+            }
+            ReregistrationAction::Replace => {}
+        }
         self.guilds.insert(
             name.to_string(),
             GuildProcess::new(
                 name,
-                GuildLauncher::Python { module_path: module_path.to_string() },
+                launcher,
                 always_on,
                 timeout_ms,
                 self.max_concurrent,
@@ -1327,11 +1383,23 @@ impl GuildRegistry {
 
     /// Register a V2 Python guild with guild_id and agent_roles.
     pub fn register_v2(&mut self, name: &str, module_path: &str, always_on: bool, timeout_ms: Option<u64>, guild_id: &str, agent_roles: Vec<String>) {
+        let launcher = GuildLauncher::Python { module_path: module_path.to_string() };
+        match self.reregistration_action(name, &launcher) {
+            ReregistrationAction::IgnoreIdentical => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con el mismo descriptor — re-registro ignorado", name);
+                return;
+            }
+            ReregistrationAction::KillThenReplace => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con descriptor DISTINTO — matando proceso antiguo y sustituyendo", name);
+                crate::registry::proxy::McpProxy::kill_abandoned_child(name);
+            }
+            ReregistrationAction::Replace => {}
+        }
         self.guilds.insert(
             name.to_string(),
             GuildProcess::new_v2(
                 name,
-                GuildLauncher::Python { module_path: module_path.to_string() },
+                launcher,
                 always_on,
                 timeout_ms,
                 guild_id,
@@ -1350,15 +1418,27 @@ impl GuildRegistry {
         headers: HashMap<String, String>,
         timeout_ms: Option<u64>,
     ) {
+        let launcher = GuildLauncher::Http {
+            url: url.to_string(),
+            headers,
+            timeout_ms,
+        };
+        match self.reregistration_action(name, &launcher) {
+            ReregistrationAction::IgnoreIdentical => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con el mismo descriptor — re-registro ignorado", name);
+                return;
+            }
+            ReregistrationAction::KillThenReplace => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con descriptor DISTINTO — matando proceso antiguo y sustituyendo", name);
+                crate::registry::proxy::McpProxy::kill_abandoned_child(name);
+            }
+            ReregistrationAction::Replace => {}
+        }
         self.guilds.insert(
             name.to_string(),
             GuildProcess::new(
                 name,
-                GuildLauncher::Http {
-                    url: url.to_string(),
-                    headers,
-                    timeout_ms,
-                },
+                launcher,
                 false,
                 timeout_ms,
                 self.max_concurrent,
@@ -1376,16 +1456,28 @@ impl GuildRegistry {
         headers: HashMap<String, String>,
         timeout_ms: Option<u64>,
     ) {
+        let launcher = GuildLauncher::Sse {
+            sse_url: sse_url.to_string(),
+            post_url: post_url.to_string(),
+            headers,
+            timeout_ms,
+        };
+        match self.reregistration_action(name, &launcher) {
+            ReregistrationAction::IgnoreIdentical => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con el mismo descriptor — re-registro ignorado", name);
+                return;
+            }
+            ReregistrationAction::KillThenReplace => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con descriptor DISTINTO — matando proceso antiguo y sustituyendo", name);
+                crate::registry::proxy::McpProxy::kill_abandoned_child(name);
+            }
+            ReregistrationAction::Replace => {}
+        }
         self.guilds.insert(
             name.to_string(),
             GuildProcess::new(
                 name,
-                GuildLauncher::Sse {
-                    sse_url: sse_url.to_string(),
-                    post_url: post_url.to_string(),
-                    headers,
-                    timeout_ms,
-                },
+                launcher,
                 false,
                 timeout_ms,
                 self.max_concurrent,
@@ -1396,16 +1488,28 @@ impl GuildRegistry {
 
     /// Register an external MCP server descriptor.
     pub fn register_external(&mut self, name: &str, command: &str, args: Vec<String>, cwd: Option<PathBuf>, env: Option<HashMap<String, String>>, timeout_ms: Option<u64>) {
+        let launcher = GuildLauncher::External {
+            command: command.to_string(),
+            args,
+            cwd,
+            env,
+        };
+        match self.reregistration_action(name, &launcher) {
+            ReregistrationAction::IgnoreIdentical => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con el mismo descriptor — re-registro ignorado", name);
+                return;
+            }
+            ReregistrationAction::KillThenReplace => {
+                tracing::warn!("[T-DSH-107] Guild '{}' ya corre con descriptor DISTINTO — matando proceso antiguo y sustituyendo", name);
+                crate::registry::proxy::McpProxy::kill_abandoned_child(name);
+            }
+            ReregistrationAction::Replace => {}
+        }
         self.guilds.insert(
             name.to_string(),
             GuildProcess::new(
                 name,
-                GuildLauncher::External {
-                    command: command.to_string(),
-                    args,
-                    cwd,
-                    env,
-                },
+                launcher,
                 false, // External servers are on-demand by default
                 timeout_ms,
                 self.max_concurrent,
@@ -2405,6 +2509,36 @@ mod tests {
         let stdio = make_params("mcp_call", &[("server_url", "stdio://node server.js")]);
         assert!(enforce_capabilities("mcp_bridge", &caps, &stdio).is_some());
     }
+    // T-DSH-107 CAMBIO PEDIDO (T1890): las dos ramas del re-registro.
+    // Antes del cambio, si el guild corría se ignoraba SIEMPRE el re-registro
+    // (rojo: descriptor distinto debía matar+sustituir y no lo hacía).
+    #[test]
+    fn t_dsh_107_running_guild_with_same_descriptor_is_ignored() {
+        assert_eq!(
+            reregistration_action_for(true, true),
+            ReregistrationAction::IgnoreIdentical
+        );
+    }
+
+    #[test]
+    fn t_dsh_107_running_guild_with_different_descriptor_kills_then_replaces() {
+        assert_eq!(
+            reregistration_action_for(true, false),
+            ReregistrationAction::KillThenReplace
+        );
+    }
+
+    #[test]
+    fn t_dsh_107_stopped_guild_is_replaced_regardless_of_descriptor() {
+        assert_eq!(
+            reregistration_action_for(false, true),
+            ReregistrationAction::Replace
+        );
+        assert_eq!(
+            reregistration_action_for(false, false),
+            ReregistrationAction::Replace
+        );
+    }
 }
 
 impl GuildRegistry {
@@ -2538,4 +2672,5 @@ pub struct GuildCallStats {
     pub avg_latency_ms: f64,
     pub last_call_unix: u64,
     pub success_rate: f64,
+
 }
