@@ -1511,7 +1511,7 @@ impl Default for SentinelConfig {
             port: 0,
             threads: 4,
             ctx_size: 2048,
-            timeout_ms: 20_000,
+            timeout_ms: 60_000,
             idle_unload_secs: 300,
         }
     }

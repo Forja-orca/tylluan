@@ -72,6 +72,9 @@ struct ServerState {
     child: Option<Child>,
     port: u16,
     last_used: Instant,
+    /// Job Object de Windows con KILL_ON_JOB_CLOSE: si el kernel muere (incluso
+    /// con kill), el handle se cierra y el hijo muere con él (sin huérfanos).
+    job: Option<isize>,
 }
 
 impl ServerState {
@@ -87,6 +90,7 @@ impl ServerState {
             let _ = child.kill();
             let _ = child.wait();
         }
+        close_job(self.job.take());
     }
 }
 
@@ -107,6 +111,7 @@ impl SentinelJudge {
                 child: None,
                 port: 0,
                 last_used: Instant::now(),
+                job: None,
             }),
             http: reqwest::Client::new(),
             test_base: None,
@@ -178,6 +183,7 @@ impl SentinelJudge {
             .spawn()
             .map_err(|e| format!("sentinel: no pude arrancar {}: {e}", bin.display()))?;
         set_below_normal(child.id());
+        st.job = assign_kill_on_close(child.id());
         st.child = Some(child);
         st.port = port;
         st.last_used = Instant::now();
@@ -324,6 +330,94 @@ fn free_port() -> Result<u16, String> {
     Ok(port)
 }
 
+/// Reaper de inactividad: cada `idle_unload_secs/2` mira si el servidor lleva
+/// más de `idle_unload_secs` sin uso y lo descarga (T-DSH-110: sin esto, el
+/// servidor solo se descargaba al entrar la siguiente llamada).
+fn spawn_idle_reaper(judge: &Arc<SentinelJudge>) {
+    let weak = Arc::downgrade(judge);
+    let idle = judge.cfg.idle_unload_secs.max(1);
+    let every = Duration::from_secs((idle / 2).max(1));
+    let handle = match tokio::runtime::Handle::try_current() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    handle.spawn(async move {
+        loop {
+            tokio::time::sleep(every).await;
+            let Some(j) = weak.upgrade() else { break };
+            if let Ok(mut st) = j.state.try_lock()
+                && st.alive_mut()
+                && st.last_used.elapsed() > Duration::from_secs(j.cfg.idle_unload_secs)
+            {
+                tracing::info!(
+                    "[T-DSH-109] centinela: descargo llama-server tras {}s inactivo (reaper)",
+                    st.last_used.elapsed().as_secs()
+                );
+                st.kill();
+            }
+        }
+    });
+}
+
+/// Job Object de Windows con KILL_ON_JOB_CLOSE. Devuelve el handle (se cierra
+/// en `kill`/`Drop`); si el kernel muere de golpe, Windows cierra el handle y
+/// mata el hijo (no quedan huérfanos).
+#[cfg(windows)]
+fn assign_kill_on_close(pid: u32) -> Option<isize> {
+    use winapi::um::jobapi2::{AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject};
+    use winapi::um::processthreadsapi::OpenProcess;
+    use winapi::um::winnt::{
+        JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+    };
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+        if job.is_null() {
+            return None;
+        }
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &mut info as *mut _ as *mut winapi::ctypes::c_void,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 {
+            winapi::um::handleapi::CloseHandle(job);
+            return None;
+        }
+        let hp = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+        if hp.is_null() {
+            winapi::um::handleapi::CloseHandle(job);
+            return None;
+        }
+        let assigned = AssignProcessToJobObject(job, hp);
+        winapi::um::handleapi::CloseHandle(hp);
+        if assigned == 0 {
+            winapi::um::handleapi::CloseHandle(job);
+            return None;
+        }
+        Some(job as isize)
+    }
+}
+
+#[cfg(not(windows))]
+fn assign_kill_on_close(_pid: u32) -> Option<isize> {
+    None
+}
+
+fn close_job(job: Option<isize>) {
+    #[cfg(windows)]
+    unsafe {
+        if let Some(handle) = job {
+            winapi::um::handleapi::CloseHandle(handle as *mut winapi::ctypes::c_void);
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = job;
+}
+
 #[cfg(windows)]
 fn set_below_normal(pid: u32) {
     use winapi::um::processthreadsapi::OpenProcess;
@@ -351,7 +445,11 @@ pub fn global() -> Arc<SentinelJudge> {
                 .ok()
                 .and_then(|c| c.try_read().ok().map(|g| g.security.sentinel.clone()))
                 .unwrap_or_default();
-            Arc::new(SentinelJudge::new(cfg))
+            let judge = Arc::new(SentinelJudge::new(cfg.clone()));
+            if cfg.enabled {
+                spawn_idle_reaper(&judge);
+            }
+            judge
         })
         .clone()
 }
