@@ -66,6 +66,13 @@ impl McpProxy {
     ) -> Result<Self> {
         info!("⚙️  McpProxy: spawning '{}'...", guild_name);
 
+        // T-DSH-106: un guild stdio no debe tener dos procesos vivos. Si un
+        // proxy anterior se perdió sin pasar por shutdown() (timeout de
+        // handshake, Arc::try_unwrap fallido en kill(), re-registro del guild),
+        // su proceso queda huérfano y este spawn crearía un duplicado. Limpiar
+        // antes de lanzar mantiene la relación 1 proxy ↔ 1 proceso.
+        Self::kill_abandoned_child(guild_name);
+
         // Ensure stderr is piped so we can capture errors, and stdout/stdin for MCP
         info!("🔧 McpProxy: creating TokioChildProcess for '{}'...", guild_name);
         
@@ -131,6 +138,49 @@ impl McpProxy {
         })
     }
 
+    /// Decide whether a process snapshot is an orphan of `guild_name`.
+    ///
+    /// T-DSH-106: extraído de `kill_abandoned_child` para poder testearlo sin
+    /// lanzar procesos. Antes, la rama "proceso Python de una sesión previa"
+    /// sólo mataba procesos con <10 MB de RSS (`memory_kb < 10000`); los
+    /// guilds de inferencia sanos (p.ej. `llama_backend`, ~80 MB) quedaban
+    /// fuera y se acumulaban si su proxy se perdía. Ahora, si el comando
+    /// corresponde **exactamente** al módulo `guilds.<...>.<name>`, se
+    /// considera orfandad aunque tenga memoria alta.
+    fn is_guild_orphan(
+        cmd: &str,
+        exe_name: &str,
+        parent_is_self: bool,
+        memory_kb: u64,
+        guild_name: &str,
+    ) -> bool {
+        let cmd_lower = cmd.to_lowercase();
+        let name_lower = guild_name.to_lowercase();
+        let pattern_lower = guild_name.replace('-', "_").to_lowercase();
+        let is_guild_cmd = cmd.contains("guilds.") || cmd.contains("guilds/") || cmd.contains("guilds\\");
+        let matches_name = cmd_lower.contains(&name_lower)
+            || cmd_lower.contains(&pattern_lower)
+            || (guild_name == "scrapling" && cmd_lower.contains("scrapling_web"));
+        if !(is_guild_cmd && matches_name) {
+            return false;
+        }
+        // Strategy 1: direct child of this kernel — any memory size.
+        if parent_is_self {
+            return true;
+        }
+        // Strategy 2: stale Python guild process from a previous session.
+        // Low-memory stubs are killed as before; a process whose module path
+        // matches the guild exactly is also an orphan even if it is a healthy
+        // ~80 MB inference guild.
+        if exe_name.to_lowercase().contains("python") {
+            let exact_module = cmd_lower.contains(&format!("guilds.core.{pattern_lower}"))
+                || cmd_lower.contains(&format!("guilds.{pattern_lower}"))
+                || cmd_lower.contains(&format!("guilds.{pattern_lower}."));
+            return memory_kb < 10_000 || exact_module;
+        }
+        false
+    }
+
     /// Reactive orphan cleanup: Find and kill any Python processes launched by this kernel
     /// that are associated with the guild name but failed to complete handshake.
     /// Enhanced to also clean stale processes from previous sessions.
@@ -140,7 +190,6 @@ impl McpProxy {
         
         let self_pid = std::process::id();
         let mut killed_count = 0;
-        let guild_pattern = guild_name.replace('-', "_");
 
         for (pid, process) in sys.processes() {
             let cmd = process.cmd().iter()
@@ -148,45 +197,18 @@ impl McpProxy {
                 .collect::<Vec<_>>()
                 .join(" ");
             let exe_name = process.exe().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            
-            // Strategy 1: Direct children of this kernel
-            if let Some(parent_pid) = process.parent()
-                && parent_pid.as_u32() == self_pid {
-                    let cmd_lower = cmd.to_lowercase();
-                    let name_lower = guild_name.to_lowercase();
-                    let pattern_lower = guild_pattern.to_lowercase();
-                    let is_guild = cmd.contains("guilds.") || cmd.contains("guilds/") || cmd.contains("guilds\\");
-                    let matches_name = cmd_lower.contains(&name_lower) 
-                        || cmd_lower.contains(&pattern_lower)
-                        || (guild_name == "scrapling" && cmd_lower.contains("scrapling_web"));
-                    if is_guild && matches_name {
-                        info!("🧹 [P0] Anti-Orphan: Killing child PID {} for '{}'", pid, guild_name);
-                        process.kill();
-                        killed_count += 1;
-                    }
-                }
-            
-            // Strategy 2: Stale Python processes from previous sessions (P0 fix)
-            // These are Python processes that started but never completed handshake
-            // and may have lost their parent reference
-            if exe_name.to_lowercase().contains("python") {
-                let cmd_lower = cmd.to_lowercase();
-                let name_lower = guild_name.to_lowercase();
-                let pattern_lower = guild_pattern.to_lowercase();
-                let is_guild = cmd.contains("guilds.") || cmd.contains("guilds/") || cmd.contains("guilds\\");
-                let matches_name = cmd_lower.contains(&name_lower) 
-                    || cmd_lower.contains(&pattern_lower)
-                    || (guild_name == "scrapling" && cmd_lower.contains("scrapling_web"));
-                if is_guild && matches_name {
-                    // Additional check: if it's using < 10MB it's likely a stuck stub
-                    let memory_kb = process.memory() / 1024;
-                    if memory_kb < 10000 {
-                        info!("🧹 [P0] Anti-Orphan: Killing stale Python PID {} ({} KB) for '{}'", 
-                            pid, memory_kb, guild_name);
-                        process.kill();
-                        killed_count += 1;
-                    }
-                }
+            let parent_is_self = process
+                .parent()
+                .map(|parent_pid| parent_pid.as_u32() == self_pid)
+                .unwrap_or(false);
+            let memory_kb = process.memory() / 1024;
+            if Self::is_guild_orphan(&cmd, &exe_name, parent_is_self, memory_kb, guild_name) {
+                info!(
+                    "🧹 [P0] Anti-Orphan: Killing PID {} (parent_is_kernel={}, {} KB) for '{}'",
+                    pid, parent_is_self, memory_kb, guild_name
+                );
+                process.kill();
+                killed_count += 1;
             }
         }
         
@@ -1131,5 +1153,35 @@ mod tests {
         let result = error_result("something went wrong");
         assert_eq!(result.is_error, Some(true));
         assert_eq!(result.content.len(), 1);
+    }
+
+    // T-DSH-106: el huérfano saneado de un guild de inferencia (~80 MB) debe
+    // detectarse aunque su proxy se perdiera y ya no cuelgue del kernel.
+    #[test]
+    fn t_dsh_106_orphan_llama_backend_high_memory_is_reaped_even_if_reparented() {
+        let cmd = r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.llama_backend"#;
+        assert!(
+            McpProxy::is_guild_orphan(cmd, "python.exe", false, 80_000, "llama_backend"),
+            "un proceso del módulo exacto guilds.core.llama_backend debe ser huérfano aunque tenga 80 MB"
+        );
+    }
+
+    #[test]
+    fn t_dsh_106_direct_child_still_reaped_regardless_of_memory() {
+        let cmd = r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.llama_backend"#;
+        assert!(McpProxy::is_guild_orphan(cmd, "python.exe", true, 80_000, "llama_backend"));
+    }
+
+    #[test]
+    fn t_dsh_106_other_guild_process_is_not_reaped() {
+        let cmd = r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.bash"#;
+        assert!(!McpProxy::is_guild_orphan(cmd, "python.exe", false, 80_000, "llama_backend"));
+        assert!(!McpProxy::is_guild_orphan(cmd, "python.exe", true, 80_000, "llama_backend"));
+    }
+
+    #[test]
+    fn t_dsh_106_low_memory_stale_stub_still_reaped() {
+        let cmd = r#""python" -m guilds.scholars.plugins.memory"#;
+        assert!(McpProxy::is_guild_orphan(cmd, "python.exe", false, 2_000, "memory"));
     }
 }
