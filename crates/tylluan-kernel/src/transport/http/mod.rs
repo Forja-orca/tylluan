@@ -1569,6 +1569,10 @@ pub struct HealthResponse {
     /// el arranque; este campo permite distinguir «listo» de «aún construyendo»
     /// sin abrir `/health?verbose=true`.
     pub repo_map: String,
+    /// T-DSH-113: estado del centinela (mode/loaded/verdicts/fallbacks), sin
+    /// tokens ni rutas. `None` se omite para no romper el contrato JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentinel: Option<serde_json::Value>,
 }
 
 async fn health_handler(
@@ -1683,6 +1687,7 @@ async fn health_handler(
         version: env!("CARGO_PKG_VERSION").to_string(),
         commit: env!("TYLLUAN_GIT_COMMIT").to_string(),
         repo_map: repo_map_status.to_string(),
+        sentinel: Some(crate::security::sentinel::health_json()),
     };
     (StatusCode::OK, Json(resp)).into_response()
 }

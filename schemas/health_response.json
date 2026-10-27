@@ -33,6 +33,27 @@
         "failed"
       ],
       "description": "Repo map sub-state (D-39); building while the background build runs"
+    },
+    "sentinel": {
+      "type": "object",
+      "description": "T-DSH-113: centinela de write_gate L2 (sin tokens ni rutas)",
+      "properties": {
+        "mode": { "type": "string", "enum": ["off", "observe", "enforce"] },
+        "loaded": { "type": "boolean" },
+        "verdicts": {
+          "type": "object",
+          "properties": {
+            "safe": { "type": "integer", "minimum": 0 },
+            "controversial": { "type": "integer", "minimum": 0 },
+            "unsafe": { "type": "integer", "minimum": 0 },
+            "unavailable": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "fallbacks": { "type": "integer", "minimum": 0 },
+        "in_flight": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
     }
   },
   "required": [
