@@ -14,7 +14,7 @@
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d32_acceptance
-//!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d32_acceptance -- --ignored
+//! (0 tests ignorados desde D-32: `-- --ignored` no ejecuta nada)
 //!
 //! `src/` intacto; sin `cfg(unix)`/`cfg(windows)` en ninguna función.
 

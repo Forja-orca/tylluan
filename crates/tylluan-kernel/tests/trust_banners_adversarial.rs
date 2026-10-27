@@ -12,9 +12,10 @@
 //!  (B) remitente externo pasando por local en `mailbox_send_handler`;
 //!  (C) `agent_summary` perdiendo la marca.
 //!
-//! Prueba-especificación (patrón B-7/T-DSH-9): corre en verde en la suite normal
-//! porque está ignorada; con `-- --ignored` falla HOY en los casos abiertos y
-//! debe pasar cuando se cierren las quebraduras que lista el informe.
+//! Prueba-especificación (patrón B-7/T-DSH-9): corre en verde en la suite
+//! normal porque está ignorada; con `-- --ignored` falla HOY por 1 caso
+//! abierto de 12 (B2: un externo que se auto-registra identidad pasa por
+//! local, sin banner). Verificado 2026-10-27 (M-BUFFY-13): 11 de 12 conformes.
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel \
@@ -132,9 +133,9 @@ fn push_case(cases: &mut Vec<Case>, name: &'static str, expected: &'static str, 
 }
 
 #[tokio::test(flavor = "multi_thread")]
-// Prueba-especificación: la suite normal queda en verde (`0 passed; 1 ignored`);
-// con `--ignored` falla por los casos abiertos del informe T-DSH-10.
-#[ignore = "T-DSH-10: vectores abiertos de D-18 (banner ausente en think/@inbox legacy, localidad por identidad auto-creada, herencia no retroactiva)"]
+// Prueba-especificación: la suite normal queda en verde (`0 passed; 1
+// ignored`); con `--ignored` falla por 1 caso abierto de 12 (B2).
+#[ignore = "T-DSH-10: 1 vector abierto de 12 (B2: localidad por identidad auto-creada); think/@inbox legacy y herencia retroactiva ya cerrados (verificado 2026-10-27)"]
 async fn d18_trust_banners_adversarial_matrix() {
     let audit_db = std::env::temp_dir().join(format!("tylluan_t10_audit_{}.db", std::process::id()));
     let _ = std::fs::remove_file(&audit_db);

@@ -12,11 +12,14 @@
 //!   los pierde. Lo deseado: `init_plan_store` carga los pendientes no caducados
 //!   al arrancar desde la base de datos del kernel.
 //!
-//! Este fichero fija, para cada uno:
-//!   - un test **VIVO** con el comportamiento ACTUAL (corrupto se sobrescribe;
-//!     el plan se pierde), que Deep tendrÃ¡ que invertir al arreglar;
-//!   - un test `#[ignore = "D-29"|"D-30"]` con el comportamiento DESEADO, que
-//!     hoy falla por la razÃ³n correcta y se des-ignora al cerrar el defecto.
+//! ESTADO verificado 2026-10-27 (M-BUFFY-13): los dos defectos estan
+//! CERRADOS en `396af2b` y este fichero es su **lista de aceptacion**.
+//! Los 4 tests corren en la suite normal (0 ignorados) y afirman el
+//! comportamiento DESEADO (el ilegible se conserva como
+//! `consents.json.corrupt-<ts>`; el plan pendiente sobrevive al reinicio)
+//! mas una guarda por defecto de cada uno (un fichero valido no se
+//! cuarentena; un plan retirado no resucita). Antes del arreglo habia 2
+//! tests `#[ignore]`; hoy no queda ninguno.
 //!
 //! El Â«reinicioÂ» de D-30 se simula con un **proceso hijo** del propio binario de
 //! test (un `OnceLock` no se puede reiniciar in-process): el padre crea el plan
@@ -25,7 +28,7 @@
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d29_d30_acceptance
-//!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d29_d30_acceptance -- --ignored
+//! (sin tests ignorados: `-- --ignored` no ejecuta nada y no se documenta aqui)
 //!
 //! Solo directorios temporales; sin `cfg(unix)`/`cfg(windows)` en ninguna
 //! funciÃ³n; `src/` intacto.
@@ -102,7 +105,7 @@ fn consent_client_ids(parsed: &serde_json::Value) -> Vec<String> {
 
 /// **Comportamiento DESEADO (D-29).** El fichero corrupto se conserva como
 /// `consents.json.corrupt-*` y el nuevo `consents.json` solo tiene el cliente
-/// nuevo. Hoy falla: no hay copia y el corrupto se pierde.
+/// Cumplido desde `396af2b` (el test pasa en la suite normal).
 #[test]
 fn d29_corrupt_consents_must_be_preserved() {
     let dir = fresh_dir("d29_desired");
@@ -190,8 +193,8 @@ const PLAN_ID_ENV: &str = "TYLLUAN_D30_PLAN_ID";
 static D30_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Crea el plan en ESTE proceso (con `DATA_DIR` fijado al temporal) y devuelve
-/// el id. Nota: hoy `store_plan` solo escribe en memoria; D-30 debe hacerlo
-/// escribir tambiÃ©n en la base de datos del kernel.
+/// el id. Desde `396af2b` `store_plan` persiste el plan en la base del
+/// kernel y `init_plan_store` recarga los pendientes no caducados al arrancar.
 async fn create_plan(dir: &Path) -> String {
     // El kernel real resuelve su directorio de datos por entorno; el test lo
     // fija antes de inicializar el store.

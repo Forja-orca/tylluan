@@ -157,12 +157,11 @@ fn happy_identity_app(pubkey: &'static str) -> axum::Router {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-// IGNORADO hasta que se cierre el deadlock de `federation_approve_peer`
-// (read-guard del `if let ... state.config.read()...` + `reload_peers_cache`
-// con `config.write()` dentro del cuerpo = self-deadlock del RwLock cuando la
-// identidad del peer responde 200). Repro: este test — fase RED en el informe
-// IMPL_M-BUFFY-8. Quitar `#[ignore]` cuando el fix de src aterrice; la
-// verificacion con D-52 revertido ya quedó documentada (rojo con
+// ACTIVO desde D-58 (`d1a375c`): el deadlock de `federation_approve_peer`
+// (read-guard de `config.read()` + `reload_peers_cache` con `config.write()`
+// dentro del cuerpo) está cerrado y el `#[ignore]` se retiró. Hoy corre en la
+// suite normal y pasa (verificado 2026-10-27, M-BUFFY-13). Fue la fase RED del
+// informe IMPL_M-BUFFY-8 con D-52 revertido (rojo con
 // `approved_without_identity` + caché obsoleta + 599).
 async fn d56_failed_pubkey_persist_never_leaves_an_approved_peer() {
     let state = support::test_state_custom("mb8d56", Some(MASTER.into()), false).await;

@@ -560,7 +560,8 @@ async fn mlp_routing_accuracy_benchmark() {
 // measured problem, breaks the validated sparse signal (GO T289).
 //
 // GATED: downloads ~570MB (arctic) + ~2.2GB (e5-large) on first run and takes
-// minutes on CPU. Run with: cargo test -p tylluan-evals -- --ignored --nocapture
+// ~49 min on CPU (medido 2026-10-26 en esta máquina, M-BUFFY-12: 2932 s).
+// Run with: cargo test -p tylluan-evals -- --ignored --nocapture
 //
 // Query-prefix policy (VERIFIED, not invented):
 //   - bge-m3: no prefix (BAAI/bge-m3 card: retrieval without query prefixes).
@@ -612,7 +613,7 @@ const AB_CONFIG_BGE_M3: AbConfig =
     ("bge-m3", "bge-m3", |q: &str| q.to_string(), false);
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "downloads models (~2.8GB first run) and takes minutes on CPU — run manually with --ignored --nocapture"]
+#[ignore = "downloads models (~2.8GB first run) and takes ~49 min on CPU (medido 2026-10-26) — run manually with --ignored --nocapture"]
 async fn ab_embedding_models_benchmark() {
     use tylluan_kernel::config::InferenceDevice;
     use tylluan_kernel::router::embeddings::EmbeddingEngine;
