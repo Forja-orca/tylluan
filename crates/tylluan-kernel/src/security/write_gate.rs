@@ -168,9 +168,32 @@ async fn update_node(silva: &Arc<SilvaDB>, node_id: &str, quarantine: bool, reas
 pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: String) {
     JUDGE_SPAWNS.fetch_add(1, Ordering::Relaxed);
     tokio::spawn(async move {
-        let verdict = sentinel_verdict_with_decoding(&content).await;
-        if apply_sentinel_verdict(&silva, &node_id, verdict).await {
-            return;
+        // T-DSH-113: modo de 3 estados. Off no llama al centinela (comportamiento
+        // de siempre); Observe puntúa y registra sin marcar; Enforce aplica política.
+        let sentinel = crate::security::sentinel::global();
+        let mode = sentinel.mode();
+        if mode != crate::security::sentinel::SentinelMode::Off {
+            let verdict = sentinel_verdict_with_decoding(&content).await;
+            match mode {
+                crate::security::sentinel::SentinelMode::Enforce => {
+                    if apply_sentinel_verdict(&silva, &node_id, verdict).await {
+                        return;
+                    }
+                    sentinel.note_fallback();
+                }
+                crate::security::sentinel::SentinelMode::Observe => {
+                    if verdict == crate::security::sentinel::SentinelVerdict::Unavailable {
+                        sentinel.note_fallback();
+                    } else {
+                        tracing::info!(
+                            "[T-DSH-113] centinela observe: veredicto {:?} para nodo {node_id} (no se aplica)",
+                            verdict
+                        );
+                        return;
+                    }
+                }
+                crate::security::sentinel::SentinelMode::Off => {}
+            }
         }
 
         let prompt = format!("{WRITE_GATE_PROMPT_PREFIX}{}", content.chars().take(2000).collect::<String>());

@@ -273,6 +273,9 @@ admin = ["*"]
 # Safe -> pasa. Si el centinela falla o expira, NO bloquea (fail-open a L1/L2).
 # Puerto 0 = efímero propio (nunca 47004). Un comentario por campo:
 # [security.sentinel]
+# T-DSH-113: off (default) | observe (puntua y registra, no marca) | enforce (aplica politica).
+# enabled = true sin mode equivale a enforce (compatibilidad).
+# mode = "off"
 # enabled = false
 # model_path = "E:\\tylluan-patches\\guard-eval\\models\\Qwen3Guard-Gen-0.6B.Q4_K_M.gguf"
 # llama_server_path = "C:\\Users\\you\\.cache\\tylluan\\llama-cpp\\llama-server.exe"

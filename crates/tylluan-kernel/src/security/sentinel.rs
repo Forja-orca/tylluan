@@ -68,6 +68,98 @@ pub fn action_for(verdict: SentinelVerdict) -> SentinelAction {
     }
 }
 
+/// T-DSH-113: modo del centinela.
+///
+/// - `Off`: apagado (default). No arranca nada; write_gate usa las reglas L1/L2
+///   de siempre.
+/// - `Observe`: puntúa y **registra** (tracing + contadores) pero NO pone
+///   cuarentena ni marca de revisión; fail-open igual que en `Enforce`.
+/// - `Enforce`: aplica la política (Unsafe → cuarentena, Controversial → marca).
+///
+/// Compatibilidad: `enabled = true` sin `mode` equivale a `Enforce`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SentinelMode {
+    Off,
+    Observe,
+    Enforce,
+}
+
+impl SentinelMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SentinelMode::Off => "off",
+            SentinelMode::Observe => "observe",
+            SentinelMode::Enforce => "enforce",
+        }
+    }
+
+    /// `true` si el centinela debe puntuar (observe/enforce).
+    pub fn judges(&self) -> bool {
+        !matches!(self, SentinelMode::Off)
+    }
+}
+
+/// Resuelve el modo a partir de `[security.sentinel]`. `mode` explícito manda;
+/// si falta, `enabled = true` → Enforce y `enabled = false` → Off (compatibilidad).
+pub fn resolve_mode(enabled: bool, mode: Option<&str>) -> SentinelMode {
+    match mode.map(|m| m.trim().to_ascii_lowercase()) {
+        Some(m) if m == "off" => SentinelMode::Off,
+        Some(m) if m == "observe" => SentinelMode::Observe,
+        Some(m) if m == "enforce" => SentinelMode::Enforce,
+        Some(other) => {
+            tracing::warn!(
+                "[T-DSH-113] sentinel.mode = '{other}' no reconocido; se usa off (valores: off|observe|enforce)"
+            );
+            SentinelMode::Off
+        }
+        None => {
+            if enabled {
+                SentinelMode::Enforce
+            } else {
+                SentinelMode::Off
+            }
+        }
+    }
+}
+
+/// Contadores del centinela para `/health` (sin tokens ni rutas).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SentinelStats {
+    pub safe: u64,
+    pub controversial: u64,
+    pub unsafe_verdicts: u64,
+    pub unavailable: u64,
+    pub fallbacks: u64,
+    pub in_flight: usize,
+}
+
+/// `true` solo si el modo aplica acciones (cuarentena/marca). Observe puntúa
+/// pero no actúa; Off ni siquiera puntúa.
+pub fn mode_applies_action(mode: SentinelMode) -> bool {
+    matches!(mode, SentinelMode::Enforce)
+}
+
+/// ¿Toca descargar el servidor? Falso si hay peticiones en vuelo (T-DSH-113:
+/// el reaper de T-DSH-110 podía descargar el servidor en mitad de una cola).
+pub fn should_unload_idle(alive: bool, in_flight: usize, idle_secs: u64, idle_elapsed_secs: u64) -> bool {
+    alive && in_flight == 0 && idle_elapsed_secs > idle_secs
+}
+
+/// Guard de petición en vuelo: incrementa al entrar y decrementa al salir
+/// (incluso si el future se cancela).
+struct InFlightGuard<'a>(&'a std::sync::atomic::AtomicUsize);
+impl<'a> InFlightGuard<'a> {
+    fn new(counter: &'a std::sync::atomic::AtomicUsize) -> Self {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self(counter)
+    }
+}
+impl Drop for InFlightGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 struct ServerState {
     child: Option<Child>,
     port: u16,
@@ -97,16 +189,22 @@ impl ServerState {
 /// Juez centinela con servidor propio bajo demanda y cola serie.
 pub struct SentinelJudge {
     cfg: SentinelConfig,
+    mode: SentinelMode,
     state: Mutex<ServerState>,
     http: reqwest::Client,
     /// Solo tests: base URL de un servidor falso (no se arranca llama-server).
     test_base: Option<String>,
+    in_flight: std::sync::atomic::AtomicUsize,
+    verdicts: [std::sync::atomic::AtomicU64; 4],
+    fallbacks: std::sync::atomic::AtomicU64,
 }
 
 impl SentinelJudge {
     pub fn new(cfg: SentinelConfig) -> Self {
+        let mode = resolve_mode(cfg.enabled, cfg.mode.as_deref());
         Self {
             cfg,
+            mode,
             state: Mutex::new(ServerState {
                 child: None,
                 port: 0,
@@ -115,7 +213,48 @@ impl SentinelJudge {
             }),
             http: reqwest::Client::new(),
             test_base: None,
+            in_flight: std::sync::atomic::AtomicUsize::new(0),
+            verdicts: std::array::from_fn(|_| std::sync::atomic::AtomicU64::new(0)),
+            fallbacks: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    pub fn mode(&self) -> SentinelMode {
+        self.mode
+    }
+
+    /// `true` si el servidor está cargado (para `/health`).
+    pub fn loaded(&self) -> bool {
+        self.state.try_lock().map(|mut st| st.alive_mut()).unwrap_or(false)
+    }
+
+    pub fn stats(&self) -> SentinelStats {
+        use std::sync::atomic::Ordering::Relaxed;
+        SentinelStats {
+            safe: self.verdicts[0].load(Relaxed),
+            controversial: self.verdicts[1].load(Relaxed),
+            unsafe_verdicts: self.verdicts[2].load(Relaxed),
+            unavailable: self.verdicts[3].load(Relaxed),
+            fallbacks: self.fallbacks.load(Relaxed),
+            in_flight: self.in_flight.load(Relaxed),
+        }
+    }
+
+    fn note_verdict(&self, verdict: SentinelVerdict) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let idx = match verdict {
+            SentinelVerdict::Safe => 0,
+            SentinelVerdict::Controversial => 1,
+            SentinelVerdict::Unsafe => 2,
+            SentinelVerdict::Unavailable => 3,
+        };
+        self.verdicts[idx].fetch_add(1, Relaxed);
+    }
+
+    /// Cuenta un fail-open (el llamante cae a las reglas L1/L2 existentes).
+    pub fn note_fallback(&self) {
+        self.fallbacks
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Constructor de tests: apunta a un servidor falso ya levantado por el test.
@@ -215,11 +354,21 @@ impl SentinelJudge {
     /// Dictamina un texto. Cola serie: un veredicto a la vez; descarga el
     /// servidor si ha estado inactivo más de `idle_unload_secs`.
     pub async fn judge(&self, text: &str) -> SentinelVerdict {
-        if !self.cfg.enabled {
+        if !self.mode.judges() {
+            self.note_verdict(SentinelVerdict::Unavailable);
             return SentinelVerdict::Unavailable;
         }
+        let _in_flight = InFlightGuard::new(&self.in_flight);
         let mut st = self.state.lock().await;
-        if st.alive_mut() && st.last_used.elapsed() > Duration::from_secs(self.cfg.idle_unload_secs) {
+        // T-DSH-113: last_used al EMPEZAR la petición (además de al terminar),
+        // para que el reaper no cuente como inactivo el tiempo de una cola larga.
+        st.last_used = Instant::now();
+        if should_unload_idle(
+            st.alive_mut(),
+            self.in_flight.load(std::sync::atomic::Ordering::Relaxed),
+            self.cfg.idle_unload_secs,
+            st.last_used.elapsed().as_secs(),
+        ) {
             tracing::info!(
                 "[T-DSH-109] centinela: descargo llama-server tras {}s inactivo",
                 st.last_used.elapsed().as_secs()
@@ -234,6 +383,7 @@ impl SentinelJudge {
                 Ok(p) => p,
                 Err(e) => {
                     tracing::warn!("[T-DSH-109] centinela no disponible: {e} (fail-open)");
+                    self.note_verdict(SentinelVerdict::Unavailable);
                     return SentinelVerdict::Unavailable;
                 }
             }
@@ -254,10 +404,12 @@ impl SentinelJudge {
             Ok(Ok(r)) => r,
             Ok(Err(e)) => {
                 tracing::warn!("[T-DSH-109] centinela: error HTTP: {e} (fail-open)");
+                self.note_verdict(SentinelVerdict::Unavailable);
                 return SentinelVerdict::Unavailable;
             }
             Err(_) => {
                 tracing::warn!("[T-DSH-109] centinela: timeout {}ms (fail-open)", self.cfg.timeout_ms);
+                self.note_verdict(SentinelVerdict::Unavailable);
                 return SentinelVerdict::Unavailable;
             }
         };
@@ -272,11 +424,14 @@ impl SentinelJudge {
                 .to_string(),
             Err(e) => {
                 tracing::warn!("[T-DSH-109] centinela: respuesta no parseable: {e} (fail-open)");
+                self.note_verdict(SentinelVerdict::Unavailable);
                 return SentinelVerdict::Unavailable;
             }
         };
         st.last_used = Instant::now();
-        classify_verdict(&raw)
+        let verdict = classify_verdict(&raw);
+        self.note_verdict(verdict);
+        verdict
     }
 }
 
@@ -346,8 +501,12 @@ fn spawn_idle_reaper(judge: &Arc<SentinelJudge>) {
             tokio::time::sleep(every).await;
             let Some(j) = weak.upgrade() else { break };
             if let Ok(mut st) = j.state.try_lock()
-                && st.alive_mut()
-                && st.last_used.elapsed() > Duration::from_secs(j.cfg.idle_unload_secs)
+                && should_unload_idle(
+                    st.alive_mut(),
+                    j.in_flight.load(std::sync::atomic::Ordering::Relaxed),
+                    j.cfg.idle_unload_secs,
+                    st.last_used.elapsed().as_secs(),
+                )
             {
                 tracing::info!(
                     "[T-DSH-109] centinela: descargo llama-server tras {}s inactivo (reaper)",
@@ -435,6 +594,24 @@ fn set_below_normal(pid: u32) {
 
 #[cfg(not(windows))]
 fn set_below_normal(_pid: u32) {}
+
+/// T-DSH-113: bloque `sentinel` de `/health` (sin tokens ni rutas).
+pub fn health_json() -> serde_json::Value {
+    let judge = global();
+    let stats = judge.stats();
+    serde_json::json!({
+        "mode": judge.mode().as_str(),
+        "loaded": judge.loaded(),
+        "verdicts": {
+            "safe": stats.safe,
+            "controversial": stats.controversial,
+            "unsafe": stats.unsafe_verdicts,
+            "unavailable": stats.unavailable,
+        },
+        "fallbacks": stats.fallbacks,
+        "in_flight": stats.in_flight,
+    })
+}
 
 /// Juez global perezoso (config cargada una vez). `Unavailable` si está apagado.
 pub fn global() -> Arc<SentinelJudge> {
@@ -578,5 +755,68 @@ mod tests {
         );
         assert_eq!(a, SentinelVerdict::Safe);
         assert_eq!(b, SentinelVerdict::Safe);
+    }
+
+    #[test]
+    fn resolve_mode_three_states_and_compat() {
+        assert_eq!(resolve_mode(false, None), SentinelMode::Off);
+        assert_eq!(resolve_mode(true, None), SentinelMode::Enforce);
+        assert_eq!(resolve_mode(false, Some("off")), SentinelMode::Off);
+        assert_eq!(resolve_mode(true, Some("off")), SentinelMode::Off);
+        assert_eq!(resolve_mode(false, Some("observe")), SentinelMode::Observe);
+        assert_eq!(resolve_mode(true, Some("observe")), SentinelMode::Observe);
+        assert_eq!(resolve_mode(false, Some("enforce")), SentinelMode::Enforce);
+        assert_eq!(resolve_mode(true, Some("ENFORCE")), SentinelMode::Enforce);
+        assert_eq!(resolve_mode(true, Some("basura")), SentinelMode::Off);
+    }
+
+    #[test]
+    fn should_unload_idle_respects_in_flight_requests() {
+        // Reproduccion T-DSH-113: con una peticion en vuelo el reaper NO debe
+        // descargar aunque el reloj de inactividad haya vencido (antes fallaba).
+        assert!(!should_unload_idle(true, 1, 10, 999));
+        assert!(!should_unload_idle(true, 5, 10, 999));
+        // Sin peticiones en vuelo y con inactividad vencida, si descarga.
+        assert!(should_unload_idle(true, 0, 10, 11));
+        // Servidor apagado o inactividad no vencida: no toca.
+        assert!(!should_unload_idle(false, 0, 10, 999));
+        assert!(!should_unload_idle(true, 0, 10, 5));
+    }
+
+    #[test]
+    fn observe_scores_but_does_not_enforce() {
+        assert!(!mode_applies_action(SentinelMode::Off));
+        assert!(!mode_applies_action(SentinelMode::Observe));
+        assert!(mode_applies_action(SentinelMode::Enforce));
+        assert!(SentinelMode::Observe.judges());
+        assert!(!SentinelMode::Off.judges());
+    }
+
+    #[tokio::test]
+    async fn observe_mode_counts_verdicts_but_does_not_apply_actions() {
+        let base = fake_server("Safety: Unsafe", 0).await;
+        let mut judge = SentinelJudge::for_test(&base, 5_000);
+        judge.mode = SentinelMode::Observe;
+        assert_eq!(judge.judge("ataque").await, SentinelVerdict::Unsafe);
+        let stats = judge.stats();
+        assert_eq!(stats.unsafe_verdicts, 1);
+        assert!(!mode_applies_action(judge.mode()));
+        assert_eq!(stats.in_flight, 0);
+    }
+
+    #[test]
+    fn health_json_has_required_keys_and_no_paths_or_tokens() {
+        let v = health_json();
+        assert!(v.get("mode").is_some());
+        assert!(v.get("loaded").is_some());
+        let verdicts = v.get("verdicts").expect("verdicts");
+        for k in ["safe", "controversial", "unsafe", "unavailable"] {
+            assert!(verdicts.get(k).is_some(), "falta {k}");
+        }
+        assert!(v.get("fallbacks").is_some());
+        let text = v.to_string();
+        assert!(!text.contains("Qwen3Guard"), "no debe exponer el modelo: {text}");
+        assert!(!text.contains("\\\\"), "no debe exponer rutas: {text}");
+        assert!(!text.to_lowercase().contains("token"), "no debe exponer tokens: {text}");
     }
 }

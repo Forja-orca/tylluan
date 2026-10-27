@@ -1492,6 +1492,9 @@ pub struct SecurityConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SentinelConfig {
+    /// T-DSH-113: `off` | `observe` | `enforce`. `None` = compatibilidad:
+    /// `enabled = true` → enforce, `enabled = false` → off.
+    pub mode: Option<String>,
     pub enabled: bool,
     pub model_path: Option<PathBuf>,
     pub llama_server_path: Option<PathBuf>,
@@ -1505,6 +1508,7 @@ pub struct SentinelConfig {
 impl Default for SentinelConfig {
     fn default() -> Self {
         Self {
+            mode: None,
             enabled: false,
             model_path: None,
             llama_server_path: None,
