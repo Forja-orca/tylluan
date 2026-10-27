@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml"><img src="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.17.1-blue.svg" alt="v0.17.1">
+  <img src="https://img.shields.io/badge/version-0.17.2-blue.svg" alt="v0.17.2">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP native">
 </p>
 
@@ -143,7 +143,7 @@ To change profile, stop the kernel first, then run `tylluan-cli install --profil
 
 **Why not**
 
-- Mem0, Letta, Zep, Cognee and others have years of production use and larger communities. Tylluan is young; v0.17.1 is its latest release.
+- Mem0, Letta, Zep, Cognee and others have years of production use and larger communities. Tylluan is young; v0.17.2 is its latest release.
 - It is not a hosted service. There is no team dashboard, no managed backup and no support. A React dashboard exists in `dashboard/`, but the published binaries do not embed it: build from source with `--features bundled-dashboard` to serve it from the kernel.
 - It is not hardened for hostile networks. Keep it on `127.0.0.1`.
 - Several guilds need Python 3.12, and some (web search, for example) reach the internet when you ask them to.
@@ -154,7 +154,7 @@ To change profile, stop the kernel first, then run `tylluan-cli install --profil
 
 - **Network.** By default the kernel binds to `127.0.0.1` only. Never combine `host = "0.0.0.0"` with `dev_mode = true`, which would be an unauthenticated remote shell on your network; if you do, the kernel logs a critical warning and forces the host back to `127.0.0.1`.
 - **Authentication.** On by default (`dev_mode = false`). Every API and MCP call needs the bearer token, except a short public list: the health check, discovery, the dashboard's static files, and four endpoints under `/api/` (federation ping, federation sync send and receive, and the MCP probe). The exact list is `is_public_bypass_path` in `crates/tylluan-kernel/src/transport/http/auth.rs`.
-- **Requests from web pages.** A page open in your browser could otherwise talk to the kernel on `127.0.0.1`. On `main` (after v0.17.1, **not in a tagged release yet**) the five MCP and SSE routes (`/messages`, `/mcp`, `/api/v1/mcp`, `/sse`, `/sse/download`) and every non-GET, non-HEAD route under `/api/v1/` reject requests with a non-local `Origin` or `Host` with 403, and the MCP endpoint requires `Content-Type: application/json`. If you run v0.17.1, keep `dev_mode = false`: a web page does not have your token, so it cannot call an authenticated kernel.
+- **Requests from web pages.** A page open in your browser could otherwise talk to the kernel on `127.0.0.1`. From v0.17.2 on the five MCP and SSE routes (`/messages`, `/mcp`, `/api/v1/mcp`, `/sse`, `/sse/download`) and every non-GET, non-HEAD route under `/api/v1/` reject requests with a non-local `Origin` or `Host` with 403, and the MCP endpoint requires `Content-Type: application/json`. If you run v0.17.1, keep `dev_mode = false`: a web page does not have your token, so it cannot call an authenticated kernel.
 - **Memory poisoning.** A coherence gate filters what `tylluan_recall` returns, with deterministic pattern, provenance and drift checks. An optional model-based classifier for ambiguous cases is off by default; when you enable it, it can quarantine or down-weight a memory. The plain REST search endpoint is not behind this gate yet.
 - **Tools.** Guilds run as normal operating-system processes with your user's rights. An opt-in Docker sandbox (`[security.sandbox]` in `tylluan.toml`, needs Docker) can isolate the bash and code guilds, or every guild in its `strict` profile. It is off by default, so out of the box a guild can do anything you can do. Tool calls made through the MCP tools are written to a hash-chained audit log; the direct REST endpoint for calling a guild is not audited yet, and an audit write that fails is logged as a warning rather than stopping the call.
 - **Not covered.** No independent third-party security audit. Federation is meant for a local network or your own VPN, not the open internet.
@@ -175,7 +175,7 @@ Two or more Tylluan instances can sync memories with peers you approve one by on
 
 1388 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
 
-- **Latest release:** v0.17.1 (2026-10-13). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
+- **Latest release:** v0.17.2 (2026-10-27). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
 - **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
 - **Platforms:** Linux x86_64 and ARM64, macOS Apple Silicon, Windows x86_64. CI runs the tests on Linux x86_64, and the release workflow builds all four binaries. The start-up measurement above was taken on Windows x86_64. The macOS and ARM64 builds have not been run on hardware by the maintainers (not verified).
 

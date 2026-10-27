@@ -1,4 +1,4 @@
-# Tylluan v0.17.1 — Claude Code Instructions
+# Tylluan v0.17.2 — Claude Code Instructions
 
 > **Last sync: 2026-10-14** (revisado línea a línea contra el código; las notas con fecha 2026-10-14 son correcciones). This file is the human-readable context for Claude Code.
 > For machine-readable contracts, see `.tylluan/agents.toml` (ADR-009).
@@ -105,10 +105,10 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 
 ---
 
-## Estado actual — v0.17.1 (v0.17.0 tagged 2026-08-23; v0.17.1 corta los fixes de seguridad e instalador del 2026-10-05/12)
+## Estado actual — v0.17.2 (v0.17.0 tagged 2026-08-23; v0.17.2 corta el cierre a los ~66 s del v0.17.1, los guards Origin/Host y los arreglos de instalador y guilds del 2026-10-26/27)
 
 **Tests:** 1048 kernel lib + 74 link lib + 12 fsrs = 1134 en verde (vigilado por `scripts/check_test_count.sh`) — verifica con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
-**Cargo.toml:** `version = "0.17.1"`, Rust edition 2024, toolchain 1.99.1 (`rust-toolchain.toml`, fijado también en los workflows y en `verify.sh`).
+**Cargo.toml:** `version = "0.17.2"`, Rust edition 2024, toolchain 1.99.1 (`rust-toolchain.toml`, fijado también en los workflows y en `verify.sh`).
 
 ### Cerrado en v0.17.0 (2026-08-24; trabajo del 2026-08-11 al 2026-08-14):
 - **A2A F1-F4 completo** — cliente outbound real, exposición REST + intent con ACL, streaming SSE, hardening (Deep)
