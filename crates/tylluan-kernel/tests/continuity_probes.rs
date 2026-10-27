@@ -360,14 +360,17 @@ async fn t25_b_mailbox_message_survives_restart() {
     println!("| b | mensaje de buzón sin leer tras reinicio | legible | ok |");
 }
 
-/// HALLAZGO (documentado, no ejecutable in-process): el store de planes
-/// pendientes es `static PLAN_STORE: OnceLock<RwLock<HashMap<..>>>` en
-/// `security/grants.rs` (línea 46-58): vive en el PROCESO, no en disco. Un
-/// reinicio real (proceso nuevo) pierde los planes pendientes; un "reinicio"
-/// in-process no los pierde porque el estático sigue vivo, así que este assert
-/// (la expectativa honesta de reinicio real) no puede pasar aquí.
+/// HALLAZGO (actualizado 2026-10-27, M-BUFFY-13): esta sonda se escribió cuando
+/// `PLAN_STORE` vivía solo en el proceso (`security/grants.rs`) y un reinicio
+/// perdía los planes. D-30 (`396af2b`) cambió ese comportamiento A PROPÓSITO:
+/// `store_plan` persiste y `init_plan_store` recarga los pendientes no
+/// caducados, así que un plan pendiente YA sobrevive a un reinicio real y el
+/// assert de abajo (heredado de la premisa vieja) es el que está caducado. El
+/// rojo no es del test sino el síntoma: tras el "reinicio" in-process, `get_plan`
+/// ve el plan recargado mientras `list_pending_actions` responde "No pending
+/// actions" — dos vistas del mismo store que no coinciden (IMPL_M-BUFFY-13 §3).
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "PLAN_STORE es un OnceLock en proceso (security/grants.rs línea 46-58): los planes pendientes NO persisten entre procesos; in-process no es medible"]
+#[ignore = "t25_b2: premisa caducada por D-30 (396af2b) — los planes YA persisten; el rojo mide una divergencia real: list_pending_actions no ve el plan recargado"]
 async fn t25_b2_pending_plan_does_not_survive_a_real_restart() {
     once_init();
     let dir = fresh_dir("b2");

@@ -138,9 +138,9 @@ fn response_text(body: &str) -> String {
 #[tokio::test(flavor = "multi_thread")]
 // Prueba-especificación (mismo patrón que el B-7 de Buffy): corre en verde en
 // la suite normal porque está ignorada; con `-- --ignored` falla HOY por la
-// razón correcta (9 filas no conformes) y debe pasar cuando se endurezca el
-// parser. No rompe CI mientras el hallazgo no esté decidido.
-#[ignore = "T-DSH-9 X1: abierto — agent_id declarativo permite al autor aprobar su plan; requiere binding token->agent_id (decisión de José). F1,F3 ya corregidos"]
+// razón correcta (1 fila no conforme de 16: X1) y debe pasar cuando exista el
+// binding token->agent_id que decida José. No rompe CI mientras tanto.
+#[ignore = "T-DSH-9 X1: abierto — `agent_id` declarativo permite consumir el plan de OTRO autor (spoof); requiere binding token->agent_id (decisión de José). 15/16 filas conformes"]
 async fn d16_intent_route_adversarial_matrix() {
     // Aislar el audit store: una aprobación real escribe en guild_audit_log.
     // Nunca debe tocar la base de producción.

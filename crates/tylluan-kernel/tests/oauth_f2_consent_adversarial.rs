@@ -11,9 +11,11 @@
 //!   V6. XSS en `client_id`/`state` reflejados en la página
 //!   V7. bypass del rate limit por `X-Forwarded-For`
 //!
-//! Convención: cada vector es un `#[test]` independiente. Los que fallan HOY
-//! llevan `#[ignore = "..."]` con el motivo; los que pasan (la mayoría) corren
-//! en la suite normal como pruebas de especificación.
+//! Convención: cada vector es un `#[test]` independiente. ESTADO verificado
+//! 2026-10-27 (M-BUFFY-13): los 7 vectores pasan y NINGUNO lleva `#[ignore]`
+//! (0 ignorados); corren en la suite normal como pruebas de especificación.
+//! Al escribir el fichero, un vector en rojo llevaba `#[ignore = "..."]` con
+//! su motivo; hoy no queda ninguno.
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test oauth_f2_consent_adversarial

@@ -2,27 +2,25 @@
 //! (@buffy, parte A). Lista de obligatorios: ADR-021 §9/§12 (§153 del
 //! borrador). Esquema congelado: Coloquio turno 1217.
 //!
-//! ── ESTADO DE COMPILACIÓN (leer antes de integrar) ─────────────────────
-//! Este fichero importa `tylluan_kernel::router::decision::api_types`, que
-//! entrega Deep (turno 1218). HASTA ENTONCES `cargo test -p tylluan-kernel`
-//! NO compila este target: es el orden TDD que el TL fijó (tests primero,
-//! en rojo). Buffy lo verificó localmente contra un stub idéntico al
-//! esquema del turno 1217 (creado para compilar, BORRADO después, no se
-//! entrega). Al aterrizar Deep: compila y los tests `wire_contract` corren
-//! sin tocar este fichero. Al aterrizar Antigravity (turno 1219, endpoint
-//! POST /api/v1/decide): quitar los `#[ignore]` marcados y ejecutar.
+//! ── ESTADO verificado 2026-10-27 (M-BUFFY-13) ─────────────────────────
+//! `router::decision::api_types` y el endpoint `POST /api/v1/decide` existen
+//! desde `8f16a97`/`5a4a806` (Deep) y el endpoint de Antigravity (turno
+//! 1219). Los `#[ignore]` "hasta endpoint" se retiraron: los 13 tests de
+//! este target corren en la suite normal (0 ignorados, 13 en verde). La
+//! tabla se conserva como historia del TDD; la última columna ya no es una
+//! condición pendiente sino la cobertura que existe.
 //!
 //! Cobertura de los 8 vectores del turno 1220:
-//! | # | Vector (turno 1220)                  | Test                                        | Estado hasta integración |
+//! | # | Vector (turno 1220)                  | Test                                        | Estado hoy (2026-10-27) |
 //! |---|---------------------------------------|---------------------------------------------|--------------------------|
-//! | 1 | inyección de instrucciones en state  | `v1_state_injection_never_escapes_options`  | #[ignore] hasta endpoint |
-//! | 2 | respuesta fuera de opciones          | `v2_answer_outside_declared_options_rejected` | #[ignore] hasta endpoint |
-//! | 3 | abstención respetada                 | `v3_free_question_abstains_no_model_provider` | #[ignore] hasta endpoint |
+//! | 1 | inyección de instrucciones en state  | `v1_state_injection_never_escapes_options`  | ✅ suite normal |
+//! | 2 | respuesta fuera de opciones          | `v2_answer_outside_declared_options_rejected` | ✅ suite normal |
+//! | 3 | abstención respetada                 | `v3_free_question_abstains_no_model_provider` | ✅ suite normal |
 //! | 4 | modelo no revierte rechazo determinista | `v8_model_cannot_overturn_deterministic_rejection` | ✅ implementado (advisory/gate, turno 1234) |
-//! | 5 | datos clínicos no salan de la máquina | `v5_clinical_state_never_echoed_nor_stored` | #[ignore] hasta endpoint (capa respuesta; capa BD = test de Deep) |
-//! | 6 | tool no accesible como operador      | `v4_decide_is_agent_class_not_operator`     | #[ignore] hasta endpoint |
-//! | 7 | límites de tamaño/preguntas          | `v6_size_and_question_limits_rejected`      | #[ignore] hasta endpoint |
-//! | 8 | apagado = cero llamadas externas     | `v7_disabled_switch_answers_disabled_empty` | #[ignore] hasta endpoint (cero llamadas: test unitario de Deep con proveedor canario) |
+//! | 5 | datos clínicos no salan de la máquina | `v5_clinical_state_never_echoed_nor_stored` | ✅ suite normal (capa respuesta; capa BD = test de Deep) |
+//! | 6 | tool no accesible como operador      | `v4_decide_is_agent_class_not_operator`     | ✅ suite normal |
+//! | 7 | límites de tamaño/preguntas          | `v6_size_and_question_limits_rejected`      | ✅ suite normal |
+//! | 8 | apagado = cero llamadas externas     | `v7_disabled_switch_answers_disabled_empty` | ✅ suite normal (cero llamadas: test unitario de Deep con proveedor canario) |
 //! Paridad MCP/REST y "seis herramientas" son de Antigravity (turno 1219);
 //! aquí solo se fija el contrato de cable REST que la paridad debe honrar.
 

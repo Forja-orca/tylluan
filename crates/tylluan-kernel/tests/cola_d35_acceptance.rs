@@ -13,19 +13,18 @@
 //! los `.py`) y comprueba `GuildDescriptor::capabilities`. No se replica la
 //! lógica ni se toca `src`.
 //!
-//! Tests:
-//!   - **vivo**: fija que HOY `builtin_catalog()` da `None` para vision y
-//!     websearch (el defecto); Deep debe invertirlo al cerrar D-35;
-//!   - `#[ignore = "D-35"]` (a): tras el arreglo, ambas deben parsearse (`Some`)
-//!     con `process_execution=false`;
-//!   - `#[ignore = "D-35"]` (c): con esas capacidades ya parseadas,
-//!     `websearch.web_search(command="rust async")` NO debe bloquearse (en
-//!     `websearch.py` línea 44, `command` es el tercer fallback legítimo de la
-//!     query; T-DSH-32 midió que `enforce_capabilities` lo bloquearía).
+//! ESTADO verificado 2026-10-27 (M-BUFFY-13): D-35 está CERRADO en `4fdfb2e`;
+//! los 3 tests corren en la suite normal (0 ignorados) y pasan:
+//!   - **pin de regresión** (`d35_catalog_now_parses_multiline_capabilities`):
+//!     antes del arreglo fijaba el defecto (`None` para vision y websearch);
+//!     hoy fija lo contrario y detecta cualquier regresión del parser;
+//!   - (a): ambas guilds se parsean (`Some`) con `process_execution=false`;
+//!   - (c): `websearch.web_search(command="rust async")` no se bloquea
+//!     (`websearch.py:44`: `command` es el tercer fallback legítimo de la query).
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d35_acceptance
-//!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d35_acceptance -- --ignored
+//! (sin tests ignorados: `-- --ignored` no ejecuta nada)
 //!
 //! Sin `cfg(unix)`/`cfg(windows)` en ninguna función; `src/` intacto.
 
@@ -73,9 +72,9 @@ fn d35_catalog_now_parses_multiline_capabilities() {
     }
 }
 
-/// **DESEADO (a) — D-35.** Tras arreglar el parser, `vision` y `websearch`
-/// (declaraciones multilínea) deben exponerse como `Some` con
-/// `process_execution = false` (aceptado por D-35(a)).
+/// **Aceptación (a) — D-35.** `vision` y `websearch` (declaraciones
+/// multilínea) se exponen como `Some` con `process_execution = false`;
+/// cumplido desde `4fdfb2e`, donde el test pasó de rojo a verde.
 #[test]
 fn d35_desired_multiline_capabilities_are_parsed() {
     for guild in ["vision", "websearch"] {
@@ -93,11 +92,11 @@ fn d35_desired_multiline_capabilities_are_parsed() {
     }
 }
 
-/// **DESEADO (c) — D-35.** Con las capacidades ya parseadas, el uso legítimo
-/// `websearch.web_search(command="rust async")` no debe bloquearse: en
-/// `websearch.py` (línea 44) `command` es el tercer fallback de la query, no un
-/// comando de shell. Hoy falla ya en el primer paso (el catálogo da `None`), que
-/// es la razón correcta.
+/// **Aceptación (c) — D-35.** Con las capacidades ya parseadas, el uso
+/// legítimo `websearch.web_search(command="rust async")` no se bloquea: en
+/// `websearch.py` (línea 44) `command` es el tercer fallback de la query, no
+/// un comando de shell. Antes del arreglo fallaba en el primer paso (catálogo
+/// `None`); desde `4fdfb2e` pasa.
 #[test]
 fn d35_desired_websearch_command_fallback_is_not_blocked() {
     let capabilities = catalog_capabilities("websearch").unwrap_or_else(|| {
