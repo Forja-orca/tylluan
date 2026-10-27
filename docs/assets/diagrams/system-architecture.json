@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Tylluan process map",
+    "quality_profile": "standard",
+    "viewBox": [
+      1100,
+      660
+    ],
+    "repository": {
+      "url": "https://github.com/Forja-orca/tylluan",
+      "revision": "d79990ad4499298969e5c5067a412c40c50fb8f8"
+    }
+  },
+  "components": [
+    {
+      "id": "mcpc",
+      "type": "external",
+      "label": "MCP clients",
+      "sublabel": "Claude Code, Codex, IDEs",
+      "pos": [
+        30,
+        100
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "restc",
+      "type": "external",
+      "label": "REST and A2A",
+      "sublabel": "CLI, dashboard, agents",
+      "pos": [
+        30,
+        270
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "peers",
+      "type": "external",
+      "label": "Federation peers",
+      "sublabel": "other Tylluan nodes",
+      "pos": [
+        30,
+        500
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "transport",
+      "type": "backend",
+      "label": "HTTP transport",
+      "sublabel": "/mcp /sse /api/v1 /a2a",
+      "tag": "127.0.0.1:47004",
+      "pos": [
+        330,
+        100
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/transport/http/mod.rs"
+        }
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Auth and limits",
+      "sublabel": "bearer, trust, grants",
+      "pos": [
+        330,
+        270
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/security/trust.rs"
+        }
+      ]
+    },
+    {
+      "id": "mesh",
+      "type": "cloud",
+      "label": "Mesh and P2P",
+      "sublabel": "Noise NK, mDNS, opt-in",
+      "pos": [
+        330,
+        500
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "Sovereign tools",
+      "sublabel": "do remember recall think graph decide",
+      "pos": [
+        620,
+        270
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/transport/server/tools.rs"
+        }
+      ]
+    },
+    {
+      "id": "registry",
+      "type": "backend",
+      "label": "Guild registry",
+      "sublabel": "McpProxy, lifecycle, reaping",
+      "pos": [
+        620,
+        100
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/registry/proxy.rs"
+        }
+      ]
+    },
+    {
+      "id": "silva",
+      "type": "database",
+      "label": "SilvaDB",
+      "sublabel": "SQLite, FTS5, graph, vectors",
+      "tag": "guards at write and recall",
+      "pos": [
+        620,
+        500
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/memory/silva/mod.rs"
+        }
+      ]
+    },
+    {
+      "id": "guilds",
+      "type": "backend",
+      "label": "45 guilds",
+      "sublabel": "Python FastMCP processes",
+      "pos": [
+        900,
+        100
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "llama",
+      "type": "backend",
+      "label": "llama-server",
+      "sublabel": "llama.cpp, CPU, loopback",
+      "pos": [
+        900,
+        500
+      ],
+      "size": [
+        160,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "tylluan-nexus, one Rust process",
+      "wraps": [
+        "transport",
+        "auth",
+        "mesh",
+        "tools",
+        "registry",
+        "silva"
+      ],
+      "pad": 22
+    }
+  ],
+  "connections": [
+    {
+      "id": "e1",
+      "from": "mcpc",
+      "to": "transport",
+      "label": "MCP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "restc",
+      "to": "transport",
+      "label": "REST, A2A",
+      "toSide": "left"
+    },
+    {
+      "id": "e3",
+      "from": "transport",
+      "to": "auth",
+      "label": "authz",
+      "variant": "security",
+      "labelAt": [
+        425,
+        214
+      ]
+    },
+    {
+      "id": "e4",
+      "from": "auth",
+      "to": "tools",
+      "label": "dispatch"
+    },
+    {
+      "id": "e5",
+      "from": "tools",
+      "to": "registry",
+      "label": "route"
+    },
+    {
+      "id": "e6",
+      "from": "registry",
+      "to": "guilds",
+      "label": "stdio"
+    },
+    {
+      "id": "e7",
+      "from": "tools",
+      "to": "silva",
+      "label": "read, write",
+      "labelAt": [
+        715,
+        414
+      ]
+    },
+    {
+      "id": "e8",
+      "from": "guilds",
+      "to": "llama",
+      "label": "llama_backend, judge opt-in",
+      "variant": "dashed",
+      "labelAt": [
+        980,
+        330
+      ]
+    },
+    {
+      "id": "e9",
+      "from": "peers",
+      "to": "mesh",
+      "label": "Noise",
+      "variant": "dashed"
+    },
+    {
+      "id": "e10",
+      "from": "mesh",
+      "to": "auth",
+      "label": "approved",
+      "variant": "dashed"
+    }
+  ]
+}

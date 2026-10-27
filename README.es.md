@@ -33,7 +33,7 @@ Tú pones el modelo y el cliente (Claude Code, Cursor, VS Code, …). Tylluan no
 > **Software de investigación.** Tylluan ejecuta comandos reales en tu máquina y no ha pasado ninguna auditoría de seguridad independiente de terceros. Lee [Seguridad](#seguridad-qué-protege-y-qué-no) y [DISCLAIMER.md](DISCLAIMER.md) antes de poner algo sensible a su alcance.
 
 <p align="center">
-  <img src="docs/assets/how-it-fits.svg" alt="Tus clientes de IA se conectan por MCP o REST a un único binario local, tylluan-nexus, que contiene seis herramientas, protecciones, memoria y 45 guilds. Usa modelos locales y, opcionalmente, puede sincronizarse con otras instancias de Tylluan aprobadas." width="100%">
+  <img src="docs/assets/how-it-fits.svg" alt="Mapa de procesos: los clientes MCP llegan al transporte HTTP de un solo proceso Rust, tylluan-nexus, en 127.0.0.1 puerto 47004; los clientes REST y A2A entran por el mismo transporte. Cada petición pasa por autenticación, confianza y permisos y después por las seis herramientas soberanas. Estas enrutan al registro de guilds, que habla con 45 procesos Python por stdio JSON-RPC, y leen y escriben en SilvaDB (SQLite con FTS5, grafo y vectores). El modelo juez corre en llama-server a través del guild llama_backend y es opcional. La federación con otros nodos Tylluan aprobados pasa por la malla con Noise." width="100%">
 </p>
 
 ## Instalación
@@ -116,7 +116,7 @@ Con la configuración por defecto de la rama `main` actual, cada cliente conecta
 | `tylluan_decide` | Responde una pregunta acotada (elección, puntuación o sí/no) o se abstiene. Hoy aplica reglas deterministas y registra cada decisión; por defecto no tiene ningún modelo conectado |
 
 <p align="center">
-  <img src="docs/assets/memory-flow.svg" alt="Guardar: tylluan_remember almacena el texto en SQLite con un embedding local y enlaces al grafo. Recuperar: la búsqueda por palabras clave, más la de vectores y grafo si hay un modelo de embeddings activo, se ejecuta a la vez, los rankings se fusionan, una puerta de coherencia filtra memorias sospechosas y los resultados vuelven al agente." width="100%">
+  <img src="docs/assets/memory-flow.svg" alt="Escritura: tylluan_remember pasa el filtro L1 de patrones de inyección, se vectoriza con BGE-M3 (1024 dimensiones, ONNX) y se guarda en SilvaDB; un juez L2 asíncrono clasifica el nodo nuevo como SAFE o SUSPICIOUS y marca la cuarentena. Recuperación: tylluan_recall elige un nivel (rápido, equilibrado o profundo), ejecuta FTS5 BM25 más coseno fusionados con RRF con k igual a 60, y la puerta de coherencia (L1 patrones, L2 procedencia, L3 coseno por debajo de 0,85, L4 juez opcional) filtra los candidatos antes de devolver memorias ordenadas y la cabecera de estadísticas." width="100%">
 </p>
 
 ## Perfiles

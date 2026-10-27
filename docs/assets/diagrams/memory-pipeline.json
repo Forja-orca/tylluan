@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Memory write and recall pipeline",
+    "quality_profile": "standard",
+    "viewBox": [
+      1100,
+      680
+    ]
+  },
+  "stages": [
+    {
+      "label": "Entry"
+    },
+    {
+      "label": "Pre-filter"
+    },
+    {
+      "label": "Index and retrieve"
+    },
+    {
+      "label": "Store"
+    },
+    {
+      "label": "Judge and output"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "remember",
+      "type": "frontend",
+      "label": "tylluan_remember",
+      "sublabel": "MCP or REST write",
+      "stage": 0,
+      "row": 0
+    },
+    {
+      "id": "l1",
+      "type": "security",
+      "label": "L1 patterns",
+      "sublabel": "known injection regex",
+      "tag": "reject",
+      "stage": 1,
+      "row": 0
+    },
+    {
+      "id": "embed",
+      "type": "backend",
+      "label": "Embed",
+      "sublabel": "BGE-M3, 1024-d, ONNX",
+      "stage": 2,
+      "row": 0
+    },
+    {
+      "id": "silva",
+      "type": "database",
+      "label": "SilvaDB",
+      "sublabel": "SQLite WAL, FTS5, graph",
+      "tag": "silva.db",
+      "stage": 3,
+      "row": 1
+    },
+    {
+      "id": "judge",
+      "type": "security",
+      "label": "L2 judge",
+      "sublabel": "SAFE or SUSPICIOUS",
+      "tag": "sets quarantine flag",
+      "stage": 4,
+      "row": 0,
+      "width": 130
+    },
+    {
+      "id": "recall",
+      "type": "frontend",
+      "label": "tylluan_recall",
+      "sublabel": "query text",
+      "stage": 0,
+      "row": 2
+    },
+    {
+      "id": "tier",
+      "type": "backend",
+      "label": "Tier",
+      "sublabel": "fast, balanced, deep",
+      "tag": "tokens + entropy",
+      "stage": 1,
+      "row": 2
+    },
+    {
+      "id": "hybrid",
+      "type": "backend",
+      "label": "Hybrid search",
+      "sublabel": "BM25 + cosine, RRF k=60",
+      "stage": 2,
+      "row": 2
+    },
+    {
+      "id": "cgate",
+      "type": "security",
+      "label": "Coherence gate",
+      "sublabel": "L1 to L3, optional L4",
+      "stage": 4,
+      "row": 2,
+      "width": 130
+    },
+    {
+      "id": "result",
+      "type": "external",
+      "label": "Ranked memories",
+      "sublabel": "plus gate stats header",
+      "stage": 4,
+      "row": 3
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "remember",
+      "to": "l1",
+      "label": "text",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f2",
+      "from": "l1",
+      "to": "embed",
+      "label": "clean"
+    },
+    {
+      "id": "f3",
+      "from": "embed",
+      "to": "silva",
+      "label": "node + vector"
+    },
+    {
+      "id": "f4",
+      "from": "silva",
+      "to": "judge",
+      "label": "new node, async",
+      "variant": "dashed"
+    },
+    {
+      "id": "f6",
+      "from": "recall",
+      "to": "tier",
+      "label": "query",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f7",
+      "from": "tier",
+      "to": "hybrid",
+      "label": "budget"
+    },
+    {
+      "id": "f8",
+      "from": "hybrid",
+      "to": "silva",
+      "label": "FTS5 + scan"
+    },
+    {
+      "id": "f9",
+      "from": "silva",
+      "to": "cgate",
+      "label": "candidates"
+    },
+    {
+      "id": "f10",
+      "from": "cgate",
+      "to": "result",
+      "label": "survivors",
+      "labelAt": [
+        960,
+        432
+      ]
+    }
+  ]
+}
