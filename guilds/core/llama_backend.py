@@ -88,7 +88,7 @@ def _read_config():
         "n_gpu_layers": llama_cfg.get("n_gpu_layers", 0),
         "ctx_size": llama_cfg.get("ctx_size", 2048),
         "n_keep": llama_cfg.get("n_keep", 0),  # tokens del prompt inicial conservados al desplazar contexto
-        "threads": llama_cfg.get("threads", 0),  # 0 = auto (cpu_count)
+        "threads": llama_cfg.get("threads", 0),  # 0 = auto (min(cpu_count, AUTO_THREADS_CAP))
         "batch_size": llama_cfg.get("batch_size", 512),
         "temperature": llama_cfg.get("temperature", 0.7),
         "top_p": llama_cfg.get("top_p", 0.95),
@@ -100,6 +100,21 @@ def _read_config():
 _CFG = _read_config()
 _CFG_LOADED_TS = time.time()
 LLAMA_PORT = _CFG["port"]
+
+
+AUTO_THREADS_CAP = 4  # good-neighbour default: never spin every core of a shared machine
+
+
+def _resolve_threads(configured: int) -> int:
+    """Explicit `threads` wins; 0 = auto, capped so we never take the whole CPU."""
+    if configured > 0:
+        return configured
+    return max(1, min(os.cpu_count() or 4, AUTO_THREADS_CAP))
+
+
+def _needs_mlock() -> bool:
+    import platform
+    return platform.machine().lower() in ("armv7l", "aarch64", "arm64")
 
 
 def _get_config():
@@ -619,7 +634,7 @@ async def _start_llama_server_locked():
         )
         globals()["LLAMA_PORT"] = new_port
 
-    threads = _get_config()["threads"] if _get_config()["threads"] > 0 else (os.cpu_count() or 4)
+    threads = _resolve_threads(_get_config()["threads"])
     cmd = [
         server_path,
         "--model", model_path,
@@ -638,13 +653,10 @@ async def _start_llama_server_locked():
         "--threads", str(threads),
         "--batch-size", str(_get_config()["batch_size"]),
     ])
-    # --mlock on ARM or low-RAM devices prevents model swap.
-    # The doctor-in-Africa anchor (Raspberry Pi 4, 4-8GB RAM) benefits most.
-    # On high-RAM systems the flag is cheap and harmless.
-    if platform := __import__("platform"):
-        is_arm = platform.machine().lower() in ("armv7l", "aarch64", "arm64")
-        if is_arm or _get_config()["n_gpu_layers"] == 0:
-            cmd.append("--mlock")
+    # --mlock only on ARM boards (Raspberry Pi anchor), where swapping the model
+    # is the failure mode. On a shared desktop it pins RAM other programs need.
+    if _needs_mlock():
+        cmd.append("--mlock")
 
     sys.stderr.write(f"[llama_backend] Starting: {' '.join(cmd)}\n")
     _llama_process = subprocess.Popen(
