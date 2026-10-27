@@ -1475,6 +1475,46 @@ pub struct SecurityConfig {
     /// prompt ni el contenido, solo el hash y el veredicto.
     #[serde(default = "default_judge_dedup_max_entries")]
     pub judge_dedup_max_entries: usize,
+    /// T-DSH-109: centinela local OPT-IN para write_gate L2 (juez Qwen3Guard).
+    /// Apagado por defecto: sin `enabled = true` no se arranca ningún proceso y
+    /// la capa 2 conserva su juez actual. Ver `security::sentinel`.
+    #[serde(default)]
+    pub sentinel: SentinelConfig,
+}
+
+/// T-DSH-109: configuración del centinela local de write_gate L2.
+///
+/// `model_path` es la ruta **explícita** al GGUF (nunca se descarga nada).
+/// `llama_server_path` opcional; si falta se usa `TYLLUAN_LLAMA_SERVER` o el
+/// `llama-server` del PATH. `port = 0` elige un puerto efímero propio (nunca
+/// 47004). `threads` se acota a 4 en el arranque. `idle_unload_secs` descarga
+/// el servidor tras ese tiempo sin veredictos.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SentinelConfig {
+    pub enabled: bool,
+    pub model_path: Option<PathBuf>,
+    pub llama_server_path: Option<PathBuf>,
+    pub port: u16,
+    pub threads: u8,
+    pub ctx_size: u32,
+    pub timeout_ms: u64,
+    pub idle_unload_secs: u64,
+}
+
+impl Default for SentinelConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model_path: None,
+            llama_server_path: None,
+            port: 0,
+            threads: 4,
+            ctx_size: 2048,
+            timeout_ms: 20_000,
+            idle_unload_secs: 300,
+        }
+    }
 }
 
 fn default_encrypt_at_rest() -> bool {
@@ -1503,6 +1543,7 @@ impl Default for SecurityConfig {
             judge_model: None,
             judge_dedup_window_secs: default_judge_dedup_window_secs(),
             judge_dedup_max_entries: default_judge_dedup_max_entries(),
+            sentinel: SentinelConfig::default(),
         }
     }
 }

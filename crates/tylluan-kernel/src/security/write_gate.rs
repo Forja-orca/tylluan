@@ -49,14 +49,93 @@ fn is_suspicious_verdict(verdict: &str) -> bool {
     v.len() >= 3 && "SUSPICIOUS".starts_with(v)
 }
 
+/// T-DSH-109: aplica el veredicto del centinela local (opt-in) a `node_id`.
+///
+/// Devuelve `true` si el centinela ya decidió (cuarentena, marca de revisión o
+/// paso limpio) y `false` si hay que caer a las reglas L1/L2 existentes
+/// (centinela apagado, sin modelo, timeout o error → fail-open).
+async fn apply_sentinel_verdict(
+    silva: &Arc<SilvaDB>,
+    node_id: &str,
+    verdict: crate::security::sentinel::SentinelVerdict,
+) -> bool {
+    use crate::security::sentinel::{action_for, SentinelAction};
+    match action_for(verdict) {
+        SentinelAction::Quarantine => {
+            update_node(silva, node_id, true, "T-DSH-109 centinela: Unsafe").await;
+            true
+        }
+        SentinelAction::MarkReview => {
+            update_node(
+                silva,
+                node_id,
+                false,
+                "T-DSH-109 centinela: Controversial (pendiente de revisión)",
+            )
+            .await;
+            true
+        }
+        SentinelAction::Pass => true,
+        SentinelAction::FallbackToExistingRules => false,
+    }
+}
+
+/// `quarantined = 1` + razón, o solo la marca de revisión (`quarantined` intacto).
+async fn update_node(silva: &Arc<SilvaDB>, node_id: &str, quarantine: bool, reason: &'static str) {
+    let conn = silva.conn_lock();
+    let node_for_log = node_id.to_string();
+    let node_arg = node_for_log.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let node_id = node_arg;
+        let c = conn.blocking_lock();
+        if quarantine {
+            c.execute(
+                "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
+                rusqlite::params![reason, node_id],
+            )
+        } else {
+            c.execute(
+                "UPDATE nodes SET quarantine_reason = ?1 WHERE id = ?2",
+                rusqlite::params![reason, node_id],
+            )
+        }
+    })
+    .await;
+    match result {
+        Ok(Ok(rows)) if rows > 0 => {
+            if quarantine {
+                tracing::warn!("🛡️ write_gate: node {node_for_log} quarantined ({reason})");
+            } else {
+                tracing::info!("🛡️ write_gate: node {node_for_log} marcado para revisión ({reason})");
+            }
+        }
+        Ok(Ok(_)) => {
+            tracing::debug!("write_gate: node {node_id} no encontrado para actualizar (¿borrado?)");
+        }
+        Ok(Err(e)) => tracing::warn!("write_gate: UPDATE falló para {node_id}: {e}"),
+        Err(e) => tracing::warn!("write_gate: tarea de actualización panicó para {node_id}: {e}"),
+    }
+}
+
 /// Spawns the async judge for `content` against `node_id`. Fire-and-forget --
 /// callers should not `.await` this from the request path; call it and move on.
 /// Errors (LLM unreachable, bad response, DB write failure) are logged and
 /// swallowed, matching the observation-first posture of every other
 /// fire-and-forget classifier in this codebase (recall Layer 4, DCR reinforcement).
+///
+/// T-DSH-109: si `[security.sentinel] enabled = true`, primero dictamina el
+/// centinela local (Qwen3Guard): Unsafe → cuarentena, Controversial → marca de
+/// revisión, Safe → pasa. Si el centinela está apagado o falla, se conserva el
+/// camino anterior (juez por gramática vía `llama_backend`).
 pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: String) {
     JUDGE_SPAWNS.fetch_add(1, Ordering::Relaxed);
     tokio::spawn(async move {
+        let sentinel = crate::security::sentinel::global();
+        let verdict = sentinel.judge(&content).await;
+        if apply_sentinel_verdict(&silva, &node_id, verdict).await {
+            return;
+        }
+
         let prompt = format!("{WRITE_GATE_PROMPT_PREFIX}{}", content.chars().take(2000).collect::<String>());
         let verdict = match crate::security::coherence_gate::call_reasoning_backend_with_grammar(
             &prompt,
