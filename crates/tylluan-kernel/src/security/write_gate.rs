@@ -80,6 +80,44 @@ async fn apply_sentinel_verdict(
     }
 }
 
+/// T-DSH-111: combina el veredicto del original con los de los textos
+/// decodificados (base64/hex/URL) para que el centinela vea también el ataque
+/// codificado. Solo corre si el centinela está activo y disponible; si no,
+/// `Unavailable` y write_gate cae a las reglas L1/L2 de siempre (fail-open).
+async fn sentinel_verdict_with_decoding(content: &str) -> crate::security::sentinel::SentinelVerdict {
+    use crate::security::sentinel::SentinelVerdict;
+    let sentinel = crate::security::sentinel::global();
+    let mut verdict = sentinel.judge(content).await;
+    if verdict == SentinelVerdict::Unavailable || verdict == SentinelVerdict::Unsafe {
+        return verdict;
+    }
+    for candidate in crate::security::encoding::decode_candidates(content)
+        .into_iter()
+        .take(3)
+    {
+        let decoded = sentinel.judge(&candidate.text).await;
+        verdict = worst_verdict(verdict, decoded);
+        if verdict == SentinelVerdict::Unsafe {
+            break;
+        }
+    }
+    verdict
+}
+
+fn worst_verdict(
+    a: crate::security::sentinel::SentinelVerdict,
+    b: crate::security::sentinel::SentinelVerdict,
+) -> crate::security::sentinel::SentinelVerdict {
+    use crate::security::sentinel::SentinelVerdict as V;
+    let rank = |v: V| match v {
+        V::Unavailable => 0,
+        V::Safe => 1,
+        V::Controversial => 2,
+        V::Unsafe => 3,
+    };
+    if rank(a) >= rank(b) { a } else { b }
+}
+
 /// `quarantined = 1` + razón, o solo la marca de revisión (`quarantined` intacto).
 async fn update_node(silva: &Arc<SilvaDB>, node_id: &str, quarantine: bool, reason: &'static str) {
     let conn = silva.conn_lock();
@@ -130,8 +168,7 @@ async fn update_node(silva: &Arc<SilvaDB>, node_id: &str, quarantine: bool, reas
 pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: String) {
     JUDGE_SPAWNS.fetch_add(1, Ordering::Relaxed);
     tokio::spawn(async move {
-        let sentinel = crate::security::sentinel::global();
-        let verdict = sentinel.judge(&content).await;
+        let verdict = sentinel_verdict_with_decoding(&content).await;
         if apply_sentinel_verdict(&silva, &node_id, verdict).await {
             return;
         }

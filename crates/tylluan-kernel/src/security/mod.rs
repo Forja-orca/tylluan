@@ -20,6 +20,7 @@ pub mod friction_log;
 pub mod llm_examples;
 pub mod write_gate;
 pub mod sentinel;
+pub mod encoding;
 pub mod judge_telemetry;
 pub mod trust;
 pub mod guild_credential;
