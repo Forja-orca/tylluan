@@ -263,3 +263,21 @@ admin = ["*"]
 # max_parallel_phases = 2
 # idle_lab_enabled = false    # IdleLab (retrieval hill-climbing) is OFF by default: measured at 0.0% gain
 #                             # while using ~99.8% of the cycle on CPU (ADR-007, T-DSH-104). Turn on only to experiment.
+
+# ── T-DSH-109: centinela local OPT-IN de write_gate L2 (juez Qwen3Guard) ──
+# APAGADO por defecto. Con enabled=true el kernel arranca BAJO DEMANDA un
+# llama-server propio con el GGUF de model_path (ruta explícita; NUNCA se
+# descarga nada), en cola serie, con --threads acotado a 4, sin --mlock y
+# prioridad BELOW_NORMAL best-effort; se descarga tras idle_unload_secs sin uso.
+# Política: Unsafe -> cuarentena; Controversial -> marca para revisión;
+# Safe -> pasa. Si el centinela falla o expira, NO bloquea (fail-open a L1/L2).
+# Puerto 0 = efímero propio (nunca 47004). Un comentario por campo:
+# [security.sentinel]
+# enabled = false
+# model_path = "E:\\tylluan-patches\\guard-eval\\models\\Qwen3Guard-Gen-0.6B.Q4_K_M.gguf"
+# llama_server_path = "C:\\Users\\you\\.cache\\tylluan\\llama-cpp\\llama-server.exe"
+# port = 0
+# threads = 4
+# ctx_size = 2048
+# timeout_ms = 20000
+# idle_unload_secs = 300
