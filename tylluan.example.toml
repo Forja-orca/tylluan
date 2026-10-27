@@ -256,3 +256,10 @@ admin = ["*"]
 # command = "npx"
 # args = ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/db"]
 # timeout_ms = 10000
+
+# NightConsolidation (periodic background maintenance of the memory).
+# [night]
+# interval_secs = 1800        # rest between cycles, counted from the END of the previous cycle (60 s floor)
+# max_parallel_phases = 2
+# idle_lab_enabled = false    # IdleLab (retrieval hill-climbing) is OFF by default: measured at 0.0% gain
+#                             # while using ~99.8% of the cycle on CPU (ADR-007, T-DSH-104). Turn on only to experiment.

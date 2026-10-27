@@ -61,6 +61,33 @@ pub async fn run_night_consolidation_loop_with_repose(
     }
 }
 
+/// Phases NightConsolidation runs in production, in order. IdleLab is
+/// opt-in (`[night] idle_lab_enabled`, default false; ADR-007, T-DSH-104).
+pub fn production_phases(idle_lab_enabled: bool) -> Vec<Box<dyn Phase>> {
+    let mut phases: Vec<Box<dyn Phase>> = vec![
+        Box::new(DreamPhase),
+        Box::new(OuroborosPhase),
+        Box::new(AutoLinkPhase),
+        Box::new(GraphRagPhase),
+        Box::new(DecayPhase),
+        Box::new(AgentPhase),
+        Box::new(CurriculumPhase),
+    ];
+    if idle_lab_enabled {
+        phases.push(Box::new(IdleLabPhase));
+    }
+    phases.push(Box::new(FeedbackSignalPhase));
+    phases.push(Box::new(LifecyclePhase));
+    // J-14: opt-in (default OFF via [eval] deep_eval_enabled). The phase
+    // self-gates on the flag and a 24h marker, so registering it is safe
+    // even with eval disabled.
+    phases.push(Box::new(DeepEvalPhase));
+    // Phase 0: opt-in (default OFF via [eval] slm_society_eval_enabled).
+    // Evaluates 3-arm SLM society benchmark (Arm A/B/C) on a 24h cadence.
+    phases.push(Box::new(SlmSocietyPhase));
+    phases
+}
+
 #[derive(Clone)]
 pub struct PhaseContext {
     pub silva: Arc<SilvaDB>,
@@ -724,5 +751,36 @@ mod tests {
 
         loop_handle.abort();
         assert!(start.elapsed() >= Duration::from_millis(440));
+    }
+
+    // ── IdleLab is opt-in (ADR-007, T-DSH-104) ──────────────────────
+
+    #[test]
+    fn production_phases_skip_idle_lab_by_default() {
+        let names: Vec<&'static str> = production_phases(false).iter().map(|p| p.name()).collect();
+        assert!(
+            !names.contains(&"IdleLab"),
+            "IdleLab must not run unless [night] idle_lab_enabled = true; got {names:?}"
+        );
+        assert!(!names.is_empty(), "the other phases must still run");
+    }
+
+    #[test]
+    fn production_phases_include_idle_lab_when_enabled() {
+        let off: Vec<&'static str> = production_phases(false).iter().map(|p| p.name()).collect();
+        let on: Vec<&'static str> = production_phases(true).iter().map(|p| p.name()).collect();
+        assert_eq!(on.len(), off.len() + 1, "enabling IdleLab adds exactly one phase");
+        assert!(on.contains(&"IdleLab"));
+        let without: Vec<&'static str> = on.iter().copied().filter(|n| *n != "IdleLab").collect();
+        assert_eq!(without, off, "enabling IdleLab must not reorder or change the other phases");
+    }
+
+    #[test]
+    fn night_config_keeps_idle_lab_off_unless_set() {
+        assert!(!crate::config::NightConfig::default().idle_lab_enabled);
+        let absent: crate::config::NightConfig = toml::from_str("interval_secs = 600").unwrap();
+        assert!(!absent.idle_lab_enabled);
+        let on: crate::config::NightConfig = toml::from_str("idle_lab_enabled = true").unwrap();
+        assert!(on.idle_lab_enabled);
     }
 }

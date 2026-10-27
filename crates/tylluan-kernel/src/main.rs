@@ -2250,32 +2250,13 @@ async fn run_night_consolidation_loop(
     matcher: Arc<GuildMatcher>,
     night_config: tylluan_kernel::config::NightConfig,
 ) {
-    use tylluan_kernel::memory::night::{
-        PhaseOrchestrator, PhaseContext,
-        DreamPhase, OuroborosPhase, AutoLinkPhase, GraphRagPhase,
-        DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase, FeedbackSignalPhase,
-        LifecyclePhase, DeepEvalPhase, SlmSocietyPhase,
-    };
+    use tylluan_kernel::memory::night::{PhaseOrchestrator, PhaseContext, production_phases};
 
-    let orchestrator = PhaseOrchestrator::new(vec![
-        Box::new(DreamPhase),
-        Box::new(OuroborosPhase),
-        Box::new(AutoLinkPhase),
-        Box::new(GraphRagPhase),
-        Box::new(DecayPhase),
-        Box::new(AgentPhase),
-        Box::new(CurriculumPhase),
-        Box::new(IdleLabPhase),
-        Box::new(FeedbackSignalPhase),
-        Box::new(LifecyclePhase),
-        // J-14: opt-in (default OFF via [eval] deep_eval_enabled). The phase
-        // self-gates on the flag and a 24h marker, so registering it is safe
-        // even with eval disabled.
-        Box::new(DeepEvalPhase),
-        // Phase 0: opt-in (default OFF via [eval] slm_society_eval_enabled).
-        // Evaluates 3-arm SLM society benchmark (Arm A/B/C) on a 24h cadence.
-        Box::new(SlmSocietyPhase),
-    ], night_config.max_parallel_phases);
+    // IdleLab is opt-in ([night] idle_lab_enabled, default false; ADR-007).
+    let orchestrator = PhaseOrchestrator::new(
+        production_phases(night_config.idle_lab_enabled),
+        night_config.max_parallel_phases,
+    );
 
     let ctx = PhaseContext {
         silva,

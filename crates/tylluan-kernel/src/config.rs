@@ -294,6 +294,15 @@ pub struct NightConfig {
     /// matching the hardcoded interval this replaces.
     #[serde(default = "default_night_interval_secs")]
     pub interval_secs: u64,
+
+    /// Opt-in gate for the IdleLab phase (hill-climbing of retrieval
+    /// parameters). Defaults to FALSE, as ADR-007 recommended: on 2026-10-27
+    /// T-DSH-104 measured IdleLab at 0.0% in every variant and in production
+    /// while it took 99.8% of the cycle (~1200 s at 27-34 cores, ~190 hybrid
+    /// searches plus cross-encoder reranks on CPU). Parameters already saved
+    /// in `idle_lab_best.json` are still restored at startup.
+    #[serde(default)]
+    pub idle_lab_enabled: bool,
 }
 
 impl Default for NightConfig {
@@ -301,6 +310,7 @@ impl Default for NightConfig {
         Self {
             max_parallel_phases: default_max_parallel_phases(),
             interval_secs: default_night_interval_secs(),
+            idle_lab_enabled: false,
         }
     }
 }
