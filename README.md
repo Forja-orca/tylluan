@@ -33,7 +33,7 @@ You bring the model and the client (Claude Code, Cursor, VS Code, …). Tylluan 
 > **Research software.** Tylluan runs real commands on your machine and has had no independent third-party security audit. Read [Security](#security-what-it-protects-and-what-it-does-not) and [DISCLAIMER.md](DISCLAIMER.md) before you put anything sensitive near it.
 
 <p align="center">
-  <img src="docs/assets/how-it-fits.svg" alt="Your AI clients connect over MCP or REST to one local binary, tylluan-nexus, which holds six tools, guards, memory and 45 guilds. It uses local models and can optionally sync with other approved Tylluan instances." width="100%">
+  <img src="docs/assets/how-it-fits.svg" alt="Process map: MCP clients reach the HTTP transport of one Rust process, tylluan-nexus, on 127.0.0.1 port 47004; REST and A2A clients enter the same transport. Every request passes auth, trust and grants, then the six sovereign tools. Tools route to the guild registry, which talks to 45 Python guild processes over stdio JSON-RPC, and read and write SilvaDB (SQLite with FTS5, graph and vectors). The judge model runs in llama-server through the llama_backend guild and is opt-in. Federation with other approved Tylluan nodes goes through the mesh over Noise." width="100%">
 </p>
 
 ## Install
@@ -116,7 +116,7 @@ With the default configuration of the current `main` branch, every connected cli
 | `tylluan_decide` | Answers a bounded question (choice, score or yes/no) or abstains. Today it applies deterministic rules and logs every decision; by default no model is connected to it |
 
 <p align="center">
-  <img src="docs/assets/memory-flow.svg" alt="Saving: tylluan_remember stores text in SQLite with a local embedding and graph links. Recalling: keyword search, plus vector and graph search when an embedding model is on, run together, rankings are fused, a coherence gate filters suspicious memories, and results return to the agent." width="100%">
+  <img src="docs/assets/memory-flow.svg" alt="Write path: tylluan_remember passes the L1 injection-pattern filter, is embedded with BGE-M3 (1024 dimensions, ONNX) and stored in SilvaDB; an asynchronous L2 judge classifies the new node as SAFE or SUSPICIOUS and sets a quarantine flag. Recall path: tylluan_recall picks a retrieval tier (fast, balanced or deep), runs FTS5 BM25 plus cosine search fused with RRF at k equal to 60, then the coherence gate (L1 patterns, L2 provenance, L3 cosine below 0.85, optional L4 judge) filters candidates before ranked memories and a gate-stats header return to the agent." width="100%">
 </p>
 
 ## Profiles
