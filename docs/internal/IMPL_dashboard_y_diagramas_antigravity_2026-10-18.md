@@ -227,7 +227,7 @@ Tras inspeccionar los handlers en `crates/tylluan-kernel/src/transport/http/` y 
 ---
 
 ### 3. D6 — Política de Invocación en Canvas de Coloquio
-- **Bloqueo en Puente de Canvas:** En [`ColoquioCanvasWorkspace.tsx`](../../dashboard/src/components/ColoquioCanvasWorkspace.tsx), el allowlist estricto autoriza 5 herramientas soberanas (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`) y rechaza deliberadamente `tylluan_decide`.
+- **Bloqueo en Puente de Canvas:** En `ColoquioCanvasWorkspace` (retirado en AG-12), el allowlist estricto autoriza 5 herramientas soberanas (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`) y rechaza deliberadamente `tylluan_decide`.
 - **Aviso Visible en Pantalla:** Se actualizó la barra de estado superior del canvas con explicación transparente:
   - *"Canvas bridge: 5 of 6 sovereign tools authorized (`do`, `remember`, `recall`, `think`, `graph`)"*.
   - Pill descriptiva: *"tylluan_decide: not exposed (provisional, pending TL decision)"* con tooltip detallado aclarando que un canvas ejecuta código pegado en un canal y no debe emitir veredictos de políticas, señalando además que el iframe ejecuta con `allow-same-origin`.
