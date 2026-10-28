@@ -495,6 +495,7 @@ mod tests {
         DecisionRequest {
             state: serde_json::json!({"task": "t"}),
             questions,
+            sensitivity: None,
         }
     }
 
@@ -685,6 +686,7 @@ mod t120_gap_tests {
         DecisionRequest {
             state: serde_json::json!({"task": "t"}),
             questions,
+            sensitivity: None,
         }
     }
 

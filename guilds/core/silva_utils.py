@@ -123,12 +123,20 @@ def add_node(
     M17-4 Drift Guard: rejects drift-sensitive types from guild/public paths.
 
     NOTE: previously this did a raw sqlite3.connect() INSERT directly against
-    silva.db from the Python guild process. That bypassed the kernel entirely,
-    which meant the node never got a BGE-M3 embedding (invisible to semantic
-    hybrid search) and risked concurrent writes to the same SQLite file the
-    Rust kernel has open. Routed through the same HTTP IPC pattern as
-    write_edge() below so the kernel is the single writer and the node gets a
-    real embedding like any other node it creates.
+    silva.db from the Python guild process. That bypassed the kernel entirely
+    and risked concurrent writes to the same SQLite file the Rust kernel has
+    open. Routed through the same HTTP IPC pattern as write_edge() below so
+    the kernel is the single writer.
+
+    CORRECCION (H-45, 2026-10-28): la version anterior de esta nota promitia
+    que el nodo 'gets a real embedding like any other node it creates' -- eso
+    nunca fue cierto. El handler POST /api/v1/silva/node solo hace upsert
+    node+FTS (api_memory.rs -> upsert_node_with_validity, sin save_embedding),
+    asi que los nodos creados aqui quedan SIN embedding hasta que el Agnostic
+    Re-indexer los barra (lag: 1 tick de 10 min como minimo, mucho mas bajo
+    backlog; invisibles a busqueda denso-hibrida hasta entonces). Verificado
+    2026-10-28 (H-44): ~2000 filas code_entity stale. Decidir si embeber al
+    escribir es una decision de diseno abierta (H-45).
     """
     if node_type in DRIFT_SENSITIVE_TYPES:
         logger.warning(f"DRIFT GUARD: node type '{node_type}' is drift-sensitive and cannot be created through guilds. Skipping.")

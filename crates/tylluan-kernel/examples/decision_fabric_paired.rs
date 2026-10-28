@@ -1269,7 +1269,7 @@ async fn run_variant_c_inner(
         if questions.is_empty() {
             continue;
         }
-        let req = DecisionRequest { state: it["state"].clone(), questions };
+        let req = DecisionRequest { state: it["state"].clone(), questions, sensitivity: None };
         let t0 = Instant::now();
         let answers = match provider.decide(&req).await {
             Ok(a) => a,
@@ -1742,7 +1742,7 @@ async fn run_variant_b_inner(
         if questions.is_empty() {
             continue;
         }
-        let req = DecisionRequest { state: it["state"].clone(), questions };
+        let req = DecisionRequest { state: it["state"].clone(), questions, sensitivity: None };
         let t0 = Instant::now();
         let answers = match provider.decide(&req).await {
             Ok(a) => a,
@@ -2221,7 +2221,7 @@ async fn run_variant_d_inner(dir: &str, split: &str, source: &str, limit: Option
         if questions.is_empty() {
             continue;
         }
-        let req = DecisionRequest { state: it["state"].clone(), questions };
+        let req = DecisionRequest { state: it["state"].clone(), questions, sensitivity: None };
         let t0 = Instant::now();
         let answers = match provider.decide(&req).await {
             Ok(a) => a,

@@ -417,6 +417,7 @@ impl DecisionService {
                 .iter()
                 .map(|(n, s)| (n.clone(), to_core_question(s)))
                 .collect(),
+            sensitivity: req.sensitivity.clone(),
         };
 
         let (answers, degraded) = match self.provider.decide(&core_req).await {
@@ -523,7 +524,7 @@ impl DecisionService {
             && !shadow_targets.is_empty()
         {
             let state = req.state.clone();
-            self.spawn_shadow(slot, state, shadow_targets);
+            self.spawn_shadow(slot, state, shadow_targets, req.sensitivity.clone());
         }
 
         DecideResponse {
@@ -580,6 +581,7 @@ impl DecisionService {
                 .iter()
                 .map(|(n, s)| (n.clone(), to_core_question(s)))
                 .collect(),
+            sensitivity: req.sensitivity.clone(),
         };
         let call_started = Instant::now();
         let outcome = tokio::time::timeout(
@@ -773,7 +775,13 @@ impl DecisionService {
     /// o ninguno. Timeout/error → las filas quedan NULL (que `paired_eval`
     /// interpreta como fallo conservador del modelo) y la causa va a tracing.
     /// El resultado NUNCA altera la respuesta ya emitida (invariante v8).
-    fn spawn_shadow(&self, slot: ModelSlot, state: serde_json::Value, targets: Vec<ShadowTarget>) {
+    fn spawn_shadow(
+        &self,
+        slot: ModelSlot,
+        state: serde_json::Value,
+        targets: Vec<ShadowTarget>,
+        sensitivity: Option<String>,
+    ) {
         let Some(silva) = self.silva.clone() else {
             return;
         };
@@ -782,7 +790,11 @@ impl DecisionService {
                 .iter()
                 .map(|t| (t.name.clone(), to_core_question(&t.spec)))
                 .collect();
-            let core_req = DecisionRequest { state, questions };
+            let core_req = DecisionRequest {
+                state,
+                questions,
+                sensitivity,
+            };
             let call_started = Instant::now();
             let outcome =
                 tokio::time::timeout(slot.shadow_timeout, slot.provider.decide(&core_req)).await;
@@ -982,6 +994,7 @@ mod tests {
             questions: BTreeMap::from([("route".to_string(), route_spec())]),
             contract: Some("scheduler_routing".to_string()),
             max_latency_ms: None,
+            sensitivity: None,
         }
     }
 
@@ -1063,6 +1076,7 @@ mod tests {
             )]),
             contract: None,
             max_latency_ms: None,
+            sensitivity: None,
         };
         let resp = svc.decide(req, "mcp").await;
         assert_eq!(resp.status, DecideStatus::Degraded);
@@ -1130,6 +1144,7 @@ mod tests {
             )]),
             contract: Some("scheduler_routing".to_string()),
             max_latency_ms: None,
+            sensitivity: None,
         };
         let resp = svc.decide(req, "mcp").await;
         assert_eq!(resp.status, DecideStatus::Degraded);
@@ -1152,6 +1167,7 @@ mod tests {
             questions,
             contract: Some("scheduler_routing".to_string()),
             max_latency_ms: None,
+            sensitivity: None,
         };
         let resp = svc.decide(req, "mcp").await;
         assert_eq!(resp.status, DecideStatus::Error);
@@ -1279,7 +1295,7 @@ mod t121_clinical_gate_integration_tests {
             Some(s) => serde_json::json!({"sensitivity": s}),
             None => serde_json::json!({"task": "t"}),
         };
-        DecisionRequest { state, questions }
+        DecisionRequest { state, questions, sensitivity: None }
     }
 
     #[tokio::test]
@@ -1296,6 +1312,17 @@ mod t121_clinical_gate_integration_tests {
                 "sensibilidad {state:?}: {err}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn wire_clinical_on_cloud_slot_abstains_without_connection() {
+        // T-DSH-122: el campo del wire tiene prioridad y bloquea antes de red.
+        let cfg = cfg_cloud("https://192.0.2.1/v1");
+        let slot = resolve_model_slot(&cfg).expect("adaptador cloud envuelto");
+        let mut request = req(Some("public"));
+        request.sensitivity = Some("clinical".to_string());
+        let err = slot.provider.decide(&request).await.unwrap_err();
+        assert!(matches!(err, DecisionError::Abstained(_)), "{err}");
     }
 
     #[tokio::test]

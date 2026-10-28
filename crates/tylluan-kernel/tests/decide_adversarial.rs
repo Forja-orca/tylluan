@@ -557,6 +557,7 @@ async fn v8_model_cannot_overturn_deterministic_rejection() {
             )]),
             contract: Some("scheduler_routing".to_string()),
             max_latency_ms: None,
+            sensitivity: None,
         };
         let resp = svc.decide(req, "test").await;
 
@@ -699,6 +700,7 @@ async fn rejection_with_value_keeps_rules_answer_and_logs_disagreement() {
             )]),
             contract: Some("scheduler_routing".to_string()),
             max_latency_ms: None,
+            sensitivity: None,
         };
         let resp = svc.decide(req, "test").await;
 

@@ -440,7 +440,7 @@ export function OverviewTab({
             type="button"
             aria-label="Run Vacuum Maintenance Fix"
             onClick={() => bridge?.fetchRaw('/api/v1/maintenance/vacuum', { method: 'POST' })}
-            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-lg text-[11px] font-bold border border-amber-500/30 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-lg text-[11px] font-bold border border-amber-500/30 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             VACUUM FIX
           </button>
@@ -502,7 +502,7 @@ export function OverviewTab({
                 type="button"
                 disabled={sentinelBusy || !bridge}
                 onClick={() => setSentinelMode(m)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:opacity-50 ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
                   sentinel?.mode === m
                     ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
                     : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
@@ -801,7 +801,7 @@ export function OverviewTab({
                 ))}
                 <button
                   type="button"
-                  className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded text-[11px] font-bold border border-amber-500/30 mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                  className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded text-[11px] font-bold border border-amber-500/30 mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   MANAGE APPROVALS
                 </button>

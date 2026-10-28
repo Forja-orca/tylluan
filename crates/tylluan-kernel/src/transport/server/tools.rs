@@ -308,6 +308,11 @@ impl super::TylluanServer {
                         "max_latency_ms": {
                             "type": "integer",
                             "description": "Optional latency budget in milliseconds (default 2000, max 10000)."
+                        },
+                        "sensitivity": {
+                            "type": "string",
+                            "enum": ["public", "private", "clinical"],
+                            "description": "Optional declared data sensitivity. Clinical or unknown blocks cloud decision providers (fail-closed, clinical_requires_hitl)."
                         }
                     },
                     "required": ["state", "questions"]

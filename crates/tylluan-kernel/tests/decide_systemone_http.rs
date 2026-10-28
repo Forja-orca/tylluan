@@ -117,6 +117,7 @@ fn contract_router(risk: f64) -> DecideRequest {
         questions: std::collections::BTreeMap::from([("route".to_string(), route_spec())]),
         contract: Some("scheduler_routing".to_string()),
         max_latency_ms: None,
+        sensitivity: None,
     }
 }
 
@@ -134,6 +135,7 @@ fn free_bool() -> DecideRequest {
         )]),
         contract: None,
         max_latency_ms: None,
+        sensitivity: None,
     }
 }
 
@@ -268,6 +270,7 @@ async fn rules_abstention_is_final_and_model_is_not_called() {
         )]),
         contract: Some("scheduler_routing".to_string()),
         max_latency_ms: None,
+        sensitivity: None,
     };
     let resp = svc.decide(req, "test").await;
     assert_eq!(resp.status, DecideStatus::Degraded);
@@ -344,6 +347,7 @@ async fn free_lane_forwards_wire_instructions_to_the_model() {
         )]),
         contract: None,
         max_latency_ms: None,
+        sensitivity: None,
     };
     let resp = svc.decide(req, "test").await;
     assert_eq!(resp.status, DecideStatus::Ok, "el canal no cambia la respuesta");
@@ -704,6 +708,7 @@ async fn state_max_chars_cap_skips_the_wire() {
         questions: std::collections::BTreeMap::from([("route".to_string(), route_spec())]),
         contract: Some("scheduler_routing".to_string()),
         max_latency_ms: None,
+        sensitivity: None,
     };
     let resp = svc.decide(big, "test").await;
     assert_eq!(
