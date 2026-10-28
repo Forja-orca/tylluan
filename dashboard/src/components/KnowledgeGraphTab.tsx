@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { 
   Search, 
   RefreshCw, 
@@ -15,7 +15,7 @@ import {
   List,
   ShieldAlert
 } from 'lucide-react';
-import type { NexusBridge, GraphNode } from '../lib/nexus-bridge';
+import type { NexusBridge, GraphNode, NexusEvent } from '../lib/nexus-bridge';
 import { LifecycleBadge } from '../lib/nexus-bridge';
 import type { MemoryStats } from '../hooks/useNexus';
 import { useNexus } from '../hooks/useNexus';
@@ -24,11 +24,18 @@ import { IngestPanel } from './IngestPanel';
 
 // The graph canvas is heavy enough to warrant code-splitting — only load it
 // when the Knowledge tab is actually opened. 2D canvas renderer (see
-// KnowledgeCortex2D: three.js/WebGL removed after user feedback — same data,
 // same semantics, a fraction of the cost).
-const KnowledgeCortex2D = lazy(() =>
-  import('./graph/KnowledgeCortex2D').then((m) => ({ default: m.KnowledgeCortex2D }))
-);
+function LightGraphPlaceholder({ bridge: _bridge }: { bridge: NexusBridge; events: NexusEvent[] }) {
+  return (
+    <div className="flex-1 min-h-[300px] rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+      <Network className="w-10 h-10 text-emerald-400/40 mb-3" />
+      <h4 className="text-sm font-semibold text-slate-200">Explorador Estructural SilvaDB</h4>
+      <p className="text-xs text-slate-400 max-w-md mt-1">
+        Consulta recuerdos estructurados y relaciones directamente desde la pestana de Nodos para maxima velocidad y cero consumo de GPU/WebGL.
+      </p>
+    </div>
+  );
+}
 
 interface Props {
   bridge: NexusBridge | null;
@@ -300,7 +307,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                     <RefreshCw className="w-4 h-4 animate-spin" /> Loading graph canvas...
                   </div>
                 }>
-                  <KnowledgeCortex2D bridge={bridge} events={events} />
+                  <LightGraphPlaceholder bridge={bridge} events={events} />
                 </Suspense>
               </div>
               <IngestPanel bridge={bridge} notify={notify} onIngestComplete={handleIngestComplete} />

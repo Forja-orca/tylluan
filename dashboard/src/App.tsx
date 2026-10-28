@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   LayoutDashboard,
-  Cpu,
+  MessageSquare,
+  ShieldCheck,
   Database,
+  Cpu,
+  Settings,
+  Beaker,
   Wifi, WifiOff,
-  Users,
   AlertTriangle,
   Zap,
-  ShieldCheck,
   Radio,
-  Beaker,
   Bell,
   Sun,
   Moon,
@@ -34,18 +35,16 @@ import { OverviewConsolidated } from './components/OverviewConsolidated'
 import { TylluanLogo } from './components/TylluanLogo'
 import DeviceStatusBadge from './components/DeviceStatusBadge'
 
+// Lazy-loaded Views (6 Sovereign Views + Optional Diagnostic)
+const ColoquioTab = lazy(() => import('./components/ColoquioTab').then(m => ({ default: m.ColoquioTab })))
+const ApprovalsAndSecurityTab = lazy(() => import('./components/ApprovalsAndSecurityTab').then(m => ({ default: m.ApprovalsAndSecurityTab })))
 const MemoryConsolidated = lazy(() => import('./components/MemoryConsolidated'))
-const TeamConsolidated = lazy(() => import('./components/TeamConsolidated'))
-const GuildsConsolidated = lazy(() => import('./components/GuildsConsolidated'))
-const LabConsolidated = lazy(() => import('./components/LabConsolidated'))
-const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
-const CoherenceGatePanel = lazy(() => import('./components/CoherenceGatePanel'))
-const FrictionPanel = lazy(() => import('./components/FrictionPanel'))
-const TrustConsoleTab = lazy(() => import('./components/TrustConsoleTab').then(m => ({ default: m.TrustConsoleTab })))
-const DecisionServicePanel = lazy(() => import('./components/DecisionServicePanel'))
+const ModelsTab = lazy(() => import('./components/ModelsTab').then(m => ({ default: m.ModelsTab })))
+const SettingsTab = lazy(() => import('./components/SettingsTab').then(m => ({ default: m.SettingsTab })))
+const DiagnosticTab = lazy(() => import('./components/DiagnosticTab').then(m => ({ default: m.DiagnosticTab })))
 
 function App() {
-  const { activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, showMentionsDropdown, setShowMentionsDropdown } = useAppStore()
+  const { activeTab, setActiveTab: setTab, toasts, addToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, showMentionsDropdown, setShowMentionsDropdown } = useAppStore()
   const setActiveTab = useCallback((id: string) => {
     setTab(id)
   }, [setTab])
@@ -61,6 +60,14 @@ function App() {
   } = useNexus();
 
   const [retrying, setRetrying] = useState(false);
+  const [devMode, setDevMode] = useState<boolean>(false);
+
+  // Check if dev_mode is active from sysStatus or config
+  useEffect(() => {
+    if (sysStatus?.dev_mode !== undefined) {
+      setDevMode(Boolean(sysStatus.dev_mode));
+    }
+  }, [sysStatus]);
 
   const handleRetry = useCallback(async () => {
     setRetrying(true);
@@ -78,7 +85,14 @@ function App() {
   useEffect(() => {
     const onSwitchTab = (event: Event) => {
       const id = (event as CustomEvent<string>).detail;
-      if (id) handleTabChange(id);
+      if (id) {
+        // Map legacy tab names to the 6 official tabs if triggered by old code
+        if (id === 'team') handleTabChange('coloquio');
+        else if (id === 'audit') handleTabChange('approvals');
+        else if (id === 'guilds') handleTabChange('models');
+        else if (id === 'lab') handleTabChange('diagnostic');
+        else handleTabChange(id);
+      }
     };
     window.addEventListener('nexus_switch_tab', onSwitchTab);
     return () => window.removeEventListener('nexus_switch_tab', onSwitchTab);
@@ -113,7 +127,7 @@ function App() {
   useColoquioMentions({ notify })
   useSSEBridgeEvents({ notify })
 
-  // SSE layer — resilient, with error_result → toast routing
+  // SSE layer — resilient, with error_result -> toast routing
   const { connectionStatus, reconnectAttempts } = useNexusSSE(bridge, {
     onError: useCallback((msg: string, guild?: string) => {
       notify(msg, 'error', guild);
@@ -136,7 +150,7 @@ function App() {
     }
   }, [online, stats, memoryStats]);
 
-  // Polling via centralized coordinator (replaces 3 scattered setInterval calls)
+  // Polling via centralized coordinator
   usePolling('app-uptime', incrementUptime, { interval: 'fast', enabled: online });
   usePolling('app-coloquio-unread', async () => {
     if (!bridge) return;
@@ -171,27 +185,31 @@ function App() {
     if (cleanId.includes('buffy')) return 'bg-rose-500';
     if (cleanId.includes('opencode') || cleanId.includes('deepseek')) return 'bg-cyan-500';
     if (cleanId.includes('jose') || cleanId.includes('human')) return 'bg-amber-500';
-    let hash = 0;
-    for (let i = 0; i < cleanId.length; i++) {
-      hash = cleanId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const colors = ['bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-lime-500', 'bg-rose-500'];
-    return colors[Math.abs(hash) % colors.length];
+    return 'bg-emerald-500';
   };
 
-  const tabs: Array<{
-    id: string;
-    name: string;
-    icon: React.ComponentType<{ className?: string }>;
-    badge?: number | null;
-  }> = [
-    { id: 'overview', name: 'Overview', icon: LayoutDashboard },
-    { id: 'memory', name: 'Memory', icon: Database },
-    { id: 'team', name: 'Team', icon: Users, badge: coloquioUnread > 0 ? coloquioUnread : null },
-    { id: 'guilds', name: 'Guilds', icon: Cpu },
-    { id: 'lab', name: 'Laboratory', icon: Beaker },
-    { id: 'audit', name: 'Audit Trail', icon: ShieldCheck },
-  ];
+  // The 6 Sovereign Official Views (AG-12)
+  const tabs = useMemo(() => {
+    const baseTabs: Array<{
+      id: string;
+      name: string;
+      icon: React.ComponentType<{ className?: string }>;
+      badge?: number | null;
+    }> = [
+      { id: 'overview', name: 'Estado y Salud', icon: LayoutDashboard },
+      { id: 'coloquio', name: 'Coloquio', icon: MessageSquare, badge: coloquioUnread > 0 ? coloquioUnread : null },
+      { id: 'approvals', name: 'Aprobaciones', icon: ShieldCheck, badge: approvals.length > 0 ? approvals.length : null },
+      { id: 'memory', name: 'Memoria SilvaDB', icon: Database },
+      { id: 'models', name: 'Modelos y Servidor', icon: Cpu },
+      { id: 'settings', name: 'Ajustes', icon: Settings },
+    ];
+
+    if (devMode) {
+      baseTabs.push({ id: 'diagnostic', name: 'Diagnóstico', icon: Beaker });
+    }
+
+    return baseTabs;
+  }, [coloquioUnread, approvals.length, devMode]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-amber-500/30">
@@ -200,7 +218,7 @@ function App() {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            aria-label="Go to Overview"
+            aria-label="Ir a Estado y Salud"
             className="flex items-center gap-2 group cursor-pointer rounded-xl focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
             onClick={() => handleTabChange('overview')}
           >
@@ -223,13 +241,13 @@ function App() {
           
           {activeAgents.length > 0 && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
-              <span className="text-slate-300">{activeAgents.length} {activeAgents.length === 1 ? 'agent' : 'agents'} active</span>
+              <span className="text-slate-300">{activeAgents.length} {activeAgents.length === 1 ? 'agente' : 'agentes'}</span>
               <div className="flex gap-1">
                 {activeAgents.map(agent => (
                   <span
                     key={agent}
                     className={`w-1.5 h-1.5 rounded-full ${getAgentDotColor(agent)}`}
-                    title={`@${agent} active`}
+                    title={`@${agent} activo`}
                   />
                 ))}
               </div>
@@ -246,10 +264,10 @@ function App() {
             className={cn(
               'hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
               connectionStatus === 'connected'
-                ? 'bg-slate-900 border-slate-800'
+                ? 'bg-slate-900 border-slate-800 text-slate-200'
                 : connectionStatus === 'reconnecting'
-                ? 'bg-amber-950/40 border-amber-500/30 animate-pulse'
-                : 'bg-red-950/40 border-red-500/30'
+                ? 'bg-amber-950/40 border-amber-500/30 text-amber-300 animate-pulse'
+                : 'bg-red-950/40 border-red-500/30 text-red-300'
             )}
           >
             {connectionStatus === 'connected'
@@ -259,51 +277,51 @@ function App() {
               : <WifiOff className="w-3 h-3 text-red-400" aria-hidden="true" />}
             <span className="text-[11px] font-bold uppercase tracking-wider">
               {connectionStatus === 'connected'
-                ? 'Secure Link'
+                ? '● Conectado'
                 : connectionStatus === 'reconnecting'
-                ? `Reconnecting (${reconnectAttempts})`
-                : 'No Connection'}
+                ? `▲ Reconectando (${reconnectAttempts})`
+                : '■ Sin Conexión'}
             </span>
           </div>
           
           {/* Theme Selector Toggle */}
-          <div role="group" aria-label="Theme Selector" className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-full p-0.5">
+          <div role="group" aria-label="Selector de Tema" className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-full p-0.5">
             <button
               type="button"
-              aria-label="Light Theme"
+              aria-label="Tema Claro"
               aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
               className={cn(
                 "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
                 theme === 'light' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
               )}
-              title="Light Theme"
+              title="Tema Claro"
             >
               <Sun className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
             <button
               type="button"
-              aria-label="Dark Theme"
+              aria-label="Tema Oscuro"
               aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
               className={cn(
                 "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
                 theme === 'dark' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
               )}
-              title="Dark Theme"
+              title="Tema Oscuro"
             >
               <Moon className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
             <button
               type="button"
-              aria-label="System Theme"
+              aria-label="Tema del Sistema"
               aria-pressed={theme === 'system'}
               onClick={() => setTheme('system')}
               className={cn(
                 "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
                 theme === 'system' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
               )}
-              title="System Theme"
+              title="Tema del Sistema"
             >
               <Monitor className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
@@ -313,7 +331,7 @@ function App() {
           <div className="relative">
             <button
               type="button"
-              aria-label="Recent Mentions"
+              aria-label="Menciones Recientes"
               aria-expanded={showMentionsDropdown}
               onClick={() => setShowMentionsDropdown(!showMentionsDropdown)}
               className={cn(
@@ -337,7 +355,7 @@ function App() {
                   {activeMentions.length > 0 && (
                     <button 
                       type="button"
-                      aria-label="Clear Mentions"
+                      aria-label="Limpiar Menciones"
                       onClick={() => {
                         useAppStore.getState().clearMentions();
                         setShowMentionsDropdown(false);
@@ -375,7 +393,7 @@ function App() {
           {/* Bearer Token Config Button */}
           <button
             type="button"
-            aria-label="Configure Bearer Token"
+            aria-label="Configurar Bearer Token"
             onClick={() => setAuthModalOpen(true)}
             className="p-2 rounded-full border bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/30 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
             title="Configurar Bearer Token"
@@ -387,7 +405,7 @@ function App() {
             <div 
               role="status"
               aria-live="polite"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 cursor-help group relative"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 cursor-help group relative text-slate-200"
               title={`Embeddings: ${healthDetailed.components?.embeddings?.ok ? '✓' : '✗'} | Reranker: ${healthDetailed.components?.reranker?.ok ? '✓' : '✗'} | Guilds: ${healthDetailed.components?.guilds?.active}/${healthDetailed.components?.guilds?.total} | Silva: ${healthDetailed.components?.silva?.nodes}n/${healthDetailed.components?.silva?.edges}e`}
             >
               <div className={cn(
@@ -396,6 +414,7 @@ function App() {
                 healthDetailed.score >= 50 ? "bg-amber-500" : "bg-red-500"
               )} />
               <span className="text-[11px] font-bold uppercase tracking-wider">
+                {healthDetailed.score >= 80 ? '● ' : healthDetailed.score >= 50 ? '▲ ' : '■ '}
                 {healthDetailed.status}
               </span>
             </div>
@@ -406,7 +425,7 @@ function App() {
             >
               <div className="w-2 h-2 rounded-full bg-rose-500" />
               <span className="text-[11px] font-bold uppercase tracking-wider">
-                OFFLINE
+                ■ OFFLINE
               </span>
             </div>
           ) : null}
@@ -414,12 +433,12 @@ function App() {
       </header>
 
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
-        {/* Sidebar Navigation */}
-        <aside aria-label="Primary Navigation" className="w-16 md:w-64 border-r border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-y-auto transition-all duration-300">
-          <div className="p-2 md:p-4 space-y-1">
+        {/* Sidebar Navigation (232px Fixed according to DISENO_UI_2026-10-28.md) */}
+        <aside aria-label="Navegación Principal" className="w-16 md:w-[232px] border-r border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-y-auto transition-all duration-300">
+          <div className="p-2 md:p-3 space-y-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
-              const active = activeTab === tab.id;
+              const active = activeTab === tab.id || (activeTab === 'team' && tab.id === 'coloquio') || (activeTab === 'audit' && tab.id === 'approvals');
               return (
                 <button
                   key={tab.id}
@@ -428,9 +447,9 @@ function App() {
                   aria-current={active ? 'page' : undefined}
                   onClick={() => handleTabChange(tab.id)}
                   className={cn(
-                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
+                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer",
                     active 
-                      ? "bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/5" 
+                      ? "bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/5 font-semibold" 
                       : "text-slate-400 hover:text-slate-100 hover:bg-slate-900"
                   )}
                 >
@@ -447,17 +466,18 @@ function App() {
               );
             })}
           </div>
-          
-          <div className="mt-auto p-2 md:p-4 border-t border-slate-800 bg-slate-900/20 flex flex-col items-center md:items-stretch">
-             <div className="flex items-center gap-3 mb-1 md:mb-3">
-               <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700 shrink-0">o3</div>
+
+          {/* Footer: Version and commit without ports */}
+          <div className="mt-auto p-2 md:p-3 border-t border-slate-800 bg-slate-900/20 flex flex-col items-center md:items-stretch">
+             <div className="flex items-center gap-2 mb-2">
+               <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-[10px] font-mono font-bold text-slate-400 border border-slate-700 shrink-0">TY</div>
                <div className="overflow-hidden hidden md:block">
-                 <p className="text-[11px] font-bold text-slate-300 uppercase truncate">SilvaDB Cortex</p>
-                 <p className="text-[11px] text-slate-400 font-mono truncate">ID: 0x4F...7A</p>
+                 <p className="text-[11px] font-bold text-slate-300 uppercase truncate">Tylluan Sovereign</p>
+                 <p className="text-[10px] text-slate-400 font-mono truncate">{sysStatus?.version ? `v${sysStatus.version}` : 'v0.17.2'}</p>
                </div>
              </div>
              <div className="h-1 bg-slate-800 rounded-full overflow-hidden w-full hidden md:block">
-                <div className="h-full bg-emerald-500 w-3/4 animate-pulse" />
+                <div className={cn("h-full w-full", online ? "bg-emerald-500" : "bg-red-500")} />
              </div>
           </div>
         </aside>
@@ -465,11 +485,11 @@ function App() {
         {/* Main Content Area */}
         <main className="flex-1 min-h-0 flex flex-col overflow-hidden bg-slate-950">
           {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
+            <div className="m-3 md:m-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-bold text-red-400">Communication Error</h4>
+                  <h4 className="text-sm font-bold text-red-400">Error de Comunicación</h4>
                   <p className="text-xs text-red-500/80 mt-1">{error}</p>
                 </div>
               </div>
@@ -485,9 +505,10 @@ function App() {
             </div>
           )}
 
-          {/* Consolidated Tab Panels */}
-          <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-400">Loading module...</div>}>
-            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'guilds' || activeTab === 'lab' || activeTab === 'audit') ? "overflow-y-auto p-3 sm:p-6" : "p-3 sm:p-6")}>
+          {/* Consolidated View Panels */}
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-400">Cargando vista...</div>}>
+            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'approvals' || activeTab === 'audit' || activeTab === 'models' || activeTab === 'settings' || activeTab === 'diagnostic') ? "overflow-y-auto p-3 sm:p-6" : "p-3 sm:p-6")}>
+              {/* 1. Estado y Salud */}
               {activeTab === 'overview' && (
                 <ErrorBoundary>
                   <OverviewConsolidated
@@ -510,7 +531,23 @@ function App() {
                   />
                 </ErrorBoundary>
               )}
-              {activeTab === 'memory' && mountedTabs.has('memory') && (
+
+              {/* 2. Coloquio (First-class citizen) */}
+              {(activeTab === 'coloquio' || activeTab === 'team') && (
+                <ErrorBoundary>
+                  <ColoquioTab bridge={bridge} />
+                </ErrorBoundary>
+              )}
+
+              {/* 3. Aprobaciones y Seguridad */}
+              {(activeTab === 'approvals' || activeTab === 'audit') && (
+                <ErrorBoundary>
+                  <ApprovalsAndSecurityTab bridge={bridge} />
+                </ErrorBoundary>
+              )}
+
+              {/* 4. Memoria SilvaDB */}
+              {activeTab === 'memory' && (
                 <ErrorBoundary>
                   <MemoryConsolidated
                     bridge={bridge}
@@ -519,47 +556,34 @@ function App() {
                   />
                 </ErrorBoundary>
               )}
-              {activeTab === 'team' && mountedTabs.has('team') && (
+
+              {/* 5. Modelos y Servidor */}
+              {activeTab === 'models' && (
                 <ErrorBoundary>
-                  <TeamConsolidated
+                  <ModelsTab bridge={bridge} />
+                </ErrorBoundary>
+              )}
+
+              {/* 6. Ajustes y Conexión */}
+              {activeTab === 'settings' && (
+                <ErrorBoundary>
+                  <SettingsTab
                     bridge={bridge}
+                    notify={notify}
+                    onOpenAuthModal={() => setAuthModalOpen(true)}
                   />
                 </ErrorBoundary>
               )}
-              {activeTab === 'guilds' && mountedTabs.has('guilds') && (
+
+              {/* Diagnóstico (Dev Mode) */}
+              {activeTab === 'diagnostic' && (
                 <ErrorBoundary>
-                  <GuildsConsolidated
+                  <DiagnosticTab
                     bridge={bridge}
                     notify={notify}
                     events={events}
+                    onClearLogs={clearLogs}
                   />
-                </ErrorBoundary>
-              )}
-              {activeTab === 'lab' && mountedTabs.has('lab') && (
-                <ErrorBoundary>
-                  <LabConsolidated
-                    bridge={bridge}
-                    notify={notify}
-                  />
-                </ErrorBoundary>
-              )}
-              {activeTab === 'audit' && mountedTabs.has('audit') && (
-                <ErrorBoundary>
-                  <div className="space-y-8">
-                    <TrustConsoleTab />
-                    <DecisionServicePanel
-                      bridge={bridge}
-                    />
-                    <AuditTrailPanel
-                      bridge={bridge}
-                    />
-                    <CoherenceGatePanel
-                      bridge={bridge}
-                    />
-                    <FrictionPanel
-                      bridge={bridge}
-                    />
-                  </div>
                 </ErrorBoundary>
               )}
             </div>
@@ -574,55 +598,56 @@ function App() {
             <div className="px-6 py-4 border-b border-slate-800 bg-amber-500/5 flex items-center gap-3">
               <ShieldCheck className="w-6 h-6 text-amber-500 animate-pulse" />
               <div>
-                <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">Authorization Required</h3>
+                <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">Autorización Requerida</h3>
                 <p className="text-[11px] text-amber-500 font-mono font-bold uppercase tracking-tight">HITL Sandbox Gateway Clearance</p>
               </div>
             </div>
+
             <div className="p-6 space-y-4 font-mono text-[11px]">
               <div className="space-y-1.5 p-3 rounded-lg bg-slate-950 border border-slate-800">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Guild Requested:</span>
+                  <span className="text-slate-500">Guild Solicitado:</span>
                   <span className="text-slate-200 font-bold">{pendingGrant.guild}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Target Tool:</span>
+                  <span className="text-slate-500">Herramienta:</span>
                   <span className="text-slate-200 font-bold text-amber-400">{pendingGrant.tool}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Requested By:</span>
+                  <span className="text-slate-500">Solicitado por:</span>
                   <span className="text-slate-300">{pendingGrant.agentId}</span>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <span className="text-slate-500 uppercase font-black text-[11px]">Blocked Reason:</span>
+                <span className="text-slate-500 uppercase font-black text-[11px]">Motivo de Bloqueo:</span>
                 <p className="p-3 bg-red-950/15 border border-red-500/20 text-red-400 rounded leading-normal">
                   {pendingGrant.blockedReason}
                 </p>
               </div>
 
               <div className="space-y-2 pt-2">
-                <span className="text-slate-500 uppercase font-black text-[11px] block">Authorize Scope Option:</span>
+                <span className="text-slate-500 uppercase font-black text-[11px] block">Alcance de Autorización:</span>
                 <div className="grid grid-cols-1 gap-2">
                   <button
                     onClick={() => handleApproveGrant('once')}
-                    className="w-full py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
+                    className="w-full py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
                   >
-                    <span>Authorize Only This Time</span>
+                    <span>Autorizar solo esta vez</span>
                     <span className="text-[11px] opacity-60">scope: once</span>
                   </button>
                   <button
                     onClick={() => handleApproveGrant('session')}
-                    className="w-full py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
+                    className="w-full py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
                   >
-                    <span>Authorize For Current Session</span>
+                    <span>Autorizar durante esta sesión</span>
                     <span className="text-[11px] opacity-60">scope: session</span>
                   </button>
                   <button
                     onClick={() => handleApproveGrant('always')}
-                    className="w-full py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
+                    className="w-full py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
                   >
-                    <span>Always Authorize For This Guild</span>
+                    <span>Autorizar siempre este guild</span>
                     <span className="text-[11px] opacity-60">scope: always</span>
                   </button>
                 </div>
@@ -631,9 +656,9 @@ function App() {
             <div className="px-6 py-4 bg-slate-950/50 border-t border-slate-800 flex justify-end">
               <button
                 onClick={() => setPendingGrant(null)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold transition-colors font-mono"
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold transition-colors font-mono cursor-pointer"
               >
-                Deny Execution
+                Denegar Ejecución
               </button>
             </div>
           </div>

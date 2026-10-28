@@ -1,5 +1,5 @@
-import { MessageSquare, Sparkles, Users } from 'lucide-react';
-import { useMemo, useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
+import { MessageSquare, Users } from 'lucide-react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { useNexus } from '../hooks/useNexus';
@@ -7,7 +7,6 @@ import { usePolling } from '../hooks/usePolling';
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
 import { ColoquioChannelsPanel } from './ColoquioChannelsPanel';
 import { ColoquioMessagesPanel } from './ColoquioMessagesPanel';
-const ColoquioCanvasWorkspace = lazy(() => import('./ColoquioCanvasWorkspace').then(m => ({ default: m.ColoquioCanvasWorkspace })));
 import { ColoquioAgentsPanel } from './ColoquioAgentsPanel';
 
 interface ColoquioTabProps {
@@ -51,48 +50,21 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
   const [newChannelName, setNewChannelName] = useState('');
   const [needsScrollToBottom, setNeedsScrollToBottom] = useState(false);
   const [showAgentPanel, setShowAgentPanel] = useState(true);
-  const [showCanvas, setShowCanvas] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
-  const [showTemplates, setShowTemplates] = useState(false);
+    const [showTemplates, setShowTemplates] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [typingStatuses, setTypingStatuses] = useState<Record<string, { ts: number; status: string }>>({});
-  const [chatWidth, setChatWidth] = useState(650);
-  const [compactMode, setCompactMode] = useState(false);
+    const [compactMode, setCompactMode] = useState(false);
 
   const hasSelectedInitial = useRef(false);
   const isAtBottom = useRef(true);
   const lastChRef = useRef<string | null>(null);
   const lastCntRef = useRef(0);
-  const isResizingRef = useRef(false);
-  const splitContainerRef = useRef<HTMLDivElement>(null);
+    const splitContainerRef = useRef<HTMLDivElement>(null);
 
-  const startResizing = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    document.body.style.cursor = 'col-resize';
-  }, []);
+  
+  
+  
 
-  const stopResizing = useCallback(() => {
-    isResizingRef.current = false;
-    document.body.style.cursor = '';
-  }, []);
-
-  const resize = useCallback((e: MouseEvent) => {
-    if (!isResizingRef.current || !splitContainerRef.current) return;
-    const rect = splitContainerRef.current.getBoundingClientRect();
-    const newWidth = e.clientX - rect.left;
-    const maxChatWidth = rect.width - 320;
-    const finalWidth = Math.max(320, Math.min(maxChatWidth, newWidth));
-    setChatWidth(finalWidth);
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('mousemove', resize);
-    window.addEventListener('mouseup', stopResizing);
-    return () => {
-      window.removeEventListener('mousemove', resize);
-      window.removeEventListener('mouseup', stopResizing);
-    };
-  }, [resize, stopResizing]);
 
   const unreadMap = useMemo(() => new Map(unreadData.map(c => [c.channel_id, c.unread_count])), [unreadData]);
   const totalUnread = useMemo(() => unreadData.reduce((s, c) => s + c.unread_count, 0), [unreadData]);
@@ -449,18 +421,6 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
           )}
           <button
             type="button"
-            onClick={() => setShowCanvas(v => !v)}
-            aria-label={showCanvas ? "Hide Blackboard Canvas" : "Show Blackboard Canvas"}
-            title="Blackboard Canvas"
-            className={cn(
-              'p-1.5 rounded-lg transition-all mr-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:outline-none',
-              showCanvas ? 'bg-violet-500/10 text-violet-400' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-            )}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
             onClick={() => setShowAgentPanel(v => !v)}
             aria-label={showAgentPanel ? "Hide Agent Presence Panel" : "Show Agent Presence Panel"}
             title="Agent Panel"
@@ -499,19 +459,11 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
           />
         </div>
 
-        {/* Central Area: Split screen between Chat (Thread) and Canvas */}
+        {/* Central Area: Chat Thread */}
         <div ref={splitContainerRef} className={cn("flex-1 flex overflow-hidden", !selectedId ? "hidden md:flex" : "flex")}>
           {/* Thread (Chat) */}
           <div
-            className={cn(
-              "flex flex-col overflow-hidden bg-slate-900/40 border-r border-slate-800",
-              showCanvas && selectedId ? "w-full md:w-1/2 lg:w-auto min-w-0" : "w-full"
-            )}
-            style={
-              showCanvas && selectedId && typeof window !== 'undefined' && window.innerWidth >= 1024
-                ? { width: chatWidth, flexShrink: 0, maxWidth: '100%' }
-                : undefined
-            }
+            className="flex-1 flex flex-col overflow-hidden bg-slate-900/40 border-r border-slate-800 w-full"
           >
             {!selectedId ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
@@ -556,23 +508,6 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
             )}
           </div>
 
-          {/* Resizable Divider Splitter Bar (desktop >= 1024px) */}
-          {showCanvas && selectedId && (
-            <div
-              onMouseDown={startResizing}
-              className="hidden lg:block w-1 bg-slate-800/85 hover:bg-indigo-500 transition-colors cursor-col-resize select-none shrink-0"
-              title="Drag to resize"
-            />
-          )}
-
-          {/* Canvas View */}
-          {showCanvas && selectedId && (
-            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-              <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-400 text-xs">Loading canvas...</div>}>
-                <ColoquioCanvasWorkspace channelId={selectedId} messages={messages} />
-              </Suspense>
-            </div>
-          )}
         </div>
 
         {/* Agent panel */}
