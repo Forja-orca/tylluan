@@ -157,12 +157,21 @@ jobs:
           name: release-archives
           path: tylluan-*.tar.gz
 
+      - name: Build release checksums manifest
+        # AUD-01 (2026-10-28): `tylluan update` downloads this as its own release
+        # asset; the checksums.txt inside each tarball is only for install.sh/.ps1.
+        run: |
+          sha256sum tylluan-*.tar.gz > checksums.txt
+          cat checksums.txt
+
       - name: Create Draft Release
         id: create_draft
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
-          files: tylluan-*.tar.gz
+          files: |
+            tylluan-*.tar.gz
+            checksums.txt
           generate_release_notes: true
 
   version-gate:
