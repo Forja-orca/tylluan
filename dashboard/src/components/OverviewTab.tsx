@@ -192,6 +192,57 @@ export function OverviewTab({
       dotClass: 'bg-emerald-500',
     };
   }, [online, sovereignToolsData]);
+  // T-DSH-114: tarjeta del centinela (bloque /health.sentinel + selector de modo).
+  type SentinelState = {
+    mode?: string;
+    loaded?: boolean;
+    verdicts?: { safe?: number; controversial?: number; unsafe?: number; unavailable?: number };
+    fallbacks?: number;
+    cpu_skips?: number;
+    max_cpu_pct?: number;
+    in_flight?: number;
+  };
+  const [sentinel, setSentinel] = useState<SentinelState | null>(null);
+  const [sentinelBusy, setSentinelBusy] = useState(false);
+
+  const fetchSentinel = useCallback(async () => {
+    if (!bridge || !online) return;
+    try {
+      const res = (await bridge.fetchRaw('/health')) as { sentinel?: SentinelState };
+      setSentinel(res?.sentinel ?? null);
+    } catch {
+      setSentinel(null);
+    }
+  }, [bridge, online]);
+
+  useEffect(() => {
+    fetchSentinel();
+  }, [fetchSentinel]);
+
+  usePolling('overview-sentinel', fetchSentinel, {
+    interval: 'medium',
+    enabled: !!bridge && online,
+  });
+
+  const setSentinelMode = useCallback(
+    async (mode: string) => {
+      if (!bridge) return;
+      setSentinelBusy(true);
+      try {
+        const res = (await bridge.fetchRaw('/api/v1/security/sentinel/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        })) as { state?: SentinelState };
+        if (res?.state) setSentinel(res.state);
+        else await fetchSentinel();
+      } finally {
+        setSentinelBusy(false);
+      }
+    },
+    [bridge, fetchSentinel],
+  );
+
   useEffect(() => {
     const fetchMetricsHistory = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
@@ -425,6 +476,42 @@ export function OverviewTab({
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
           <MiniSparkline data={memHistory} color="hsl(var(--emerald-500))" />
           <span className="text-[11px] font-semibold text-slate-300">RAM</span>
+        </div>
+      </div>
+
+      {/* T-DSH-114: centinela de write_gate L2 (opt-in, default off) */}
+      <div className="mt-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h4 className="text-sm font-bold text-slate-200">Centinela (write_gate L2)</h4>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {sentinel
+                ? `modo ${sentinel.mode ?? 'off'} · cargado ${sentinel.loaded ? 'sí' : 'no'} · fallbacks ${sentinel.fallbacks ?? 0} · saltos CPU ${sentinel.cpu_skips ?? 0} (umbral ${sentinel.max_cpu_pct ?? 85}%)`
+                : 'estado no disponible'}
+            </p>
+            {sentinel?.verdicts && (
+              <p className="text-[11px] font-mono text-slate-500 mt-1">
+                safe {sentinel.verdicts.safe ?? 0} · controversial {sentinel.verdicts.controversial ?? 0} · unsafe {sentinel.verdicts.unsafe ?? 0} · unavailable {sentinel.verdicts.unavailable ?? 0}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1" role="group" aria-label="Modo del centinela">
+            {['off', 'observe', 'enforce'].map((m) => (
+              <button
+                key={m}
+                type="button"
+                disabled={sentinelBusy || !bridge}
+                onClick={() => setSentinelMode(m)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:opacity-50 ${
+                  sentinel?.mode === m
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

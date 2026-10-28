@@ -51,6 +51,8 @@
           "additionalProperties": false
         },
         "fallbacks": { "type": "integer", "minimum": 0 },
+        "cpu_skips": { "type": "integer", "minimum": 0 },
+        "max_cpu_pct": { "type": "integer", "minimum": 0, "maximum": 100 },
         "in_flight": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false

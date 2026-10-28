@@ -130,6 +130,7 @@ pub struct SentinelStats {
     pub unsafe_verdicts: u64,
     pub unavailable: u64,
     pub fallbacks: u64,
+    pub cpu_skips: u64,
     pub in_flight: usize,
 }
 
@@ -137,6 +138,30 @@ pub struct SentinelStats {
 /// pero no actúa; Off ni siquiera puntúa.
 pub fn mode_applies_action(mode: SentinelMode) -> bool {
     matches!(mode, SentinelMode::Enforce)
+}
+
+/// T-DSH-114: ¿hay que saltarse el centinela por carga de CPU? Devuelve true
+/// si la CPU global supera `max_cpu_pct` (fail-open, sin lanzar llama-server).
+pub fn should_skip_for_cpu(cpu_pct: Option<f32>, max_cpu_pct: u8) -> bool {
+    cpu_pct.map(|p| p > f32::from(max_cpu_pct)).unwrap_or(false)
+}
+
+/// CPU global del sistema, cacheada 2 s (sysinfo es caro para llamarla por nota).
+fn system_cpu_pct_cached() -> Option<f32> {
+    use std::sync::Mutex;
+    use std::time::Instant;
+    static CACHE: Mutex<Option<(Instant, f32)>> = Mutex::new(None);
+    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((ts, pct)) = *guard
+        && ts.elapsed() < Duration::from_secs(2)
+    {
+        return Some(pct);
+    }
+    let mut sys = sysinfo::System::new();
+    sys.refresh_cpu_usage();
+    let pct = sys.global_cpu_usage();
+    *guard = Some((Instant::now(), pct));
+    Some(pct)
 }
 
 /// ¿Toca descargar el servidor? Falso si hay peticiones en vuelo (T-DSH-113:
@@ -157,6 +182,22 @@ impl<'a> InFlightGuard<'a> {
 impl Drop for InFlightGuard<'_> {
     fn drop(&mut self) {
         self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+fn mode_to_u8(mode: SentinelMode) -> u8 {
+    match mode {
+        SentinelMode::Off => 0,
+        SentinelMode::Observe => 1,
+        SentinelMode::Enforce => 2,
+    }
+}
+
+fn mode_from_u8(v: u8) -> SentinelMode {
+    match v {
+        1 => SentinelMode::Observe,
+        2 => SentinelMode::Enforce,
+        _ => SentinelMode::Off,
     }
 }
 
@@ -189,7 +230,8 @@ impl ServerState {
 /// Juez centinela con servidor propio bajo demanda y cola serie.
 pub struct SentinelJudge {
     cfg: SentinelConfig,
-    mode: SentinelMode,
+    mode: std::sync::atomic::AtomicU8,
+    reaper_started: std::sync::atomic::AtomicBool,
     state: Mutex<ServerState>,
     http: reqwest::Client,
     /// Solo tests: base URL de un servidor falso (no se arranca llama-server).
@@ -197,6 +239,7 @@ pub struct SentinelJudge {
     in_flight: std::sync::atomic::AtomicUsize,
     verdicts: [std::sync::atomic::AtomicU64; 4],
     fallbacks: std::sync::atomic::AtomicU64,
+    cpu_skips: std::sync::atomic::AtomicU64,
 }
 
 impl SentinelJudge {
@@ -204,7 +247,8 @@ impl SentinelJudge {
         let mode = resolve_mode(cfg.enabled, cfg.mode.as_deref());
         Self {
             cfg,
-            mode,
+            mode: std::sync::atomic::AtomicU8::new(mode_to_u8(mode)),
+            reaper_started: std::sync::atomic::AtomicBool::new(false),
             state: Mutex::new(ServerState {
                 child: None,
                 port: 0,
@@ -216,11 +260,20 @@ impl SentinelJudge {
             in_flight: std::sync::atomic::AtomicUsize::new(0),
             verdicts: std::array::from_fn(|_| std::sync::atomic::AtomicU64::new(0)),
             fallbacks: std::sync::atomic::AtomicU64::new(0),
+            cpu_skips: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
     pub fn mode(&self) -> SentinelMode {
+        mode_from_u8(self.mode.load(std::sync::atomic::Ordering::SeqCst))
+    }
+
+    /// T-DSH-114: cambia el modo en caliente (sin reiniciar el kernel).
+    pub fn set_mode(&self, mode: SentinelMode) -> SentinelMode {
+        let prev = self.mode();
         self.mode
+            .store(mode_to_u8(mode), std::sync::atomic::Ordering::SeqCst);
+        prev
     }
 
     /// `true` si el servidor está cargado (para `/health`).
@@ -236,6 +289,7 @@ impl SentinelJudge {
             unsafe_verdicts: self.verdicts[2].load(Relaxed),
             unavailable: self.verdicts[3].load(Relaxed),
             fallbacks: self.fallbacks.load(Relaxed),
+            cpu_skips: self.cpu_skips.load(Relaxed),
             in_flight: self.in_flight.load(Relaxed),
         }
     }
@@ -263,6 +317,9 @@ impl SentinelJudge {
         let mut judge = Self::new(SentinelConfig {
             enabled: true,
             timeout_ms,
+            // En tests no queremos que el gate de CPU (maquina cargada) tumbe
+            // los fake servers: umbral 100 = nunca salta.
+            max_cpu_pct: 100,
             ..SentinelConfig::default()
         });
         judge.test_base = Some(base.trim_end_matches('/').to_string());
@@ -354,8 +411,19 @@ impl SentinelJudge {
     /// Dictamina un texto. Cola serie: un veredicto a la vez; descarga el
     /// servidor si ha estado inactivo más de `idle_unload_secs`.
     pub async fn judge(&self, text: &str) -> SentinelVerdict {
-        if !self.mode.judges() {
+        if !self.mode().judges() {
             self.note_verdict(SentinelVerdict::Unavailable);
+            return SentinelVerdict::Unavailable;
+        }
+        // T-DSH-114: salto por carga de CPU (fail-open, sin lanzar llama-server).
+        if should_skip_for_cpu(system_cpu_pct_cached(), self.cfg.max_cpu_pct) {
+            self.cpu_skips
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.note_verdict(SentinelVerdict::Unavailable);
+            tracing::debug!(
+                "[T-DSH-114] centinela: CPU > {}% — se salta el juez (fail-open)",
+                self.cfg.max_cpu_pct
+            );
             return SentinelVerdict::Unavailable;
         }
         let _in_flight = InFlightGuard::new(&self.in_flight);
@@ -595,6 +663,17 @@ fn set_below_normal(pid: u32) {
 #[cfg(not(windows))]
 fn set_below_normal(_pid: u32) {}
 
+/// T-DSH-114: cambia el modo del centinela global en caliente. Arranca el
+/// reaper si se pasa a observe/enforce (idempotente). Devuelve el modo previo.
+pub fn set_mode(mode: SentinelMode) -> SentinelMode {
+    let judge = global();
+    let prev = judge.set_mode(mode);
+    if mode.judges() && !judge.reaper_started.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        spawn_idle_reaper(&judge);
+    }
+    prev
+}
+
 /// T-DSH-113: bloque `sentinel` de `/health` (sin tokens ni rutas).
 pub fn health_json() -> serde_json::Value {
     let judge = global();
@@ -609,6 +688,8 @@ pub fn health_json() -> serde_json::Value {
             "unavailable": stats.unavailable,
         },
         "fallbacks": stats.fallbacks,
+        "cpu_skips": stats.cpu_skips,
+        "max_cpu_pct": judge.cfg.max_cpu_pct,
         "in_flight": stats.in_flight,
     })
 }
@@ -795,8 +876,8 @@ mod tests {
     #[tokio::test]
     async fn observe_mode_counts_verdicts_but_does_not_apply_actions() {
         let base = fake_server("Safety: Unsafe", 0).await;
-        let mut judge = SentinelJudge::for_test(&base, 5_000);
-        judge.mode = SentinelMode::Observe;
+        let judge = SentinelJudge::for_test(&base, 5_000);
+        judge.set_mode(SentinelMode::Observe);
         assert_eq!(judge.judge("ataque").await, SentinelVerdict::Unsafe);
         let stats = judge.stats();
         assert_eq!(stats.unsafe_verdicts, 1);
@@ -818,5 +899,43 @@ mod tests {
         assert!(!text.contains("Qwen3Guard"), "no debe exponer el modelo: {text}");
         assert!(!text.contains("\\\\"), "no debe exponer rutas: {text}");
         assert!(!text.to_lowercase().contains("token"), "no debe exponer tokens: {text}");
+    }
+
+    #[test]
+    fn cpu_gate_skips_above_threshold_only() {
+        assert!(!should_skip_for_cpu(None, 85));
+        assert!(!should_skip_for_cpu(Some(84.9), 85));
+        assert!(!should_skip_for_cpu(Some(85.0), 85));
+        assert!(should_skip_for_cpu(Some(85.1), 85));
+        assert!(should_skip_for_cpu(Some(99.0), 85));
+        assert!(!should_skip_for_cpu(Some(100.0), 100));
+    }
+
+    #[test]
+    fn set_mode_changes_mode_in_hot() {
+        let judge = SentinelJudge::new(SentinelConfig::default());
+        assert_eq!(judge.mode(), SentinelMode::Off);
+        judge.set_mode(SentinelMode::Observe);
+        assert_eq!(judge.mode(), SentinelMode::Observe);
+        judge.set_mode(SentinelMode::Enforce);
+        assert_eq!(judge.mode(), SentinelMode::Enforce);
+        judge.set_mode(SentinelMode::Off);
+        assert_eq!(judge.mode(), SentinelMode::Off);
+    }
+
+    #[tokio::test]
+    async fn cpu_gate_returns_unavailable_without_calling_server() {
+        // max_cpu_pct = 0 => cualquier CPU > 0 hace saltar el juez; con el
+        // servidor falso respondiendo Unsafe, el resultado debe ser Unavailable
+        // y el contador cpu_skips debe subir (no se llama al modelo).
+        let base = fake_server("Safety: Unsafe", 0).await;
+        let mut judge = SentinelJudge::for_test(&base, 5_000);
+        judge.cfg.max_cpu_pct = 0;
+        let v = judge.judge("ataque").await;
+        if system_cpu_pct_cached().map(|p| p > 0.0).unwrap_or(false) {
+            assert_eq!(v, SentinelVerdict::Unavailable);
+            assert_eq!(judge.stats().cpu_skips, 1);
+            assert_eq!(judge.stats().unsafe_verdicts, 0);
+        }
     }
 }

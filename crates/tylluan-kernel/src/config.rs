@@ -1503,6 +1503,9 @@ pub struct SentinelConfig {
     pub ctx_size: u32,
     pub timeout_ms: u64,
     pub idle_unload_secs: u64,
+    /// T-DSH-114: si la CPU global supera este porcentaje, el centinela
+    /// devuelve `Unavailable` (fail-open) sin lanzar llama-server. Default 85.
+    pub max_cpu_pct: u8,
 }
 
 impl Default for SentinelConfig {
@@ -1517,6 +1520,7 @@ impl Default for SentinelConfig {
             ctx_size: 2048,
             timeout_ms: 60_000,
             idle_unload_secs: 300,
+            max_cpu_pct: 85,
         }
     }
 }

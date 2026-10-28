@@ -284,3 +284,8 @@ admin = ["*"]
 # ctx_size = 2048
 # timeout_ms = 60000
 # idle_unload_secs = 300
+# T-DSH-114: si la CPU global supera este porcentaje, el centinela no lanza el
+# llama-server (fail-open, cuenta cpu_skips en /health). Defecto 85.
+# max_cpu_pct = 85
+# El modo se cambia en caliente (sin reiniciar) por POST /api/v1/security/sentinel/mode
+# o `tylluan sentinel mode <off|observe|enforce>`; ambos exigen clase operador.
