@@ -631,11 +631,11 @@ export function OverviewTab({
       )}
 
       {/* Multi-Agent Activity */}
-      <div className="rounded-xl bg-slate-900/50 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
+      <div className="rounded-xl bg-card border border-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <History className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-            <span className="text-[11px] font-medium text-slate-400">Sovereign Activity Stream</span>
+            <History className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+            <span className="text-[11px] font-medium text-muted-foreground">Sovereign Activity Stream</span>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer select-none hover:text-slate-200 transition-colors">
@@ -778,10 +778,10 @@ export function OverviewTab({
           </div>
         </div>
 
-        <div className="rounded-xl bg-slate-900/50 overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
-            <span className="text-[11px] font-medium text-slate-400">HITL Gateway</span>
-            <ShieldCheck className="w-3 h-3 text-amber-400" />
+        <div className="rounded-xl bg-card border border-border overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <span className="text-[11px] font-medium text-muted-foreground">HITL Gateway</span>
+            <ShieldCheck className="w-3 h-3 text-primary" />
           </div>
           <div className="flex-1 p-4 flex flex-col items-center justify-center text-center">
             {approvals.length === 0 ? (
@@ -814,10 +814,10 @@ export function OverviewTab({
       {/* Guild Utilization, Memory Retention, Night Consolidation & Canary Assertions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Tarjeta 1 — Guild Utilization */}
-        <div className="p-4 rounded-xl bg-slate-900/50">
+        <div className="p-4 rounded-xl bg-card border border-border">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 text-slate-400 text-[11px] font-medium">
-              <Cpu className="w-3.5 h-3.5 text-amber-400" /> Guild Utilization
+            <div className="flex items-center gap-2 text-muted-foreground text-[11px] font-medium">
+              <Cpu className="w-3.5 h-3.5 text-primary" /> Guild Utilization
             </div>
             <span className="text-[11px] text-slate-400">
               {guildsUtilization?.active || 0} / {guildsUtilization?.total || 0} active

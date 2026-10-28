@@ -211,6 +211,9 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     bridgeRef.current = bridge;
     bridge.connectEvents();
 
+    // Fetch initial health_detailed immediately on mount
+    bridge.health_detailed().then(h => setHealthDetailed(h)).catch(() => {});
+
     const healthInterval = setInterval(async () => {
       if (bridgeRef.current && onlineRef.current && !pausedRef.current) {
         try {

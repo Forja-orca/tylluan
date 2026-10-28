@@ -40,6 +40,7 @@ use super::api_types::{
 };
 use super::systemone_http::SystemOneHttpProvider;
 use super::{CoreQuestion, DecisionAnswer, DecisionError, DecisionProvider, DecisionRequest, rules::RulesDecisionProvider};
+use super::clinical_gate::ClinicalHtlGate;
 
 /// Motivo de abstención del carril síncrono cuando el modelo excede su deadline.
 const ABSTAIN_PROVIDER_TIMEOUT: &str = "provider_timeout";
@@ -187,6 +188,11 @@ fn resolve_model_slot(config: &Arc<RwLock<TylluanConfig>>) -> Option<ModelSlot> 
                 30_000,
             ) {
                 Ok(provider) => {
+                    let provider: Arc<dyn DecisionProvider> = if point.is_cloud() {
+                        Arc::new(ClinicalHtlGate::new(provider, true))
+                    } else {
+                        provider
+                    };
                     let identity = format!("{}:{}", provider.provider_id(), model);
                     tracing::info!(
                         "decision: [inference.points.decision] adaptador {} listo ({identity}); locality={}",
@@ -231,7 +237,12 @@ fn resolve_model_slot(config: &Arc<RwLock<TylluanConfig>>) -> Option<ModelSlot> 
         };
         return match SystemOneHttpProvider::from_config(&sc) {
             Ok(p) => {
-                let identity = format!("{}:{}", p.provider_id(), sc.model);
+                let provider: Arc<dyn DecisionProvider> = if point.is_cloud() {
+                    Arc::new(ClinicalHtlGate::new(Arc::new(p), true))
+                } else {
+                    Arc::new(p)
+                };
+                let identity = format!("{}:{}", provider.provider_id(), sc.model);
                 tracing::info!(
                     "decision: [inference.points.decision] systemone_http ready ({identity}); locality={}",
                     if crate::router::inference_points_runtime::effective_is_cloud(point) {
@@ -241,7 +252,7 @@ fn resolve_model_slot(config: &Arc<RwLock<TylluanConfig>>) -> Option<ModelSlot> 
                     }
                 );
                 Some(ModelSlot {
-                    provider: Arc::new(p),
+                    provider,
                     identity,
                     request_timeout: Duration::from_millis(sc.request_timeout_ms),
                     shadow_timeout: Duration::from_millis(sc.shadow_timeout_ms),
@@ -1240,5 +1251,63 @@ mod t119_adapter_resolution_tests {
         let cfg = cfg_points("ollama_compatible", "http://127.0.0.1:11434", false);
         let slot = resolve_model_slot(&cfg).expect("adaptador ollama");
         assert_eq!(slot.identity, "ollama_json:modelo-decision");
+    }
+}
+
+
+#[cfg(test)]
+mod t121_clinical_gate_integration_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn cfg_cloud(endpoint: &str) -> Arc<RwLock<TylluanConfig>> {
+        let mut cfg = TylluanConfig::default();
+        cfg.inference.points.decision.provider = Some("openai_compatible".to_string());
+        cfg.inference.points.decision.endpoint = Some(endpoint.to_string());
+        cfg.inference.points.decision.model = Some("m".to_string());
+        cfg.inference.points.decision.cloud_enabled = true;
+        Arc::new(RwLock::new(cfg))
+    }
+
+    fn req(sensitivity: Option<&str>) -> DecisionRequest {
+        let mut questions = HashMap::new();
+        questions.insert(
+            "q".to_string(),
+            CoreQuestion::without_instructions(crate::router::decision::DecisionQuestion::Noul),
+        );
+        let state = match sensitivity {
+            Some(s) => serde_json::json!({"sensitivity": s}),
+            None => serde_json::json!({"task": "t"}),
+        };
+        DecisionRequest { state, questions }
+    }
+
+    #[tokio::test]
+    async fn cloud_slot_blocks_clinical_and_unknown_fail_closed() {
+        // Endpoint NO loopback => el punto resuelve a nube y el slot se envuelve
+        // con ClinicalHtlGate. Clinical/desconocida deben abstenerse ANTES de
+        // cualquier conexión (el endpoint es TEST-NET, no hay servidor).
+        let cfg = cfg_cloud("https://192.0.2.1/v1");
+        let slot = resolve_model_slot(&cfg).expect("adaptador cloud envuelto");
+        for state in [Some("clinical"), None] {
+            let err = slot.provider.decide(&req(state)).await.unwrap_err();
+            assert!(
+                matches!(err, DecisionError::Abstained(_)),
+                "sensibilidad {state:?}: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn local_loopback_slot_is_not_gated() {
+        // Loopback => local: sin gate, el proveedor intenta la llamada (falla
+        // por red, no por política). No se usa aquí para contar peticiones.
+        let cfg = cfg_cloud("http://127.0.0.1:1");
+        let slot = resolve_model_slot(&cfg).expect("adaptador local");
+        let err = slot.provider.decide(&req(Some("clinical"))).await.unwrap_err();
+        assert!(
+            matches!(err, DecisionError::Provider(_, _)),
+            "local no debe bloquear por política: {err}"
+        );
     }
 }
