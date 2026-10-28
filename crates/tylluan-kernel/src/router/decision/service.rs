@@ -156,12 +156,57 @@ fn resolve_model_slot(config: &Arc<RwLock<TylluanConfig>>) -> Option<ModelSlot> 
     // el resto de dialectos de decision aun no tiene adaptador -> reglas.
     let point = &cfg.inference.points.decision;
     if point.provider() != "local_ephemeral" {
-        if point.provider() != "systemone_http" {
+        // T-DSH-119: adaptadores multiproveedor (diseño aprobado). Nube opt-in
+        // por punto: si resuelve a nube sin cloud_enabled, ni se construye.
+        if point.is_cloud() && !point.cloud_enabled {
             tracing::warn!(
-                "decision: [inference.points.decision] provider='{}' no implementado en el dialecto de decision (solo systemone_http) — rules baseline",
+                "decision: [inference.points.decision] provider='{}' es nube con cloud_enabled=false — rules baseline",
                 point.provider()
             );
             return None;
+        }
+        if point.provider() != "systemone_http" {
+            let Some(endpoint) = point.endpoint.clone() else {
+                tracing::warn!(
+                    "decision: [inference.points.decision] provider='{}' sin endpoint — rules baseline",
+                    point.provider()
+                );
+                return None;
+            };
+            let model = point
+                .model
+                .clone()
+                .filter(|m| !m.trim().is_empty())
+                .unwrap_or_else(|| "default".to_string());
+            let key_env = point.api_key_env.clone().unwrap_or_default();
+            return match crate::router::decision::adapters::provider_for_point(
+                point.provider(),
+                &endpoint,
+                &model,
+                &key_env,
+                30_000,
+            ) {
+                Ok(provider) => {
+                    let identity = format!("{}:{}", provider.provider_id(), model);
+                    tracing::info!(
+                        "decision: [inference.points.decision] adaptador {} listo ({identity}); locality={}",
+                        provider.provider_id(),
+                        if point.is_cloud() { "cloud" } else { "local" }
+                    );
+                    Some(ModelSlot {
+                        provider,
+                        identity,
+                        request_timeout: Duration::from_millis(5_000),
+                        shadow_timeout: Duration::from_millis(30_000),
+                    })
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "decision: [inference.points.decision] adaptador rechazado ({e}) — rules baseline"
+                    );
+                    None
+                }
+            };
         }
         let Some(endpoint) = point.endpoint.clone() else {
             tracing::warn!(
@@ -1152,5 +1197,48 @@ mod t116_points_resolution_tests {
         // [decision.provider] (rules por defecto => sin proveedor de modelo).
         let cfg = Arc::new(RwLock::new(TylluanConfig::default()));
         assert!(resolve_model_slot(&cfg).is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod t119_adapter_resolution_tests {
+    use super::*;
+
+    fn cfg_points(provider: &str, endpoint: &str, cloud_enabled: bool) -> Arc<RwLock<TylluanConfig>> {
+        let mut cfg = TylluanConfig::default();
+        cfg.inference.points.decision.provider = Some(provider.to_string());
+        cfg.inference.points.decision.endpoint = Some(endpoint.to_string());
+        cfg.inference.points.decision.model = Some("modelo-decision".to_string());
+        cfg.inference.points.decision.api_key_env = Some("T119_KEY".to_string());
+        cfg.inference.points.decision.cloud_enabled = cloud_enabled;
+        Arc::new(RwLock::new(cfg))
+    }
+
+    #[test]
+    fn openai_without_cloud_opt_in_does_not_build_adapter() {
+        let cfg = cfg_points("openai_compatible", "https://api.example.com/v1", false);
+        assert!(resolve_model_slot(&cfg).is_none());
+    }
+
+    #[test]
+    fn openai_with_cloud_opt_in_builds_adapter() {
+        let cfg = cfg_points("openai_compatible", "https://api.example.com/v1", true);
+        let slot = resolve_model_slot(&cfg).expect("adaptador openai");
+        assert_eq!(slot.identity, "openai_chat_json:modelo-decision");
+    }
+
+    #[test]
+    fn anthropic_with_cloud_opt_in_builds_adapter() {
+        let cfg = cfg_points("anthropic_compatible", "https://api.anthropic.com/v1", true);
+        let slot = resolve_model_slot(&cfg).expect("adaptador anthropic");
+        assert_eq!(slot.identity, "anthropic_tool_json:modelo-decision");
+    }
+
+    #[test]
+    fn ollama_local_loopback_builds_adapter_without_opt_in() {
+        let cfg = cfg_points("ollama_compatible", "http://127.0.0.1:11434", false);
+        let slot = resolve_model_slot(&cfg).expect("adaptador ollama");
+        assert_eq!(slot.identity, "ollama_json:modelo-decision");
     }
 }

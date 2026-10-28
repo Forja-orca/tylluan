@@ -278,13 +278,21 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_disabled_never_opens_a_connection() {
-        let srv = fake_server(serde_json::json!({"choices": [{"message": {"content": "x"}}]})).await;
-        // openai_compatible es nube: sin cloud_enabled el guard corta ANTES de
-        // tocar la red, aunque el endpoint sea loopback.
-        let p = point("openai_compatible", &srv.url);
+        // Endpoint NO loopback + cloud_enabled=false => el guard corta antes de
+        // tocar la red (no hay servidor falso: si intentara conectar, el error
+        // seria de red/DNS, no el de politica).
+        let p = point("openai_compatible", "https://api.example.invalid/v1");
         let err = complete_with_config(&base_cfg(), &p, "hola", 8).await.unwrap_err();
         assert!(err.contains("cloud_enabled=false"), "{err}");
-        assert_eq!(srv.hits.load(Ordering::SeqCst), 0, "no debe abrir conexion");
+    }
+
+    #[tokio::test]
+    async fn loopback_provider_is_local_and_needs_no_cloud_opt_in() {
+        let srv = fake_server(serde_json::json!({"choices": [{"message": {"content": "ok"}}]})).await;
+        let p = point("openai_compatible", &srv.url);
+        let out = complete_with_config(&base_cfg(), &p, "hola", 8).await.unwrap();
+        assert_eq!(out, "ok");
+        assert_eq!(srv.hits.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

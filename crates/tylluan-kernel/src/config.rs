@@ -967,13 +967,15 @@ impl InferencePointConfig {
     }
 
     pub fn is_cloud(&self) -> bool {
-        match self.provider() {
-            "openai_compatible" | "anthropic_compatible" | "ollama_compatible" => true,
-            // E-2/E-3: SystemOne local (loopback) NO es nube; solo si el
-            // endpoint no es loopback.
-            "systemone_http" => !self.endpoint_is_loopback(),
-            _ => false,
+        // E-3: ningun punto "sale de la maquina" si el endpoint es loopback,
+        // sea cual sea el dialecto; solo es nube cuando el endpoint no lo es.
+        if self.endpoint_is_loopback() {
+            return false;
         }
+        matches!(
+            self.provider(),
+            "openai_compatible" | "anthropic_compatible" | "ollama_compatible" | "systemone_http"
+        )
     }
 
     /// Validacion de un punto: proveedor conocido, endpoint/clave y nube opt-in.
@@ -987,17 +989,19 @@ impl InferencePointConfig {
             ));
             return errors;
         }
-        if self.is_cloud() {
-            if !self.cloud_enabled {
-                errors.push(format!(
-                    "inference.points.{name}: proveedor '{provider}' es de nube y cloud_enabled=false (la nube solo se usa si el punto la activa)"
-                ));
-            }
+        if !matches!(provider, "local_ephemeral" | "user_llama_server") {
             match self.endpoint.as_deref().map(str::trim) {
                 Some(e) if e.starts_with("http://") || e.starts_with("https://") => {}
                 _ => errors.push(format!(
                     "inference.points.{name}: endpoint http(s) obligatorio para '{provider}'"
                 )),
+            }
+        }
+        if self.is_cloud() {
+            if !self.cloud_enabled {
+                errors.push(format!(
+                    "inference.points.{name}: proveedor '{provider}' es de nube y cloud_enabled=false (la nube solo se usa si el punto la activa)"
+                ));
             }
             if matches!(provider, "openai_compatible" | "anthropic_compatible")
                 && self.api_key_env.as_deref().map(str::trim).unwrap_or("").is_empty()
