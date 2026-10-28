@@ -51,9 +51,9 @@ interface AppState {
 
 const getInitialTheme = (): 'dark' | 'light' | 'system' => {
   try {
-    return (localStorage.getItem('tylluan_theme') as 'dark' | 'light' | 'system') || 'system';
+    return (localStorage.getItem('tylluan_theme') as 'dark' | 'light' | 'system') || 'dark';
   } catch {
-    return 'system';
+    return 'dark';
   }
 };
 

@@ -66,16 +66,16 @@ export function ModelsTab({ bridge }: Props) {
   }
 
   const tabs: { id: SubTab; label: string; icon: React.ElementType }[] = [
-    { id: 'inference', label: 'Local Inference', icon: Cpu },
-    { id: 'roles', label: 'Role Assignment', icon: ShieldCheck },
-    { id: 'external', label: 'External Providers', icon: Globe },
-    { id: 'embeddings', label: 'Embeddings & Disk', icon: Database },
+    { id: 'inference', label: 'Inferencia Local', icon: Cpu },
+    { id: 'roles', label: 'Asignación de Roles', icon: ShieldCheck },
+    { id: 'external', label: 'Proveedores Externos', icon: Globe },
+    { id: 'embeddings', label: 'Embeddings y Disco', icon: Database },
   ];
 
   return (
     <div className="space-y-4">
       {/* Sub Navigation */}
-      <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-xl w-max">
+      <div className="flex items-center gap-2 p-1 bg-muted/60 border border-border rounded-xl w-max">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -84,13 +84,13 @@ export function ModelsTab({ bridge }: Props) {
               type="button"
               onClick={() => setSubTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer",
                 subTab === tab.id
-                  ? "bg-slate-800 text-slate-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
               )}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4 text-primary" />
               {tab.label}
             </button>
           );
@@ -132,23 +132,23 @@ export function ModelsTab({ bridge }: Props) {
 
       {/* Restart Kernel Modal (shared across all sub-tabs) */}
       {showRestartModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-50 p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-amber-400">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-50 p-4">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-primary">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-lg font-bold text-slate-200 font-mono">Restart Required</h3>
+              <h3 className="text-lg font-bold text-foreground font-mono">Reinicio Requerido</h3>
             </div>
             
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Hardware acceleration has been configured to <span className="font-mono text-amber-400 font-semibold">{selectedDevice}</span>. To load the appropriate Execution Providers and apply the changes, the Tylluan Nexus Kernel must be restarted.
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              La aceleración por hardware se ha configurado a <span className="font-mono text-primary font-semibold">{selectedDevice}</span>. Para cargar los proveedores de ejecución y aplicar los cambios, el Kernel de Tylluan debe reiniciarse.
             </p>
 
-            <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2 text-xs text-slate-400 font-mono">
-              <p className="text-slate-300 font-semibold text-[11px] mb-1">Restart instructions:</p>
-              <p>1. Stop the current kernel in your terminal (press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Ctrl + C</kbd>).</p>
-              <p>2. Start it again by running:</p>
-              <div className="bg-slate-900 p-2 rounded border border-slate-800 text-slate-300">
-                .\tylluan-mcp.bat
+            <div className="bg-background border border-border rounded-lg p-3 space-y-2 text-xs text-muted-foreground font-mono">
+              <p className="text-foreground font-semibold text-[11px] mb-1">Instrucciones de reinicio:</p>
+              <p>1. Detén el kernel en tu terminal (<kbd className="bg-muted px-1.5 py-0.5 rounded text-foreground">Ctrl + C</kbd>).</p>
+              <p>2. Vuelve a iniciarlo ejecutando:</p>
+              <div className="bg-card p-2 rounded border border-border text-foreground">
+                tylluan-cli start
               </div>
             </div>
 
@@ -156,9 +156,9 @@ export function ModelsTab({ bridge }: Props) {
               <button
                 type="button"
                 onClick={() => setShowRestartModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
               >
-                Got it
+                Entendido
               </button>
             </div>
           </div>
