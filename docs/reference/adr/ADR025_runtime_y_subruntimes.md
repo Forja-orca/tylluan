@@ -47,11 +47,17 @@ Un registro en el kernel que arranca, supervisa y detiene las tareas declaradas,
 ### R3. Seis subruntimes como fronteras de módulo
 Memoria (decay, reindex, HNSW, consenso, ciclo nocturno), Inferencia (puntos, pool ONNX, servidores efímeros, batcher), Procesos y guilds (supervisor, ciclo de vida, contención), Decisión (servicio, adaptadores, gate clínico), Coordinación (Coloquio, dispatch, flota) y Red (federación, link). Son agrupaciones de módulos con un trait común, no procesos separados.
 
-### R4. Apagado ordenado con tiempo máximo medible
-Al apagar, el registro cancela todas las tareas y espera hasta un máximo configurable; lo que no responda se registra por nombre. Criterio: el proceso sale en menos de 10 s en un arranque normal.
+### R4. Apagado ordenado, con drenaje y con tiempo máximo medible
+Orden fijo al apagar: (1) el servidor HTTP deja de aceptar peticiones (`with_graceful_shutdown`); (2) el token maestro cancela todas las tareas registradas y se espera a cada una hasta un máximo configurable, registrando por nombre las que no respondan; (3) se **drenan la auditoría y las escrituras en vuelo** antes de cerrar los almacenes; (4) se paran los guilds activos (hoy `reap_idle` solo recoge los inactivos); (5) se borra el PID. Criterio: el proceso sale en menos de 10 s en un arranque normal (hoy 10-33 s, T-DSH-123); solo se baja de ahí si T-DSH-125 lo demuestra.
 
-### R5. Observabilidad
-`GET /api/v1/runtime/tasks` (REST) y una herramienta MCP de solo lectura con el estado de cada tarea; vista en el dashboard después.
+### R5. Observabilidad con superficie mínima (revisión de seguridad de Deep, D-67)
+`GET /api/v1/runtime/tasks` solo REST, **solo lectura**, clase operador, con campos saneados (id, subruntime, estado, última ejecución, contadores; nunca rutas, agentes ni contenido). **No hay herramienta MCP nueva**: CONTRACT-01 fija seis tools; si hiciera falta verlo por MCP, va por `tylluan_do` o `tylluan_think`, o con una enmienda formal aprobada por José. El control de tareas (parar, arrancar) no se expone por HTTP en esta fase.
+
+### R6. Cancelación cooperativa; nunca `abort()` sobre escrituras
+Las tareas comprueban el token entre unidades de trabajo. `GuardedTask::abort` no cancela un `spawn_blocking` de SQLite o de ONNX; por tanto no se usa para interrumpir escrituras: se espera a que termine la unidad en curso.
+
+### R7. Frontera con el supervisor existente
+El `TaskRegistry` gobierna las tareas de fondo del kernel. `registry/supervisor.rs` y `registry/lifecycle.rs` siguen gobernando los procesos de guilds; el registro no los sustituye ni los duplica y solo comparte la señal de apagado.
 
 ## 5. Orden recomendado (propuesta, no decisión)
 
@@ -84,6 +90,10 @@ Cada fase: diff sin commitear, `clippy -D warnings` en 0, tests propios, `## Imp
 2. ¿Aprobar la fase 1 con el reindexer como primera tarea migrada? Recomendación: sí.
 3. ¿Aprobar R3 solo como lenguaje y fronteras de módulo, sin procesos separados? Recomendación: sí.
 4. ¿Prioridad frente al resto (seguridad, release v0.17.2, dashboard)? Decide José.
+
+## 9b. Revisión independiente
+
+Deep revisó este ADR (`docs/internal/REVIEW_ADR025_deep_2026-10.md`): recomendación **aprobar con cambios**. Los cinco cambios están incorporados en R4 a R7 y en las cifras del §2.
 
 ## 10. No verificado
 
