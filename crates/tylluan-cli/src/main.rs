@@ -124,11 +124,14 @@ enum Commands {
         #[arg(long)]
         no_start: bool,
     },
-    /// Check for updates and auto-update Tylluan binary
+    /// Check for updates and (solo con orden explicita) instalar el binario
     Update {
         /// Only check for updates, don't download
         #[arg(long)]
         check: bool,
+        /// Instalar la release nueva (orden explicita; nunca silencioso)
+        #[arg(long)]
+        install: bool,
     },
     /// Create a new guild or other scaffold
     New {
@@ -764,7 +767,7 @@ async fn main() -> Result<()> {
 
             let _ = std::env::set_current_dir(&original_dir);
         }
-        Commands::Update { check } => {
+        Commands::Update { check, install } => {
             println!("🔍 Checking for updates...");
             let repo = "Forja-orca/tylluan";
             let current_ver = env!("CARGO_PKG_VERSION");
@@ -792,9 +795,17 @@ async fn main() -> Result<()> {
 
             println!("📦 Update available: v{current_ver} → v{latest_ver}");
 
-            if check {
-                println!("   Run 'tylluan update' without --check to download.");
-                return Ok(());
+            match update_action(check, install) {
+                "check" => {
+                    println!("   Run 'tylluan update --install' para instalar (orden explicita).");
+                    return Ok(());
+                }
+                "notice" => {
+                    println!("   Aviso: hay una version nueva. NO se instala nada sin orden.");
+                    println!("   Para instalar: tylluan update --install");
+                    return Ok(());
+                }
+                _ => {} // "install": continua con la descarga
             }
 
             // Detect current platform
@@ -1745,6 +1756,17 @@ async fn run_sentinel(action: SentinelAction, port: u16, token: Option<String>) 
     Ok(())
 }
 
+/// T-DSH-115: accion de `tylluan update` — sin orden explicita solo avisa.
+fn update_action(check: bool, install: bool) -> &'static str {
+    if check {
+        "check"
+    } else if install {
+        "install"
+    } else {
+        "notice"
+    }
+}
+
 /// Resolve the bearer token for a CLI HTTP call: explicit `--token` flag wins
 /// over `TYLLUAN_TOKEN`, which wins over `.tylluan-token` in the current
 /// directory (the same file the kernel reads at startup). `None` means "send
@@ -1779,6 +1801,14 @@ fn with_optional_bearer(
 mod sandbox_token_tests {
     use super::*;
     use clap::CommandFactory;
+
+    #[test]
+    fn update_without_order_only_notifies() {
+        assert_eq!(update_action(false, false), "notice");
+        assert_eq!(update_action(true, false), "check");
+        assert_eq!(update_action(false, true), "install");
+        assert_eq!(update_action(true, true), "check");
+    }
 
     #[test]
     fn sentinel_mode_validation_matches_kernel() {

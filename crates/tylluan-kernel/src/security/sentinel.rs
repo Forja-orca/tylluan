@@ -501,6 +501,77 @@ impl SentinelJudge {
         self.note_verdict(verdict);
         verdict
     }
+
+    /// T-DSH-115: completion CRUDA (prompt + gramatica GBNF opcional) para el
+    /// juez de gramatica de write_gate. Mismo servidor efimero aislado y misma
+    /// cola serie que el centinela; NO usa el llama-server del usuario.
+    pub async fn raw_completion(
+        &self,
+        prompt: &str,
+        grammar: Option<&str>,
+    ) -> Result<String, String> {
+        if !self.mode().judges() {
+            return Err("write_gate_judge: modo off".to_string());
+        }
+        if should_skip_for_cpu(system_cpu_pct_cached(), self.cfg.max_cpu_pct) {
+            self.cpu_skips
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            return Err(format!(
+                "write_gate_judge: CPU > {}% (fail-open)",
+                self.cfg.max_cpu_pct
+            ));
+        }
+        let _in_flight = InFlightGuard::new(&self.in_flight);
+        let mut st = self.state.lock().await;
+        // Descarga perezosa por inactividad (patron T-DSH-113): si el servidor
+        // lleva mas de idle_unload_secs sin usarse, se apaga antes de reusarlo.
+        if st.alive_mut()
+            && self.cfg.idle_unload_secs > 0
+            && st.last_used.elapsed().as_secs() > self.cfg.idle_unload_secs
+            && self.in_flight.load(std::sync::atomic::Ordering::Relaxed) <= 1
+        {
+            st.kill();
+        }
+        st.last_used = Instant::now();
+        let port = if self.test_base.is_some() {
+            0
+        } else {
+            self.ensure_server(&mut st).await?
+        };
+        let base = self.base_url(port);
+        let mut body = serde_json::json!({
+            "messages": [{"role": "user", "content": prompt.chars().take(4000).collect::<String>()}],
+            "temperature": 0.0,
+            "max_tokens": 16,
+            "stream": false,
+        });
+        if let Some(g) = grammar {
+            body["grammar"] = serde_json::Value::String(g.to_string());
+        }
+        let fut = self
+            .http
+            .post(format!("{base}/v1/chat/completions"))
+            .json(&body)
+            .send();
+        let resp = tokio::time::timeout(Duration::from_millis(self.cfg.timeout_ms), fut)
+            .await
+            .map_err(|_| format!("write_gate_judge: timeout {}ms", self.cfg.timeout_ms))?
+            .map_err(|e| format!("write_gate_judge: error HTTP: {e}"))?;
+        let json = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("write_gate_judge: respuesta no parseable: {e}"))?;
+        let text = json
+            .get("choices")
+            .and_then(|c| c.get(0))
+            .and_then(|c| c.get("message"))
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_str())
+            .unwrap_or_default()
+            .to_string();
+        st.last_used = Instant::now();
+        Ok(text)
+    }
 }
 
 impl Drop for SentinelJudge {

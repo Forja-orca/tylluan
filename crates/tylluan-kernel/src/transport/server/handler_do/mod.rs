@@ -41,6 +41,7 @@ mod a2a;
 mod outcome;
 mod prepare;
 mod sentinel_cmd;
+mod llama_cmd;
 
 use prepare::{execute_guild_call_with_progress, resolve_and_prepare_tool_call};
 
@@ -246,6 +247,15 @@ pub async fn handle_tylluan_do(
     // T-DSH-114: interruptor del centinela por MCP (deterministico, sin guild,
     // sin herramienta nueva: CONTRACT-01 sigue con 6 sovereign tools).
     if let Some(result) = sentinel_cmd::handle_sentinel_intent(&intent) {
+        let is_err = result.get("ok") == Some(&serde_json::json!(false));
+        return Ok(CallToolResult {
+            content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())],
+            is_error: Some(is_err),
+        });
+    }
+
+    // T-DSH-115: intents de LECTURA del llama-server del usuario (sin arrancar).
+    if let Some(result) = llama_cmd::handle_llama_intent(server, &intent).await {
         let is_err = result.get("ok") == Some(&serde_json::json!(false));
         return Ok(CallToolResult {
             content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())],

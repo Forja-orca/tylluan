@@ -26,30 +26,9 @@ pub fn judge_spawn_count() -> u64 {
     JUDGE_SPAWNS.load(Ordering::Relaxed)
 }
 
-/// Puerto por defecto del llama-server opcional (`[inference.llama] port`).
-const LLAMA_SERVER_DEFAULT_PORT: u16 = 9000;
+pub(crate) const WRITE_GATE_GRAMMAR: &str = "root ::= verdict\nverdict ::= \"SAFE\" | \"SUSPICIOUS\"";
 
-/// `true` si algo escucha ya en el puerto del llama-server. Solo comprueba; nunca
-/// arranca nada (el guild `llama_backend` lo arrancaría por su cuenta).
-async fn llama_server_listening() -> bool {
-    port_listening(LLAMA_SERVER_DEFAULT_PORT).await
-}
-
-async fn port_listening(port: u16) -> bool {
-    let addr = ("127.0.0.1", port);
-    matches!(
-        tokio::time::timeout(
-            std::time::Duration::from_millis(300),
-            tokio::net::TcpStream::connect(addr),
-        )
-        .await,
-        Ok(Ok(_))
-    )
-}
-
-const WRITE_GATE_GRAMMAR: &str = "root ::= verdict\nverdict ::= \"SAFE\" | \"SUSPICIOUS\"";
-
-const WRITE_GATE_PROMPT_PREFIX: &str = "\
+pub(crate) const WRITE_GATE_PROMPT_PREFIX: &str = "\
 Classify this text that is about to be stored in an AI agent's long-term memory.\n\
 Output exactly one word: SAFE or SUSPICIOUS.\n\
 \n\
@@ -217,24 +196,14 @@ pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: Str
             }
         }
 
-        // José 2026-10-28: el juez de gramática NO arranca el servidor del 9000.
-        // Ese llama-server es opcional y lo enciende el usuario; si no escucha,
-        // la capa 2 se omite (la capa 1 determinista ya corrió antes de escribir).
-        if !llama_server_listening().await {
-            tracing::debug!("write_gate: llama-server no esta encendido; se omite el juez de gramatica para {node_id}");
-            return;
-        }
-
-        let prompt = format!("{WRITE_GATE_PROMPT_PREFIX}{}", content.chars().take(2000).collect::<String>());
-        let verdict = match crate::security::coherence_gate::call_reasoning_backend_with_grammar(
-            &prompt,
-            WRITE_GATE_GRAMMAR,
-        )
-        .await
-        {
-            Ok(v) => v.trim().to_uppercase(),
+        // T-DSH-115: el juez de gramatica corre en un servidor EFIMERO aislado
+        // (patron del centinela), NUNCA en el llama-server del usuario (9000).
+        // Si no esta configurado/arrancado, la capa 2 se omite (fail-open: la
+        // capa 1 determinista ya corrio antes de escribir).
+        let verdict = match crate::security::grammar_judge::judge_grammar(&content).await {
+            Ok(v) => v,
             Err(e) => {
-                tracing::debug!("write_gate: judge call failed for node {node_id}: {e} (observation mode, not blocking)");
+                tracing::debug!("write_gate: juez de gramatica efimero no disponible para {node_id}: {e} (no bloquea)");
                 return;
             }
         };
@@ -274,15 +243,6 @@ pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: Str
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[tokio::test]
-    async fn port_listening_detects_open_and_closed_ports() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let open = listener.local_addr().unwrap().port();
-        assert!(port_listening(open).await);
-        drop(listener);
-        assert!(!port_listening(open).await);
-    }
 
     #[test]
     fn write_gate_grammar_is_binary() {

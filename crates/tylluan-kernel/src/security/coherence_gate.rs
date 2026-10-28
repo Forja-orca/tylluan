@@ -218,8 +218,10 @@ pub fn judge_max_concurrency() -> usize {
 // al modelo una y otra vez. Esta cache guarda solo el hash del prompt+gramatica
 // y el veredicto (nunca el prompt), con ventana y tope configurables en
 // `[security]`.
+#[allow(dead_code)] // T-DSH-115: ruta HTTP legacy del juez de gramatica (write_gate usa servidor efimero)
 const DEFAULT_JUDGE_DEDUP_WINDOW_SECS: u64 = 60;
 const MAX_JUDGE_DEDUP_WINDOW_SECS: u64 = 3_600;
+#[allow(dead_code)] // T-DSH-115: ruta HTTP legacy del juez de gramatica (write_gate usa servidor efimero)
 const DEFAULT_JUDGE_DEDUP_MAX_ENTRIES: usize = 256;
 const MAX_JUDGE_DEDUP_MAX_ENTRIES: usize = 4_096;
 
@@ -233,6 +235,7 @@ fn effective_judge_dedup(window_secs: u64, max_entries: usize) -> (std::time::Du
 /// D-36: lee `[security] judge_dedup_*` en cada juicio. Usa el mismo
 /// `load_cached` que `configured_judge_model`, asi que un reload de config se
 /// respeta sin reiniciar el kernel.
+#[allow(dead_code)] // T-DSH-115: ruta HTTP legacy del juez de gramatica (write_gate usa servidor efimero)
 fn configured_judge_dedup() -> (std::time::Duration, usize) {
     let (mut window_secs, mut max_entries) =
         (DEFAULT_JUDGE_DEDUP_WINDOW_SECS, DEFAULT_JUDGE_DEDUP_MAX_ENTRIES);
@@ -372,6 +375,7 @@ pub(crate) async fn acquire_judge_permit(
 ///
 /// D-14/C4: cada llamada queda contada (ok / timeout / http / transporte /
 /// parse) con su latencia, sin registrar prompt ni veredicto.
+#[allow(dead_code)] // T-DSH-115: ruta HTTP legacy del juez de gramatica (write_gate usa servidor efimero)
 pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
     let kernel_base = std::env::var("TYLLUAN_KERNEL_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:47004".to_string());
@@ -391,6 +395,7 @@ pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &
 /// ANTES de pedir la ranura, asi que un veredicto repetido no consume turno de
 /// generacion. Se vuelve a mirar tras adquirir el permiso para que dos
 /// llamadas identicas simultaneas no generen dos veces.
+#[allow(dead_code)] // T-DSH-115: ruta HTTP legacy del juez de gramatica (write_gate usa servidor efimero)
 async fn call_reasoning_backend_with_grammar_using(
     kernel_base: &str,
     prompt: &str,

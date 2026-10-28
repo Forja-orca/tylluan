@@ -129,6 +129,14 @@ slo_target = 99.9
 
 # Local LLM inference via llama.cpp
 [inference.llama]
+# T-DSH-115: el llama-server es DEL USUARIO y esta APAGADO por defecto; no se
+# autoarranca. Arrancalo explicitamente (tylluan sentinel? no: llama start /
+# POST /api/v1/inference/llama/start / boton del dashboard).
+# Modelo unico: ruta explicita a un .gguf (nunca se descarga nada).
+# model_path = "E:\\modelos\\Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+# Modo router: carpeta de .gguf y maximo de modelos cargados (llama-server b10158).
+# models_dir = "E:\\modelos"
+# models_max = 4
 # llama-server port (avoid Ollama 11434, LM Studio 1234, vLLM 8000, Gradio 7860)
 port = 9000
 n_gpu_layers = 0      # 0 = CPU only; set to 999 for all layers on GPU
@@ -272,7 +280,20 @@ admin = ["*"]
 # Política: Unsafe -> cuarentena; Controversial -> marca para revisión;
 # Safe -> pasa. Si el centinela falla o expira, NO bloquea (fail-open a L1/L2).
 # Puerto 0 = efímero propio (nunca 47004). Un comentario por campo:
-# [security.sentinel]
+# [security.write_gate_judge]
+# T-DSH-115: juez de gramatica de write_gate en servidor EFIMERO propio
+# (patron del centinela: CPU, hilos<=4, prioridad baja, descarga por inactividad).
+# NO usa el llama-server del usuario. Apagado por defecto (sin model_path).
+# enabled = false
+# model_path = "E:\\modelos\\Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+# llama_server_path = "C:\\ruta\\llama-server.exe"
+# threads = 4
+# ctx_size = 2048
+# timeout_ms = 60000
+# idle_unload_secs = 300
+# max_cpu_pct = 85
+
+[security.sentinel]
 # T-DSH-113: off (default) | observe (puntua y registra, no marca) | enforce (aplica politica).
 # enabled = true sin mode equivale a enforce (compatibilidad).
 # mode = "off"
