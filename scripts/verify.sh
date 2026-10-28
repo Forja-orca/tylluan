@@ -184,6 +184,14 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "doc-path/doc-port/version drift — see scripts/check_docs_reality.sh output above"
     fi
 
+    # Agent read-route gate (2026-10-28, Jose): the same read-order table in every
+    # agentic markdown file, REVIEW.md always third, CLAUDE.md imports REVIEW.md.
+    if bash scripts/check_read_routes.sh; then
+        ok "agent read routes consistent, REVIEW.md third (check_read_routes.sh)"
+    else
+        fail "agent read-route drift -- see scripts/check_read_routes.sh output above"
+    fi
+
     # Markdown link gate (2026-10-14 documentation audit): 20 relative links
     # were broken or pointed at one machine's absolute paths (file:///E:/...);
     # check_docs_reality.sh only judges backtick-cited paths.

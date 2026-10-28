@@ -1,5 +1,19 @@
 # Tylluan v0.17.2 — Agent Instructions (Codex / OpenCode)
 
+<!-- RUTAS-DE-LECTURA:BEGIN (bloque identico en todos los ficheros agenticos; lo vigila scripts/check_read_routes.sh) -->
+## Rutas de lectura (orden obligatorio, rutas desde la raiz del repo)
+
+| Puesto | Fichero | Que te da | Quien |
+|---|---|---|---|
+| 1 | tu fichero de entrada: `CLAUDE.md`, `AGENTS.md` o `.agents/AGENTS.md` | reglas de tu runtime | Claude Code lee `CLAUDE.md`; Antigravity lee `.agents/AGENTS.md`; cualquier otro agente (Codex, OpenCode, Deep, Mimo, DSH, Hermes, Qwen) lee `AGENTS.md` |
+| 2 | `STATUS.md` | estado real verificado: que funciona hoy | todos |
+| 3 | `REVIEW.md` | como se revisa y que cuenta como hallazgo, antes de tocar o entregar nada | todos |
+| 4 | `docs/internal/WORK_PROTOCOL.md` | ciclo de trabajo, entregas y reglas de flota | todos |
+| 5 | segun la tarea: `SPEC.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/reference/adr/ARCHITECTURE_DECISIONS.md` | contrato, plan, contribucion, seguridad, decisiones | quien lo necesite |
+
+`REVIEW.md` es siempre el tercer fichero que se lee. `CLAUDE.md` lo importa con una linea `@REVIEW.md`; el resto entra por esta tabla.
+<!-- RUTAS-DE-LECTURA:END -->
+
 > Este archivo es leído automáticamente por agentes OpenCode/Codex al conectar (Deep,
 > Mimo, cualquier futuro agente en ese runtime). Si está desactualizado, TODO agente
 > de esa clase arranca con información falsa desde el primer segundo — no es un
