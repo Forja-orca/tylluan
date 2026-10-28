@@ -162,6 +162,34 @@ enum Commands {
         /// Backup directory containing backup-manifest.json + .db files
         dir: PathBuf,
     },
+    /// Sentinel (write_gate L2 judge) control: status / mode
+    Sentinel {
+        #[command(subcommand)]
+        action: SentinelAction,
+        /// Port of the kernel instance (default 47004)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Bearer token for authenticated instances (or set TYLLUAN_TOKEN)
+        #[arg(long, short)]
+        token: Option<String>,
+    },
+}
+
+/// T-DSH-114: subcomandos del centinela.
+#[derive(Subcommand)]
+enum SentinelAction {
+    /// Show the sentinel state (mode, loaded, verdict counters, fallbacks, cpu_skips)
+    Status,
+    /// Change the sentinel mode in hot: off | observe | enforce
+    Mode {
+        /// off | observe | enforce
+        mode: String,
+    },
+}
+
+/// T-DSH-114: valida el modo del centinela (mismo criterio que kernel/REST).
+fn valid_sentinel_mode(mode: &str) -> bool {
+    matches!(mode.trim().to_ascii_lowercase().as_str(), "off" | "observe" | "enforce")
 }
 
 #[derive(Subcommand)]
@@ -320,7 +348,7 @@ async fn main() -> Result<()> {
             let mut all_ok = true;
 
             // ── 1. Binary & version ──
-            print!("[1/7] Binary version: {} ... ", env!("CARGO_PKG_VERSION"));
+            print!("[1/8] Binary version: {} ... ", env!("CARGO_PKG_VERSION"));
             println!("✅");
 
             // ── 2. Config file ──
@@ -339,12 +367,12 @@ async fn main() -> Result<()> {
                 };
                 if !raw.is_empty() {
                     match raw.parse::<toml::Value>() {
-                        Ok(_) => println!("[2/7] Config file: {} ... ✅", p.display()),
-                        Err(e) => { println!("[2/7] Config file: {} ... ❌ (invalid TOML: {})", p.display(), e); all_ok = false; }
+                        Ok(_) => println!("[2/8] Config file: {} ... ✅", p.display()),
+                        Err(e) => { println!("[2/8] Config file: {} ... ❌ (invalid TOML: {})", p.display(), e); all_ok = false; }
                     }
                 }
             } else {
-                println!("[2/7] Config file: not found (tylluan.toml) ... ⚠️");
+                println!("[2/8] Config file: not found (tylluan.toml) ... ⚠️");
                 println!("       Run 'tylluan install --profile portable' to create one.");
             }
 
@@ -367,14 +395,14 @@ async fn main() -> Result<()> {
                     let major_minor = v.split_whitespace().nth(1).unwrap_or("0.0")
                         .split('.').take(2).map(|n| n.parse::<u32>().unwrap_or(0)).collect::<Vec<_>>();
                     if major_minor.len() == 2 && major_minor[0] >= 3 && major_minor[1] >= 12 {
-                        println!("[3/7] Python: {v} ... ✅");
+                        println!("[3/8] Python: {v} ... ✅");
                     } else {
-                        println!("[3/7] Python: {v} ... ❌ (need 3.12+)");
+                        println!("[3/8] Python: {v} ... ❌ (need 3.12+)");
                         all_ok = false;
                     }
                 }
                 None => {
-                    println!("[3/7] Python: not found ... ❌");
+                    println!("[3/8] Python: not found ... ❌");
                     println!("       Install Python 3.12+: https://python.org/downloads");
                     all_ok = false;
                 }
@@ -387,9 +415,9 @@ async fn main() -> Result<()> {
                     Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x == "py" || x == "rs")).count(),
                     Err(_) => 0,
                 };
-                println!("[4/7] Guilds core: {} guilds at {} ... ✅", count, guild_dir.display());
+                println!("[4/8] Guilds core: {} guilds at {} ... ✅", count, guild_dir.display());
             } else {
-                println!("[4/7] Guilds core: {} not found ... ⚠️", guild_dir.display());
+                println!("[4/8] Guilds core: {} not found ... ⚠️", guild_dir.display());
                 println!("       Guilds will be loaded from ~/.tylluan/guilds/ at runtime.");
             }
 
@@ -398,18 +426,18 @@ async fn main() -> Result<()> {
             let model_cache_ok = models_dir.exists() && std::fs::read_dir(&models_dir).is_ok_and(|mut e| e.next().is_some());
             if model_cache_ok {
                 let size = models_dir_approx_size(&models_dir);
-                println!("[5/7] Embedding model: cached (~{} MB) ... ✅", size / 1024 / 1024);
+                println!("[5/8] Embedding model: cached (~{} MB) ... ✅", size / 1024 / 1024);
             } else {
-                println!("[5/7] Embedding model: not cached ... ⚠️");
+                println!("[5/8] Embedding model: not cached ... ⚠️");
                 println!("       BM25-only mode active. Run 'tylluan download-models' for semantic search.");
             }
 
             // ── 6. Port free ──
             let port_free = std::net::TcpListener::bind(("127.0.0.1", DEFAULT_PORT)).is_ok();
             if port_free {
-                println!("[6/7] Port {DEFAULT_PORT}: available ... ✅");
+                println!("[6/8] Port {DEFAULT_PORT}: available ... ✅");
             } else {
-                println!("[6/7] Port {DEFAULT_PORT}: in use (kernel likely running) ... ✅");
+                println!("[6/8] Port {DEFAULT_PORT}: in use (kernel likely running) ... ✅");
             }
 
             // ── 7. Kernel health (online check) ──
@@ -423,7 +451,7 @@ async fn main() -> Result<()> {
                     Ok(resp) if resp.status().is_success() => {
                         let json: serde_json::Value = resp.json().await?;
                         let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("ok");
-                        println!("[7/7] Kernel: running ({status}) ... ✅");
+                        println!("[7/8] Kernel: running ({status}) ... ✅");
                         // Also fetch detailed doctor report
                         let doctor_url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/doctor");
                         if let Ok(resp) = client.get(&doctor_url).send().await
@@ -448,11 +476,11 @@ async fn main() -> Result<()> {
                                     }
                             }
                     }
-                    Ok(resp) => println!("[7/7] Kernel: error {} ... ❌", resp.status()),
-                    Err(_) => println!("[7/7] Kernel: unreachable despite port open ... ❌"),
+                    Ok(resp) => println!("[7/8] Kernel: error {} ... ❌", resp.status()),
+                    Err(_) => println!("[7/8] Kernel: unreachable despite port open ... ❌"),
                 }
             } else {
-                println!("[7/7] Kernel: not running ... ⚪");
+                println!("[7/8] Kernel: not running ... ⚪");
                 println!("       Start with 'tylluan start'");
             }
 
@@ -463,6 +491,9 @@ async fn main() -> Result<()> {
                 println!("⚠️ Some checks failed — review items marked ❌ above.");
                 println!("   Run 'tylluan doctor' again after resolving issues.");
             }
+        }
+        Commands::Sentinel { action, port, token } => {
+            run_sentinel(action, port.unwrap_or(DEFAULT_PORT), token).await?;
         }
         Commands::Logs { follow } => {
             let log_file = PathBuf::from("logs/kernel.log");
@@ -1656,6 +1687,64 @@ mod installer_flag_tests {
     }
 }
 
+/// T-DSH-114: `tylluan sentinel status|mode <off|observe|enforce>`.
+async fn run_sentinel(action: SentinelAction, port: u16, token: Option<String>) -> Result<()> {
+    let base = format!("http://127.0.0.1:{port}");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let token = resolve_cli_token(token);
+    match action {
+        SentinelAction::Status => {
+            let req = with_optional_bearer(
+                client.get(format!("{base}/api/v1/security/sentinel")),
+                &token,
+            );
+            let resp = req
+                .send()
+                .await
+                .context("no pude contactar el kernel (¿está arrancado?)")?;
+            if !resp.status().is_success() {
+                anyhow::bail!(
+                    "kernel respondió {} (¿token? usa --token o TYLLUAN_TOKEN)",
+                    resp.status()
+                );
+            }
+            let json: serde_json::Value = resp.json().await?;
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        SentinelAction::Mode { mode } => {
+            if !valid_sentinel_mode(&mode) {
+                anyhow::bail!("modo inválido '{mode}': usa off|observe|enforce");
+            }
+            let body = serde_json::json!({ "mode": mode.trim().to_ascii_lowercase() });
+            let req = with_optional_bearer(
+                client
+                    .post(format!("{base}/api/v1/security/sentinel/mode"))
+                    .json(&body),
+                &token,
+            );
+            let resp = req
+                .send()
+                .await
+                .context("no pude contactar el kernel (¿está arrancado?)")?;
+            if !resp.status().is_success() {
+                anyhow::bail!(
+                    "kernel respondió {} (¿token? usa --token o TYLLUAN_TOKEN)",
+                    resp.status()
+                );
+            }
+            let json: serde_json::Value = resp.json().await?;
+            println!(
+                "sentinel mode: {} (antes {})",
+                json["mode"], json["previous"]
+            );
+            println!("{}", serde_json::to_string_pretty(&json["state"])?);
+        }
+    }
+    Ok(())
+}
+
 /// Resolve the bearer token for a CLI HTTP call: explicit `--token` flag wins
 /// over `TYLLUAN_TOKEN`, which wins over `.tylluan-token` in the current
 /// directory (the same file the kernel reads at startup). `None` means "send
@@ -1690,6 +1779,16 @@ fn with_optional_bearer(
 mod sandbox_token_tests {
     use super::*;
     use clap::CommandFactory;
+
+    #[test]
+    fn sentinel_mode_validation_matches_kernel() {
+        for ok in ["off", "observe", "enforce", " ENFORCE "] {
+            assert!(valid_sentinel_mode(ok), "{ok}");
+        }
+        for bad in ["", "on", "basura", "true"] {
+            assert!(!valid_sentinel_mode(bad), "{bad}");
+        }
+    }
 
     #[test]
     fn pick_token_prefers_flag_then_env_then_file() {

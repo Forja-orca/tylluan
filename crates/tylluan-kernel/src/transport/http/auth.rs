@@ -263,6 +263,7 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
         || path == "/api/v1/config"
         || path.starts_with("/api/v1/config/")
         || path.starts_with("/api/v1/mcp/external")
+        || path.starts_with("/api/v1/security/sentinel")
         || path.starts_with("/api/v1/autoresearch/")
         || path.starts_with("/api/v1/a2a/agents")
         || path.starts_with("/api/v1/dispatches/")
@@ -1137,6 +1138,9 @@ mod fase1_operator_tests {
     #[test]
     fn operator_table_covers_management_and_excludes_agent_surfaces() {
         // Operator class (management / execution):
+        // T-DSH-114: el interruptor del centinela es clase operador (config).
+        assert!(operator_class_required("GET", "/api/v1/security/sentinel"));
+        assert!(operator_class_required("POST", "/api/v1/security/sentinel/mode"));
         assert!(operator_class_required("POST", "/api/v1/admin/shutdown"));
         assert!(operator_class_required("POST", "/api/v1/maintenance/purge"));
         assert!(operator_class_required("PUT", "/api/v1/federation/peers/x/permissions"));

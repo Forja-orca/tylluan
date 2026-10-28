@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::security::coherence_gate;
 use crate::security::friction_log;
 use crate::transport::http::HttpState;
+use crate::security::sentinel::{self, SentinelMode};
 
 /// ADR-011 §2.5 observability: cumulative Coherence Gate counters since kernel start.
 pub async fn coherence_gate_stats() -> impl axum::response::IntoResponse {
@@ -112,4 +113,49 @@ mod tests {
             "un éxito no debe avisar, got: {captured}"
         );
     }
+}
+
+
+// ── T-DSH-114: interruptor del centinela (MCP + REST) ────────────────────────
+
+/// `GET /api/v1/security/sentinel` — estado del centinela (sin tokens ni rutas).
+pub async fn sentinel_status_handler() -> impl axum::response::IntoResponse {
+    axum::Json(sentinel::health_json())
+}
+
+#[derive(serde::Deserialize)]
+pub struct SentinelModePayload {
+    pub mode: String,
+}
+
+/// `POST /api/v1/security/sentinel/mode` — cambia el modo en caliente.
+/// Misma clase de auth que las rutas de config (ver `operator_class_required`).
+pub async fn set_sentinel_mode_handler(
+    axum::Json(p): axum::Json<SentinelModePayload>,
+) -> impl axum::response::IntoResponse {
+    let raw = p.mode.trim().to_ascii_lowercase();
+    let mode = match raw.as_str() {
+        "off" => SentinelMode::Off,
+        "observe" => SentinelMode::Observe,
+        "enforce" => SentinelMode::Enforce,
+        _ => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                axum::Json(serde_json::json!({
+                    "ok": false,
+                    "error": "mode inválido: usa off|observe|enforce",
+                })),
+            );
+        }
+    };
+    let previous = sentinel::set_mode(mode);
+    (
+        axum::http::StatusCode::OK,
+        axum::Json(serde_json::json!({
+            "ok": true,
+            "previous": previous.as_str(),
+            "mode": mode.as_str(),
+            "state": sentinel::health_json(),
+        })),
+    )
 }
