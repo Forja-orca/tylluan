@@ -24,6 +24,60 @@ function Write-Step($Text) { Write-Host "Tylluan $Text" -ForegroundColor Cyan }
 function Write-OK($Text)   { Write-Host "OK $Text" -ForegroundColor Green }
 function Write-Err($Text)  { Write-Host "FAIL $Text" -ForegroundColor Red; exit 1 }
 
+# D-65: strict checksum gate. Throws when the file is empty, has an unexpected
+# entry, omits an expected binary, or any SHA-256 does not match. Kept as a
+# standalone function so tests can execute it without running the installer.
+function Test-TylluanReleaseChecksums {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ChecksPath,
+        [Parameter(Mandatory = $true)][string[]]$ExpectedFiles
+    )
+
+    if (-not (Test-Path -LiteralPath $ChecksPath -PathType Leaf)) {
+        throw "checksums.txt not found at $ChecksPath"
+    }
+
+    $root = Split-Path -Parent $ChecksPath
+    $seen = @{}
+    $entries = 0
+    foreach ($Line in [System.IO.File]::ReadAllLines($ChecksPath)) {
+        $trimmed = $Line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($trimmed -notmatch '^([0-9A-Fa-f]{64})\s+\*?(.+)$') {
+            throw "Malformed checksum line: '$trimmed'"
+        }
+        $entries++
+        $want = $Matches[1].ToLowerInvariant()
+        $name = $Matches[2].Trim()
+        if ($ExpectedFiles -notcontains $name) {
+            throw "checksums.txt contains an unexpected entry: $name"
+        }
+        if ($seen.ContainsKey($name)) {
+            throw "checksums.txt contains a duplicate entry: $name"
+        }
+        $file = Join-Path $root $name
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+            throw "checksums.txt names a missing binary: $name"
+        }
+        $got = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+        if ($got -ne $want) {
+            throw "SHA-256 mismatch for ${name}: expected $want, got $got"
+        }
+        $seen[$name] = $true
+    }
+
+    if ($entries -eq 0) {
+        throw "checksums.txt is empty; refusing to install unverified binaries"
+    }
+    foreach ($expected in $ExpectedFiles) {
+        if (-not $seen.ContainsKey($expected)) {
+            throw "checksums.txt has no entry for required binary: $expected"
+        }
+    }
+    return $true
+}
+
 # PROCESSOR_ARCHITEW6432 tells the real OS arch even under 32-bit PowerShell on 64-bit Windows
 $Arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 switch ($Arch) {
@@ -145,27 +199,11 @@ try {
     Write-Err "Extraction failed. Ensure tar is available (Windows 10 1803+ or install 7zip)."
 }
 $Checks = Join-Path $Stage "checksums.txt"
-if (-not (Test-Path $Checks)) {
+try {
+    Test-TylluanReleaseChecksums -ChecksPath $Checks -ExpectedFiles @("tylluan-nexus.exe", "tylluan-cli.exe") | Out-Null
+} catch {
     Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Err "Release archive has no checksums.txt; refusing to install unverified binaries."
-}
-$BadChecksum = $false
-foreach ($Line in Get-Content $Checks) {
-    if ($Line -match '^([0-9A-Fa-f]{64})\s+\*?(.+)$') {
-        $Want = $Matches[1].ToLowerInvariant()
-        $Name = $Matches[2].Trim()
-        $File = Join-Path $Stage $Name
-        if (-not (Test-Path $File)) {
-            $BadChecksum = $true
-            continue
-        }
-        $Got = (Get-FileHash -Algorithm SHA256 -LiteralPath $File).Hash.ToLowerInvariant()
-        if ($Got -ne $Want) { $BadChecksum = $true }
-    }
-}
-if ($BadChecksum) {
-    Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Err "SHA-256 verification failed; refusing to install."
+    Write-Err "Release checksum verification failed: $_"
 }
 Copy-Item -Path (Join-Path $Stage "*") -Destination $BinDir -Recurse -Force
 Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
