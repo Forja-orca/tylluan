@@ -670,7 +670,7 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 
 ### M25 — Canvas Event Bridge (v0.19.0)
 
-**Norte:** El Canvas (`ColoquioCanvasWorkspace.tsx`, verificado: iframe `srcDoc` sandboxed, `allow-scripts allow-same-origin allow-forms allow-modals`) hoy es de un solo sentido — el kernel renderiza HTML/JS en el preview, pero la app dentro no puede comunicarse de vuelta. José: no debe ser "el Knowledge Graph disfrazado", debe ser un entorno de trabajo real al estilo Claude Artifacts/Gemini Canvas.
+**Norte:** El Canvas (`ColoquioCanvasWorkspace` (retirado en AG-12), verificado: iframe `srcDoc` sandboxed, `allow-scripts allow-same-origin allow-forms allow-modals`) hoy es de un solo sentido — el kernel renderiza HTML/JS en el preview, pero la app dentro no puede comunicarse de vuelta. José: no debe ser "el Knowledge Graph disfrazado", debe ser un entorno de trabajo real al estilo Claude Artifacts/Gemini Canvas.
 
 **Fases:**
 
