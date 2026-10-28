@@ -1451,12 +1451,21 @@ async fn main() -> anyhow::Result<()> {
     let core_reg = registry_arc.clone();
     let always_on_names: Vec<String> = config.guilds.core.always_on.clone();
     let health_guilds = health_ready.clone();
+    let expose_guild_tools_warning = config.nexus.expose_guild_tools;
+    let warning_server = server_arc.clone();
     tokio::spawn(async move {
         for name in always_on_names {
             info!("🚀 [Startup] Spawning always-on guild: {}", name);
             if let Err(e) = core_reg.write().await.ensure_guild_running(&name).await {
                 error!("❌ [Startup] Failed to spawn guild '{}': {}", name, e);
             }
+        }
+        if expose_guild_tools_warning {
+            let exposed = warning_server.read().await.all_tools().await.len();
+            warn!(
+                "[SECURITY] nexus.expose_guild_tools=true: exposing {} MCP tools instead of the 6 CONTRACT-01 sovereign tools. This is an opt-in exception; keep it false in production.",
+                exposed
+            );
         }
         health_guilds.store(true, std::sync::atomic::Ordering::Release);
         info!("✅ [Startup] Always-on guilds loaded — /health now returns ok");

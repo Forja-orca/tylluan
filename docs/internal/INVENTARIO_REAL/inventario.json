@@ -1,0 +1,223 @@
+{
+  "actualizado": "2026-10-28T05:10:00+01:00",
+  "base": "a564880",
+  "resumen": {
+    "por_estado": {
+      "REAL": 5,
+      "A_MEDIAS": 7,
+      "MAL_PLANTEADO": 3,
+      "FALTA": 0,
+      "SIN_VERIFICAR": 2
+    },
+    "por_area": {
+      "kernel": 8,
+      "transporte": 9
+    }
+  },
+  "items": [
+    {
+      "id": "K-01",
+      "area": "kernel",
+      "item": "Los 24 modulos de primer nivel del kernel estan declarados y cableados (ninguno huerfano)",
+      "estado": "REAL",
+      "gravedad": "BAJA",
+      "esfuerzo": "S",
+      "evidencia": "src/lib.rs lineas 15-38; tabla de refs en AREA_06_kernel.md; los 4 con 0 refs internas (logging, guard, tunnel, version_check) se usan desde main.rs con tylluan_kernel:: (main.rs:17, 46, 559, 1446)",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "transport+memory+security+router+registry = 89% de las lineas del kernel"
+    },
+    {
+      "id": "K-02",
+      "area": "kernel",
+      "item": "Project Skills: guardar/listar/abrir/borrar usan dos almacenes distintos (fichero y SilvaDB)",
+      "estado": "MAL_PLANTEADO",
+      "gravedad": "ALTA",
+      "esfuerzo": "S",
+      "evidencia": "api_admin.rs:1459-1570 (fichero) vs handler_do/skill.rs:31-150 (SilvaDB); routes.rs:94 solo get+post; 4 tests rojos en tests/project_skills_store_mismatch.rs",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "M-BUFFY-14. El guardado del panel va a Silva y la lista lee el fichero: lo guardado no aparece nunca"
+    },
+    {
+      "id": "K-03",
+      "area": "kernel",
+      "item": "process_isolation aplica un 20% de CPU fijo (hard cap) a todo guild stdio, tras el handshake, y el fallo solo deja un warn",
+      "estado": "A_MEDIAS",
+      "gravedad": "ALTA",
+      "esfuerzo": "S",
+      "evidencia": "registry/proxy.rs:130 isolate_guild_process(guild_name, 20); process_isolation.rs:2-16 (JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP, CpuRate = 20*100); no hay clave en config ni en catalog.rs",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Guilds HTTP/SSE no pasan por ahi. Efecto real sobre inferencia SIN MEDIR"
+    },
+    {
+      "id": "K-04",
+      "area": "kernel",
+      "item": "/metrics no existe en los binarios publicados: metrics_exporter va tras la feature observability, que no es default",
+      "estado": "A_MEDIAS",
+      "gravedad": "MEDIA",
+      "esfuerzo": "S",
+      "evidencia": "lib.rs:31-32 cfg(feature=observability); transport/http/mod.rs:1385-1386 misma cfg; Cargo.toml default=[semantic]; grep -c features release.yml = 0",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Confirma tambien que la release no lleva bundled-dashboard"
+    },
+    {
+      "id": "K-05",
+      "area": "kernel",
+      "item": "El recurso MCP tylluan://skills devuelve un catalogo de ejemplo escrito a mano, no las skills del proyecto, y esta duplicado en dos ficheros",
+      "estado": "MAL_PLANTEADO",
+      "gravedad": "MEDIA",
+      "esfuerzo": "S",
+      "evidencia": "transport/http/api_v1/mcp.rs:823-852 y transport/server/mod.rs:355-387; 2 apariciones de 'Tylluan Skill Catalog' en cada fichero",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Usuario MCP que lea el recurso esperando skills del proyecto recibe texto fijo"
+    },
+    {
+      "id": "K-06",
+      "area": "kernel",
+      "item": "logging, guard, tunnel y version_check solo son usables desde el binario: la libreria no los consume",
+      "estado": "REAL",
+      "gravedad": "BAJA",
+      "esfuerzo": "S",
+      "evidencia": "0 ficheros fuera del modulo; main.rs:17 (guard), 46 (logging), 559 (tunnel), 1446 (version_check)",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "No es codigo muerto; limita a quien use tylluan_kernel como libreria"
+    },
+    {
+      "id": "K-07",
+      "area": "kernel",
+      "item": "MlpScorer se crea e inyecta en el servidor al arrancar, pero no se ha verificado que sus puntuaciones cambien una decision real",
+      "estado": "SIN_VERIFICAR",
+      "gravedad": "BAJA",
+      "esfuerzo": "M",
+      "evidencia": "main.rs:1369-1370 MlpScorer::new + server.set_mlp; transport/server/mod.rs:107-108, 206-208 (campos Option)",
+      "verificado": false,
+      "quien": "buffy",
+      "nota": "Haria falta una llamada real con replay y comparar decisiones con y sin scorer"
+    },
+    {
+      "id": "K-08",
+      "area": "kernel",
+      "item": "hubo dos guardados de skill distintos con dos marcas de capa 1 distintas (una al nodo, otra al fichero)",
+      "estado": "A_MEDIAS",
+      "gravedad": "MEDIA",
+      "esfuerzo": "S",
+      "evidencia": "skill.rs:127-135 mark_if_layer1_flagged sobre metadata; api_admin.rs:1517-1539 mark_text sobre el cuerpo del .md; tests api_admin.rs:2031-2050 solo cubren la via fichero",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Consecuencia de K-02: dos politicas de cuarentena para el mismo tipo de contenido; se cierra con el mismo fix"
+    },
+    {
+      "id": "T-01",
+      "area": "transporte",
+      "item": "Hay exactamente 6 tools soberanas, filtradas en un unico punto (all_tools) y con dos tests que fijan conteo y nombres; las otras 29 kernel_tools solo se exponen con expose_guild_tools=true",
+      "estado": "REAL",
+      "gravedad": "BAJA",
+      "esfuerzo": "S",
+      "evidencia": "server/tools.rs:16-30 (filtro), :49 (sovereign_tool_names), :153 (35 kernel_tools); config.rs:663 (default false); tests/sovereign_tools_e2e.rs:431 y :55",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Tanda 7. Romper esto exige editar el filtro, no anadir una tool suelta"
+    },
+    {
+      "id": "T-02",
+      "area": "transporte",
+      "item": "Un test guardian parsea routes.rs y falla si una ruta mutante no esta clasificada como operador o como agente/par",
+      "estado": "REAL",
+      "gravedad": "BAJA",
+      "esfuerzo": "S",
+      "evidencia": "transport/http/auth.rs:1230 (route_inventory_every_mutating_route_is_classified); cordura >=110 mutantes y >=50 operador",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Gate real: impide anadir una escritura sin decidir quien la llama"
+    },
+    {
+      "id": "T-03",
+      "area": "transporte",
+      "item": "/api/v1/capabilities anuncia el recurso tylluan://metadata/guilds y el prompt tylluan_guilds_catalog, y ni resources/read ni prompts/get los sirven",
+      "estado": "MAL_PLANTEADO",
+      "gravedad": "MEDIA",
+      "esfuerzo": "S",
+      "evidencia": "api_v1/mod.rs:1130 y :1137 (anuncio) vs api_v1/mcp.rs:778-793 (resources/list solo skills+grafo), :823-824 (unknown resource uri), :727 (unknown prompt)",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Misma forma que K-02: lo anunciado no se puede leer"
+    },
+    {
+      "id": "T-04",
+      "area": "transporte",
+      "item": "a2a_routes() registra /.well-known/agent-card.json y /a2a pero nadie la llama: registro duplicado y muerto",
+      "estado": "A_MEDIAS",
+      "gravedad": "MEDIA",
+      "esfuerzo": "S",
+      "evidencia": "transport/http/a2a.rs:773-782; build_router las registra a mano en transport/http/mod.rs:1382 y :1394; grep a2a_routes devuelve solo la definicion",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Una ruta nueva en a2a_routes() no surtiria efecto"
+    },
+    {
+      "id": "T-05",
+      "area": "transporte",
+      "item": "13 rutas repartidas en 6 handlers (alias de compatibilidad): silva/graph 3, guild call 2, sessions 2, docker 2, golden signals 2, maintenance status 2",
+      "estado": "A_MEDIAS",
+      "gravedad": "BAJA",
+      "esfuerzo": "S",
+      "evidencia": "script sobre api_v1/routes.rs agrupando por handler; lineas exactas 32/139 (guild call), 39/57/140 (grafo), 50/54 (sesiones), 64/65 (docker), 112/135 (golden signals), 114/115 (maintenance)",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "No divergen de comportamiento (mismo handler); cuestan superficie de auditoria"
+    },
+    {
+      "id": "T-06",
+      "area": "transporte",
+      "item": "La capa DefaultBodyLimit de 100 MB se aplica a las 41 rutas registradas antes (incluida /api/v1/do) y deja con 2 MB las 189 posteriores, entre ellas /api/v1/ingest",
+      "estado": "A_MEDIAS",
+      "gravedad": "ALTA",
+      "esfuerzo": "S",
+      "evidencia": "api_v1/routes.rs:63 (layer); recuento 41 antes / 189 despues; /api/v1/ingest registrada en :171, despues de la capa; /api/v1/ingest/upload en :60, antes",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "El limite acaba donde no se queria (tylluan_do) y falta donde se documenta (upload de ingest)"
+    },
+    {
+      "id": "T-07",
+      "area": "transporte",
+      "item": "Se anuncian 13 metodos MCP con tasks/get, tasks/update y tasks/cancel, pero no existen tasks/result, tasks/list, resources/templates/list ni completion/complete",
+      "estado": "A_MEDIAS",
+      "gravedad": "MEDIA",
+      "esfuerzo": "M",
+      "evidencia": "api_v1/mcp.rs:415-950 (metodos), :869 (capabilities tasks:{}), :33 (4 versiones); grep 'tasks/result|tasks/list' sin resultados",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Que tasks/update sea extension propia o spec no esta verificado"
+    },
+    {
+      "id": "T-08",
+      "area": "transporte",
+      "item": "El token por query-string solo se acepta para SSE, queda marcado MasterTokenQuery y NO satisface la clase operador; hay saneado de query en logs",
+      "estado": "REAL",
+      "gravedad": "BAJA",
+      "esfuerzo": "S",
+      "evidencia": "transport/http/auth.rs:62-66, :337-338, :547-549, :803-805; transport/http/sse.rs:82 (token re-emitido en el evento endpoint)",
+      "verificado": true,
+      "quien": "buffy",
+      "nota": "Diseno consciente para clientes SSE que no pueden poner cabeceras"
+    },
+    {
+      "id": "T-09",
+      "area": "transporte",
+      "item": "No se ha ejecutado el kernel: ningun codigo de estado de este mapa sale de una respuesta HTTP real",
+      "estado": "SIN_VERIFICAR",
+      "gravedad": "MEDIA",
+      "esfuerzo": "M",
+      "evidencia": "modo lectura pura; ver seccion No verificado de AREA_07_transporte.md",
+      "verificado": false,
+      "quien": "buffy",
+      "nota": "Un handler registrado puede devolver 501 sin que este mapa lo vea (grep de todo!()/unimplemented! = 0)"
+    }
+  ]
+}

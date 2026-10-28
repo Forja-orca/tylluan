@@ -781,3 +781,58 @@ mod tests {
         assert!(subtool_examples[0]["example_invocation"].as_str().unwrap().contains("schedule"));
     }
 }
+
+#[cfg(test)]
+mod d66_tests {
+    use crate::transport::server::TylluanServer;
+
+    async fn server() -> TylluanServer {
+        let silva = std::sync::Arc::new(
+            crate::memory::silva::SilvaDB::in_memory()
+                .await
+                .expect("in-memory SilvaDB for D-66 test"),
+        );
+        crate::transport::server::handler_do::base_test_server(silva).await
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn default_all_tools_are_exactly_six_in_sovereign_order() {
+        let server = server().await;
+        let names: Vec<String> = server
+            .all_tools()
+            .await
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        let expected: Vec<String> = TylluanServer::sovereign_tool_names()
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
+        assert_eq!(
+            names, expected,
+            "default all_tools() must expose exactly the six sovereign tools in sovereign_tool_names() order"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn expose_guild_tools_still_contains_all_six_sovereign_tools() {
+        let mut server = server().await;
+        server.expose_guild_tools = true;
+        let names: Vec<String> = server
+            .all_tools()
+            .await
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        for expected in TylluanServer::sovereign_tool_names() {
+            assert!(
+                names.iter().any(|name| name == expected),
+                "expanded all_tools() must still include sovereign tool {expected}; got {names:?}"
+            );
+        }
+        assert!(
+            names.len() >= TylluanServer::sovereign_tool_names().len(),
+            "expanded mode cannot expose fewer tools than sovereign mode"
+        );
+    }
+}
