@@ -578,3 +578,200 @@ mod tests {
         assert_eq!(out["route"].distribution["a"], 1.0);
     }
 }
+
+
+#[cfg(test)]
+mod t120_gap_tests {
+    use super::*;
+    use crate::router::decision::CoreQuestion;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    /// Servidor HTTP falso que lee el body completo y responde segun una funcion.
+    struct CaptureServer {
+        url: String,
+        hits: Arc<AtomicUsize>,
+        bodies: Arc<Mutex<Vec<String>>>,
+        _handle: tokio::task::JoinHandle<()>,
+    }
+
+    async fn capture_server<F>(respond: F) -> CaptureServer
+    where
+        F: Fn(&str) -> (u16, serde_json::Value) + Send + Sync + 'static,
+    {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let bodies = Arc::new(Mutex::new(Vec::new()));
+        let hits_task = hits.clone();
+        let bodies_task = bodies.clone();
+        let respond = Arc::new(respond);
+        let handle = tokio::spawn(async move {
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let hits = hits_task.clone();
+                let bodies = bodies_task.clone();
+                let respond = respond.clone();
+                tokio::spawn(async move {
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    let mut buf = Vec::new();
+                    let mut tmp = [0u8; 4096];
+                    loop {
+                        let Ok(n) = socket.read(&mut tmp).await else {
+                            return;
+                        };
+                        if n == 0 {
+                            break;
+                        }
+                        buf.extend_from_slice(&tmp[..n]);
+                        let text = String::from_utf8_lossy(&buf).to_string();
+                        if let Some(pos) = text.find("\r\n\r\n") {
+                            let header = &text[..pos];
+                            let len = header
+                                .lines()
+                                .find_map(|l| {
+                                    let (k, v) = l.split_once(':')?;
+                                    if k.eq_ignore_ascii_case("content-length") {
+                                        v.trim().parse::<usize>().ok()
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or(0);
+                            if buf.len() >= pos + 4 + len {
+                                break;
+                            }
+                        }
+                    }
+                    let text = String::from_utf8_lossy(&buf).to_string();
+                    let body = text
+                        .find("\r\n\r\n")
+                        .map(|p| text[p + 4..].to_string())
+                        .unwrap_or_default();
+                    bodies.lock().unwrap().push(body.clone());
+                    hits.fetch_add(1, Ordering::SeqCst);
+                    let (status, payload) = respond(&body);
+                    let reason = if status == 400 { "Bad Request" } else { "OK" };
+                    let response = format!(
+                        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        payload.to_string().len(),
+                        payload
+                    );
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+        CaptureServer {
+            url: format!("http://{addr}"),
+            hits,
+            bodies,
+            _handle: handle,
+        }
+    }
+
+    fn req_with_instructions() -> DecisionRequest {
+        let mut questions = HashMap::new();
+        questions.insert(
+            "route".to_string(),
+            CoreQuestion::new(
+                DecisionQuestion::Choice {
+                    options: vec!["a".into(), "b".into()],
+                },
+                Some("elige la ruta segura\u{0007} ahora".to_string()),
+            ),
+        );
+        DecisionRequest {
+            state: serde_json::json!({"task": "t"}),
+            questions,
+        }
+    }
+
+    fn valid_answers() -> serde_json::Value {
+        serde_json::json!({"answers": [{"question_id": "route", "option": "a"}]})
+    }
+
+    #[tokio::test]
+    async fn openai_retries_once_without_response_format_on_400() {
+        // 400 si el body lleva response_format; 200 (sin el) en el reintento.
+        let srv = capture_server(|body| {
+            if body.contains("response_format") {
+                (400, serde_json::json!({"error": "json_schema no soportado"}))
+            } else {
+                (
+                    200,
+                    serde_json::json!({
+                        "choices": [{"message": {"content": valid_answers().to_string()}}]
+                    }),
+                )
+            }
+        })
+        .await;
+        let p = OpenAiChatJsonProvider::new(&srv.url, "m", "", 5000).unwrap();
+        let out = p.decide(&req_with_instructions()).await.unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(srv.hits.load(Ordering::SeqCst), 2, "debe reintentar una vez");
+        let bodies = srv.bodies.lock().unwrap();
+        assert_eq!(bodies.len(), 2);
+        assert!(bodies[0].contains("response_format"));
+        assert!(!bodies[1].contains("response_format"), "el reintento no lleva response_format");
+    }
+
+    fn prompt_from_body(body: &str) -> String {
+        let value: serde_json::Value = serde_json::from_str(body).unwrap();
+        value["messages"][0]["content"].as_str().unwrap().to_string()
+    }
+
+    #[tokio::test]
+    async fn sanitized_instructions_reach_all_three_dialects_identically() {
+        let openai = capture_server(|_| {
+            (
+                200,
+                serde_json::json!({"choices": [{"message": {"content": valid_answers().to_string()}}]}),
+            )
+        })
+        .await;
+        let anthropic = capture_server(|_| {
+            (
+                200,
+                serde_json::json!({"content": [{"type": "tool_use", "input": valid_answers()}]}),
+            )
+        })
+        .await;
+        let ollama = capture_server(|_| {
+            (
+                200,
+                serde_json::json!({"message": {"content": valid_answers().to_string()}}),
+            )
+        })
+        .await;
+
+        let req = req_with_instructions();
+        let _ = OpenAiChatJsonProvider::new(&openai.url, "m", "", 5000)
+            .unwrap()
+            .decide(&req)
+            .await
+            .unwrap();
+        let _ = AnthropicToolJsonProvider::new(&anthropic.url, "m", "", 5000)
+            .unwrap()
+            .decide(&req)
+            .await
+            .unwrap();
+        let _ = OllamaJsonProvider::new(&ollama.url, "m", 5000)
+            .unwrap()
+            .decide(&req)
+            .await
+            .unwrap();
+
+        let p_openai = prompt_from_body(&openai.bodies.lock().unwrap()[0]);
+        let p_anthropic = prompt_from_body(&anthropic.bodies.lock().unwrap()[0]);
+        let p_ollama = prompt_from_body(&ollama.bodies.lock().unwrap()[0]);
+        // Mismo prompt en los tres dialectos.
+        assert_eq!(p_openai, p_anthropic);
+        assert_eq!(p_openai, p_ollama);
+        // La instruccion saneada (sin el caracter de control) llega identica.
+        assert!(p_openai.contains("elige la ruta segura ahora"), "{p_openai}");
+        assert!(!p_openai.contains('\u{0007}'), "el caracter de control debe eliminarse");
+    }
+}
