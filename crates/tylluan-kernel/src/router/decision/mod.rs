@@ -142,6 +142,7 @@ pub mod api_types;
 pub mod rules;
 pub mod service;
 pub mod systemone_http;
+pub mod adapters;
 
 pub use api_types::{Answer, DecideRequest, DecideResponse, DecideStatus, DecisionMode, QuestionKind, QuestionSpec};
 pub use service::{DecisionService, decision_row_hash};
