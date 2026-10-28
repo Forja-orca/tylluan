@@ -192,6 +192,7 @@ async fn shadow_response_carries_no_state_or_question_text() {
         )]),
         contract: Some("leak_check_contract".to_string()),
         max_latency_ms: None,
+        sensitivity: None,
     };
     let resp = svc.decide(req, "test").await;
     assert!(

@@ -92,6 +92,13 @@ export default defineConfig({
       '/api/v1/events': {
         target: 'http://127.0.0.1:47004',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyRes', (_proxyRes, _req, res) => {
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
+          });
+        },
       },
       '/api': {
         target: 'http://127.0.0.1:47004',

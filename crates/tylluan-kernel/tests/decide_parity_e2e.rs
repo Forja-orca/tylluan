@@ -55,6 +55,7 @@ async fn test_decide_mcp_rest_parity() {
         questions: questions.clone(),
         contract: Some("scheduler_routing".into()),
         max_latency_ms: Some(2000),
+        sensitivity: None,
     };
 
     // ── 1. Ejecutar vía MCP ──────────────────────────────────────────────────
@@ -132,6 +133,7 @@ async fn test_decide_disabled_mode_zero_external_calls() {
         questions: questions.clone(),
         contract: None,
         max_latency_ms: None,
+        sensitivity: None,
     };
 
     // REST debe devolver 200 OK con status: disabled y answers vacío
@@ -172,6 +174,7 @@ async fn test_decide_limits_enforced_in_rest() {
         questions,
         contract: None,
         max_latency_ms: None,
+        sensitivity: None,
     };
 
     let req = Request::builder()

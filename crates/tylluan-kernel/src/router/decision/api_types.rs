@@ -119,6 +119,11 @@ pub struct DecideRequest {
     /// Límite de latencia en ms (defecto 2000, máx 10000).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_latency_ms: Option<u32>,
+    /// T-DSH-122: sensibilidad declarada por el llamante (`public` | `private`
+    /// | `clinical`). Aditivo: ausente = desconocida (el ClinicalHtlGate la
+    /// trata fail-closed hacia nube). Prioridad sobre la heurística de `state`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sensitivity: Option<String>,
 }
 
 /// Estado de la respuesta (§1217).
@@ -221,6 +226,14 @@ pub fn validate_request(req: &DecideRequest) -> Result<(), String> {
         && (c.trim().is_empty() || c.len() > 64)
     {
         return Err("contract name must be 1..=64 chars".to_string());
+    }
+    if let Some(sensitivity) = &req.sensitivity {
+        let normalized = sensitivity.trim().to_ascii_lowercase();
+        if !matches!(normalized.as_str(), "public" | "private" | "clinical") {
+            return Err(format!(
+                "sensitivity must be one of public|private|clinical (got '{sensitivity}')"
+            ));
+        }
     }
     for (name, spec) in &req.questions {
         if name.trim().is_empty() {
@@ -333,6 +346,7 @@ mod tests {
             questions: q,
             contract: None,
             max_latency_ms: None,
+            sensitivity: None,
         }
     }
 
@@ -345,6 +359,7 @@ mod tests {
             questions: BTreeMap::from([("route".to_string(), choice_spec())]),
             contract: Some("scheduler_routing".into()),
             max_latency_ms: Some(1500),
+            sensitivity: None,
         };
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["questions"]["route"]["kind"], "choice");
@@ -414,6 +429,7 @@ mod tests {
             questions: BTreeMap::from([("a".to_string(), choice_spec())]),
             contract: None,
             max_latency_ms: None,
+            sensitivity: None,
         };
         assert!(validate_request(&big).unwrap_err().contains("too large"));
 
@@ -476,5 +492,45 @@ mod tests {
             levels: vec![],
         });
         assert!(none.instructions.is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod t122_wire_sensitivity_tests {
+    use super::*;
+
+    fn wire(sensitivity: Option<&str>) -> serde_json::Value {
+        let mut v = serde_json::json!({
+            "state": {"task": "t"},
+            "questions": {"q": {"kind": "boolean"}}
+        });
+        if let Some(s) = sensitivity {
+            v["sensitivity"] = serde_json::json!(s);
+        }
+        v
+    }
+
+    #[test]
+    fn old_wire_without_sensitivity_still_parses_and_validates() {
+        let req: DecideRequest = serde_json::from_value(wire(None)).unwrap();
+        assert!(req.sensitivity.is_none());
+        assert!(validate_request(&req).is_ok());
+    }
+
+    #[test]
+    fn wire_with_sensitivity_parses_and_validates() {
+        for value in ["public", "private", "clinical"] {
+            let req: DecideRequest = serde_json::from_value(wire(Some(value))).unwrap();
+            assert_eq!(req.sensitivity.as_deref(), Some(value));
+            assert!(validate_request(&req).is_ok(), "{value}");
+        }
+    }
+
+    #[test]
+    fn wire_invalid_sensitivity_is_rejected() {
+        let req: DecideRequest = serde_json::from_value(wire(Some("secret"))).unwrap();
+        let err = validate_request(&req).unwrap_err();
+        assert!(err.contains("sensitivity"), "{err}");
     }
 }

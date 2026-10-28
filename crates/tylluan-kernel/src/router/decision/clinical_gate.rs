@@ -24,13 +24,28 @@ pub enum Sensitivity {
 
 /// Deriva la sensibilidad del `state` de la petición. Sin campo explícito ⇒
 /// `None` (desconocida ⇒ fail-closed en cloud).
-pub fn sensitivity_from_state(state: &serde_json::Value) -> Option<Sensitivity> {
-    let parse = |v: &str| match v.trim().to_ascii_lowercase().as_str() {
+pub fn parse_sensitivity(raw: &str) -> Option<Sensitivity> {
+    match raw.trim().to_ascii_lowercase().as_str() {
         "public" | "publico" | "público" => Some(Sensitivity::Public),
         "private" | "privado" | "privada" => Some(Sensitivity::Private),
         "clinical" | "clinico" | "clínico" | "clinica" | "clínica" => Some(Sensitivity::Clinical),
         _ => None,
-    };
+    }
+}
+
+/// T-DSH-122: sensibilidad de la petición con prioridad del campo del wire
+/// (`req.sensitivity`) sobre la heurística de `state`.
+pub fn sensitivity_from_request(req: &DecisionRequest) -> Option<Sensitivity> {
+    if let Some(raw) = req.sensitivity.as_deref()
+        && let Some(parsed) = parse_sensitivity(raw)
+    {
+        return Some(parsed);
+    }
+    sensitivity_from_state(&req.state)
+}
+
+pub fn sensitivity_from_state(state: &serde_json::Value) -> Option<Sensitivity> {
+    let parse = parse_sensitivity;
     if let Some(s) = state.get("sensitivity").and_then(|v| v.as_str())
         && let Some(parsed) = parse(s)
     {
@@ -75,7 +90,7 @@ impl DecisionProvider for ClinicalHtlGate {
         req: &DecisionRequest,
     ) -> Result<HashMap<String, DecisionAnswer>, DecisionError> {
         if self.cloud {
-            match sensitivity_from_state(&req.state) {
+            match sensitivity_from_request(req) {
                 Some(Sensitivity::Clinical) | None => {
                     tracing::warn!(
                         "decision: petición clínica/desconocida hacia proveedor cloud bloqueada (fail-closed, clinical_requires_hitl)"
@@ -130,7 +145,7 @@ mod tests {
             Some(s) => serde_json::json!({"sensitivity": s}),
             None => serde_json::json!({"task": "sin sensibilidad"}),
         };
-        DecisionRequest { state, questions }
+        DecisionRequest { state, questions, sensitivity: None }
     }
 
     fn gate(cloud: bool) -> (ClinicalHtlGate, Arc<AtomicUsize>) {
@@ -171,6 +186,27 @@ mod tests {
         let err = g.decide(&request_with_sensitivity(None)).await.unwrap_err();
         assert!(matches!(err, DecisionError::Abstained(_)), "{err}");
         assert_eq!(hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn wire_sensitivity_overrides_state_heuristic() {
+        // state dice public, pero el wire declara clinical => bloquea.
+        let (g, hits) = gate(true);
+        let mut req = request_with_sensitivity(Some("public"));
+        req.sensitivity = Some("clinical".to_string());
+        let err = g.decide(&req).await.unwrap_err();
+        assert!(matches!(err, DecisionError::Abstained(_)), "{err}");
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn wire_public_overrides_clinical_state() {
+        // state dice clinical, pero el wire declara public => delega.
+        let (g, hits) = gate(true);
+        let mut req = request_with_sensitivity(Some("clinical"));
+        req.sensitivity = Some("public".to_string());
+        g.decide(&req).await.unwrap();
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 
     #[test]

@@ -68,6 +68,9 @@ impl CoreQuestion {
 pub struct DecisionRequest {
     pub state: serde_json::Value,
     pub questions: HashMap<String, CoreQuestion>,
+    /// T-DSH-122: sensibilidad declarada en el wire (`public|private|clinical`);
+    /// prioridad sobre la heurística de `state` en el ClinicalHtlGate.
+    pub sensitivity: Option<String>,
 }
 
 /// Distribución de probabilidad sobre las opciones/niveles de UNA
@@ -168,6 +171,7 @@ mod tests {
         DecisionRequest {
             state: serde_json::json!({ "risk": 0.2 }),
             questions,
+            sensitivity: None,
         }
     }
 

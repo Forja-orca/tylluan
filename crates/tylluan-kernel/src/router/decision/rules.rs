@@ -192,7 +192,7 @@ mod tests {
             .into_iter()
             .map(|(k, q)| (k, CoreQuestion::without_instructions(q)))
             .collect();
-        DecisionRequest { state, questions }
+        DecisionRequest { state, questions, sensitivity: None }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
