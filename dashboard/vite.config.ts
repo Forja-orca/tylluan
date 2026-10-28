@@ -34,28 +34,6 @@ export default defineConfig({
           ) {
             return 'vendor-utils';
           }
-          if (
-            id.includes('@tldraw/editor') ||
-            id.includes('@tldraw/tlschema') ||
-            id.includes('@tldraw/store') ||
-            id.includes('@tldraw/state') ||
-            id.includes('@tldraw/utils') ||
-            id.includes('@tldraw/validate') ||
-            id.includes('@tldraw/driver')
-          ) {
-            return 'vendor-tldraw-engine';
-          }
-          if (id.includes('@tldraw/') || id.includes('/tldraw/')) {
-            return 'vendor-tldraw-ui';
-          }
-          if (
-            id.includes('node_modules/react-force-graph') ||
-            id.includes('node_modules/force-graph') ||
-            id.includes('node_modules/d3-') ||
-            id.includes('node_modules/kapsule')
-          ) {
-            return 'vendor-force-graph';
-          }
           if (id.includes('node_modules/lucide-react/')) {
             return 'vendor-lucide';
           }
