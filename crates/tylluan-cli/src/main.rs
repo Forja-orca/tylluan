@@ -1,8 +1,9 @@
 use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 use anyhow::{Result, Context};
 use std::process::Command;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sysinfo::System;
+use sha2::{Digest, Sha256};
 
 mod backup;
 mod stop;
@@ -824,15 +825,25 @@ async fn main() -> Result<()> {
             }
 
             let release: serde_json::Value = resp.json().await?;
-            let latest_tag = release["tag_name"].as_str().unwrap_or("v0.0.0");
+            let latest_tag = release["tag_name"]
+                .as_str()
+                .filter(|tag| !tag.trim().is_empty())
+                .ok_or_else(|| anyhow::anyhow!("Latest release has no usable tag_name; refusing to update"))?;
             let latest_ver = latest_tag.trim_start_matches('v');
 
-            if latest_ver == current_ver {
-                println!("✅ Tylluan v{current_ver} is up to date.");
-                return Ok(());
+            match compare_versions(current_ver, latest_ver)? {
+                std::cmp::Ordering::Equal => {
+                    println!("✅ Tylluan v{current_ver} is up to date.");
+                    return Ok(());
+                }
+                std::cmp::Ordering::Less => {
+                    println!("✅ Tylluan v{current_ver} is already newer than v{latest_ver}; not downgrading.");
+                    return Ok(());
+                }
+                std::cmp::Ordering::Greater => {
+                    println!("📦 Update available: v{current_ver} → v{latest_ver}");
+                }
             }
-
-            println!("📦 Update available: v{current_ver} → v{latest_ver}");
 
             match update_action(check, install) {
                 "check" => {
@@ -847,14 +858,37 @@ async fn main() -> Result<()> {
                 _ => {} // "install": continua con la descarga
             }
 
-            // Detect current platform
+            // Detect current platform.
             let target = detect_update_target();
             let archive_name = format!("tylluan-{target}.tar.gz");
-            let download_url = format!(
-                "https://github.com/{repo}/releases/download/{latest_tag}/{archive_name}"
-            );
+            let base_url = format!("https://github.com/{repo}/releases/download/{latest_tag}");
+            let download_url = format!("{base_url}/{archive_name}");
+            let checksums_url = format!("{base_url}/checksums.txt");
 
-            println!("📥 Downloading {archive_name} ...");
+            // E-03: the checksum must come from a different transport object than
+            // the archive it authenticates. A checksum embedded in the same tar
+            // only detects accidental corruption, not substitution.
+            println!("🔐 Verifying release checksum from {checksums_url} ...");
+            let checksums_resp = client.get(&checksums_url).send().await.with_context(|| {
+                format!("Could not download checksums.txt for {latest_tag}")
+            })?;
+            if !checksums_resp.status().is_success() {
+                anyhow::bail!(
+                    "Release {latest_tag} does not publish a separate checksums.txt (HTTP {}). \
+                     Refusing to update without an independent checksum.",
+                    checksums_resp.status()
+                );
+            }
+            let checksums_text = checksums_resp
+                .text()
+                .await
+                .context("Could not read checksums.txt")?;
+            let expected_hash = checksum_for_asset(&checksums_text, &archive_name)
+                .ok_or_else(|| anyhow::anyhow!(
+                    "checksums.txt has no entry for {archive_name}; refusing to update"
+                ))?;
+
+            println!("📦 Downloading {archive_name} ...");
             let download_resp = client.get(&download_url).send().await?;
             if !download_resp.status().is_success() {
                 println!("❌ Download failed: HTTP {} — unsupported platform: {}", download_resp.status(), target);
@@ -863,58 +897,28 @@ async fn main() -> Result<()> {
             }
 
             let bytes = download_resp.bytes().await?;
+            verify_sha256(&bytes, &expected_hash)?;
+
             let current_exe = std::env::current_exe()?;
             let parent = current_exe.parent().unwrap_or(std::path::Path::new("."));
-            let temp_path = parent.join(format!(".tylluan-update-{}", std::process::id()));
+            let stage = parent.join(format!(".tylluan-update-{}.stage", std::process::id()));
+            if stage.exists() {
+                std::fs::remove_dir_all(&stage)
+                    .with_context(|| format!("Could not clear stale staging dir {}", stage.display()))?;
+            }
+            std::fs::create_dir_all(&stage)
+                .with_context(|| format!("Could not create staging dir {}", stage.display()))?;
 
-            // Extract binary from tarball to temp, then atomic rename
-            {
-                let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(&bytes[..]));
-                let exe_name = current_exe.file_name().and_then(|n| n.to_str()).unwrap_or("tylluan");
-                let found = archive.entries()?.find_map(|entry| {
-                    let mut entry = entry.ok()?;
-                    let name = entry.path().ok()?;
-                    let fname = name.file_name()?.to_str()?;
-                    // Match: same filename, or tylluan updating from tylluan-cli, or tylluan-cli/tylluan-nexus
-                    if fname == exe_name || (exe_name == "tylluan" && fname == "tylluan-cli") || fname == "tylluan-nexus" {
-                        entry.unpack(&temp_path).ok()?;
-                        Some(())
-                    } else {
-                        None
-                    }
-                });
-                if found.is_none() {
-                    println!("❌ Could not find '{exe_name}' in archive.");
-                    println!("   Manual download: https://github.com/{repo}/releases");
-                    return Ok(());
-                }
+            let result = (|| -> Result<Vec<PathBuf>> {
+                let staged = extract_update_binaries(&bytes, &stage)?;
+                install_staged_binaries(&staged, parent)
+            })();
+            let _ = std::fs::remove_dir_all(&stage);
+            let installed = result?;
+            for path in &installed {
+                println!("✅ Installed {}", path.display());
             }
-
-            if !temp_path.exists() {
-                println!("❌ Could not extract binary from archive.");
-                println!("   Manual download: https://github.com/{repo}/releases");
-                return Ok(());
-            }
-
-            // Atomic replace: rename temp -> target
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o755))?;
-            }
-            match std::fs::rename(&temp_path, &current_exe) {
-                Ok(()) => {
-                    println!("✅ Updated to Tylluan v{latest_ver}");
-                }
-                Err(e) => {
-                    // Windows: can't rename over running exe. Place beside it.
-                    let fallback = parent.join(format!("tylluan-v{}{}", latest_ver, std::env::consts::EXE_SUFFIX));
-                    std::fs::rename(&temp_path, &fallback)?;
-                    println!("✅ Downloaded Tylluan v{} to {}", latest_ver, fallback.display());
-                    println!("   Replace {} manually with the new binary.", current_exe.display());
-                    println!("   Error was: {e}");
-                }
-            }
+            println!("✅ Updated to Tylluan v{latest_ver}");
             println!("   Restart the kernel with 'tylluan start' for changes to take effect.");
         }
         Commands::New { what } => match what {
@@ -1555,6 +1559,183 @@ fn models_dir_approx_size(dir: &std::path::Path) -> u64 {
     total
 }
 
+/// Parse a release version, accepting the optional `v` prefix.
+fn parse_release_version(raw: &str) -> Result<semver::Version> {
+    let trimmed = raw.trim().trim_start_matches('v');
+    semver::Version::parse(trimmed)
+        .with_context(|| format!("Invalid release version '{raw}' (expected semver)"))
+}
+
+/// Compare the installed and published versions without ever treating a
+/// downgrade as an update. Returns `Greater` when `latest` is newer.
+fn compare_versions(current: &str, latest: &str) -> Result<std::cmp::Ordering> {
+    Ok(parse_release_version(latest)?.cmp(&parse_release_version(current)?))
+}
+
+/// Extract the SHA-256 for `asset` from a release-level checksums.txt.
+fn checksum_for_asset(text: &str, asset: &str) -> Option<String> {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let Some(hash) = parts.next() else { continue };
+        let Some(name) = parts.next() else { continue };
+        if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+            continue;
+        }
+        let name = name.trim_start_matches('*');
+        let name = name.strip_prefix("./").unwrap_or(name);
+        if name == asset {
+            return Some(hash.to_ascii_lowercase());
+        }
+    }
+    None
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn verify_sha256(bytes: &[u8], expected: &str) -> Result<()> {
+    let actual = sha256_hex(bytes);
+    if !actual.eq_ignore_ascii_case(expected.trim()) {
+        anyhow::bail!(
+            "SHA-256 mismatch for release archive: expected {expected}, got {actual}"
+        );
+    }
+    Ok(())
+}
+
+/// The two binaries every release archive must contain. The suffix is empty on
+/// Unix and `.exe` on Windows, matching the release workflow.
+fn update_binary_names() -> [String; 2] {
+    let suffix = std::env::consts::EXE_SUFFIX;
+    [
+        format!("tylluan-nexus{suffix}"),
+        format!("tylluan-cli{suffix}"),
+    ]
+}
+
+/// Extract exactly the two expected binaries, each into its own path. Entry
+/// paths from the archive are never used as destinations, so a malicious `../`
+/// member cannot escape the staging directory.
+fn extract_update_binaries(bytes: &[u8], stage: &Path) -> Result<Vec<(String, PathBuf)>> {
+    use std::collections::HashMap;
+
+    let names = update_binary_names();
+    let mut found: HashMap<String, PathBuf> = HashMap::new();
+    let decoder = flate2::read::GzDecoder::new(bytes);
+    let mut archive = tar::Archive::new(decoder);
+
+    for entry in archive.entries().context("Could not read release archive")? {
+        let mut entry = entry.context("Could not read archive entry")?;
+        let path = entry.path().context("Could not read archive entry path")?;
+        let Some(name) = path.file_name().and_then(|n| n.to_str()).map(str::to_owned) else {
+            continue;
+        };
+        if !names.contains(&name) {
+            continue;
+        }
+        if found.contains_key(&name) {
+            anyhow::bail!("Release archive contains duplicate {name}");
+        }
+        let destination = stage.join(&name);
+        entry
+            .unpack(&destination)
+            .with_context(|| format!("Could not extract {name}"))?;
+        found.insert(name, destination);
+    }
+
+    let mut binaries = Vec::with_capacity(names.len());
+    for name in names {
+        let path = found
+            .remove(&name)
+            .ok_or_else(|| anyhow::anyhow!("Release archive is missing {name}"))?;
+        binaries.push((name, path));
+    }
+    Ok(binaries)
+}
+
+/// Install each staged binary under its own name. On Windows, rename the old
+/// file aside before moving the new one into place; if that is impossible
+/// because the old binary is running, leave the new binary beside it and fail
+/// instead of overwriting a live executable.
+fn install_staged_binaries(
+    staged: &[(String, PathBuf)],
+    destination_dir: &Path,
+) -> Result<Vec<PathBuf>> {
+    let mut installed = Vec::with_capacity(staged.len());
+    for (name, staged_path) in staged {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(staged_path, std::fs::Permissions::from_mode(0o755))
+                .with_context(|| format!("Could not make {name} executable"))?;
+        }
+        let destination = destination_dir.join(name);
+        replace_update_binary(staged_path, &destination)?;
+        installed.push(destination);
+    }
+    Ok(installed)
+}
+
+#[cfg(not(windows))]
+fn replace_update_binary(new_path: &Path, destination: &Path) -> Result<()> {
+    std::fs::rename(new_path, destination).with_context(|| {
+        format!(
+            "Could not replace {} with {}",
+            destination.display(),
+            new_path.display()
+        )
+    })?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn replace_update_binary(new_path: &Path, destination: &Path) -> Result<()> {
+    if !destination.exists() {
+        std::fs::rename(new_path, destination).with_context(|| {
+            format!("Could not install {}", destination.display())
+        })?;
+        return Ok(());
+    }
+
+    let file_name = destination
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_default();
+    let aside = destination.with_file_name(format!("{file_name}.old-{}", std::process::id()));
+
+    match std::fs::rename(destination, &aside) {
+        Ok(()) => match std::fs::rename(new_path, destination) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&aside);
+                Ok(())
+            }
+            Err(error) => {
+                let _ = std::fs::rename(&aside, destination);
+                Err(error).with_context(|| {
+                    format!("Could not install {}", destination.display())
+                })
+            }
+        },
+        Err(error) => {
+            let fallback = destination.with_file_name(format!("{file_name}.new"));
+            std::fs::rename(new_path, &fallback).with_context(|| {
+                format!("Could not save replacement for {}", destination.display())
+            })?;
+            anyhow::bail!(
+                "Could not replace {} because the old binary is in use; \
+                 new binary saved at {} (rename-aside failed: {error})",
+                destination.display(),
+                fallback.display()
+            )
+        }
+    }
+}
+
 /// Detect the current platform target triple for update downloads.
 /// Must match the release artifact naming in .github/workflows/release.yml.
 fn detect_update_target() -> String {
@@ -2014,3 +2195,88 @@ mod startup_wait_tests {
     }
 }
 
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn gzip_tar(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        for (name, bytes) in entries {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o755);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, name, *bytes)
+                .expect("append test tar entry");
+        }
+        let tar_bytes = builder.into_inner().expect("finish test tar");
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(&tar_bytes).expect("gzip test tar");
+        encoder.finish().expect("finish test gzip")
+    }
+
+    #[test]
+    fn semver_never_downgrades_and_rejects_invalid_versions() {
+        assert_eq!(
+            compare_versions("0.17.2", "0.17.1").unwrap(),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_versions("0.17.2", "0.17.2").unwrap(),
+            std::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            compare_versions("0.17.2", "v0.17.3").unwrap(),
+            std::cmp::Ordering::Greater
+        );
+        assert!(compare_versions("not-a-version", "0.17.3").is_err());
+    }
+
+    #[test]
+    fn checksum_parser_selects_asset_and_detects_mismatch() {
+        let archive = b"release-archive-bytes";
+        let hash = sha256_hex(archive);
+        let text = format!(
+            "{}  unrelated.tar.gz\n{} *tylluan-x86_64-unknown-linux-gnu.tar.gz\n",
+            "0".repeat(64),
+            hash
+        );
+        let selected = checksum_for_asset(&text, "tylluan-x86_64-unknown-linux-gnu.tar.gz")
+            .expect("archive entry must be found");
+        assert_eq!(selected, hash);
+        assert!(verify_sha256(archive, &selected).is_ok());
+        assert!(verify_sha256(b"tampered", &selected).is_err());
+        assert!(checksum_for_asset(&text, "missing.tar.gz").is_none());
+    }
+
+    #[test]
+    fn archive_extraction_keeps_each_binary_under_its_own_name() {
+        let names = update_binary_names();
+        let entries: Vec<(&str, &[u8])> = vec![
+            (names[0].as_str(), b"nexus-payload"),
+            (names[1].as_str(), b"cli-payload"),
+        ];
+        let archive = gzip_tar(&entries);
+        let stage = tempfile::tempdir().expect("tempdir");
+        let found = extract_update_binaries(&archive, stage.path()).expect("extract both binaries");
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].0, names[0]);
+        assert_eq!(found[1].0, names[1]);
+        assert_eq!(std::fs::read(&found[0].1).unwrap(), b"nexus-payload");
+        assert_eq!(std::fs::read(&found[1].1).unwrap(), b"cli-payload");
+    }
+
+    #[test]
+    fn archive_extraction_rejects_a_missing_binary() {
+        let names = update_binary_names();
+        let archive = gzip_tar(&[(names[0].as_str(), b"only-nexus")]);
+        let stage = tempfile::tempdir().expect("tempdir");
+        let error = extract_update_binaries(&archive, stage.path()).unwrap_err();
+        assert!(
+            error.to_string().contains(&names[1]),
+            "error must name the missing binary, got: {error}"
+        );
+    }
+}

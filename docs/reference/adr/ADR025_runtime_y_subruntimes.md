@@ -16,7 +16,7 @@ Hoy Tylluan ya tiene piezas de runtime, pero cada una resuelve su caso y no hay 
 
 | Medida | Valor | Comando |
 |---|---|---|
-| `tokio::spawn` fuera de tests | 123 | `grep -rn "tokio::spawn" crates/tylluan-kernel/src --include=*.rs` filtrando tests |
+| Ocurrencias de `tokio::spawn`, `spawn_blocking`, `thread::spawn` | 191 en 61 ficheros: 121 spawns reales de producción (43 + 78), 21 menciones en comentarios o cadenas y 49 en módulos de test | `grep -rn "tokio::spawn\|spawn_blocking\|thread::spawn" crates/tylluan-kernel/src --include=*.rs`; reparto en la Fase 0 (`2026-10-28_FASE0_inventario_spawns_hermes.md` y `..._dsh.md`) |
 | Ficheros con `CancellationToken` | 3 (8 usos) | `grep -rln "CancellationToken" crates/tylluan-kernel/src` |
 | Sitios con `GuardedTask` | 6, todos en `main.rs` | `grep -rn "GuardedTask::new" crates/tylluan-kernel/src` |
 | Usuarios de `BackgroundBudget` | 9 | `grep -rn "BackgroundBudget" crates/tylluan-kernel/src` |
@@ -24,7 +24,8 @@ Hoy Tylluan ya tiene piezas de runtime, pero cada una resuelve su caso y no hay 
 | Cadencia del reindexer | 100 nodos cada 600 s, fijo en el código, sin clave de config | `main.rs`, línea 1919 y siguientes (H-42) |
 | Avisos del guard del reindexer | 363 en 4 días (ronda de 100 nodos supera 120 s) | `kernel.log`, medido por Hermes en H-45 |
 | Convergencia del reindexer | no converge: ~6.400 nodos pendientes, 4.493 nunca embebidos | H-42 y H-43 |
-| Parada del kernel (2026-10-28) | el log dijo "stopped" y el proceso siguió vivo más de 85 s | observación del TL; causa **no verificada** |
+| Parada del kernel (2026-10-28) | el log dijo "stopped" y el proceso siguió vivo más de 85 s | observación del TL. Hipótesis **no verificada**: `main` termina con `Ok(())` (el `process::exit(1)` solo ocurre si falló el HTTP, `main.rs`, línea 2239) y al soltarse el runtime de tokio este espera a los hilos de `spawn_blocking` (lotes ONNX del reindexer) |
+| Bucles de `main.rs` sin token de apagado | 27 de 28 | Fase 0 (Hermes) |
 
 Piezas que ya existen y este ADR reutiliza: `GuardedTask` (timeout adaptativo), `BackgroundBudget` (semáforo de CPU de fondo), `supervisor`/`lifecycle` (guilds), Cognitive Scheduler (hoy solo observa, ADR-014) y el registro de puntos de inferencia (T-DSH-116).
 
@@ -86,7 +87,7 @@ Cada fase: diff sin commitear, `clippy -D warnings` en 0, tests propios, `## Imp
 
 ## 10. No verificado
 
-- Por qué el proceso tardó en salir tras el apagado.
-- El reparto exacto de los 123 spawns por subruntime (es la fase 0).
+- Por qué el proceso tardó en salir tras el apagado (hipótesis del §2: el runtime espera a `spawn_blocking`; se comprobaría con `shutdown_timeout`).
+- La clasificación fina por subruntime (la Fase 0 la hizo por lectura estática, sin instrumentar el kernel vivo).
 - El coste de la fase 1 y si 10 s de parada es alcanzable sin tocar las guilds.
 - Que `max_threads = 8` (config de producción desde 2026-10-28) reduzca los avisos del guard.
