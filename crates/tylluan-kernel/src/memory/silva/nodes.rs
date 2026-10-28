@@ -559,9 +559,18 @@ impl super::SilvaDB {
     /// harmless (last row wins in the map). Test-visible batch size is
     /// tracked in `embedding_fetch_batch_size` so the gate tests can prove
     /// the single-round-trip invariant.
+    ///
+    /// H-40 B1: `model_name` restricts rows to embeddings produced by that
+    /// exact model. The coherence gate must never score a query against a
+    /// stored embedding from a different model — cross-model cosine is noise,
+    /// and 32 % of production rows (1.878 of 5.821: bge-m3-v2 1.087 +
+    /// distill-v1 785 + bge-m3 6) predate the current mxbai engine. `None`
+    /// keeps the legacy unfiltered behavior (compare-anything).
+    /// See docs/internal/IMPL_H-40_diagnostico_mapa_mem_hermes.md.
     pub async fn get_node_embeddings_batch(
         &self,
         node_ids: &[String],
+        model_name: Option<&str>,
     ) -> Result<std::collections::HashMap<String, Vec<f32>>> {
         if node_ids.is_empty() {
             return Ok(std::collections::HashMap::new());
@@ -572,13 +581,22 @@ impl super::SilvaDB {
             .map(|i| format!("?{i}"))
             .collect::<Vec<_>>()
             .join(", ");
+        let model_clause = if model_name.is_some() {
+            format!(" AND model_name = ?{}", node_ids.len() + 1)
+        } else {
+            String::new()
+        };
         let sql = format!(
-            "SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})"
+            "SELECT node_id, embedding FROM node_embeddings \
+             WHERE node_id IN ({placeholders}){model_clause}"
         );
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(&sql)?;
-            let mut rows = stmt.query(rusqlite::params_from_iter(node_ids.iter()))?;
+            let model_owned = model_name.map(|m| m.to_string());
+            let mut rows = stmt.query(rusqlite::params_from_iter(
+                node_ids.iter().chain(model_owned.iter()),
+            ))?;
             let mut out = std::collections::HashMap::with_capacity(node_ids.len());
             while let Some(row) = rows.next()? {
                 let id: String = row.get(0)?;
