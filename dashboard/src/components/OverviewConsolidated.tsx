@@ -67,7 +67,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
               </span>
             </div>
             <p className="break-words text-xs text-slate-300 mt-0.5 font-mono">
-              Sovereign Local Kernel on :47004 • Noise XK P2P Mesh • ADR-011 Signal Loop Active
+              Sovereign Local Kernel • Noise XK P2P Mesh • ADR-011 Signal Loop Active
             </p>
           </div>
         </div>

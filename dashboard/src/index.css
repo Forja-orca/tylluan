@@ -36,199 +36,202 @@
  
 @layer base {
   :root {
-    --background: 48 33% 97%;          /* Claude Light #faf9f5 */
-    --foreground: 60 3% 8%;            /* Claude Dark #141413 */
-    --card: 0 0% 100%;                 /* Warm White #ffffff */
-    --card-foreground: 60 3% 8%;       /* Claude Dark #141413 */
+    /* Neutral Light Theme (DISENO_UI_2026-10-28) */
+    --background: 60 8% 95%;           /* #F3F3F1 fondo hueso */
+    --foreground: 220 5% 12%;          /* #1C1D1F texto principal */
+    --card: 0 0% 100%;                 /* #FFFFFF superficie */
+    --card-foreground: 220 5% 12%;      /* #1C1D1F */
     --popover: 0 0% 100%;
-    --popover-foreground: 60 3% 8%;
-    --primary: 15 63% 60%;             /* Claude Orange #d97757 */
-    --primary-foreground: 60 3% 8%;    /* Claude Dark #141413 (5.90:1 PASS AA sobre naranja) */
-    --secondary: 50 21% 89%;           /* Claude Light Gray #e8e6dc */
-    --secondary-foreground: 60 3% 8%;  /* Claude Dark #141413 */
-    --muted: 50 21% 89%;               /* Claude Light Gray #e8e6dc */
-    --muted-foreground: 49 8% 37%;     /* Muted text passing WCAG AA (5.72:1) */
-    --accent: 50 21% 89%;              /* Claude Light Gray #e8e6dc */
-    --accent-foreground: 60 3% 8%;
-    --destructive: 0 60% 44%;          /* Warm Terracotta / Red AA */
-    --destructive-foreground: 48 33% 97%;
-    --border: 49 7% 67%;               /* Claude Mid Gray #b0aea5 */
-    --input: 49 7% 67%;                /* Claude Mid Gray #b0aea5 */
-    --ring: 15 63% 60%;                /* Claude Orange #d97757 */
+    --popover-foreground: 220 5% 12%;
+    --primary: 167 40% 30%;            /* #2E6B5E acento salvia oscuro */
+    --primary-foreground: 0 0% 100%;   /* #FFFFFF sobre acento (6.21:1 PASS AA) */
+    --secondary: 80 5% 88%;            /* #E2E3E0 elevada 2 */
+    --secondary-foreground: 220 5% 12%;
+    --muted: 60 7% 92%;                /* #ECECE9 elevada 1 */
+    --muted-foreground: 213 5% 33%;    /* #4F5358 texto 2 (6.97:1 PASS AA) */
+    --accent: 167 40% 30%;             /* #2E6B5E acento */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 5 50% 46%;          /* #B0443A crítico (5.06:1 PASS AA) */
+    --destructive-foreground: 0 0% 100%;
+    --border: 75 5% 85%;               /* #D9DAD6 borde 1 */
+    --input: 75 5% 85%;
+    --ring: 167 40% 30%;
     --radius: 0.5rem;
 
-    /* Inverted Slate Scale for Dark-First Architecture in Claude Light Theme */
-    /* Surface and Container classes (bg-slate-950, bg-slate-900, bg-slate-850, bg-slate-800) -> Light Warm Surfaces */
-    --slate-950: 48 33% 97%;      /* #faf9f5 Base Light Canvas */
-    --slate-900: 0 0% 100%;       /* #ffffff Crisp Card Surface / Container */
-    --slate-850: 50 21% 94%;      /* Warm Elevated Card / Panel #f4f3ee */
-    --slate-800: 50 21% 89%;      /* #e8e6dc Light Gray Container / Subtle Border */
-    --slate-700: 49 10% 78%;      /* Warm Secondary Border / Divider */
+    /* Inverted Slate Scale for Neutral Light Theme */
+    --slate-950: 60 8% 95%;      /* #F3F3F1 fondo hueso base */
+    --slate-900: 0 0% 100%;       /* #FFFFFF superficie tarjeta */
+    --slate-850: 60 7% 92%;       /* #ECECE9 superficie elevada 1 */
+    --slate-800: 80 5% 88%;       /* #E2E3E0 superficie elevada 2 */
+    --slate-700: 75 5% 85%;       /* #D9DAD6 borde 1 */
 
     /* Intermediate Muted & Border classes */
-    --slate-600: 49 8% 40%;       /* Accessible Muted Element / Text (4.81:1 on #e8e6dc, 5.72:1 on #faf9f5) */
-    --slate-500: 49 8% 37%;       /* Accessible Muted Text (5.72:1 on #faf9f5, 4.81:1 on #e8e6dc) */
-    --slate-400: 50 8% 28%;       /* Secondary Text / Labels (8.30:1 on #faf9f5, 6.99:1 on #e8e6dc) */
+    --slate-600: 90 3% 77%;       /* #C4C6C2 borde 2 */
+    --slate-500: 213 5% 43%;      /* #686D73 texto 3 (4.70:1 PASS AA) */
+    --slate-400: 213 5% 33%;      /* #4F5358 texto 2 (6.97:1 PASS AA) */
 
-    /* Typography and High-Contrast Text classes (text-slate-300, text-slate-200, text-slate-100, text-slate-50) -> Dark Text */
-    --slate-300: 55 5% 20%;       /* Dark Neutral Text (11.67:1 on #faf9f5) */
-    --slate-200: 60 4% 14%;       /* Deep Neutral Text (14.59:1 on #faf9f5) */
-    --slate-100: 60 3% 8%;        /* #141413 Dark Primary Text (17.34:1 on #faf9f5) */
-    --slate-50: 60 3% 5%;         /* Deepest Obsidian Dark Text (20.5:1 on #faf9f5) */
+    /* Typography & Contrast classes */
+    --slate-300: 220 5% 20%;      /* #2B2D30 */
+    --slate-200: 220 5% 15%;      /* #202224 */
+    --slate-100: 220 5% 12%;      /* #1C1D1F texto principal (15.18:1 PASS AAA) */
+    --slate-50: 220 5% 8%;        /* #121314 */
     
-    /* Claude Green (Tertiary / Success Light) — Base #788c5d */
-    --emerald-300: 86 25% 32%;    /* Accessible Text AA (6.2:1) */
-    --emerald-400: 86 25% 34%;    /* Accessible Text AA (5.71:1 on bg, 4.81:1 on surface) */
-    --emerald-500: 86 20% 46%;    /* #788c5d Fill/Indicator */
-    --emerald-600: 86 20% 34%;    /* Accessible Text AA (5.71:1 on bg, 4.81:1 on surface) */
-    --emerald-700: 86 25% 26%;    /* Accessible Text AAA (7.86:1 on bg, 6.62:1 on surface) */
-    --emerald-950: 86 35% 95%;    /* Light Green Tint #F3F6EF */
+    /* Correct / Emerald — #2B7A42 (4.77:1 PASS AA) */
+    --emerald-300: 137 48% 32%;
+    --emerald-400: 137 48% 32%;
+    --emerald-500: 137 48% 32%;
+    --emerald-600: 137 48% 26%;
+    --emerald-700: 137 48% 22%;
+    --emerald-950: 137 30% 95%;
 
-    /* Claude Orange (Primary Accent Light) — Base #d97757 */
-    --amber-100: 15 63% 18%;      /* Accessible Text AA for Human Bubbles (12.5:1 on light) */
-    --amber-200: 15 63% 38%;      /* Accessible Text AA (5.90:1) */
-    --amber-300: 15 63% 38%;      /* Accessible Text AA (5.90:1) */
-    --amber-400: 15 63% 40%;      /* #a64626 Accessible Text AA (5.65:1 on bg, 4.76:1 on surface) */
-    --amber-500: 15 63% 60%;      /* #d97757 Primary Accent Fill / Ring / Large Text */
-    --amber-600: 15 63% 40%;      /* #a64626 Accessible Text AA (5.65:1 on bg, 4.76:1 on surface) */
-    --amber-700: 15 63% 30%;      /* #8e3b20 Accessible Text AAA (8.38:1 on bg, 7.05:1 on surface) */
-    --amber-950: 15 80% 96%;      /* Light Orange Tint #FDF5F2 */
+    /* Warning / Amber — #86600F (5.12:1 PASS AA) */
+    --amber-100: 41 80% 20%;
+    --amber-200: 41 80% 25%;
+    --amber-300: 41 80% 29%;
+    --amber-400: 41 80% 29%;
+    --amber-500: 41 80% 29%;
+    --amber-600: 41 80% 25%;
+    --amber-700: 41 80% 20%;
+    --amber-950: 41 60% 95%;
     
-    --red-300: 0 60% 36%;
-    --red-400: 0 60% 40%;
-    --red-500: 0 60% 44%;         /* Accessible Destructive AA (5.94:1 on bg, 5.00:1 on surface) */
+    /* Critical / Destructive — #B0443A (5.06:1 PASS AA) */
+    --red-300: 5 50% 46%;
+    --red-400: 5 50% 46%;
+    --red-500: 5 50% 46%;
     
-    --rose-300: 350 65% 36%;
-    --rose-400: 350 65% 38%;
-    --rose-500: 350 60% 44%;
-    --rose-600: 350 65% 38%;
-    --rose-700: 350 70% 28%;
+    --rose-300: 5 50% 46%;
+    --rose-400: 5 50% 46%;
+    --rose-500: 5 50% 46%;
+    --rose-600: 5 50% 40%;
+    --rose-700: 5 50% 32%;
+    --rose-950: 5 40% 95%;
     
-    /* Claude Blue (Secondary Accent Light) — Base #6a9bcc */
-    --blue-300: 210 50% 36%;
-    --blue-400: 210 49% 41%;      /* Accessible Text AA (5.46:1 on bg, 4.60:1 on surface) */
-    --blue-500: 210 49% 61%;      /* #6a9bcc Secondary Accent Fill */
-    --blue-600: 210 49% 41%;      /* Accessible Text AA (5.46:1 on bg, 4.60:1 on surface) */
-    --blue-700: 210 55% 30%;      /* Accessible Text AAA (8.42:1 on bg, 7.09:1 on surface) */
-    --blue-950: 210 50% 96%;      /* Soft Light Blue Tint Surface */
+    /* Accent Salvia — #2E6B5E (5.59:1 PASS AA) */
+    --blue-300: 167 40% 30%;
+    --blue-400: 167 40% 30%;
+    --blue-500: 167 40% 30%;
+    --blue-600: 167 40% 24%;
+    --blue-700: 167 40% 18%;
+    --blue-950: 167 30% 95%;
 
-    --indigo-300: 210 50% 36%;    /* Accessible Text AA */
-    --indigo-400: 210 49% 41%;    /* Accessible Text AA */
-    --indigo-500: 210 49% 41%;    /* Mapped to accessible Claude Blue AA */
-    --indigo-600: 210 55% 30%;    /* Mapped to accessible Claude Blue AAA */
-    --indigo-950: 210 50% 96%;    /* Soft Light Indigo Tint Surface */
+    --indigo-300: 167 40% 30%;
+    --indigo-400: 167 40% 30%;
+    --indigo-500: 167 40% 30%;
+    --indigo-600: 167 40% 24%;
+    --indigo-950: 167 30% 95%;
     
-    --violet-300: 260 40% 32%;    /* Accessible Text AA (6.8:1) */
-    --violet-400: 260 40% 34%;    /* Accessible Text AA (6.5:1) */
-    --violet-500: 260 35% 44%;
-    --violet-600: 260 40% 34%;
-    --violet-950: 260 40% 96%;    /* Soft Light Violet Tint Surface */
+    --violet-300: 167 40% 30%;
+    --violet-400: 167 40% 30%;
+    --violet-500: 167 40% 30%;
+    --violet-600: 167 40% 24%;
+    --violet-950: 167 30% 95%;
 
-    --rose-950: 350 50% 96%;      /* Soft Light Rose Tint Surface */
+    --cyan-300: 167 40% 30%;
+    --cyan-400: 167 40% 30%;
+    --cyan-500: 167 40% 30%;
+    --cyan-950: 167 30% 95%;
 
-    --cyan-300: 190 70% 26%;      /* Accessible Text AA (6.8:1) */
-    --cyan-400: 190 60% 32%;      /* Accessible Text AA */
-    --cyan-500: 190 50% 45%;
-    --cyan-950: 190 50% 96%;      /* Soft Light Cyan Tint Surface */
-
-    --teal-300: 175 60% 28%;      /* Accessible Text AA (6.2:1) */
-    --teal-400: 175 55% 34%;      /* Accessible Text AA */
-    --teal-500: 175 45% 45%;
-    --teal-950: 175 50% 96%;      /* Soft Light Teal Tint Surface */
+    --teal-300: 167 40% 30%;
+    --teal-400: 167 40% 30%;
+    --teal-500: 167 40% 30%;
+    --teal-950: 167 30% 95%;
   }
 
   .dark {
-    --background: 222 33% 6%;     /* Obsidian Nocturne #0A0D14 */
-    --foreground: 210 40% 98%;
-    --card: 220 33% 10%;
-    --card-foreground: 210 40% 98%;
-    --popover: 220 33% 10%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 33% 11%;
-    --secondary: 218 30% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 218 30% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 218 30% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 218 30% 17%;
-    --input: 218 30% 17%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Neutral Dark Theme (DISENO_UI_2026-10-28) - Default */
+    --background: 210 5% 9%;           /* #151617 fondo grafito oscuro */
+    --foreground: 90 4% 90%;           /* #E6E7E5 texto principal */
+    --card: 220 5% 12%;                /* #1D1E20 superficie */
+    --card-foreground: 90 4% 90%;      /* #E6E7E5 */
+    --popover: 220 5% 12%;
+    --popover-foreground: 90 4% 90%;
+    --primary: 160 22% 62%;            /* #8AB4A6 acento salvia */
+    --primary-foreground: 165 33% 9%;  /* #10201C sobre acento (7.35:1 PASS AA) */
+    --secondary: 210 6% 20%;           /* #2F3235 elevada 2 */
+    --secondary-foreground: 90 4% 90%;
+    --muted: 216 6% 16%;               /* #26282B elevada 1 */
+    --muted-foreground: 210 5% 71%;    /* #B0B4B8 texto 2 (8.69:1 PASS AA) */
+    --accent: 160 22% 62%;             /* #8AB4A6 acento salvia */
+    --accent-foreground: 165 33% 9%;
+    --destructive: 6 66% 70%;          /* #E58C82 crítico (7.25:1 PASS AA) */
+    --destructive-foreground: 210 5% 9%;
+    --border: 214 6% 22%;              /* #34373B borde 1 */
+    --input: 214 6% 22%;
+    --ring: 160 22% 62%;
 
-    /* Dark Mode Tokens (Obsidian Nocturne Sovereign Theme) */
-    --slate-50: 210 40% 98%;
-    --slate-100: 210 40% 96%;
-    --slate-200: 214 32% 91%;
-    --slate-300: 213 27% 84%;
-    --slate-400: 215 20% 65%;
-    --slate-500: 215 16% 47%;     /* Void Muted #64748B */
-    --slate-600: 215 19% 35%;
-    --slate-700: 218 30% 25%;
-    --slate-800: 218 30% 17%;     /* Owl Slate #1E2638 */
-    --slate-850: 220 33% 13%;     /* Card Surface #141A26 */
-    --slate-900: 220 33% 10%;     /* Nocturne Deep Container #10141E */
-    --slate-950: 222 33% 6%;      /* Obsidian Nocturne Canvas #0A0D14 */
+    /* Dark Mode Neutral Slate Tokens */
+    --slate-50: 90 4% 96%;
+    --slate-100: 90 4% 90%;            /* #E6E7E5 texto principal (14.60:1 PASS AAA) */
+    --slate-200: 90 4% 85%;
+    --slate-300: 90 4% 78%;
+    --slate-400: 210 5% 71%;           /* #B0B4B8 texto 2 (8.69:1 PASS AA) */
+    --slate-500: 210 5% 58%;           /* #8E9398 texto 3 (5.85:1 PASS AA) */
+    --slate-600: 213 6% 28%;           /* #44484D borde 2 */
+    --slate-700: 214 6% 22%;           /* #34373B borde 1 */
+    --slate-800: 210 6% 20%;           /* #2F3235 superficie elevada 2 */
+    --slate-850: 216 6% 16%;           /* #26282B superficie elevada 1 */
+    --slate-900: 220 5% 12%;           /* #1D1E20 superficie tarjeta */
+    --slate-950: 210 5% 9%;            /* #151617 fondo base */
 
-    /* Signal Mint (GPU Active Dark) */
-    --emerald-300: 156 72% 67%;
-    --emerald-400: 160 64% 52%;   /* #34D399 (WCAG AAA pass 8.05:1) */
-    --emerald-500: 160 84% 39%;   /* #10B981 */
-    --emerald-600: 161 94% 30%;   /* #059669 */
-    --emerald-700: 163 94% 24%;
-    --emerald-950: 158 46% 11%;   /* Dark Mint Tint #0F291E */
+    /* Correct / Emerald — #86C494 (8.92:1 PASS AA) */
+    --emerald-300: 134 34% 75%;
+    --emerald-400: 134 34% 65%;        /* #86C494 */
+    --emerald-500: 134 34% 60%;
+    --emerald-600: 134 34% 50%;
+    --emerald-700: 134 34% 40%;
+    --emerald-950: 134 30% 12%;
 
-    /* Sovereign Amber (CPU Active Dark) */
-    --amber-100: 48 96% 89%;
-    --amber-200: 48 97% 77%;
-    --amber-300: 46 97% 65%;
-    --amber-400: 37 90% 61%;     /* #F5B041 (WCAG AAA pass 8.04:1) */
-    --amber-500: 39 77% 57%;     /* #E5A93C Sovereign Amber */
-    --amber-600: 36 80% 40%;
-    --amber-700: 32 65% 32%;
-    --amber-950: 36 60% 10%;
+    /* Warning / Amber — #DDB962 (9.66:1 PASS AA) */
+    --amber-100: 42 64% 85%;
+    --amber-200: 42 64% 75%;
+    --amber-300: 42 64% 68%;
+    --amber-400: 42 64% 63%;        /* #DDB962 */
+    --amber-500: 42 64% 55%;
+    --amber-600: 42 64% 45%;
+    --amber-700: 42 64% 35%;
+    --amber-950: 42 40% 12%;
     
-    --red-300: 0 94% 82%;
-    --red-400: 0 91% 71%;
-    --red-500: 0 84% 60%;
+    /* Critical / Destructive — #E58C82 (7.25:1 PASS AA) */
+    --red-300: 6 66% 75%;
+    --red-400: 6 66% 70%;           /* #E58C82 */
+    --red-500: 6 66% 65%;
     
-    --rose-300: 351 95% 71%;
-    --rose-400: 351 95% 71%;
-    --rose-500: 350 89% 60%;
-    --rose-600: 347 77% 50%;
-    --rose-700: 345 83% 41%;
-    --rose-950: 343 88% 16%;
+    --rose-300: 6 66% 75%;
+    --rose-400: 6 66% 70%;          /* #E58C82 */
+    --rose-500: 6 66% 65%;
+    --rose-600: 6 66% 55%;
+    --rose-700: 6 66% 45%;
+    --rose-950: 6 40% 12%;
     
-    --indigo-300: 230 94% 82%;
-    --indigo-400: 234 89% 74%;
-    --indigo-500: 239 84% 67%;
-    --indigo-600: 243 75% 59%;
-    --indigo-950: 243 47% 20%;
+    /* Accent Salvia — #8AB4A6 (7.90:1 PASS AA) */
+    --indigo-300: 160 22% 70%;
+    --indigo-400: 160 22% 62%;
+    --indigo-500: 160 22% 55%;
+    --indigo-600: 160 22% 45%;
+    --indigo-950: 160 20% 12%;
     
-    --violet-300: 252 95% 85%;
-    --violet-400: 255 92% 76%;
-    --violet-500: 258 90% 66%;
-    --violet-600: 262 83% 58%;
-    --violet-950: 261 73% 23%;
+    --violet-300: 160 22% 70%;
+    --violet-400: 160 22% 62%;
+    --violet-500: 160 22% 55%;
+    --violet-600: 160 22% 45%;
+    --violet-950: 160 20% 12%;
     
-    --blue-300: 212 96% 78%;
-    --blue-400: 213 94% 68%;
-    --blue-500: 217 91% 60%;
-    --blue-600: 221 83% 53%;
-    --blue-700: 224 76% 48%;
-    --blue-950: 226 57% 21%;
+    --blue-300: 160 22% 70%;
+    --blue-400: 160 22% 62%;
+    --blue-500: 160 22% 55%;
+    --blue-600: 160 22% 45%;
+    --blue-700: 160 22% 35%;
+    --blue-950: 160 20% 12%;
 
-    --cyan-300: 187 92% 69%;
-    --cyan-400: 189 86% 53%;
-    --cyan-500: 189 95% 43%;
-    --cyan-950: 198 79% 15%;
+    --cyan-300: 160 22% 70%;
+    --cyan-400: 160 22% 62%;
+    --cyan-500: 160 22% 55%;
+    --cyan-950: 160 20% 12%;
 
-    --teal-300: 171 77% 64%;
-    --teal-400: 173 66% 50%;
-    --teal-500: 173 80% 40%;
-    --teal-950: 179 84% 10%;
+    --teal-300: 160 22% 70%;
+    --teal-400: 160 22% 62%;
+    --teal-500: 160 22% 55%;
+    --teal-950: 160 20% 12%;
   }
 }
  
@@ -237,26 +240,14 @@
     @apply border-border;
   }
   body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased;
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(212, 160, 48, 0.03) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(148, 163, 184, 0.03) 0px, transparent 50%);
+    @apply bg-background text-foreground font-sans antialiased;
   }
 
-  /* V1: Tipografía Claude para tema claro exclusivamente (offline fallback, cero descargas) */
-  :root:not(.dark),
-  :root:not(.dark) body,
-  :root:not(.dark) .font-sans {
-    font-family: 'Lora', Georgia, serif;
-  }
-
-  :root:not(.dark) h1,
-  :root:not(.dark) h2,
-  :root:not(.dark) h3,
-  :root:not(.dark) h4,
-  :root:not(.dark) h5,
-  :root:not(.dark) h6 {
-    font-family: 'Poppins', Arial, sans-serif;
+  /* Reset default font overrides for consistent clean typography */
+  :root,
+  body,
+  .font-sans {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   }
 }
 

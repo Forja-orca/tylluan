@@ -199,8 +199,8 @@ function App() {
       { id: 'overview', name: 'Estado y Salud', icon: LayoutDashboard },
       { id: 'coloquio', name: 'Coloquio', icon: MessageSquare, badge: coloquioUnread > 0 ? coloquioUnread : null },
       { id: 'approvals', name: 'Aprobaciones', icon: ShieldCheck, badge: approvals.length > 0 ? approvals.length : null },
-      { id: 'memory', name: 'Memoria SilvaDB', icon: Database },
-      { id: 'models', name: 'Modelos y Servidor', icon: Cpu },
+      { id: 'memory', name: 'Memoria', icon: Database },
+      { id: 'models', name: 'Modelos', icon: Cpu },
       { id: 'settings', name: 'Ajustes', icon: Settings },
     ];
 
