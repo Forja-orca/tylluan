@@ -23,8 +23,8 @@ export function WelcomeEmptyState({
   onRefresh
 }: WelcomeEmptyStateProps) {
   const { agentProfiles, bridge: ctxBridge, sessions: hookSessions } = useNexus();
-  const [firstQueryText, setFirstQueryText] = useState('What is Tylluan?');
-  const [noteText, setNoteText] = useState('Tylluan is running local RAG.');
+  const [firstQueryText, setFirstQueryText] = useState('¿Qué es Tylluan?');
+  const [noteText, setNoteText] = useState('Tylluan ejecuta RAG local.');
   const [copied, setCopied] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [querying, setQuerying] = useState(false);
@@ -144,7 +144,7 @@ export function WelcomeEmptyState({
           <TylluanLogo size="xl" animated={false} showText={false} />
         </div>
         <h2 className="text-3xl font-extrabold tracking-tight text-foreground uppercase font-mono">
-          Bienvenido / Welcome to <span className="text-primary">Tylluan</span>
+          Bienvenido a <span className="text-primary">Tylluan</span>
         </h2>
         <p className="text-muted-foreground text-sm max-w-md mx-auto">
           Tu memoria soberana para IA está lista. SilvaDB inicializada y escuchando localmente.
@@ -155,15 +155,15 @@ export function WelcomeEmptyState({
         {/* Onboarding Tasks Checklist */}
         <div className="lg:col-span-1 bg-card border border-border rounded-2xl p-5 space-y-4">
           <h3 className="text-[11px] font-medium text-muted-foreground border-b border-border pb-2">
-            Onboarding Checklist
+            Lista de Inicio
           </h3>
           <div className="space-y-3">
             {[
-              { id: 'install', label: 'Install Tylluan', done: isInstalled },
-              { id: 'profile', label: 'Create Agent Profile', done: isProfileResolved },
-              { id: 'model', label: 'Embeddings Engine', done: isModelLoaded },
-              { id: 'mcp', label: 'Connect MCP Client', done: isMcpConnected },
-              { id: 'query', label: 'First Query / Action', done: firstQueryDone }
+              { id: 'install', label: 'Instalar Tylluan', done: isInstalled },
+              { id: 'profile', label: 'Crear Perfil de Agente', done: isProfileResolved },
+              { id: 'model', label: 'Motor de Embeddings', done: isModelLoaded },
+              { id: 'mcp', label: 'Conectar Cliente MCP', done: isMcpConnected },
+              { id: 'query', label: 'Primera Consulta / Acción', done: firstQueryDone }
             ].map(task => (
               <div key={task.id} className="flex items-center gap-3 text-xs">
                 {task.done ? (
@@ -284,7 +284,7 @@ export function WelcomeEmptyState({
                   disabled={querying}
                   className="w-full py-1.5 bg-primary text-primary-foreground rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
-                  {querying ? 'Querying...' : 'Ask'}
+                  {querying ? 'Consultando...' : 'Consultar'}
                 </button>
               </form>
             </div>

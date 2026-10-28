@@ -143,6 +143,7 @@ pub mod rules;
 pub mod service;
 pub mod systemone_http;
 pub mod adapters;
+pub mod clinical_gate;
 
 pub use api_types::{Answer, DecideRequest, DecideResponse, DecideStatus, DecisionMode, QuestionKind, QuestionSpec};
 pub use service::{DecisionService, decision_row_hash};

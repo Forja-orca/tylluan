@@ -70,7 +70,7 @@ describe('LOTE AF — Auditoría de Cableado y Correcciones Frontend', () => {
       );
 
       // El paso de MCP debe marcarse como completado con line-through
-      const mcpTask = screen.getByText('Connect MCP Client');
+      const mcpTask = screen.getByText('Conectar Cliente MCP');
       expect(mcpTask).toBeInTheDocument();
       expect(mcpTask.className).toContain('line-through');
     });

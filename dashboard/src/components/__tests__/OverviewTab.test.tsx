@@ -123,8 +123,8 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
     );
 
     // Welcome checklist should be shown
-    expect(await screen.findByText(/Welcome to/i)).toBeInTheDocument();
-    expect(screen.getByText(/Onboarding Checklist/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Bienvenido a/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lista de Inicio/i)).toBeInTheDocument();
     expect(screen.queryByTestId('mock-homeostasis-widget')).not.toBeInTheDocument();
   });
 
@@ -141,8 +141,8 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
     );
 
     // Welcome checklist should NOT be shown
-    expect(screen.queryByText(/Welcome to/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Onboarding Checklist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bienvenido a/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lista de Inicio/i)).not.toBeInTheDocument();
 
     // Main overview widgets are rendered
     expect(screen.getByTestId('mock-homeostasis-widget')).toBeInTheDocument();
@@ -162,8 +162,8 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
     );
 
     // Welcome checklist should NOT be shown
-    expect(screen.queryByText(/Welcome to/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Onboarding Checklist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bienvenido a/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lista de Inicio/i)).not.toBeInTheDocument();
 
     expect(screen.getByTestId('mock-homeostasis-widget')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: /Tylluan is/i })).toBeInTheDocument();
@@ -183,8 +183,8 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
       />
     );
 
-    expect(screen.queryByText(/Welcome to/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Onboarding Checklist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bienvenido a/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lista de Inicio/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('mock-homeostasis-widget')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: /Tylluan is/i })).toBeInTheDocument();
   });
