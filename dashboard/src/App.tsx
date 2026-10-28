@@ -212,36 +212,36 @@ function App() {
   }, [coloquioUnread, approvals.length, devMode]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-amber-500/30">
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
       {/* Top Navbar */}
-      <header className="h-16 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
+      <header className="h-16 border-b border-border bg-card/90 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
             type="button"
             aria-label="Ir a Estado y Salud"
-            className="flex items-center gap-2 group cursor-pointer rounded-xl focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="flex items-center gap-2 group cursor-pointer rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             onClick={() => handleTabChange('overview')}
           >
-            <TylluanLogo size="md" showText={true} animated={true} />
+            <TylluanLogo size="md" showText={true} animated={false} />
           </button>
         </div>
 
         <div className="flex min-w-0 items-center gap-2 md:gap-4 lg:gap-6">
-          <div className="hidden lg:flex items-center gap-4 text-[11px] font-mono text-slate-400">
+          <div className="hidden lg:flex items-center gap-4 text-[11px] font-mono text-muted-foreground">
              <div className="flex flex-col items-end">
-               <span className="uppercase opacity-70 tracking-widest text-[11px]">Uptime</span>
-               <span className="text-slate-300">{online ? formatUptime(kernelUptime) : '—'}</span>
+               <span className="uppercase opacity-70 tracking-widest text-[11px]">Activo</span>
+               <span className="text-foreground">{online ? formatUptime(kernelUptime) : '—'}</span>
              </div>
-             <div className="h-6 w-px bg-slate-800" />
+             <div className="h-6 w-px bg-border" />
              <div className="flex flex-col items-end">
-               <span className="uppercase opacity-70 tracking-widest text-[11px]">Last Refresh</span>
-               <span className="text-slate-300">{lastRefresh.toLocaleTimeString()}</span>
+               <span className="uppercase opacity-70 tracking-widest text-[11px]">Última Actualización</span>
+               <span className="text-foreground">{lastRefresh.toLocaleTimeString()}</span>
              </div>
           </div>
           
           {activeAgents.length > 0 && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
-              <span className="text-slate-300">{activeAgents.length} {activeAgents.length === 1 ? 'agente' : 'agentes'}</span>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
+              <span className="text-foreground">{activeAgents.length} {activeAgents.length === 1 ? 'agente' : 'agentes'}</span>
               <div className="flex gap-1">
                 {activeAgents.map(agent => (
                   <span
@@ -264,10 +264,10 @@ function App() {
             className={cn(
               'hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
               connectionStatus === 'connected'
-                ? 'bg-slate-900 border-slate-800 text-slate-200'
+                ? 'bg-card border-border text-foreground'
                 : connectionStatus === 'reconnecting'
-                ? 'bg-amber-950/40 border-amber-500/30 text-amber-300 animate-pulse'
-                : 'bg-red-950/40 border-red-500/30 text-red-300'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                : 'bg-destructive/10 border-destructive/30 text-destructive'
             )}
           >
             {connectionStatus === 'connected'
@@ -285,15 +285,15 @@ function App() {
           </div>
           
           {/* Theme Selector Toggle */}
-          <div role="group" aria-label="Selector de Tema" className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-full p-0.5">
+          <div role="group" aria-label="Selector de Tema" className="flex items-center gap-1 bg-muted/60 border border-border rounded-full p-0.5">
             <button
               type="button"
               aria-label="Tema Claro"
               aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
-                theme === 'light' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
+                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+                theme === 'light' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
               title="Tema Claro"
             >
@@ -305,8 +305,8 @@ function App() {
               aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
-                theme === 'dark' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
+                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+                theme === 'dark' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
               title="Tema Oscuro"
             >
@@ -318,8 +318,8 @@ function App() {
               aria-pressed={theme === 'system'}
               onClick={() => setTheme('system')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
-                theme === 'system' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
+                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+                theme === 'system' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
               title="Tema del Sistema"
             >
@@ -335,23 +335,23 @@ function App() {
               aria-expanded={showMentionsDropdown}
               onClick={() => setShowMentionsDropdown(!showMentionsDropdown)}
               className={cn(
-                "p-2 rounded-full border transition-all relative cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none",
+                "p-2 rounded-full border transition-all relative cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                 activeMentions.length > 0 
-                  ? "bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse animate-duration-1000" 
-                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  ? "bg-primary/10 border-primary/30 text-primary" 
+                  : "bg-card border-border text-muted-foreground hover:text-foreground"
               )}
               title="Menciones Recientes"
             >
               <Bell className="w-4 h-4" aria-hidden="true" />
               {activeMentions.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-slate-950" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full ring-2 ring-card" />
               )}
             </button>
 
             {showMentionsDropdown && (
-              <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden">
-                <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-800 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300 uppercase">Menciones (@yo)</span>
+              <div className="absolute right-0 mt-2 w-80 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+                <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground uppercase">Menciones (@yo)</span>
                   {activeMentions.length > 0 && (
                     <button 
                       type="button"
@@ -360,26 +360,26 @@ function App() {
                         useAppStore.getState().clearMentions();
                         setShowMentionsDropdown(false);
                       }}
-                      className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold uppercase cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none rounded"
+                      className="text-[11px] text-primary hover:underline font-bold uppercase cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
                     >
                       Limpiar
                     </button>
                   )}
                 </div>
-                <div className="max-h-64 overflow-y-auto divide-y divide-slate-800/50">
+                <div className="max-h-64 overflow-y-auto divide-y divide-border/60">
                   {activeMentions.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-xs text-slate-400">
+                    <div className="px-4 py-6 text-center text-xs text-muted-foreground">
                       Sin menciones recientes
                     </div>
                   ) : (
                     activeMentions.map((m) => (
-                      <div key={m.id} className="p-3 hover:bg-slate-800/30 transition-colors">
+                      <div key={m.id} className="p-3 hover:bg-muted/30 transition-colors">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-bold text-emerald-400">@{m.sender}</span>
-                          <span className="text-[11px] font-mono text-slate-400">#{m.channel}</span>
+                          <span className="text-xs font-bold text-primary">@{m.sender}</span>
+                          <span className="text-[11px] font-mono text-muted-foreground">#{m.channel}</span>
                         </div>
-                        <p className="text-xs text-slate-300 line-clamp-2">{m.message}</p>
-                        <span className="text-[11px] font-mono text-slate-400 block mt-1">
+                        <p className="text-xs text-foreground line-clamp-2">{m.message}</p>
+                        <span className="text-[11px] font-mono text-muted-foreground block mt-1">
                           {m.ts.toLocaleTimeString()}
                         </span>
                       </div>
@@ -395,7 +395,7 @@ function App() {
             type="button"
             aria-label="Configurar Bearer Token"
             onClick={() => setAuthModalOpen(true)}
-            className="p-2 rounded-full border bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/30 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="p-2 rounded-full border bg-card border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             title="Configurar Bearer Token"
           >
             <Key className="w-4 h-4" aria-hidden="true" />
@@ -405,7 +405,7 @@ function App() {
             <div 
               role="status"
               aria-live="polite"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 cursor-help group relative text-slate-200"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border cursor-help group relative text-foreground"
               title={`Embeddings: ${healthDetailed.components?.embeddings?.ok ? '✓' : '✗'} | Reranker: ${healthDetailed.components?.reranker?.ok ? '✓' : '✗'} | Guilds: ${healthDetailed.components?.guilds?.active}/${healthDetailed.components?.guilds?.total} | Silva: ${healthDetailed.components?.silva?.nodes}n/${healthDetailed.components?.silva?.edges}e`}
             >
               <div className={cn(
@@ -421,11 +421,11 @@ function App() {
           ) : !online ? (
             <div 
               role="status"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-950/40 border border-rose-800/60 text-rose-300"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-destructive/10 border border-destructive/30 text-destructive"
             >
-              <div className="w-2 h-2 rounded-full bg-rose-500" />
+              <div className="w-2 h-2 rounded-full bg-destructive" />
               <span className="text-[11px] font-bold uppercase tracking-wider">
-                ■ OFFLINE
+                ■ DESCONECTADO
               </span>
             </div>
           ) : null}
@@ -434,7 +434,7 @@ function App() {
 
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         {/* Sidebar Navigation (232px Fixed according to DISENO_UI_2026-10-28.md) */}
-        <aside aria-label="Navegación Principal" className="w-16 md:w-[232px] border-r border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-y-auto transition-all duration-300">
+        <aside aria-label="Navegación Principal" className="w-16 md:w-[232px] border-r border-border bg-card flex flex-col shrink-0 overflow-y-auto transition-all duration-300">
           <div className="p-2 md:p-3 space-y-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -447,18 +447,18 @@ function App() {
                   aria-current={active ? 'page' : undefined}
                   onClick={() => handleTabChange(tab.id)}
                   className={cn(
-                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer",
+                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer",
                     active 
-                      ? "bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/5 font-semibold" 
-                      : "text-slate-400 hover:text-slate-100 hover:bg-slate-900"
+                      ? "bg-primary/10 text-primary font-semibold" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className={cn("w-4 h-4 transition-colors shrink-0", active ? "text-emerald-400" : "text-slate-400 group-hover:text-slate-300")} aria-hidden="true" />
+                    <Icon className={cn("w-4 h-4 transition-colors shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} aria-hidden="true" />
                     <span className="hidden md:inline">{tab.name}</span>
                   </div>
                   {tab.badge && (
-                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-500 dark:border-amber-500/30 text-[11px] font-bold min-w-[1.2rem] text-center border">
+                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border-primary/30 text-[11px] font-bold min-w-[1.2rem] text-center border">
                       {tab.badge}
                     </span>
                   )}

@@ -31,13 +31,13 @@ export function SettingsTab({ bridge, notify, onOpenAuthModal }: SettingsTabProp
         </div>
 
         <div className="flex items-center gap-2">
-          <div role="group" aria-label="Secciones de ajustes" className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+          <div role="group" aria-label="Secciones de ajustes" className="flex items-center gap-1 bg-muted/60 border border-border rounded-lg p-1">
             <button
               type="button"
               onClick={() => setSection('connectors')}
               className={cn(
                 "px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer",
-                section === 'connectors' ? "bg-slate-800 text-slate-100 shadow-sm" : "text-slate-400 hover:text-slate-200"
+                section === 'connectors' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Conexión MCP
@@ -47,7 +47,7 @@ export function SettingsTab({ bridge, notify, onOpenAuthModal }: SettingsTabProp
               onClick={() => setSection('maintenance')}
               className={cn(
                 "px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer",
-                section === 'maintenance' ? "bg-slate-800 text-slate-100 shadow-sm" : "text-slate-400 hover:text-slate-200"
+                section === 'maintenance' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Mantenimiento
@@ -57,7 +57,7 @@ export function SettingsTab({ bridge, notify, onOpenAuthModal }: SettingsTabProp
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/30 text-xs font-medium transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card border-border text-foreground hover:text-primary hover:border-primary/40 text-xs font-medium transition-colors cursor-pointer"
             title="Configurar Bearer Token"
           >
             <Key className="w-3.5 h-3.5" />

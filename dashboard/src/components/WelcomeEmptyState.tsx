@@ -141,20 +141,20 @@ export function WelcomeEmptyState({
       {/* Hero Section */}
       <div className="text-center space-y-3">
         <div className="flex justify-center mb-2">
-          <TylluanLogo size="xl" animated={true} showText={false} />
+          <TylluanLogo size="xl" animated={false} showText={false} />
         </div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-100 uppercase font-mono">
-          Welcome to <span className="text-amber-500">Tylluan</span>
+        <h2 className="text-3xl font-extrabold tracking-tight text-foreground uppercase font-mono">
+          Bienvenido / Welcome to <span className="text-primary">Tylluan</span>
         </h2>
-        <p className="text-slate-400 text-sm max-w-md mx-auto">
-          Your sovereign AI memory is ready. SilvaDB is initialized and listening local.
+        <p className="text-muted-foreground text-sm max-w-md mx-auto">
+          Tu memoria soberana para IA está lista. SilvaDB inicializada y escuchando localmente.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Onboarding Tasks Checklist */}
-        <div className="lg:col-span-1 bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4">
-          <h3 className="text-[11px] font-medium text-slate-400 border-b border-slate-800 pb-2">
+        <div className="lg:col-span-1 bg-card border border-border rounded-2xl p-5 space-y-4">
+          <h3 className="text-[11px] font-medium text-muted-foreground border-b border-border pb-2">
             Onboarding Checklist
           </h3>
           <div className="space-y-3">
@@ -167,11 +167,11 @@ export function WelcomeEmptyState({
             ].map(task => (
               <div key={task.id} className="flex items-center gap-3 text-xs">
                 {task.done ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
                 ) : (
-                  <Circle className="w-4 h-4 text-slate-600 shrink-0" />
+                  <Circle className="w-4 h-4 text-muted-foreground/60 shrink-0" />
                 )}
-                <span className={cn(task.done ? "text-slate-400 line-through decoration-slate-600" : "text-slate-300 font-medium")}>
+                <span className={cn(task.done ? "text-muted-foreground line-through decoration-muted-foreground/60" : "text-foreground font-medium")}>
                   {task.label}
                 </span>
               </div>
@@ -185,11 +185,11 @@ export function WelcomeEmptyState({
                 localStorage.setItem('tylluan_wizard_mcp', 'true');
                 setFirstQueryDone(true);
                 setMcpChecked(true);
-                notify('Skipped onboarding tutorial', 'info');
+                notify('Guía inicial omitida', 'info');
               }}
-              className="w-full text-center text-[11px] text-slate-400 hover:text-slate-200 font-medium mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none rounded"
+              className="w-full text-center text-[11px] text-muted-foreground hover:text-foreground font-medium mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
             >
-              Skip Tutorial
+              Omitir Guía
             </button>
           </div>
         </div>
@@ -198,14 +198,14 @@ export function WelcomeEmptyState({
         <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
           
           {/* Card 1: Add First Note */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between transition-all group">
+          <div className="bg-card border border-border rounded-2xl p-5 flex flex-col justify-between transition-all group">
             <div className="space-y-3">
-              <div className="p-2 w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <div className="p-2 w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center">
                 <PlusCircle className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-semibold text-slate-100">1. Add Note</h3>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                Save a key-value or raw memory into your database.
+              <h3 className="text-sm font-semibold text-foreground">1. Guardar Nota</h3>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Almacena una memoria o dato clave en tu base local SilvaDB.
               </p>
               
               <form onSubmit={handleAddNote} className="space-y-2 pt-2">
@@ -213,30 +213,30 @@ export function WelcomeEmptyState({
                   type="text"
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="e.g. Tylluan is RAG."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-sans"
+                  placeholder="ej. Tylluan ejecuta RAG local."
+                  className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-sans"
                   required
                 />
                 <button
                   type="submit"
                   disabled={addingNote}
-                  className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                  className="w-full py-1.5 bg-primary text-primary-foreground rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
-                  {addingNote ? 'Saving...' : 'Remember'}
+                  {addingNote ? 'Guardando...' : 'Recordar'}
                 </button>
               </form>
             </div>
           </div>
 
           {/* Card 2: Connect Tools */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between transition-all">
+          <div className="bg-card border border-border rounded-2xl p-5 flex flex-col justify-between transition-all">
             <div className="space-y-3">
-              <div className="p-2 w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+              <div className="p-2 w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center">
                 <Terminal className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-semibold text-slate-100">2. Connect Client</h3>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                Configure your MCP workspace client to use Tylluan.
+              <h3 className="text-sm font-semibold text-foreground">2. Conectar Cliente</h3>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Configura tu cliente MCP para conectarse a Tylluan.
               </p>
 
               <div className="relative mt-2">
@@ -244,30 +244,30 @@ export function WelcomeEmptyState({
                   tabIndex={0}
                   role="region"
                   aria-label="Configuración MCP generada"
-                  className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 leading-normal overflow-x-auto select-all max-h-[85px] focus-visible:ring-1 focus-visible:ring-blue-400 focus-visible:outline-none"
+                  className="bg-background border border-border rounded-lg p-2.5 text-[11px] font-mono text-muted-foreground leading-normal overflow-x-auto select-all max-h-[85px] focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   {mcpConfigJson}
                 </pre>
                 <button
                   onClick={handleCopyMcp}
-                  className="absolute top-1.5 right-1.5 p-1 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
-                  title="Copy configuration"
+                  className="absolute top-1.5 right-1.5 p-1 bg-card hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none border border-border"
+                  title="Copiar configuración"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
           </div>
 
           {/* Card 3: Query Memory */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between transition-all">
+          <div className="bg-card border border-border rounded-2xl p-5 flex flex-col justify-between transition-all">
             <div className="space-y-3">
-              <div className="p-2 w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center">
+              <div className="p-2 w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center">
                 <MessageSquare className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-semibold text-slate-100">3. Test Query</h3>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                Run a simulation test query against SilvaDB.
+              <h3 className="text-sm font-semibold text-foreground">3. Probar Consulta</h3>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Ejecuta una consulta de prueba sobre los nodos de SilvaDB.
               </p>
 
               <form onSubmit={handleQuery} className="space-y-2 pt-2">
@@ -275,14 +275,14 @@ export function WelcomeEmptyState({
                   type="text"
                   value={firstQueryText}
                   onChange={(e) => setFirstQueryText(e.target.value)}
-                  placeholder="Ask anything..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-violet-500 font-sans"
+                  placeholder="Pregunta algo..."
+                  className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-sans"
                   required
                 />
                 <button
                   type="submit"
                   disabled={querying}
-                  className="w-full py-1.5 bg-violet-500 hover:bg-violet-600 text-white rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:outline-none"
+                  className="w-full py-1.5 bg-primary text-primary-foreground rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   {querying ? 'Querying...' : 'Ask'}
                 </button>

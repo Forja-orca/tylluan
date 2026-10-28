@@ -518,62 +518,62 @@ export function OverviewTab({
       {liveMetrics && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[ 
-            { label: 'Total Calls', value: liveMetrics.totalCalls, icon: Wifi },
-            { label: 'Success Rate', value: `${(liveMetrics.successRate * 100).toFixed(0)}%`, icon: CheckCircle },
-            { label: 'Avg Latency', value: `${liveMetrics.avgLatency}ms`, icon: Activity },
-            { label: 'Active Agents', value: liveMetrics.activeAgents, icon: Cpu },
-            { label: 'Broadcasts/h', value: liveMetrics.broadcastsLastHour, icon: Wifi },
-            { label: 'Memory Nodes', value: liveMetrics.graphNodes, icon: Database },
+            { label: 'Llamadas Totales', value: liveMetrics.totalCalls, icon: Wifi },
+            { label: 'Tasa de Éxito', value: `${(liveMetrics.successRate * 100).toFixed(0)}%`, icon: CheckCircle },
+            { label: 'Latencia Media', value: `${liveMetrics.avgLatency}ms`, icon: Activity },
+            { label: 'Agentes Activos', value: liveMetrics.activeAgents, icon: Cpu },
+            { label: 'Difusiones/h', value: liveMetrics.broadcastsLastHour, icon: Wifi },
+            { label: 'Nodos en Memoria', value: liveMetrics.graphNodes, icon: Database },
           ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="bg-slate-900/40 rounded-xl p-3 text-center hover:bg-slate-900/60 transition-colors group">
-              <Icon className="w-3 h-3 text-slate-400 mx-auto mb-1 group-hover:text-amber-400 transition-colors" aria-hidden="true" />
-              <div className="text-lg font-bold font-mono text-slate-100">{value}</div>
-              <div className="text-[11px] font-medium text-slate-400 mt-0.5">{label}</div>
+            <div key={label} className="bg-card border border-border rounded-xl p-3 text-center hover:bg-muted/40 transition-colors group">
+              <Icon className="w-3 h-3 text-muted-foreground mx-auto mb-1 group-hover:text-primary transition-colors" aria-hidden="true" />
+              <div className="text-lg font-bold font-mono text-foreground">{value}</div>
+              <div className="text-[11px] font-medium text-muted-foreground mt-0.5">{label}</div>
             </div>
           ))}
         </div>
       )}
       {sysStatus && (
         <div className="mt-4 flex gap-3 flex-wrap">
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.silva_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
-            SilvaDB: {sysStatus.silva_healthy ? 'OK' : 'ERROR'}
+          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.silva_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
+            SilvaDB: {sysStatus.silva_healthy ? '● CORRECTO' : '■ ERROR'}
           </span>
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.mailbox_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
-            Mailbox: {sysStatus.mailbox_healthy ? 'OK' : 'ERROR'}
+          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.mailbox_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
+            Buzón: {sysStatus.mailbox_healthy ? '● CORRECTO' : '■ ERROR'}
           </span>
-          <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
-            Curriculum: {sysStatus.curriculum_entries ?? 0} entries
+          <span className="text-xs px-2 py-1 rounded-full bg-muted border border-border text-foreground">
+            Curriculum: {sysStatus.curriculum_entries ?? 0} entradas
           </span>
-          <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
-            Uptime: {Math.floor((sysStatus.uptime_secs ?? 0) / 60)}m
+          <span className="text-xs px-2 py-1 rounded-full bg-muted border border-border text-foreground">
+            Activo: {Math.floor((sysStatus.uptime_secs ?? 0) / 60)}m
           </span>
           <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
-            ? 'bg-blue-500/20 text-blue-300'
-            : 'bg-amber-500/20 text-amber-400'}`}>
-            Embeddings: {sysStatus.embeddings_loaded ? 'mxbai-embed-large' : 'FTS5 fallback'}
+            ? 'bg-primary/15 text-primary border border-primary/30'
+            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'}`}>
+            Embeddings: {sysStatus.embeddings_loaded ? 'mxbai-embed-large' : '▲ FTS5 fallback'}
           </span>
         </div>
       )}
-      <div className="flex items-center justify-between bg-slate-900/60 rounded-xl p-4 relative overflow-hidden group">
+      <div className="flex items-center justify-between bg-card border border-border rounded-xl p-4 relative overflow-hidden group">
         <div className="flex items-center gap-4 relative z-10">
           <div className="relative">
-            <div className="w-14 h-14 rounded-full border border-amber-500/20 flex items-center justify-center bg-amber-500/5">
-              <Activity className="w-7 h-7 text-amber-400 animate-pulse" aria-hidden="true" />
+            <div className="w-14 h-14 rounded-full border border-primary/30 flex items-center justify-center bg-primary/10">
+              <Activity className="w-7 h-7 text-primary" aria-hidden="true" />
             </div>
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-slate-950 rounded-full flex items-center justify-center">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" aria-hidden="true"></div>
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-card rounded-full flex items-center justify-center border border-border">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full" aria-hidden="true"></div>
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-slate-100">Sovereign Kernel Pulse</h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">O3 ENGINE · UPTIME: {Math.floor((goldenSignals?.uptime_seconds || 0) / 3600)}h {Math.floor(((goldenSignals?.uptime_seconds || 0) % 3600) / 60)}m</p>
+            <h3 className="text-xs font-semibold text-foreground">Pulso del Kernel Soberano</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">MOTOR O3 · TIEMPO ACTIVO: {Math.floor((goldenSignals?.uptime_seconds || 0) / 3600)}h {Math.floor(((goldenSignals?.uptime_seconds || 0) % 3600) / 60)}m</p>
           </div>
         </div>
         <div className="text-right relative z-10">
-          <div className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-slate-400")}>
-            {sloSummary?.status ? sloSummary.status.toUpperCase() : 'TELEMETRY IDLE'}
+          <div className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-muted-foreground")}>
+            {sloSummary?.status ? (sloSummary.status === 'healthy' ? '● SALUDABLE' : sloSummary.status === 'degraded' ? '▲ DEGRADADO' : '■ CRÍTICO') : '○ TELEMETRÍA EN ESPERA'}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Availability: {sloSummary?.current_availability !== undefined ? `${sloSummary.current_availability.toFixed(3)}%` : '—'}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">Disponibilidad: {sloSummary?.current_availability !== undefined ? `${sloSummary.current_availability.toFixed(3)}%` : '—'}</div>
         </div>
       </div>
 
