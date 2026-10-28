@@ -237,6 +237,9 @@ pub struct PointUpdatePayload {
     pub model: Option<String>,
     pub api_key_env: Option<String>,
     pub cloud_enabled: Option<bool>,
+    /// T-DSH-117: opt-in para persistir el cambio en tylluan.toml (atomico,
+    /// solo la seccion [inference.points.<point>]).
+    pub persist: Option<bool>,
 }
 
 /// Aplica el update sobre una copia y valida el resultado (pura, testeable).
@@ -317,12 +320,44 @@ pub async fn set_inference_point_handler(
                 "[T-DSH-116] punto de inferencia '{name}' actualizado por operador (clase operador): {}",
                 public
             );
+            // T-DSH-117: persistencia opt-in (--persist / ?persist=true).
+            let persist_requested = payload.persist == Some(true);
+            let mut persisted = serde_json::Value::Null;
+            if persist_requested {
+                let Some(path) = crate::config::TylluanConfig::find_config_file() else {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({
+                            "ok": false,
+                            "point": name,
+                            "error": "no hay tylluan.toml que persistir (usa --config o crea uno)",
+                            "state": cfg.inference.points.public_json(),
+                        })),
+                    )
+                        .into_response();
+                };
+                let point_now = point.clone();
+                if let Err(e) = crate::config::persist_inference_point(&path, &name, &point_now) {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "ok": false,
+                            "point": name,
+                            "error": format!("cambio aplicado en memoria pero NO persistido: {e}"),
+                            "state": cfg.inference.points.public_json(),
+                        })),
+                    )
+                        .into_response();
+                }
+                persisted = serde_json::json!({"path": path.display().to_string()});
+            }
             (
                 StatusCode::OK,
                 Json(serde_json::json!({
                     "ok": true,
                     "point": name,
                     "updated": public,
+                    "persisted": persisted,
                     "state": cfg.inference.points.public_json(),
                 })),
             )

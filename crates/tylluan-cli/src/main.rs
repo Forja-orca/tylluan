@@ -208,6 +208,9 @@ enum InferenceAction {
         api_key_env: Option<String>,
         #[arg(long = "cloud-enabled")]
         cloud_enabled: Option<bool>,
+        /// Persistir el cambio en tylluan.toml (atomico, solo esa seccion)
+        #[arg(long)]
+        persist: bool,
     },
 }
 
@@ -1761,6 +1764,7 @@ async fn run_inference(action: InferenceAction, port: u16, token: Option<String>
             model,
             api_key_env,
             cloud_enabled,
+            persist,
         } => {
             let mut body = serde_json::Map::new();
             if let Some(v) = provider { body.insert("provider".into(), v.into()); }
@@ -1768,6 +1772,7 @@ async fn run_inference(action: InferenceAction, port: u16, token: Option<String>
             if let Some(v) = model { body.insert("model".into(), v.into()); }
             if let Some(v) = api_key_env { body.insert("api_key_env".into(), v.into()); }
             if let Some(v) = cloud_enabled { body.insert("cloud_enabled".into(), v.into()); }
+            if persist { body.insert("persist".into(), true.into()); }
             if body.is_empty() {
                 anyhow::bail!("set-point sin cambios: pasa --provider/--endpoint/--model/--api-key-env/--cloud-enabled");
             }
