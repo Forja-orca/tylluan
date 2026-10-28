@@ -128,6 +128,26 @@ slo_target = 99.9
 # max_inflight = 1             # llama.cpp local suele ser single-slot
 
 # Local LLM inference via llama.cpp
+# T-DSH-116: REGISTRO DE PUNTOS DE INFERENCIA (por funcion). Cada punto elige
+# proveedor: local_ephemeral | user_llama_server | openai_compatible |
+# anthropic_compatible | ollama_compatible | systemone_http.
+# La nube SOLO se usa si el punto activa cloud_enabled = true; la clave va por
+# NOMBRE de variable de entorno (api_key_env), nunca en claro. Default: local
+# efimero para los cuatro puntos.
+# [inference.points.decision]
+# provider = "local_ephemeral"
+# endpoint = ""
+# model = ""
+# api_key_env = ""
+# cloud_enabled = false
+#
+# [inference.points.grammar_judge]
+# provider = "local_ephemeral"
+# [inference.points.sentinel]
+# provider = "local_ephemeral"
+# [inference.points.chat]
+# provider = "local_ephemeral"
+
 [inference.llama]
 # T-DSH-115: el llama-server es DEL USUARIO y esta APAGADO por defecto; no se
 # autoarranca. Arrancalo explicitamente (tylluan sentinel? no: llama start /

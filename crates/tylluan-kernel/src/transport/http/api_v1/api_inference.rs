@@ -216,6 +216,18 @@ pub async fn llama_stop_handler(State(state): State<Arc<HttpState>>) -> impl Int
     }
 }
 
+/// `GET /api/v1/inference/points` — T-DSH-116: registro de puntos de inferencia
+/// (lectura; NUNCA devuelve valores de claves, solo el nombre de la env var).
+pub async fn inference_points_handler(
+    State(_state): State<Arc<HttpState>>,
+) -> impl IntoResponse {
+    let json = match crate::config::TylluanConfig::load_cached() {
+        Ok(lock) => lock.read().await.inference.points.public_json(),
+        Err(e) => serde_json::json!({"valid": false, "errors": [format!("no pude cargar config: {e}")]}),
+    };
+    Json(json)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
