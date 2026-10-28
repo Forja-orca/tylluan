@@ -823,7 +823,7 @@ impl CoherenceGate {
         silva: &crate::memory::silva::SilvaDB,
         query_embedding: Option<&[f32]>,
     ) -> (Vec<(GraphNode, f32)>, GateStats) {
-        Self::filter_with_scope(results, silva, query_embedding, SEMANTIC_SCOPE_ALL).await
+        Self::filter_with_scope(results, silva, query_embedding, SEMANTIC_SCOPE_ALL, None).await
     }
 
     /// T-DSH-96: igual que `filter`, pero permite elegir el alcance de la
@@ -836,6 +836,7 @@ impl CoherenceGate {
         silva: &crate::memory::silva::SilvaDB,
         query_embedding: Option<&[f32]>,
         semantic_scope: &str,
+        query_model_id: Option<&str>,
     ) -> (Vec<(GraphNode, f32)>, GateStats) {
         let total = results.len();
         let median_score = {
@@ -859,7 +860,10 @@ impl CoherenceGate {
         let node_embeddings: std::collections::HashMap<String, Vec<f32>> =
             if query_embedding.is_some() && !results.is_empty() {
                 let ids: Vec<String> = results.iter().map(|(n, _)| n.id.clone()).collect();
-                silva.get_node_embeddings_batch(&ids).await
+                // H-40 B1: only same-model embeddings may be compared; a node
+                // whose stored vector comes from another model is treated as
+                // "no embedding" (no penalty), never cross-model noise.
+                silva.get_node_embeddings_batch(&ids, query_model_id).await
                     .unwrap_or_default()
             } else {
                 std::collections::HashMap::new()
@@ -1001,7 +1005,10 @@ impl CoherenceGate {
                 let survivor_embeddings: std::collections::HashMap<String, Vec<f32>> =
                     if query_embedding.is_some() {
                         let ids: Vec<String> = survivors_clone.iter().map(|(n, _)| n.id.clone()).collect();
-                        silva.get_node_embeddings_batch(&ids).await
+                        // H-40: model filter not threaded into Layer 4's own
+                        // embedding map (hybrid judge is opt-in, default off);
+                        // None = legacy compare-anything. Flagged in IMPL_H-40.
+                        silva.get_node_embeddings_batch(&ids, None).await
                             .unwrap_or_default()
                     } else {
                         std::collections::HashMap::new()
@@ -1228,6 +1235,98 @@ mod tests {
         assert!((with_emb - 0.09).abs() < 1e-5, "embedded node penalized, got {with_emb}");
         assert!((*without_emb - 0.9).abs() < 1e-5, "node without embedding must NOT be penalized, got {without_emb}");
         assert_eq!(stats.penalized, 1);
+    }
+
+    /// H-40 (2026-10-28): reproduccion determinista de la linea de produccion
+    /// "Coherence Gate: 0 eliminated, N penalized of N candidates" (medida en
+    /// kernel.log: 50/50 x640, 30/30 x753, 29/30 x90). Con el scope por defecto
+    /// ("all") y COHERENCE_THRESHOLD=0.85, pares query~recuerdo REALISTAS
+    /// (cosim 0.68-0.75, el rango normal en mxbai-embed-large) caen siempre
+    /// bajo el umbral y reciben x0.1. Con 33 candidatos y 30 de ellos
+    /// realistas: `30 penalized of 33` — el numero que el mapa MEM llamo
+    /// "recall filtra 30 de 33". Nota clave: NO es eliminacion (survivors=33);
+    /// es entierro por x0.1 que el reranker y los ordenes aguas abajo heredan.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn h40_default_scope_penalizes_realistic_recall_pairs() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let q_emb = [1.0f32, 0.0, 0.0];
+        // 3 candidatos alineados (cosim = 1.0 >= 0.85): sobreviven sin penalizar.
+        for i in 0..3 {
+            let id = format!("aligned-{i}");
+            db.upsert_node(&id, "concept", "contenido exactamente pedido", "{}")
+                .await
+                .unwrap();
+            db.save_embedding(&id, &[1.0, 0.0, 0.0], "test-model", None)
+                .await
+                .unwrap();
+        }
+        // 30 candidatos legitimos relacionados (cosim 0.75..0.68 < 0.85).
+        for i in 0..30 {
+            let id = format!("related-{i}");
+            db.upsert_node(&id, "concept", "contenido relacionado legitimo {i}", "{}")
+                .await
+                .unwrap();
+            let angle = 0.722f32 + (i as f32) * 0.005; // acos(0.75)..~acos(0.68)
+            let emb = [angle.cos(), angle.sin(), 0.0];
+            db.save_embedding(&id, &emb, "test-model", None).await.unwrap();
+        }
+        let mut results = Vec::new();
+        for i in 0..3 {
+            results.push((node(&format!("aligned-{i}"), "alineado", "agent_generated", 1.0), 0.95));
+        }
+        for i in 0..30 {
+            results.push((node(&format!("related-{i}"), "relacionado", "agent_generated", 1.0), 0.9));
+        }
+        let (survivors, stats) = CoherenceGate::filter(results, &db, Some(&q_emb)).await;
+        assert_eq!(stats.total, 33);
+        assert_eq!(stats.eliminated, 0, "el gate no elimina aqui; penaliza");
+        assert_eq!(stats.penalized, 30, "30 de 33 candidatos realistas, x0.1");
+        assert_eq!(stats.semantic_penalized, 30);
+        assert_eq!(survivors.len(), 33, "los penalizados siguen en la lista");
+        for (n, s) in survivors.iter().filter(|(n, _)| n.id.starts_with("related-")) {
+            assert!((s - 0.09).abs() < 1e-5, "{} queda enterrado a 0.09, got {s}", n.id);
+        }
+        for (n, s) in survivors.iter().filter(|(n, _)| n.id.starts_with("aligned-")) {
+            assert!((s - 0.95).abs() < 1e-5, "{} intacto, got {s}", n.id);
+        }
+    }
+
+    /// H-40 B1: el gate NO debe comparar el embedding de la query contra un
+    /// embedding guardado de OTRO modelo. El coseno cross-model es ruido, y
+    /// antes de H-40 alimentaba el x0.1 con el 32 % de filas de produccion
+    /// (bge-m3/distill-v1 frente a queries mxbai, medido en silva.db).
+    /// Vector ortogonal + `model_name` distinto => semantica "sin embedding"
+    /// (no penaliza). El wrapper `filter` sin modelo mantiene el comportamiento
+    /// legacy de comparar-lo-que-haya.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn h40_gate_never_compares_cross_model_embeddings() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("old-model-node", "concept", "contenido legacy", "{}")
+            .await
+            .unwrap();
+        // Ortogonal a la query: si se comparara, caería siempre penalizado.
+        db.save_embedding("old-model-node", &[0.0, 1.0, 0.0], "bge-m3-v2-onnx", None)
+            .await
+            .unwrap();
+        let results = vec![(node("old-model-node", "legacy", "agent_generated", 1.0), 0.9f32)];
+        let q_emb = [1.0f32, 0.0, 0.0];
+
+        // Con B1 (modelo de la query = mxbai): el vector legacy no entra en la
+        // comparacion y no hay penalizacion.
+        let (survivors, stats) = CoherenceGate::filter_with_scope(
+            results.clone(),
+            &db,
+            Some(&q_emb),
+            SEMANTIC_SCOPE_ALL,
+            Some("mxbai-embed-large-v2-onnx"),
+        )
+        .await;
+        assert_eq!(stats.penalized, 0, "vector cross-model no debe penalizar");
+        assert!((survivors[0].1 - 0.9).abs() < 1e-5, "score intacto, got {}", survivors[0].1);
+
+        // Wrapper legacy sin modelo: comportamiento historico intacto.
+        let (_legacy, legacy_stats) = CoherenceGate::filter(results, &db, Some(&q_emb)).await;
+        assert_eq!(legacy_stats.penalized, 1, "legacy filter sigue comparando todo");
     }
 
     /// (2026-10-03, flake de security::llm_examples) El juez hibrido Layer 4
@@ -2302,12 +2401,12 @@ mod judge_dedup_tests {
         let q_emb = [0.0f32, 1.0, 0.0]; // coseno 0 con ambos: los dos "drift"
 
         let (_, stats_all) = CoherenceGate::filter_with_scope(
-            build(), &db, Some(&q_emb), SEMANTIC_SCOPE_ALL,
+            build(), &db, Some(&q_emb), SEMANTIC_SCOPE_ALL, None,
         ).await;
         assert_eq!(stats_all.penalized, 2, "perfil all: penaliza a los dos (comportamiento historico)");
 
         let (survivors, stats_top) = CoherenceGate::filter_with_scope(
-            build(), &db, Some(&q_emb), SEMANTIC_SCOPE_CONFLICTING_TOP,
+            build(), &db, Some(&q_emb), SEMANTIC_SCOPE_CONFLICTING_TOP, None,
         ).await;
         assert_eq!(stats_top.penalized, 1, "perfil nuevo: solo el candidato fuerte se penaliza");
         assert_eq!(stats_top.eliminated, 0, "ninguna regla elimina aqui");
