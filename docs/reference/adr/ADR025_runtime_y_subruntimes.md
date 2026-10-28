@@ -1,0 +1,92 @@
+# ADR-025: Runtime de Tylluan y subruntimes — contrato único para los flujos de fondo
+
+- **Estado:** 📐 **PROPUESTO** — borrador del Tech Lead (Claude). **La aprobación es de José**; nada de lo que sigue se implementa hasta que la dé, fase por fase (§9).
+- **Fecha:** 2026-10-28
+- **Origen:** pregunta de José (2026-10-28): ¿debe Tylluan ser un runtime completo, con sus flujos organizados en runtime y subruntimes? Conecta con su motivo fundacional (`docs/architecture/tylluan_as_living_organism.md`): "todo Tylluan debe ser un pipeline, un mega workflow donde sus circuitos se conectan y crean flujos".
+- **Insumos (todos en el repo):** `crates/tylluan-kernel/src/main.rs`, `guard.rs`, `memory/background_budget.rs`, `registry/supervisor.rs`, `registry/lifecycle.rs`, `router/scheduler/mod.rs`, `docs/architecture/DESIGN_cognitive_scheduler.md`, ADR-013, ADR-014, ADR-024, `docs/reference/research/2026-10-28_H42_diseno_reembed_b3_onnx_cpu_hermes.md`, `..._H43_...`, `..._H45_...`.
+- **Ámbito:** cómo se declaran, se acotan, se detienen y se observan las tareas de fondo del kernel. **Fuera de ámbito:** el runtime de inferencia (ONNX frente a llama.cpp, ya decidido: no cambiar), el KV-cache (`unified_runtime_engine_addendum.md`) y el aislamiento de procesos de guilds (ADR-022/024).
+
+---
+
+## 1. Resumen
+
+Hoy Tylluan ya tiene piezas de runtime, pero cada una resuelve su caso y no hay un contrato común. Este ADR propone **formalizar lo que existe**, no reescribirlo: un contrato declarativo por tarea de fondo y seis subruntimes como fronteras de módulo. Se introduce por fases, cada una con un criterio medible y todas apagadas por defecto hasta su aprobación (ADR-013).
+
+## 2. Estado real verificado (árbol `1a24e82`)
+
+| Medida | Valor | Comando |
+|---|---|---|
+| `tokio::spawn` fuera de tests | 123 | `grep -rn "tokio::spawn" crates/tylluan-kernel/src --include=*.rs` filtrando tests |
+| Ficheros con `CancellationToken` | 3 (8 usos) | `grep -rln "CancellationToken" crates/tylluan-kernel/src` |
+| Sitios con `GuardedTask` | 6, todos en `main.rs` | `grep -rn "GuardedTask::new" crates/tylluan-kernel/src` |
+| Usuarios de `BackgroundBudget` | 9 | `grep -rn "BackgroundBudget" crates/tylluan-kernel/src` |
+| Tamaño de `main.rs` | 2.673 líneas | `wc -l crates/tylluan-kernel/src/main.rs` |
+| Cadencia del reindexer | 100 nodos cada 600 s, fijo en el código, sin clave de config | `main.rs`, línea 1919 y siguientes (H-42) |
+| Avisos del guard del reindexer | 363 en 4 días (ronda de 100 nodos supera 120 s) | `kernel.log`, medido por Hermes en H-45 |
+| Convergencia del reindexer | no converge: ~6.400 nodos pendientes, 4.493 nunca embebidos | H-42 y H-43 |
+| Parada del kernel (2026-10-28) | el log dijo "stopped" y el proceso siguió vivo más de 85 s | observación del TL; causa **no verificada** |
+
+Piezas que ya existen y este ADR reutiliza: `GuardedTask` (timeout adaptativo), `BackgroundBudget` (semáforo de CPU de fondo), `supervisor`/`lifecycle` (guilds), Cognitive Scheduler (hoy solo observa, ADR-014) y el registro de puntos de inferencia (T-DSH-116).
+
+## 3. Decisiones de José que este ADR respeta
+
+- Pulir antes que reconstruir; el trabajo en curso no se detiene (`tylluan_as_living_organism.md`).
+- Todo lo nuevo es opt-in y apagado por defecto, con declaración de impacto (ADR-013).
+- ONNX se queda como runtime de embeddings; llama.cpp opcional y apagado por defecto.
+- Toda capacidad nueva se expone en REST y en MCP.
+
+## 4. Decisiones propuestas (ninguna aprobada)
+
+### R1. Contrato declarativo de tarea de fondo
+Cada tarea declara: `id`, subruntime dueño, disparador (intervalo o evento) con clave de configuración, clase de presupuesto, timeout con extensiones, cancelación cooperativa al apagar y contadores de telemetría (ejecuciones, duración, avisos del guard, saltos por presupuesto).
+
+### R2. `TaskRegistry` mínimo
+Un registro en el kernel que arranca, supervisa y detiene las tareas declaradas, reutilizando `GuardedTask` y `BackgroundBudget`. No sustituye al supervisor de guilds. Migración tarea a tarea, empezando por el reindexer.
+
+### R3. Seis subruntimes como fronteras de módulo
+Memoria (decay, reindex, HNSW, consenso, ciclo nocturno), Inferencia (puntos, pool ONNX, servidores efímeros, batcher), Procesos y guilds (supervisor, ciclo de vida, contención), Decisión (servicio, adaptadores, gate clínico), Coordinación (Coloquio, dispatch, flota) y Red (federación, link). Son agrupaciones de módulos con un trait común, no procesos separados.
+
+### R4. Apagado ordenado con tiempo máximo medible
+Al apagar, el registro cancela todas las tareas y espera hasta un máximo configurable; lo que no responda se registra por nombre. Criterio: el proceso sale en menos de 10 s en un arranque normal.
+
+### R5. Observabilidad
+`GET /api/v1/runtime/tasks` (REST) y una herramienta MCP de solo lectura con el estado de cada tarea; vista en el dashboard después.
+
+## 5. Orden recomendado (propuesta, no decisión)
+
+| Fase | Contenido | Criterio de paso (comando y salida esperada) |
+|---|---|---|
+| 0 | Inventario de solo lectura de los 123 spawns | tabla completa; la suma de filas coincide con el `grep` del §2 |
+| 1 | `TaskRegistry` + reindexer migrado, con cadencia y tope configurables | avisos del guard del reindexer: 0 en 24 h; parada del proceso en menos de 10 s |
+| 2 | Endpoint y herramienta MCP de solo lectura; vista en el dashboard | el endpoint lista las 6 tareas de `GuardedTask` |
+| 3 | Resto de tareas y fronteras de subruntime, solo donde la evidencia lo pida | una tarea por PR, con su `## Impact` |
+
+## 6. Alternativas descartadas
+
+- **Reescribir `main.rs` de golpe:** riesgo alto, sin dato que lo exija.
+- **Adoptar un marco externo de actores:** añade dependencia y no resuelve el contrato propio; se revisaría solo si la fase 1 no basta.
+- **No hacer nada:** el reindexer seguiría sin converger y la parada sin tiempo acotado.
+
+## 7. Consecuencias
+
+- Positivas: cadencias y topes configurables sin recompilar, apagado acotado, un único sitio donde mirar qué corre.
+- Costes: migración gradual, disciplina de declarar cada tarea nueva, y mantener un registro más.
+- Riesgos: duplicar `GuardedTask` o `BackgroundBudget` en vez de reutilizarlos; convertirlo en framework antes de necesitarlo (YAGNI).
+
+## 8. Plan de implementación y DoD por fase (si se aprueba)
+
+Cada fase: diff sin commitear, `clippy -D warnings` en 0, tests propios, `## Impact` y apartado "No verificado". Ninguna fase activa nada por defecto.
+
+## 9. Qué debe decidir José (punto por punto)
+
+1. ¿Aprobar R1 y R2 (contrato y registro mínimo)? Recomendación: sí.
+2. ¿Aprobar la fase 1 con el reindexer como primera tarea migrada? Recomendación: sí.
+3. ¿Aprobar R3 solo como lenguaje y fronteras de módulo, sin procesos separados? Recomendación: sí.
+4. ¿Prioridad frente al resto (seguridad, release v0.17.2, dashboard)? Decide José.
+
+## 10. No verificado
+
+- Por qué el proceso tardó en salir tras el apagado.
+- El reparto exacto de los 123 spawns por subruntime (es la fase 0).
+- El coste de la fase 1 y si 10 s de parada es alcanzable sin tocar las guilds.
+- Que `max_threads = 8` (config de producción desde 2026-10-28) reduzca los avisos del guard.
