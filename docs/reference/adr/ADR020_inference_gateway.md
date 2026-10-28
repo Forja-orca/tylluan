@@ -572,3 +572,25 @@ Al construir sobre la base existente (`reqwest`, `InferenceBudget`, `ExternalPro
 - **Seguridad:** instructions se tratan como contenido NO confiable en la frontera del proveedor — saneado de caracteres de control y tope de 1024 bytes propio (defensa en profundidad frente al tope de wire), con fallback al defecto (nunca truncado). Sin ruta de escape del spec JSON: el texto viaja como valor serializado por `serde_json`.
 - **Verificación:** `cargo check -p tylluan-kernel --all-targets`, `cargo test` (lib decision 40 + `decide_systemone_http` 13 + `decide_adversarial` 4 + `decide_parity_e2e` 20, todos en verde), `cargo clippy -p tylluan-kernel --all-targets -- -D warnings` sin avisos.
 - **Fuera de alcance (orden del TL):** NO se re-miden redacciones de P2 (esperando Buffy v2); ninguna medición del duelo se toca.
+
+---
+
+## Enmienda 2026-10-28 — Puntos de inferencia configurables y nube por activación explícita
+
+> Autorizada por José el 2026-10-28 ("enmiéndalo, ya tienes mi permiso"). Redactada por el TL. No sustituye las decisiones 1.A.1 a 1.A.9: las concreta y fija lo que la implementación debe cumplir.
+
+**Contexto verificado.** La decisión 9 ya admite `/v1/decisions` (nube) junto a `/v1/systemone` (local), y el principio 1 de §1.B ya exige que toda salida a red externa sea opt-in del operador. La implementación va por detrás: el proveedor `systemone_http` solo acepta loopback (`is_loopback_endpoint`, `router/decision/systemone_http.rs`), el juez solo expone `[security] judge_model` y el guild `llama_backend` usa el primer proveedor de `[[external_providers]]` que responda, para todo, sin elegir por punto.
+
+**E-1. Todo punto de inferencia es configurable por punto.** Cada punto (decisión, juez de escritura, night reasoner, consulta de modelo, visión) tiene su propia entrada con `proveedor`, `modelo`, `timeout` y `fallback`. Quedan fuera, por razón técnica, los embeddings y el reranker, que siguen en ONNX local (1.A.6).
+
+**E-2. Dialectos.** Cada punto puede apuntar a un proveedor local o de nube hablando cualquiera de: OpenAI compatible (`/v1/chat/completions`), Anthropic compatible (`/v1/messages`), Ollama compatible, y los dialectos de decisión de la decisión 9. El tipo se declara en `[[external_providers]]`.
+
+**E-3. La nube es activación explícita POR PUNTO.** Ningún punto sale de la máquina por defecto ni por herencia de otro punto: el operador activa la nube punto a punto, con registro y notificación del cambio (refuerza 1.A.7 y 1.B.1). Cada usuario decide qué hacer con sus datos. El cambio de modo de un punto es una acción de clase operador (REST/CLI/dashboard); por MCP solo se lee.
+
+**E-4. Se mantiene lo ya decidido para datos clínicos.** `DataSensitivity::Clinical` hacia la nube sigue exigiendo aprobación humana explícita por petición (1.A.5). Esta enmienda NO la relaja; una política más permisiva de usuario sería otra enmienda de José.
+
+**E-5. Último recurso local.** Debajo de todo punto existe siempre el servidor efímero local (CPU, hilos acotados, prioridad baja, descarga por inactividad). Si el proveedor configurado falla o no hay red, el punto cae a él (o a las reglas deterministas) sin bloquear la operación; nunca sube a la nube de forma automática (1.A.7).
+
+**E-6. El llama-server completo es opcional.** El servidor persistente de usuario (guild `llama_backend`) queda apagado por defecto y no es camino de la inferencia interna: lo interno usa servidores efímeros propios (centinela, juez) o ONNX.
+
+**Implementación pendiente (no hecha a esta fecha):** registro de puntos y adaptadores OpenAI/Anthropic para cada punto (tarea T-DSH-116), apertura de `systemone_http` fuera de loopback bajo E-3, y pantalla en el dashboard nuevo. Mientras no se implemente, el comportamiento real sigue siendo el de la tabla del contexto verificado.
