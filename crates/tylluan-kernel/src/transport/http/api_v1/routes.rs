@@ -80,6 +80,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/security/sentinel/mode", post(api_security::set_sentinel_mode_handler))
         .route("/api/v1/inference/llama/status", get(api_inference::llama_status_handler))
         .route("/api/v1/inference/llama/models", get(api_inference::llama_models_handler))
+        .route("/api/v1/inference/points", get(api_inference::inference_points_handler))
         .route("/api/v1/inference/llama/start", post(api_inference::llama_start_handler))
         .route("/api/v1/inference/llama/stop", post(api_inference::llama_stop_handler))
         .route("/api/v1/security/friction/stats", get(api_security::friction_stats_handler))

@@ -254,6 +254,14 @@ pub async fn handle_tylluan_do(
         });
     }
 
+    // T-DSH-116: lectura del registro de puntos de inferencia (sin claves).
+    if let Some(result) = llama_cmd::handle_points_intent(&intent).await {
+        return Ok(CallToolResult {
+            content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())],
+            is_error: Some(false),
+        });
+    }
+
     // T-DSH-115: intents de LECTURA del llama-server del usuario (sin arrancar).
     if let Some(result) = llama_cmd::handle_llama_intent(server, &intent).await {
         let is_err = result.get("ok") == Some(&serde_json::json!(false));

@@ -868,6 +868,11 @@ pub struct InferenceConfig {
     /// or defaults to system parallelism.
     #[serde(default)]
     pub max_threads: Option<usize>,
+    /// T-DSH-116: REGISTRO DE PUNTOS DE INFERENCIA configurables por funcion.
+    /// Cada punto elige proveedor/endpoint/modelo/clave-por-env y la nube solo
+    /// se usa si el punto activa `cloud_enabled = true`.
+    #[serde(default)]
+    pub points: InferencePointsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -907,6 +912,137 @@ pub struct InferenceLlamaConfig {
     pub top_k: i32,
     #[serde(default = "default_repeat_penalty")]
     pub repeat_penalty: f32,
+}
+
+/// T-DSH-116: proveedores admitidos por un punto de inferencia.
+pub const INFERENCE_POINT_PROVIDERS: [&str; 6] = [
+    "local_ephemeral",
+    "user_llama_server",
+    "openai_compatible",
+    "anthropic_compatible",
+    "ollama_compatible",
+    "systemone_http",
+];
+
+/// Un punto de inferencia configurable (decision, juez de gramatica, centinela,
+/// chat/razonamiento). `None`/vacio = default local efimero.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct InferencePointConfig {
+    /// Uno de `INFERENCE_POINT_PROVIDERS`. Vacio = `local_ephemeral`.
+    pub provider: Option<String>,
+    /// URL del endpoint (obligatoria para proveedores cloud/HTTP).
+    pub endpoint: Option<String>,
+    /// Modelo solicitado (nombre o ruta segun proveedor).
+    pub model: Option<String>,
+    /// NOMBRE de la variable de entorno que contiene la clave. Nunca la clave.
+    pub api_key_env: Option<String>,
+    /// La nube SOLO se usa si este punto la activa explicitamente.
+    pub cloud_enabled: bool,
+}
+
+impl InferencePointConfig {
+    pub fn provider(&self) -> &str {
+        self.provider
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .unwrap_or("local_ephemeral")
+    }
+
+    pub fn is_cloud(&self) -> bool {
+        matches!(
+            self.provider(),
+            "openai_compatible" | "anthropic_compatible" | "ollama_compatible" | "systemone_http"
+        )
+    }
+
+    /// Validacion de un punto: proveedor conocido, endpoint/clave y nube opt-in.
+    pub fn validate(&self, name: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+        let provider = self.provider();
+        if !INFERENCE_POINT_PROVIDERS.contains(&provider) {
+            errors.push(format!(
+                "inference.points.{name}: proveedor desconocido '{provider}' (validos: {})",
+                INFERENCE_POINT_PROVIDERS.join(", ")
+            ));
+            return errors;
+        }
+        if self.is_cloud() {
+            if !self.cloud_enabled {
+                errors.push(format!(
+                    "inference.points.{name}: proveedor '{provider}' es de nube y cloud_enabled=false (la nube solo se usa si el punto la activa)"
+                ));
+            }
+            match self.endpoint.as_deref().map(str::trim) {
+                Some(e) if e.starts_with("http://") || e.starts_with("https://") => {}
+                _ => errors.push(format!(
+                    "inference.points.{name}: endpoint http(s) obligatorio para '{provider}'"
+                )),
+            }
+            if matches!(provider, "openai_compatible" | "anthropic_compatible" | "systemone_http")
+                && self.api_key_env.as_deref().map(str::trim).unwrap_or("").is_empty()
+            {
+                errors.push(format!(
+                    "inference.points.{name}: api_key_env obligatorio para '{provider}' (clave por variable de entorno, nunca en claro)"
+                ));
+            }
+        }
+        errors
+    }
+
+    /// Vista publica del punto: NUNCA incluye el valor de la clave, solo el
+    /// NOMBRE de la variable de entorno.
+    pub fn public_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "provider": self.provider(),
+            "locality": if self.is_cloud() { "cloud" } else { "local" },
+            "cloud_enabled": self.cloud_enabled,
+            "endpoint": self.endpoint,
+            "model": self.model,
+            "api_key_env": self.api_key_env,
+        })
+    }
+}
+
+/// Los cuatro puntos de inferencia del kernel (T-DSH-116).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct InferencePointsConfig {
+    pub decision: InferencePointConfig,
+    pub grammar_judge: InferencePointConfig,
+    pub sentinel: InferencePointConfig,
+    pub chat: InferencePointConfig,
+}
+
+impl InferencePointsConfig {
+    pub fn validate(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        for (name, point) in [
+            ("decision", &self.decision),
+            ("grammar_judge", &self.grammar_judge),
+            ("sentinel", &self.sentinel),
+            ("chat", &self.chat),
+        ] {
+            errors.extend(point.validate(name));
+        }
+        errors
+    }
+
+    pub fn public_json(&self) -> serde_json::Value {
+        let errors = self.validate();
+        serde_json::json!({
+            "points": {
+                "decision": self.decision.public_json(),
+                "grammar_judge": self.grammar_judge.public_json(),
+                "sentinel": self.sentinel.public_json(),
+                "chat": self.chat.public_json(),
+            },
+            "valid": errors.is_empty(),
+            "errors": errors,
+            "note": "lectura: las claves solo se referencian por variable de entorno; el cambio de punto es clase operador (REST/CLI)",
+        })
+    }
 }
 
 fn default_provider_name() -> String { "llama-server".to_string() }
@@ -974,6 +1110,7 @@ impl Default for InferenceConfig {
             llama: InferenceLlamaConfig::default(),
             budget: crate::memory::inference_budget::InferenceBudgetConfig::default(),
             max_threads: None,
+            points: InferencePointsConfig::default(),
         }
     }
 }
@@ -3266,5 +3403,75 @@ code = "permissive"
                 errors.len()
             );
         }
+    }
+}
+
+
+#[cfg(test)]
+mod inference_points_tests {
+    use super::*;
+
+    #[test]
+    fn default_points_are_local_and_valid() {
+        let points = InferencePointsConfig::default();
+        assert!(points.validate().is_empty(), "{:?}", points.validate());
+        let json = points.public_json();
+        assert_eq!(json["valid"], serde_json::json!(true));
+        for name in ["decision", "grammar_judge", "sentinel", "chat"] {
+            assert_eq!(json["points"][name]["provider"], "local_ephemeral");
+            assert_eq!(json["points"][name]["locality"], "local");
+            assert_eq!(json["points"][name]["cloud_enabled"], serde_json::json!(false));
+        }
+    }
+
+    #[test]
+    fn cloud_provider_without_opt_in_is_invalid() {
+        let mut points = InferencePointsConfig::default();
+        points.decision.provider = Some("openai_compatible".to_string());
+        points.decision.endpoint = Some("https://api.example.com/v1".to_string());
+        points.decision.api_key_env = Some("OPENAI_API_KEY".to_string());
+        let errors = points.validate();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].contains("cloud_enabled=false"), "{errors:?}");
+    }
+
+    #[test]
+    fn cloud_provider_with_opt_in_endpoint_and_env_is_valid() {
+        let mut points = InferencePointsConfig::default();
+        points.chat.provider = Some("anthropic_compatible".to_string());
+        points.chat.endpoint = Some("https://api.anthropic.com/v1".to_string());
+        points.chat.api_key_env = Some("ANTHROPIC_API_KEY".to_string());
+        points.chat.cloud_enabled = true;
+        assert!(points.validate().is_empty(), "{:?}", points.validate());
+        let json = points.public_json();
+        assert_eq!(json["points"]["chat"]["locality"], "cloud");
+        // La vista publica NUNCA contiene el valor de la clave, solo el nombre.
+        let rendered = serde_json::to_string(&json).unwrap();
+        assert!(rendered.contains("ANTHROPIC_API_KEY"));
+        assert!(!rendered.to_lowercase().contains("sk-"));
+    }
+
+    #[test]
+    fn unknown_provider_is_invalid() {
+        let mut points = InferencePointsConfig::default();
+        points.sentinel.provider = Some("magia".to_string());
+        let errors = points.validate();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].contains("proveedor desconocido"), "{errors:?}");
+    }
+
+    #[test]
+    fn points_parse_from_toml_section() {
+        let raw = r#"
+            [points.decision]
+            provider = "ollama_compatible"
+            endpoint = "http://127.0.0.1:11434"
+            model = "qwen2.5"
+            cloud_enabled = true
+        "#;
+        let cfg: InferenceConfig = toml::from_str(raw).expect("parse");
+        assert!(cfg.points.validate().is_empty(), "{:?}", cfg.points.validate());
+        assert_eq!(cfg.points.decision.provider(), "ollama_compatible");
+        assert_eq!(cfg.points.decision.model.as_deref(), Some("qwen2.5"));
     }
 }

@@ -62,6 +62,23 @@ pub async fn handle_llama_intent(
     }))
 }
 
+/// T-DSH-116: lectura del registro de puntos de inferencia por MCP (sin claves).
+pub async fn handle_points_intent(intent: &str) -> Option<serde_json::Value> {
+    let low = intent.trim().to_ascii_lowercase();
+    let rest = low
+        .strip_prefix("inference points")
+        .or_else(|| low.strip_prefix("puntos de inferencia"))
+        .or_else(|| low.strip_prefix("puntos inferencia"))?
+        .trim()
+        .to_string();
+    if !(rest.is_empty() || rest == "status" || rest == "estado") {
+        return None;
+    }
+    let lock = crate::config::TylluanConfig::load_cached().ok()?;
+    let cfg = lock.read().await;
+    Some(cfg.inference.points.public_json())
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -81,6 +98,19 @@ mod tests {
     fn llama_prefixes_recognized() {
         for i in ["llama status", "llama models", "estado llama", "modelos llama", "llama_backend status"] {
             assert!(prefix_recognized(i), "{i}");
+        }
+    }
+
+    #[test]
+    fn inference_points_prefixes_recognized() {
+        for i in ["inference points", "puntos de inferencia", "puntos inferencia status"] {
+            let low = i.to_ascii_lowercase();
+            assert!(
+                low.starts_with("inference points")
+                    || low.starts_with("puntos de inferencia")
+                    || low.starts_with("puntos inferencia"),
+                "{i}"
+            );
         }
     }
 
