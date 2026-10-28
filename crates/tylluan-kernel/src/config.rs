@@ -2737,6 +2737,127 @@ pub fn persist_federation_peers(config: &TylluanConfig, config_path: &std::path:
 }
 
 
+
+// ── T-DSH-117: persistencia atomica de un punto de inferencia en tylluan.toml ──
+
+fn toml_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Renderiza el fichero TOML completo con SOLO la seccion
+/// `[inference.points.<point>]` actualizada; el resto del texto (secciones,
+/// comentarios, orden) se conserva literalmente. Pura y testeable.
+pub fn render_inference_point_section(
+    raw: &str,
+    point_name: &str,
+    point: &InferencePointConfig,
+) -> String {
+    let header = format!("[inference.points.{point_name}]");
+    let mut desired: Vec<(&str, String)> = vec![
+        ("provider", format!("\"{}\"", toml_escape(point.provider()))),
+        (
+            "endpoint",
+            format!(
+                "\"{}\"",
+                toml_escape(point.endpoint.as_deref().unwrap_or(""))
+            ),
+        ),
+        (
+            "model",
+            format!("\"{}\"", toml_escape(point.model.as_deref().unwrap_or(""))),
+        ),
+        (
+            "api_key_env",
+            format!(
+                "\"{}\"",
+                toml_escape(point.api_key_env.as_deref().unwrap_or(""))
+            ),
+        ),
+        ("cloud_enabled", point.cloud_enabled.to_string()),
+    ];
+
+    let lines: Vec<&str> = raw.lines().collect();
+    let start = lines.iter().position(|l| l.trim() == header);
+    let mut out: Vec<String> = Vec::new();
+    match start {
+        None => {
+            // No existe la seccion: se anade al final, sin tocar el resto.
+            out.extend(lines.iter().map(|l| l.to_string()));
+            if out.last().map(|l| !l.trim().is_empty()).unwrap_or(false) {
+                out.push(String::new());
+            }
+            out.push(header);
+            out.extend(desired.iter().map(|(k, v)| format!("{k} = {v}")));
+        }
+        Some(start_idx) => {
+            let end = lines[start_idx + 1..]
+                .iter()
+                .position(|l| l.trim_start().starts_with('['))
+                .map(|off| start_idx + 1 + off)
+                .unwrap_or(lines.len());
+            out.extend(lines[..=start_idx].iter().map(|l| l.to_string()));
+            for line in &lines[start_idx + 1..end] {
+                let trimmed = line.trim_start();
+                let key = trimmed.split('=').next().map(str::trim).unwrap_or("");
+                if let Some(pos) = desired.iter().position(|(k, _)| *k == key) {
+                    let (k, v) = desired.remove(pos);
+                    out.push(format!("{k} = {v}"));
+                } else {
+                    out.push((*line).to_string());
+                }
+            }
+            for (k, v) in desired {
+                out.push(format!("{k} = {v}"));
+            }
+            out.extend(lines[end..].iter().map(|l| l.to_string()));
+        }
+    }
+    let mut rendered = out.join("\n");
+    rendered.push('\n');
+    rendered
+}
+
+/// Escritura atomica: temp en el mismo directorio + rename sobre el destino.
+pub fn atomic_write(path: &std::path::Path, contents: &str) -> Result<(), String> {
+    let dir = path.parent().filter(|p| !p.as_os_str().is_empty());
+    let tmp_name = format!(
+        ".{}.tmp.{}",
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("tylluan.toml"),
+        std::process::id()
+    );
+    let tmp = match dir {
+        Some(d) => d.join(tmp_name),
+        None => std::path::PathBuf::from(tmp_name),
+    };
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&tmp)
+            .map_err(|e| format!("no pude crear {}: {e}", tmp.display()))?;
+        f.write_all(contents.as_bytes())
+            .map_err(|e| format!("no pude escribir {}: {e}", tmp.display()))?;
+        f.sync_all()
+            .map_err(|e| format!("no pude sincronizar {}: {e}", tmp.display()))?;
+    }
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("no pude renombrar {} -> {}: {e}", tmp.display(), path.display())
+    })
+}
+
+/// Persiste UN punto en el `tylluan.toml` indicado (atomico, solo esa seccion).
+pub fn persist_inference_point(
+    config_path: &std::path::Path,
+    point_name: &str,
+    point: &InferencePointConfig,
+) -> Result<(), String> {
+    let raw = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("no pude leer {}: {e}", config_path.display()))?;
+    let rendered = render_inference_point_section(&raw, point_name, point);
+    atomic_write(config_path, &rendered)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3520,5 +3641,118 @@ mod inference_points_tests {
         assert!(cfg.points.validate().is_empty(), "{:?}", cfg.points.validate());
         assert_eq!(cfg.points.decision.provider(), "ollama_compatible");
         assert_eq!(cfg.points.decision.model.as_deref(), Some("qwen2.5"));
+    }
+}
+
+
+#[cfg(test)]
+mod inference_points_persist_tests {
+    use super::*;
+
+    fn point(provider: &str, endpoint: &str, key_env: &str) -> InferencePointConfig {
+        InferencePointConfig {
+            provider: Some(provider.to_string()),
+            endpoint: Some(endpoint.to_string()),
+            model: Some("m".to_string()),
+            api_key_env: Some(key_env.to_string()),
+            cloud_enabled: true,
+        }
+    }
+
+    const RAW: &str = r#"# comentario de cabecera
+[nexus]
+port = 47004
+
+# seccion ajena que NO se debe tocar
+[security.sentinel]
+enabled = false
+api_key = "sk-NO-TOCAR"
+
+[inference.points.chat]
+provider = "local_ephemeral"
+endpoint = ""
+model = ""
+api_key_env = ""
+cloud_enabled = false
+
+[night]
+interval_secs = 86400
+"#;
+
+    #[test]
+    fn render_updates_only_target_section() {
+        let p = point("openai_compatible", "https://api.example.com/v1", "OPENAI_API_KEY");
+        let out = render_inference_point_section(RAW, "chat", &p);
+        assert!(out.contains("[inference.points.chat]"));
+        assert!(out.contains("provider = \"openai_compatible\""), "{out}");
+        assert!(out.contains("endpoint = \"https://api.example.com/v1\""));
+        assert!(out.contains("api_key_env = \"OPENAI_API_KEY\""));
+        assert!(out.contains("cloud_enabled = true"));
+        // Resto intacto (incluido el comentario y el secreto ajeno sin tocar).
+        assert!(out.contains("# comentario de cabecera"));
+        assert!(out.contains("[security.sentinel]"));
+        assert!(out.contains("api_key = \"sk-NO-TOCAR\""));
+        assert!(out.contains("[night]"));
+        assert!(out.contains("interval_secs = 86400"));
+        // Solo aparece una vez la seccion del punto.
+        assert_eq!(out.matches("[inference.points.chat]").count(), 1);
+    }
+
+    #[test]
+    fn render_appends_missing_section_without_touching_rest() {
+        let raw = "[nexus]\nport = 47004\n";
+        let p = point("systemone_http", "http://127.0.0.1:8787", "");
+        let out = render_inference_point_section(raw, "decision", &p);
+        assert!(out.contains("[inference.points.decision]"));
+        assert!(out.contains("provider = \"systemone_http\""));
+        assert!(out.contains("[nexus]"));
+        assert!(out.contains("port = 47004"));
+        // El render debe seguir siendo TOML valido.
+        let _: toml::Value = toml::from_str(&out).expect("TOML valido");
+    }
+
+    #[test]
+    fn persist_writes_atomically_and_roundtrips() {
+        let dir = std::env::temp_dir().join(format!("t117_persist_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("tylluan.toml");
+        std::fs::write(&path, RAW).unwrap();
+
+        let p = point("ollama_compatible", "http://127.0.0.1:11434", "");
+        persist_inference_point(&path, "chat", &p).unwrap();
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        let parsed: toml::Value = toml::from_str(&written).expect("TOML valido tras persistir");
+        let chat = &parsed["inference"]["points"]["chat"];
+        assert_eq!(chat["provider"].as_str(), Some("ollama_compatible"));
+        assert_eq!(chat["cloud_enabled"].as_bool(), Some(true));
+        assert_eq!(
+            parsed["security"]["sentinel"]["api_key"].as_str(),
+            Some("sk-NO-TOCAR"),
+            "el resto del fichero no se toca"
+        );
+        // Sin ficheros temporales huerfanos.
+        let leftovers: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_never_writes_key_values_only_env_names() {
+        let p = point("openai_compatible", "https://api.example.com/v1", "MY_KEY_ENV");
+        let out = render_inference_point_section(RAW, "chat", &p);
+        let section = out
+            .split("[inference.points.chat]")
+            .nth(1)
+            .unwrap()
+            .split('[')
+            .next()
+            .unwrap();
+        assert!(section.contains("api_key_env = \"MY_KEY_ENV\""));
+        assert!(!section.contains("sk-"), "la seccion no debe contener valores de clave");
     }
 }
