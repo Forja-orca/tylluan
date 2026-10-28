@@ -165,6 +165,17 @@ enum Commands {
         /// Backup directory containing backup-manifest.json + .db files
         dir: PathBuf,
     },
+    /// Inference points registry (T-DSH-116): read or change a point (operator)
+    Inference {
+        #[command(subcommand)]
+        action: InferenceAction,
+        /// Port of the kernel instance (default 47004)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Bearer token for authenticated instances (or set TYLLUAN_TOKEN)
+        #[arg(long, short)]
+        token: Option<String>,
+    },
     /// Sentinel (write_gate L2 judge) control: status / mode
     Sentinel {
         #[command(subcommand)]
@@ -175,6 +186,28 @@ enum Commands {
         /// Bearer token for authenticated instances (or set TYLLUAN_TOKEN)
         #[arg(long, short)]
         token: Option<String>,
+    },
+}
+
+/// T-DSH-116: subcomandos del registro de puntos de inferencia.
+#[derive(Subcommand)]
+enum InferenceAction {
+    /// Show the configured inference points (read; never returns key values)
+    Points,
+    /// Change one point (operator class; REST only, never MCP)
+    SetPoint {
+        /// decision | grammar_judge | sentinel | chat
+        point: String,
+        #[arg(long)]
+        provider: Option<String>,
+        #[arg(long)]
+        endpoint: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long = "api-key-env")]
+        api_key_env: Option<String>,
+        #[arg(long = "cloud-enabled")]
+        cloud_enabled: Option<bool>,
     },
 }
 
@@ -494,6 +527,9 @@ async fn main() -> Result<()> {
                 println!("⚠️ Some checks failed — review items marked ❌ above.");
                 println!("   Run 'tylluan doctor' again after resolving issues.");
             }
+        }
+        Commands::Inference { action, port, token } => {
+            run_inference(action, port.unwrap_or(DEFAULT_PORT), token).await?;
         }
         Commands::Sentinel { action, port, token } => {
             run_sentinel(action, port.unwrap_or(DEFAULT_PORT), token).await?;
@@ -1696,6 +1732,62 @@ mod installer_flag_tests {
             "server must not override the SilvaConfig reranker default"
         );
     }
+}
+
+/// T-DSH-116: `tylluan inference points|set-point`.
+async fn run_inference(action: InferenceAction, port: u16, token: Option<String>) -> Result<()> {
+    let base = format!("http://127.0.0.1:{port}");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let token = resolve_cli_token(token);
+    match action {
+        InferenceAction::Points => {
+            let req = with_optional_bearer(
+                client.get(format!("{base}/api/v1/inference/points")),
+                &token,
+            );
+            let resp = req.send().await.context("no pude contactar el kernel")?;
+            if !resp.status().is_success() {
+                anyhow::bail!("kernel respondió {} (¿token?)", resp.status());
+            }
+            let json: serde_json::Value = resp.json().await?;
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        InferenceAction::SetPoint {
+            point,
+            provider,
+            endpoint,
+            model,
+            api_key_env,
+            cloud_enabled,
+        } => {
+            let mut body = serde_json::Map::new();
+            if let Some(v) = provider { body.insert("provider".into(), v.into()); }
+            if let Some(v) = endpoint { body.insert("endpoint".into(), v.into()); }
+            if let Some(v) = model { body.insert("model".into(), v.into()); }
+            if let Some(v) = api_key_env { body.insert("api_key_env".into(), v.into()); }
+            if let Some(v) = cloud_enabled { body.insert("cloud_enabled".into(), v.into()); }
+            if body.is_empty() {
+                anyhow::bail!("set-point sin cambios: pasa --provider/--endpoint/--model/--api-key-env/--cloud-enabled");
+            }
+            let req = with_optional_bearer(
+                client
+                    .post(format!("{base}/api/v1/inference/points/{point}"))
+                    .json(&serde_json::Value::Object(body)),
+                &token,
+            );
+            let resp = req.send().await.context("no pude contactar el kernel")?;
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_default();
+                anyhow::bail!("kernel respondió {status}: {text}");
+            }
+            let json: serde_json::Value = resp.json().await?;
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+    }
+    Ok(())
 }
 
 /// T-DSH-114: `tylluan sentinel status|mode <off|observe|enforce>`.

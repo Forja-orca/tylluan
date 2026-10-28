@@ -49,6 +49,35 @@ pub fn is_configured() -> bool {
 /// Dictamina el contenido con el juez efimero. Devuelve el veredicto en
 /// mayusculas (`SAFE`/`SUSPICIOUS`) o un error (fail-open en el llamante).
 pub async fn judge_grammar(content: &str) -> Result<String, String> {
+    // T-DSH-116 paso 2: si el punto `grammar_judge` apunta a un proveedor
+    // configurado (user llama-server / OpenAI / Anthropic / Ollama), se usa
+    // ese; si falla o es local_ephemeral, se cae al servidor efimero local
+    // (ADR-020 E-5: ultimo recurso local, nunca subida automatica a la nube).
+    let point_provider = match crate::config::TylluanConfig::load_cached() {
+        Ok(lock) => {
+            let cfg = lock.read().await;
+            cfg.inference.points.grammar_judge.provider().to_string()
+        }
+        Err(_) => "local_ephemeral".to_string(),
+    };
+    if point_provider != "local_ephemeral" {
+        let prompt = format!(
+            "{WRITE_GATE_PROMPT_PREFIX}{}",
+            content.chars().take(2000).collect::<String>()
+        );
+        match crate::router::inference_points_runtime::complete_for_point(
+            "grammar_judge",
+            &prompt,
+            16,
+        )
+        .await
+        {
+            Ok(raw) => return Ok(raw.trim().to_uppercase()),
+            Err(e) => tracing::debug!(
+                "grammar_judge: punto '{point_provider}' no disponible ({e}); fallback local efimero"
+            ),
+        }
+    }
     let judge = judge();
     let prompt = format!(
         "{WRITE_GATE_PROMPT_PREFIX}{}",

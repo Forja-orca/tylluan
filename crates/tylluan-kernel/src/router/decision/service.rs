@@ -150,6 +150,67 @@ fn resolve_model_slot(config: &Arc<RwLock<TylluanConfig>>) -> Option<ModelSlot> 
             return None;
         }
     };
+    // T-DSH-116 paso 2: el punto `decision` del registro manda cuando el
+    // operador lo configura (no-local). systemone_http se traduce al proveedor
+    // tipado existente (loopback local o nube con cloud_enabled, ADR-020 E-3);
+    // el resto de dialectos de decision aun no tiene adaptador -> reglas.
+    let point = &cfg.inference.points.decision;
+    if point.provider() != "local_ephemeral" {
+        if point.provider() != "systemone_http" {
+            tracing::warn!(
+                "decision: [inference.points.decision] provider='{}' no implementado en el dialecto de decision (solo systemone_http) — rules baseline",
+                point.provider()
+            );
+            return None;
+        }
+        let Some(endpoint) = point.endpoint.clone() else {
+            tracing::warn!(
+                "decision: [inference.points.decision] systemone_http sin endpoint — rules baseline"
+            );
+            return None;
+        };
+        let sc = crate::config::SystemoneHttpConfig {
+            endpoint,
+            model: point
+                .model
+                .clone()
+                .filter(|m| !m.trim().is_empty())
+                .unwrap_or_else(|| "systemone".to_string()),
+            request_timeout_ms: 5_000,
+            shadow_timeout_ms: 30_000,
+            max_inflight: 1,
+            breaker_failures: 3,
+            breaker_cooldown_s: 60,
+            state_max_chars: 0,
+            cloud_enabled: point.cloud_enabled,
+        };
+        return match SystemOneHttpProvider::from_config(&sc) {
+            Ok(p) => {
+                let identity = format!("{}:{}", p.provider_id(), sc.model);
+                tracing::info!(
+                    "decision: [inference.points.decision] systemone_http ready ({identity}); locality={}",
+                    if crate::router::inference_points_runtime::effective_is_cloud(point) {
+                        "cloud"
+                    } else {
+                        "local"
+                    }
+                );
+                Some(ModelSlot {
+                    provider: Arc::new(p),
+                    identity,
+                    request_timeout: Duration::from_millis(sc.request_timeout_ms),
+                    shadow_timeout: Duration::from_millis(sc.shadow_timeout_ms),
+                })
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "decision: [inference.points.decision] systemone_http rechazado ({e}) — rules baseline"
+                );
+                None
+            }
+        };
+    }
+
     match &cfg.decision.provider {
         DecisionProviderConfig::Name(name) => {
             if name != "rules" {
@@ -1049,5 +1110,47 @@ mod tests {
         let resp = svc.decide(contract_req(0.1), "rest").await;
         assert_eq!(resp.answers["route"].value.as_deref(), Some("local_fast"));
         assert!(svc.read_shadow_log(5).await.is_empty());
+    }
+}
+
+
+#[cfg(test)]
+mod t116_points_resolution_tests {
+    use super::*;
+
+    fn cfg_with_points(endpoint: &str, cloud_enabled: bool) -> Arc<RwLock<TylluanConfig>> {
+        let mut cfg = TylluanConfig::default();
+        cfg.inference.points.decision.provider = Some("systemone_http".to_string());
+        cfg.inference.points.decision.endpoint = Some(endpoint.to_string());
+        cfg.inference.points.decision.model = Some("modelo-decision".to_string());
+        cfg.inference.points.decision.cloud_enabled = cloud_enabled;
+        Arc::new(RwLock::new(cfg))
+    }
+
+    #[test]
+    fn points_decision_systemone_loopback_builds_provider() {
+        let cfg = cfg_with_points("http://127.0.0.1:8787", false);
+        let slot = resolve_model_slot(&cfg).expect("proveedor systemone desde el punto");
+        assert!(slot.identity.contains("modelo-decision"), "{}", slot.identity);
+    }
+
+    #[test]
+    fn points_decision_remote_without_cloud_opt_in_falls_back_to_rules() {
+        let cfg = cfg_with_points("https://systemone.example.com/v1", false);
+        assert!(resolve_model_slot(&cfg).is_none());
+    }
+
+    #[test]
+    fn points_decision_remote_with_cloud_opt_in_builds_provider() {
+        let cfg = cfg_with_points("https://systemone.example.com/v1", true);
+        assert!(resolve_model_slot(&cfg).is_some());
+    }
+
+    #[test]
+    fn default_points_keep_existing_decision_config_behaviour() {
+        // Sin tocar [inference.points], el punto es local_ephemeral y manda
+        // [decision.provider] (rules por defecto => sin proveedor de modelo).
+        let cfg = Arc::new(RwLock::new(TylluanConfig::default()));
+        assert!(resolve_model_slot(&cfg).is_none());
     }
 }

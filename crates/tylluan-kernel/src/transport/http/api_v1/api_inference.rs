@@ -228,9 +228,162 @@ pub async fn inference_points_handler(
     Json(json)
 }
 
+/// T-DSH-116 paso 3: actualizacion parcial de un punto (clase operador).
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+#[serde(default)]
+pub struct PointUpdatePayload {
+    pub provider: Option<String>,
+    pub endpoint: Option<String>,
+    pub model: Option<String>,
+    pub api_key_env: Option<String>,
+    pub cloud_enabled: Option<bool>,
+}
+
+/// Aplica el update sobre una copia y valida el resultado (pura, testeable).
+pub fn apply_point_update(
+    current: &crate::config::InferencePointConfig,
+    name: &str,
+    payload: &PointUpdatePayload,
+) -> Result<crate::config::InferencePointConfig, Vec<String>> {
+    let mut point = current.clone();
+    if let Some(provider) = &payload.provider {
+        point.provider = Some(provider.trim().to_ascii_lowercase());
+    }
+    if let Some(endpoint) = &payload.endpoint {
+        point.endpoint = if endpoint.trim().is_empty() {
+            None
+        } else {
+            Some(endpoint.trim().to_string())
+        };
+    }
+    if let Some(model) = &payload.model {
+        point.model = if model.trim().is_empty() {
+            None
+        } else {
+            Some(model.trim().to_string())
+        };
+    }
+    if let Some(api_key_env) = &payload.api_key_env {
+        point.api_key_env = if api_key_env.trim().is_empty() {
+            None
+        } else {
+            Some(api_key_env.trim().to_string())
+        };
+    }
+    if let Some(cloud_enabled) = payload.cloud_enabled {
+        point.cloud_enabled = cloud_enabled;
+    }
+    let errors = point.validate(name);
+    if errors.is_empty() {
+        Ok(point)
+    } else {
+        Err(errors)
+    }
+}
+
+fn point_slot_mut<'a>(
+    cfg: &'a mut crate::config::TylluanConfig,
+    name: &str,
+) -> Option<&'a mut crate::config::InferencePointConfig> {
+    let points = &mut cfg.inference.points;
+    match name {
+        "decision" => Some(&mut points.decision),
+        "grammar_judge" => Some(&mut points.grammar_judge),
+        "sentinel" => Some(&mut points.sentinel),
+        "chat" => Some(&mut points.chat),
+        _ => None,
+    }
+}
+
+/// `POST /api/v1/inference/points/{point}` — clase operador (REST/CLI, no MCP).
+pub async fn set_inference_point_handler(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    Json(payload): Json<PointUpdatePayload>,
+) -> impl IntoResponse {
+    let mut cfg = state.config.write().await;
+    let Some(point) = point_slot_mut(&mut cfg, &name) else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"ok": false, "error": format!("punto desconocido: {name}")})),
+        )
+            .into_response();
+    };
+    match apply_point_update(point, &name, &payload) {
+        Ok(updated) => {
+            let public = updated.public_json();
+            *point = updated;
+            tracing::warn!(
+                "[T-DSH-116] punto de inferencia '{name}' actualizado por operador (clase operador): {}",
+                public
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok": true,
+                    "point": name,
+                    "updated": public,
+                    "state": cfg.inference.points.public_json(),
+                })),
+            )
+                .into_response()
+        }
+        Err(errors) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "point": name,
+                "errors": errors,
+                "state": cfg.inference.points.public_json(),
+            })),
+        )
+            .into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn point_update_rejects_cloud_without_opt_in() {
+        let current = crate::config::InferencePointConfig::default();
+        let payload = PointUpdatePayload {
+            provider: Some("openai_compatible".into()),
+            endpoint: Some("https://api.example.com/v1".into()),
+            ..Default::default()
+        };
+        let errors = apply_point_update(&current, "chat", &payload).unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("cloud_enabled=false")), "{errors:?}");
+    }
+
+    #[test]
+    fn point_update_accepts_loopback_systemone_without_opt_in() {
+        let current = crate::config::InferencePointConfig::default();
+        let payload = PointUpdatePayload {
+            provider: Some("systemone_http".into()),
+            endpoint: Some("http://127.0.0.1:8787/v1".into()),
+            ..Default::default()
+        };
+        let updated = apply_point_update(&current, "decision", &payload).unwrap();
+        assert_eq!(updated.provider(), "systemone_http");
+        assert!(!updated.is_cloud());
+    }
+
+    #[test]
+    fn point_update_is_partial_and_keeps_other_fields() {
+        let current = crate::config::InferencePointConfig {
+            model: Some("modelo-viejo".into()),
+            ..Default::default()
+        };
+        let payload = PointUpdatePayload {
+            cloud_enabled: Some(true),
+            ..Default::default()
+        };
+        let updated = apply_point_update(&current, "chat", &payload).unwrap();
+        assert_eq!(updated.model.as_deref(), Some("modelo-viejo"));
+        assert!(updated.cloud_enabled);
+    }
 
     #[test]
     fn available_models_uses_models_dir_first() {
