@@ -5,7 +5,7 @@
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://127.0.0.1:47004",
-    "beforeBuildCommand": "cd ..\\..\\..\\dashboard && npm run build",
+    "beforeBuildCommand": "cd ..\\..\\..\\dashboard && pnpm build",
     "frontendDist": "../../../dashboard/dist"
   },
   "app": {

@@ -18,6 +18,9 @@ export default defineConfig({
     outDir: "../dashboard/dist",
     emptyOutDir: true,
     modulePreload: false,
+    minify: 'esbuild',
+    target: 'es2020',
+    cssMinify: true,
     rollupOptions: {
       output: {
         manualChunks(id) {

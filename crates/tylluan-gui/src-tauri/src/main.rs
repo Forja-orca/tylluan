@@ -11,6 +11,19 @@ use tauri_plugin_shell::process::CommandChild;
 use tracing::{info, warn, error};
 use serde::Serialize;
 
+/// Reads the kernel port from `TYLLUAN_PORT` or defaults to 47004.
+fn get_kernel_port() -> u16 {
+    std::env::var("TYLLUAN_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(47004)
+}
+
+/// Helper to get the canonical base URL of the local kernel.
+fn get_kernel_base_url() -> String {
+    format!("http://127.0.0.1:{}", get_kernel_port())
+}
+
 /// AppState manages the state of the sidecar process.
 struct AppState {
     /// Holds the child process if we spawned it ourselves.
@@ -47,7 +60,8 @@ async fn check_model_files() -> Result<serde_json::Value, String> {
 #[tauri::command]
 async fn list_guilds() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
-    let res = client.get("http://127.0.0.1:3030/api/v1/guilds")
+    let url = format!("{}/api/v1/guilds", get_kernel_base_url());
+    let res = client.get(&url)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -100,11 +114,14 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<AppState>();
                 let client = reqwest::Client::new();
+                let port = get_kernel_port();
+                let base_url = get_kernel_base_url();
+                let health_url = format!("{}/health", base_url);
                 
-                info!("🔍 Checking if TylluanNexus kernel is already running on port 3030...");
+                info!("Checking if Tylluan kernel is already running on port {}...", port);
                 let mut already_running = false;
                 for _ in 0..6 { // Poll 6 times (every 500ms) = 3s total
-                    if let Ok(res) = client.get("http://127.0.0.1:3030/health").send().await {
+                    if let Ok(res) = client.get(&health_url).send().await {
                         if res.status().is_success() {
                             already_running = true;
                             break;
@@ -114,24 +131,24 @@ fn main() {
                 }
 
                 if already_running {
-                    info!("🔌 Attached to already running TylluanNexus kernel on 127.0.0.1:3030.");
+                    info!("Attached to already running Tylluan kernel on {}.", base_url);
                     *state.attached.lock().await = true;
                 } else {
-                    info!("🚀 No active kernel found. Spawning sidecar tylluan-nexus...");
+                    info!("No active kernel found. Spawning sidecar tylluan-nexus...");
                     match handle.shell().sidecar("tylluan-nexus") {
                         Ok(sidecar) => {
                             match sidecar.spawn() {
                                 Ok((_rx, child)) => {
-                                    info!("✅ Sidecar spawned successfully.");
+                                    info!("Sidecar spawned successfully.");
                                     *state.sidecar_child.lock().await = Some(child);
                                 }
                                 Err(e) => {
-                                    error!("❌ Failed to spawn tylluan-nexus sidecar: {:?}", e);
+                                    error!("Failed to spawn tylluan-nexus sidecar: {:?}", e);
                                 }
                             }
                         }
                         Err(e) => {
-                            error!("❌ Sidecar 'tylluan-nexus' configuration error: {:?}", e);
+                            error!("Sidecar 'tylluan-nexus' configuration error: {:?}", e);
                         }
                     }
                 }
@@ -140,23 +157,23 @@ fn main() {
                 let main_window = handle.get_webview_window("main");
                 let mut operational = false;
                 for i in 0..60 { // 60 * 500ms = 30s
-                    if let Ok(res) = client.get("http://127.0.0.1:3030/health").send().await {
+                    if let Ok(res) = client.get(&health_url).send().await {
                         if res.status().is_success() {
                             operational = true;
                             break;
                         }
                     }
                     if let Some(ref win) = main_window {
-                        let _ = win.set_title(&format!("TylluanNexus - Starting... ({}s)", i / 2));
+                        let _ = win.set_title(&format!("Tylluan - Starting... ({}s)", i / 2));
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 }
 
                 if let Some(ref win) = main_window {
                     if operational {
-                        let _ = win.set_title("TylluanNexus - Operational");
+                        let _ = win.set_title("Tylluan - Operational");
                     } else {
-                        let _ = win.set_title("TylluanNexus - Startup Error");
+                        let _ = win.set_title("Tylluan - Startup Error");
                     }
                 }
             });
@@ -174,18 +191,21 @@ fn main() {
                     let is_attached = *state.attached.lock().await;
 
                     if is_attached {
-                        info!("🔌 Attached kernel left running. Closing window...");
+                        info!("Attached kernel left running. Closing window...");
                     } else {
-                        info!("🛑 Spawner mode: Initiating graceful shutdown of sidecar...");
+                        info!("Spawner mode: Initiating graceful shutdown of sidecar...");
                         let client = reqwest::Client::new();
+                        let base_url = get_kernel_base_url();
+                        let shutdown_url = format!("{}/api/v1/admin/shutdown", base_url);
+                        let health_url = format!("{}/health", base_url);
                         
                         // Send shutdown command
-                        let _ = client.post("http://127.0.0.1:3030/api/v1/admin/shutdown").send().await;
+                        let _ = client.post(&shutdown_url).send().await;
                         
                         // Poll health endpoint for up to 10s waiting for exit
                         let mut exited = false;
                         for _ in 0..20 { // 20 * 500ms = 10s
-                            match client.get("http://127.0.0.1:3030/health").send().await {
+                            match client.get(&health_url).send().await {
                                 Err(_) => {
                                     exited = true;
                                     break;
@@ -196,13 +216,13 @@ fn main() {
                         }
 
                         if exited {
-                            info!("✅ Sidecar exited gracefully.");
+                            info!("Sidecar exited gracefully.");
                         } else {
-                            warn!("⚠️ Sidecar did not exit gracefully within 10s. Force terminating...");
+                            warn!("Sidecar did not exit gracefully within 10s. Force terminating...");
                             let mut lock = state.sidecar_child.lock().await;
                             if let Some(child) = lock.take() {
                                 if let Err(e) = child.kill() {
-                                    error!("❌ Failed to kill sidecar process: {:?}", e);
+                                    error!("Failed to kill sidecar process: {:?}", e);
                                 }
                             }
                         }
