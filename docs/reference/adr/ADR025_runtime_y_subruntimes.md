@@ -24,7 +24,7 @@ Hoy Tylluan ya tiene piezas de runtime, pero cada una resuelve su caso y no hay 
 | Cadencia del reindexer | 100 nodos cada 600 s, fijo en el código, sin clave de config | `main.rs`, línea 1919 y siguientes (H-42) |
 | Avisos del guard del reindexer | 363 en 4 días (ronda de 100 nodos supera 120 s) | `kernel.log`, medido por Hermes en H-45 |
 | Convergencia del reindexer | no converge: ~6.400 nodos pendientes, 4.493 nunca embebidos | H-42 y H-43 |
-| Parada del kernel (2026-10-28) | el log dijo "stopped" y el proceso siguió vivo más de 85 s | observación del TL. Hipótesis **no verificada**: `main` termina con `Ok(())` (el `process::exit(1)` solo ocurre si falló el HTTP, `main.rs`, línea 2239) y al soltarse el runtime de tokio este espera a los hilos de `spawn_blocking` (lotes ONNX del reindexer) |
+| Parada del kernel (2026-10-28) | tras el log "stopped" el proceso sigue vivo 10-33 s (8 corridas en reposo, media 14,1 s; T-DSH-123 en un kernel de prueba) y hasta 2 min en producción (dos observaciones del TL). La orden de parada tarda 0,01 s; el retardo es el desmontaje final del runtime. La hipótesis "espera a los lotes ONNX del reindexer" quedó **refutada** (con reindex en vuelo, 10-33 s, sin proporción) | `docs/reference/research/2026-10-28_T-DSH-123_apagado_kernel_47091.md`; causa concreta **no verificada** (¿sesión ONNX, hilos del pool bloqueante?) |
 | Bucles de `main.rs` sin token de apagado | 27 de 28 | Fase 0 (Hermes) |
 
 Piezas que ya existen y este ADR reutiliza: `GuardedTask` (timeout adaptativo), `BackgroundBudget` (semáforo de CPU de fondo), `supervisor`/`lifecycle` (guilds), Cognitive Scheduler (hoy solo observa, ADR-014) y el registro de puntos de inferencia (T-DSH-116).
@@ -87,7 +87,7 @@ Cada fase: diff sin commitear, `clippy -D warnings` en 0, tests propios, `## Imp
 
 ## 10. No verificado
 
-- Por qué el proceso tardó en salir tras el apagado (hipótesis del §2: el runtime espera a `spawn_blocking`; se comprobaría con `shutdown_timeout`).
+- La causa exacta del retardo de 10-33 s al salir (T-DSH-123 descartó el reindexer; falta un volcado de hilos durante la espera). El criterio de la fase 1 pasa de 10 s a 5 s solo si T-DSH-125 lo demuestra.
 - La clasificación fina por subruntime (la Fase 0 la hizo por lectura estática, sin instrumentar el kernel vivo).
 - El coste de la fase 1 y si 10 s de parada es alcanzable sin tocar las guilds.
 - Que `max_threads = 8` (config de producción desde 2026-10-28) reduzca los avisos del guard.
