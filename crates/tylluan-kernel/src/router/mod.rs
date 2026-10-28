@@ -16,3 +16,4 @@ pub mod scheduler;
 pub mod system_snapshot;
 
 pub mod decision;
+pub mod inference_points_runtime;

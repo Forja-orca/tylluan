@@ -950,11 +950,30 @@ impl InferencePointConfig {
             .unwrap_or("local_ephemeral")
     }
 
+    /// Host loopback (ADR-020: `systemone_http` es local mientras el endpoint
+    /// sea loopback; solo pasa a nube si el endpoint no lo es).
+    pub fn endpoint_is_loopback(&self) -> bool {
+        let Some(endpoint) = self.endpoint.as_deref().map(str::trim) else {
+            return false;
+        };
+        let rest = endpoint
+            .strip_prefix("http://")
+            .or_else(|| endpoint.strip_prefix("https://"))
+            .unwrap_or(endpoint);
+        let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+        let host = host.split('@').next_back().unwrap_or(host);
+        let host = host.split(':').next().unwrap_or("");
+        matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]") || host.starts_with("127.")
+    }
+
     pub fn is_cloud(&self) -> bool {
-        matches!(
-            self.provider(),
-            "openai_compatible" | "anthropic_compatible" | "ollama_compatible" | "systemone_http"
-        )
+        match self.provider() {
+            "openai_compatible" | "anthropic_compatible" | "ollama_compatible" => true,
+            // E-2/E-3: SystemOne local (loopback) NO es nube; solo si el
+            // endpoint no es loopback.
+            "systemone_http" => !self.endpoint_is_loopback(),
+            _ => false,
+        }
     }
 
     /// Validacion de un punto: proveedor conocido, endpoint/clave y nube opt-in.
@@ -980,7 +999,7 @@ impl InferencePointConfig {
                     "inference.points.{name}: endpoint http(s) obligatorio para '{provider}'"
                 )),
             }
-            if matches!(provider, "openai_compatible" | "anthropic_compatible" | "systemone_http")
+            if matches!(provider, "openai_compatible" | "anthropic_compatible")
                 && self.api_key_env.as_deref().map(str::trim).unwrap_or("").is_empty()
             {
                 errors.push(format!(
@@ -2436,6 +2455,10 @@ pub struct SystemoneHttpConfig {
     /// límite real del modelo (T1241, hallazgo en vivo con Decima).
     #[serde(default)]
     pub state_max_chars: usize,
+    /// T-DSH-116 / ADR-020 E-3: `systemone_http` fuera de loopback es nube y
+    /// exige activación explícita por punto. Default false (fail-closed).
+    #[serde(default)]
+    pub cloud_enabled: bool,
 }
 
 fn default_decision_request_timeout_ms() -> u64 {
@@ -3449,6 +3472,30 @@ mod inference_points_tests {
         let rendered = serde_json::to_string(&json).unwrap();
         assert!(rendered.contains("ANTHROPIC_API_KEY"));
         assert!(!rendered.to_lowercase().contains("sk-"));
+    }
+
+    #[test]
+    fn systemone_loopback_is_local_and_needs_no_cloud_opt_in() {
+        let mut points = InferencePointsConfig::default();
+        points.sentinel.provider = Some("systemone_http".to_string());
+        points.sentinel.endpoint = Some("http://127.0.0.1:8787/v1".to_string());
+        assert!(points.validate().is_empty(), "{:?}", points.validate());
+        let json = points.public_json();
+        assert_eq!(json["points"]["sentinel"]["locality"], "local");
+    }
+
+    #[test]
+    fn systemone_non_loopback_requires_cloud_opt_in() {
+        let mut points = InferencePointsConfig::default();
+        points.decision.provider = Some("systemone_http".to_string());
+        points.decision.endpoint = Some("https://systemone.example.com/v1".to_string());
+        let errors = points.validate();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].contains("cloud_enabled=false"), "{errors:?}");
+        assert_eq!(points.public_json()["points"]["decision"]["locality"], "cloud");
+
+        points.decision.cloud_enabled = true;
+        assert!(points.validate().is_empty(), "{:?}", points.validate());
     }
 
     #[test]

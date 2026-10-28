@@ -266,6 +266,7 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
         || path.starts_with("/api/v1/security/sentinel")
         || path == "/api/v1/inference/llama/start"
         || path == "/api/v1/inference/llama/stop"
+        || (m == "POST" && path.starts_with("/api/v1/inference/points/"))
         || path.starts_with("/api/v1/autoresearch/")
         || path.starts_with("/api/v1/a2a/agents")
         || path.starts_with("/api/v1/dispatches/")

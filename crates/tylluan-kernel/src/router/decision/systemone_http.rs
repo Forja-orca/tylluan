@@ -79,10 +79,11 @@ impl SystemOneHttpProvider {
     /// Construye el cliente desde `[decision.provider]` (`kind = "systemone_http"`).
     /// `Err` con motivo claro para que el servicio caiga a reglas (fail-closed).
     pub fn from_config(cfg: &SystemoneHttpConfig) -> Result<Self, String> {
-        if !is_loopback_endpoint(&cfg.endpoint) {
+        // T-DSH-116 / ADR-020 E-3: fuera de loopback es nube y exige activacion
+        // explicita por punto (`cloud_enabled`), nunca por herencia.
+        if !is_loopback_endpoint(&cfg.endpoint) && !cfg.cloud_enabled {
             return Err(format!(
-                "endpoint '{}' is not loopback — phase 2 only allows 127.0.0.1/localhost/::1 \
-                 (clinical data never leaves the machine)",
+                "endpoint '{}' is not loopback and cloud_enabled=false (ADR-020 E-3: la nube es activacion explicita por punto)",
                 cfg.endpoint
             ));
         }
@@ -635,5 +636,41 @@ mod tests {
         assert!(!is_loopback_endpoint("http://169.254.169.254"));
         assert!(!is_loopback_endpoint("not a url"));
         assert!(!is_loopback_endpoint(""));
+    }
+}
+
+
+#[cfg(test)]
+mod t116_cloud_opt_in_tests {
+    use super::*;
+
+    fn cfg(endpoint: &str, cloud_enabled: bool) -> SystemoneHttpConfig {
+        SystemoneHttpConfig {
+            endpoint: endpoint.to_string(),
+            model: "m".to_string(),
+            request_timeout_ms: 5_000,
+            shadow_timeout_ms: 30_000,
+            max_inflight: 1,
+            breaker_failures: 3,
+            breaker_cooldown_s: 60,
+            state_max_chars: 0,
+            cloud_enabled,
+        }
+    }
+
+    #[test]
+    fn non_loopback_requires_cloud_opt_in() {
+        let remote = "https://systemone.example.com/v1";
+        let err = match SystemOneHttpProvider::from_config(&cfg(remote, false)) {
+            Ok(_) => panic!("debio rechazar el endpoint remoto sin opt-in"),
+            Err(e) => e,
+        };
+        assert!(err.contains("cloud_enabled=false"), "{err}");
+        assert!(SystemOneHttpProvider::from_config(&cfg(remote, true)).is_ok());
+    }
+
+    #[test]
+    fn loopback_needs_no_cloud_opt_in() {
+        assert!(SystemOneHttpProvider::from_config(&cfg("http://127.0.0.1:8787", false)).is_ok());
     }
 }
