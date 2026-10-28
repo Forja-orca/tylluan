@@ -85,6 +85,11 @@ def _read_config():
 
     return {
         "port": llama_cfg.get("port", 9000),
+        # T-DSH-115: modelo del USUARIO (ruta explicita o carpeta router).
+        "model_path": llama_cfg.get("model_path") or "",
+        "models_dir": llama_cfg.get("models_dir") or "",
+        "models_max": int(llama_cfg.get("models_max", 4)),
+        "llama_server_path": llama_cfg.get("llama_server_path") or "",
         "n_gpu_layers": llama_cfg.get("n_gpu_layers", 0),
         "ctx_size": llama_cfg.get("ctx_size", 2048),
         "n_keep": llama_cfg.get("n_keep", 0),  # tokens del prompt inicial conservados al desplazar contexto
@@ -394,6 +399,9 @@ _start_lock = asyncio.Lock()
 def _find_llama_server():
     """Find llama-server binary. Returns path or None."""
     import shutil
+    configured = _get_config().get("llama_server_path") or ""
+    if configured and Path(configured).is_file():
+        return configured
     for name in ["llama-server", "llama-server.exe"]:
         found = shutil.which(name)
         if found:
@@ -526,7 +534,18 @@ def _install_llama_server():
 
 
 def _resolve_model_path():
-    """Download GGUF model from HuggingFace hub if not cached. Returns path."""
+    """Ruta del GGUF. T-DSH-115: si el usuario configuro `model_path`, se usa
+    TAL CUAL (nunca se descarga nada); si no, se mantiene el legacy con cache."""
+    configured = _get_config().get("model_path") or ""
+    if configured:
+        p = Path(configured).expanduser()
+        if not p.is_file():
+            raise RuntimeError(
+                f"[llama_backend] [inference.llama] model_path no existe: {p}. "
+                "El servidor es del usuario: no se descarga nada automaticamente."
+            )
+        sys.stderr.write(f"[llama_backend] Using configured model_path: {p}\n")
+        return str(p)
     from huggingface_hub import hf_hub_download
     sys.stderr.write(f"[llama_backend] Resolving model: {DEFAULT_MODEL} :: {DEFAULT_MODEL_FILE}\n")
     path = hf_hub_download(
@@ -610,7 +629,9 @@ async def _start_llama_server_locked():
         # for minutes, timing out every other call including health checks.
         server_path = await asyncio.to_thread(_install_llama_server)
 
-    model_path = await asyncio.to_thread(_resolve_model_path)
+    cfg = _get_config()
+    models_dir = cfg.get("models_dir") or ""
+    model_path = "" if models_dir else await asyncio.to_thread(_resolve_model_path)
 
     if not _is_port_open(LLAMA_PORT):
         # Something is already bound to our configured port. It might be a
@@ -635,14 +656,13 @@ async def _start_llama_server_locked():
         globals()["LLAMA_PORT"] = new_port
 
     threads = _resolve_threads(_get_config()["threads"])
-    cmd = [
-        server_path,
-        "--model", model_path,
-        "--host", "127.0.0.1",
-        "--port", str(LLAMA_PORT),
-        "--n-gpu-layers", str(_get_config()["n_gpu_layers"]),
-        "--ctx-size", str(_get_config()["ctx_size"]),
-    ]
+    cmd = [server_path, "--host", "127.0.0.1", "--port", str(LLAMA_PORT)]
+    if models_dir:
+        # Modo router: llama-server b10158 soporta --models-dir/--models-max.
+        cmd.extend(["--models-dir", str(Path(models_dir).expanduser()), "--models-max", str(cfg.get("models_max", 4))])
+    else:
+        cmd.extend(["--model", model_path])
+    cmd.extend(["--n-gpu-layers", str(cfg["n_gpu_layers"]), "--ctx-size", str(cfg["ctx_size"])])
     # --n-keep: llama.cpp keeps the first N prompt tokens cached across context
     # shifts (multi-turn / long generations). Default 0 keeps nothing; a positive
     # value preserves a stable prefix (e.g. system prompt) so it isn't recomputed.
@@ -833,8 +853,14 @@ async def query_model(
     # can probe several candidate backends over HTTP.
     is_external = backend_url != f"http://127.0.0.1:{LLAMA_PORT}/v1"
 
-    if not is_external:
-        await _start_llama_server()
+    if not is_external and not (_model_loaded and _llama_process is not None and _llama_process.poll() is None):
+        # T-DSH-115: el servidor es del usuario. Ningun codigo interno lo arranca;
+        # solo `start_server` (orden explicita) lo hace.
+        raise RuntimeError(
+            "llama_backend no esta arrancado. Arrancalo explicitamente "
+            "(tylluan_do 'llama start', POST /api/v1/inference/llama/start o "
+            "el boton del dashboard). El servidor es del usuario y no se autoarranca."
+        )
 
     t = temperature if temperature is not None else _get_config()["temperature"]
 
@@ -923,6 +949,37 @@ async def list_models() -> str:
             "path": str(gguf),
         })
     return json.dumps({"models": sorted(models, key=lambda m: m["size_mb"])})
+
+
+@mcp.tool()
+async def start_server() -> str:
+    """Arranca el llama-server DEL USUARIO (orden explicita). Sin autoarranque."""
+    await _start_llama_server()
+    return await server_status()
+
+
+@mcp.tool()
+async def stop_server() -> str:
+    """Para el llama-server del usuario (si esta corriendo)."""
+    await _stop_llama_server()
+    return await server_status()
+
+
+@mcp.tool()
+async def server_status() -> str:
+    """Estado del llama-server del usuario (sin arrancarlo)."""
+    cfg = _get_config()
+    running = bool(_model_loaded and _llama_process is not None and _llama_process.poll() is None)
+    return json.dumps({
+        "running": running,
+        "pid": _llama_process.pid if running and _llama_process else None,
+        "port": LLAMA_PORT,
+        "mode": "router" if cfg.get("models_dir") else "single",
+        "model_path": cfg.get("model_path") or "",
+        "models_dir": cfg.get("models_dir") or "",
+        "models_max": cfg.get("models_max", 4),
+        "threads": _resolve_threads(cfg.get("threads", 0)),
+    })
 
 
 if __name__ == "__main__":

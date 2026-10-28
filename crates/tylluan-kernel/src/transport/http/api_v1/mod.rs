@@ -27,6 +27,7 @@ pub mod api_silva;
 pub mod api_collective;
 pub mod api_audit;
 pub mod api_security;
+pub mod api_inference;
 pub mod api_eval;
 pub mod api_ops;
 pub mod api_canvas;

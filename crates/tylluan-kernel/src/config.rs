@@ -874,6 +874,17 @@ pub struct InferenceConfig {
 pub struct InferenceLlamaConfig {
     #[serde(default = "default_provider_name")]
     pub provider: String,
+    /// T-DSH-115: ruta explicita a un GGUF del USUARIO (nunca se descarga).
+    /// Si esta vacia se usa `models_dir` (modo router) o el modelo legacy.
+    #[serde(default)]
+    pub model_path: Option<std::path::PathBuf>,
+    /// T-DSH-115: carpeta de modelos para el modo router de llama-server
+    /// (`--models-dir`); los modelos se eligen por peticion.
+    #[serde(default)]
+    pub models_dir: Option<std::path::PathBuf>,
+    /// T-DSH-115: maximo de modelos cargados en modo router (`--models-max`).
+    #[serde(default = "default_models_max")]
+    pub models_max: usize,
     #[serde(default = "default_endpoint_url")]
     pub endpoint: String,
     #[serde(default = "default_llama_port")]
@@ -899,6 +910,7 @@ pub struct InferenceLlamaConfig {
 }
 
 fn default_provider_name() -> String { "llama-server".to_string() }
+fn default_models_max() -> usize { 4 }
 fn default_endpoint_url() -> String { "http://127.0.0.1:9000".to_string() }
 fn default_llama_port() -> u16 { 9000 }
 fn default_ctx_size() -> usize { 4096 }
@@ -915,6 +927,9 @@ impl Default for InferenceLlamaConfig {
     fn default() -> Self {
         Self {
             provider: default_provider_name(),
+            model_path: None,
+            models_dir: None,
+            models_max: default_models_max(),
             endpoint: default_endpoint_url(),
             port: default_llama_port(),
             ctx_size: default_ctx_size(),
@@ -1480,6 +1495,12 @@ pub struct SecurityConfig {
     /// la capa 2 conserva su juez actual. Ver `security::sentinel`.
     #[serde(default)]
     pub sentinel: SentinelConfig,
+    /// T-DSH-115: juez de gramatica de write_gate en servidor EFIMERO propio
+    /// (patron del centinela: CPU, hilos<=4, prioridad baja, descarga por
+    /// inactividad). NO depende del llama-server del usuario. Apagado por
+    /// defecto: sin `enabled`/`model_path` la capa 2 se omite (fail-open).
+    #[serde(default)]
+    pub write_gate_judge: SentinelConfig,
 }
 
 /// T-DSH-109: configuración del centinela local de write_gate L2.
@@ -1552,6 +1573,7 @@ impl Default for SecurityConfig {
             judge_dedup_window_secs: default_judge_dedup_window_secs(),
             judge_dedup_max_entries: default_judge_dedup_max_entries(),
             sentinel: SentinelConfig::default(),
+            write_gate_judge: SentinelConfig::default(),
         }
     }
 }
