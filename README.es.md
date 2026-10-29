@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/assets/hero/2026-10-29_guardianes.jpg" alt="Ilustración: una gran lechuza azul con un anillo luminoso de nodos conectados extiende las alas sobre una sala de piedra mientras un grupo de pequeños personajes con armadura y capa, animales, una langosta y un robot, espera listo" width="760">
+</p>
+
+<p align="center">
   <img src="assets/branding/logo.jpg" alt="Tylluan" width="140">
 </p>
 
@@ -174,7 +178,7 @@ Dos o más instancias de Tylluan pueden sincronizar memorias con pares que aprue
 ## Estado
 
 - **Última release:** v0.17.2 (2026-10-27). El trabajo posterior vive en `main`; consulta [CHANGELOG.md](CHANGELOG.md).
-- **Tests:** 1512 tests entre el kernel de Rust (lib), `tylluan-link` y `tylluan-fsrs`, que CI ejecuta en cada push junto con clippy, `cargo-deny`, el lint de Python y la suite de auditoría de seguridad.
+- **Tests:** 1516 tests entre el kernel de Rust (lib), `tylluan-link` y `tylluan-fsrs`, que CI ejecuta en cada push junto con clippy, `cargo-deny`, el lint de Python y la suite de auditoría de seguridad.
 - **Qué está planificado y qué no:** [ROADMAP.md](ROADMAP.md). Estado actual de cada afirmación: [STATUS.md](STATUS.md).
 - **Plataformas:** Linux x86_64 y ARM64, macOS Apple Silicon, Windows x86_64. CI ejecuta los tests en Linux x86_64 y el workflow de release construye los cuatro binarios. La medición de arranque de arriba se tomó en Windows x86_64. Las versiones de macOS y ARM64 no las han ejecutado los mantenedores en hardware (sin verificar).
 
