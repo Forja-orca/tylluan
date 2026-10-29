@@ -460,10 +460,26 @@ fn enforce_security_guard(config: &TylluanConfig, cli_token: &Option<String>) {
 // Re-exported from tylluan_kernel::router::embeddings for local callers and probe tests
 use tylluan_kernel::router::embeddings::onnx_runtime_ort_compatible;
 
+/// T-DSH-132: registra un `tokio::spawn` de arranque en la lista de tareas de
+/// fondo para el apagado ordenado (ADR-025 R4). No cambia la logica de la tarea.
+macro_rules! bg_spawn {
+    ($tasks:expr, $name:expr, $sub:expr, $policy:expr, $fut:expr) => {
+        $tasks.push(tylluan_kernel::runtime::shutdown::BackgroundTask::new(
+            $name,
+            $sub,
+            $policy,
+            tokio::spawn($fut),
+        ))
+    };
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load .env file if present
     dotenvy::dotenv().ok();
+
+    // T-DSH-132: handles de tareas de fondo para el apagado ordenado.
+    let mut background_tasks: Vec<tylluan_kernel::runtime::shutdown::BackgroundTask> = Vec::new();
 
     let cancel_token = tokio_util::sync::CancellationToken::new();
     
@@ -672,7 +688,7 @@ async fn main() -> anyhow::Result<()> {
             stun_timeout_secs: config.nat.stun_timeout_secs,
             stun_retries: config.nat.stun_retries,
         };
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "nat-discovery", "Red", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             match tylluan_link::nat::discover_external_addr(&nat_config).await {
                 Ok(addr) => info!("🌐 NAT external IP: {}:{} (via {})", addr.ip, addr.port, addr.stun_server),
                 Err(e) => info!("🌐 NAT external address not available (fallback to LAN): {e}"),
@@ -963,7 +979,7 @@ async fn main() -> anyhow::Result<()> {
     let matcher_hub_clone = matcher.clone();
 
     info!("🚀 Hub: Spawning Mailbox Listener thread...");
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "mailbox-listener", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         info!("🚀 Hub: Listener thread started - event-driven mode (Sovereign Efficiency)");
         loop {
             match mailbox_hub.check_mail("hub", true, 5).await {
@@ -1244,13 +1260,13 @@ async fn main() -> anyhow::Result<()> {
     // uses direct .read().await/.write().await for legacy paths).
     let registry_arc = Arc::new(RwLock::new(registry_raw));
     let (registry_actor, registry) = RegistryActor::new(registry_arc.clone());
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "registry-actor", "Procesos y guilds", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         registry_actor.run().await;
     });
 
     // Periodic guild metrics persistence (every 60 seconds)
     let metrics_reg = registry_arc.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "metrics-interval", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
         loop {
             interval.tick().await;
@@ -1271,7 +1287,7 @@ async fn main() -> anyhow::Result<()> {
     let doctor_bg = doctor.clone();
     let doc_token = CancellationToken::new();
     let doc_token_inner = doc_token.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "doc-token-guard", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Wait, async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             tokio::select! {
@@ -1299,7 +1315,7 @@ async fn main() -> anyhow::Result<()> {
     // IVF warm-up: build centroids if >50 embeddings and table empty (non-blocking)
     {
         let silva_ivf = silva.clone();
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "ivf-consolidate-once", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             match silva_ivf.consolidate_ivf_index().await {
                 Ok(r) if !r.skipped => info!("🔬 IVF warm-up: {} centroids in {}ms", r.n_centroids, r.elapsed_ms),
                 Ok(_) => {},
@@ -1311,7 +1327,7 @@ async fn main() -> anyhow::Result<()> {
     // IVF staleness watcher: rebuild every 6h if graph has grown >10% since last build
     {
         let silva_ivf = silva.clone();
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks, "ivf-interval", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             let mut interval = tokio::time::interval(Duration::from_secs(6 * 3600));
             interval.tick().await;
             loop {
@@ -1443,7 +1459,7 @@ async fn main() -> anyhow::Result<()> {
     // any failure (no network / rate-limit / missing marker). Never
     // auto-updates — pin changes are a human decision.
     {
-        tokio::spawn(tylluan_kernel::version_check::run_version_check(coloquio_for_version_check));
+        bg_spawn!(background_tasks,  "version-check", "Red", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, tylluan_kernel::version_check::run_version_check(coloquio_for_version_check));
     }
 
     // ─── Core Guild Spawning (after HTTP) ────────────────────────────
@@ -1453,7 +1469,7 @@ async fn main() -> anyhow::Result<()> {
     let health_guilds = health_ready.clone();
     let expose_guild_tools_warning = config.nexus.expose_guild_tools;
     let warning_server = server_arc.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks,  "always-on-guilds", "Procesos y guilds", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         for name in always_on_names {
             info!("🚀 [Startup] Spawning always-on guild: {}", name);
             if let Err(e) = core_reg.write().await.ensure_guild_running(&name).await {
@@ -1477,7 +1493,7 @@ async fn main() -> anyhow::Result<()> {
     let warm_names: Vec<String> = config.guilds.core.warm_pool.clone();
     if !warm_names.is_empty() {
         let warm_reg = registry_arc.clone();
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "warm-pool", "Procesos y guilds", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             for name in warm_names {
                 info!("🔥 [WarmPool] Pre-warming guild: {}", name);
                 if let Err(e) = warm_reg.write().await.ensure_guild_running(&name).await {
@@ -1495,7 +1511,7 @@ async fn main() -> anyhow::Result<()> {
         let bg_device = config.inference.device.clone();
         let bg_model_inner = bg_model.clone();
         let hot_swap_target = bg_matcher.clone();
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "model-download", "Inferencia", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             info!("📥 [Background] Downloading embedding model '{}'...", bg_model);
             let result = tokio::task::spawn_blocking(move || {
                 hot_swap_target.hot_swap_engine(&bg_model_inner, &bg_device)
@@ -1525,7 +1541,7 @@ async fn main() -> anyhow::Result<()> {
     // Try to spawn external MCP servers (non-blocking)
     let ext_mcps = config.external_mcp.clone();
     let ext_reg = registry_arc.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks,  "external-mcps", "Procesos y guilds", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         for ext in ext_mcps {
             if !ext.active {
                 info!("⏭️ [Startup] External MCP '{}' skipped (active=false)", ext.name);
@@ -1598,7 +1614,7 @@ async fn main() -> anyhow::Result<()> {
         {
             let config = Arc::new(RwLock::new(config.clone()));
             let silva = silva.clone();
-            tokio::spawn(async move {
+            bg_spawn!(background_tasks, "coloquio-loop", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
                 loop {
                     tokio::time::sleep(Duration::from_secs(300)).await;
                     let cfg = config.read().await;
@@ -1619,7 +1635,7 @@ async fn main() -> anyhow::Result<()> {
         let jobs_clone = jobs.clone();
         let silva_clone = silva.clone();
         let matcher_clone = matcher.clone();
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks, "blackboard-loop", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 if let Ok(Some(job)) = jobs_clone.claim_next("episodic_index") {
@@ -1704,7 +1720,7 @@ async fn main() -> anyhow::Result<()> {
         let embedding_model = config.memory.embedding_model.clone();
         let warm_start_enabled = config.silva.embed_warm_start;
         let budget_warm = background_budget.clone();
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "seed-corpus", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             // ── Phase 1: upsert seed corpus (no engine needed) ────────
             let seed_path = workspace_for_seed.join("data").join("routing_anchors_seed.jsonl");
             if seed_path.exists() {
@@ -1795,7 +1811,7 @@ async fn main() -> anyhow::Result<()> {
     {
         let silva_re = Arc::clone(&silva);
         let matcher_re = Arc::clone(&matcher);
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "retro-link-5s", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             tokio::time::sleep(Duration::from_secs(5)).await;
             match crate::transport::server::handler_do::re_embed_legacy_nodes(&silva_re, &matcher_re).await {
                 Ok(n) => info!("📀 M22 re-embed: {} episode/lesson nodes distilled", n),
@@ -1807,7 +1823,7 @@ async fn main() -> anyhow::Result<()> {
     // ─── M24/A1-bis: one-shot collapse of legacy duplicate summaries ──
     {
         let silva_cl = Arc::clone(&silva);
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "retro-link-20s", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             tokio::time::sleep(Duration::from_secs(20)).await;
             let rag = tylluan_kernel::memory::graph_rag::GraphRagManager::new(silva_cl);
             match rag.collapse_legacy_summaries().await {
@@ -1819,7 +1835,7 @@ async fn main() -> anyhow::Result<()> {
 
     // ─── Hormone Tick (exponential decay every 5s) ──────────────────
     let hormone_server = server_arc.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "hormones", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
         static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         loop {
@@ -1853,7 +1869,7 @@ async fn main() -> anyhow::Result<()> {
     // Biological decay scheduler (respects config)
     let silva_decay = silva.clone();
     let decay_enabled = config.silva.decay_enabled;
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "memory-decay", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         if !decay_enabled {
             info!("🌲 SilvaDB: Biological decay is DISABLED by config.");
             return;
@@ -1873,7 +1889,7 @@ async fn main() -> anyhow::Result<()> {
     // Coloquio→SilvaDB flywheel: background ingestion of coloquio turns into long-term memory
     let coloquio_fly = coloquio_for_fly.clone();
     let silva_fly = silva.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "flywheel", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut fly_interval = tokio::time::interval(Duration::from_secs(60));
         let mut watermarks: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
         loop {
@@ -1915,7 +1931,7 @@ async fn main() -> anyhow::Result<()> {
     let silva_reindex = silva.clone();
     let matcher_reindex = matcher.clone();
     let budget_reindex = background_budget.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "reindexer", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         // tokio::time::interval fires its FIRST tick immediately by default --
         // this reindexer would then compete for the shared embedding model
         // (Mutex-protected ONNX session) with real recall traffic right at
@@ -2012,7 +2028,7 @@ async fn main() -> anyhow::Result<()> {
     // HNSW index rebuild scheduler (runs every 10 minutes, only if >= threshold)
     let silva_hnsw = silva.clone();
     let budget_hnsw = background_budget.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "hnsw-rebuild", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut hnsw_interval = tokio::time::interval(Duration::from_secs(600));
         loop {
             hnsw_interval.tick().await;
@@ -2041,7 +2057,7 @@ async fn main() -> anyhow::Result<()> {
     let hybrid_db_path = config.memory.db_path.clone();
     let matcher_migrate = matcher.clone();
     let budget_migrate = background_budget.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "embedding-migrate", "Inferencia", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut migrate_interval = tokio::time::interval_at(
             tokio::time::Instant::now() + Duration::from_secs(600),
             Duration::from_secs(600),
@@ -2097,7 +2113,7 @@ async fn main() -> anyhow::Result<()> {
     let silva_consensus = silva.clone();
     let matcher_consensus = matcher.clone();
     let budget_consensus = background_budget.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "consensus", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut consensus_interval = tokio::time::interval(Duration::from_secs(60));
         let mut secs_to_consensus: u64 = 3600;
         let silva_hub_consensus = silva_consensus;
@@ -2125,7 +2141,7 @@ async fn main() -> anyhow::Result<()> {
     // ─── Retrolink Orphans (one-shot, 10s after startup) ──────────
     {
         let silva_retro = silva.clone();
-        tokio::spawn(async move {
+        bg_spawn!(background_tasks,  "retro-link-10s", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             tokio::time::sleep(Duration::from_secs(10)).await;
             match silva_retro.retrolink_orphans(150, 0.25).await {
                 Ok(n) => info!("🌿 retrolink_orphans: created {} new edges from orphan nodes", n),
@@ -2135,7 +2151,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ─── NightConsolidation (hourly: selective decay + agent memory consolidation) ──
-    tokio::spawn(run_night_consolidation_loop(
+    bg_spawn!(background_tasks, "night-consolidation", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, run_night_consolidation_loop(
         silva.clone(),
         agent_profiles.clone(),
         curriculum.clone(),
@@ -2151,7 +2167,7 @@ async fn main() -> anyhow::Result<()> {
     let maint_silva = silva.clone();
     let maint_mailbox = mailbox.clone();
     let budget_maint = background_budget.clone();
-    tokio::spawn(async move {
+    bg_spawn!(background_tasks, "maintenance", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut maint_interval = tokio::time::interval(Duration::from_secs(300));
         loop {
             maint_interval.tick().await;
@@ -2264,10 +2280,14 @@ async fn main() -> anyhow::Result<()> {
     let shutdown_deadline = tylluan_kernel::runtime::shutdown::ShutdownDeadline::start(
         config.runtime.shutdown_timeout_ms,
     );
-    let pending = shutdown_deadline.wait_for(Vec::new()).await;
+    // doc_token es un token separado del maestro: se cancela aqui para que su
+    // tarea (doc-token-guard, la unica Wait cooperativa) termine dentro del deadline.
+    _doc_token_guard.cancel();
+    let (pending, skipped) = shutdown_deadline.wait_for(background_tasks).await;
     let exit_code = if http_failure.is_some() { 1 } else { 0 };
     tylluan_kernel::runtime::shutdown::force_exit_after_shutdown(
         &pending,
+        &skipped,
         exit_code,
         config.runtime.shutdown_force_exit,
     );
