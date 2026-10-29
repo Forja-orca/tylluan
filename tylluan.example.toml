@@ -330,3 +330,13 @@ admin = ["*"]
 # max_cpu_pct = 85
 # El modo se cambia en caliente (sin reiniciar) por POST /api/v1/security/sentinel/mode
 # o `tylluan sentinel mode <off|observe|enforce>`; ambos exigen clase operador.
+
+[runtime]
+# T-DSH-130 (ADR-025 R4): apagado ordenado con deadline de join.
+# shutdown_timeout_ms = maximo de espera de las tareas de fondo registradas
+# antes del corte duro. 0 = sin deadline (comportamiento historico).
+shutdown_timeout_ms = 5000
+# shutdown_force_exit = true corta el proceso con std::process::exit tras la
+# secuencia ordenada si el runtime seguiria esperando hilos (ONNX/SQLite).
+# Apagado por defecto: activarlo es decision del operador tras medir.
+shutdown_force_exit = false

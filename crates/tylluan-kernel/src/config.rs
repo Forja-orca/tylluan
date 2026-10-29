@@ -203,6 +203,39 @@ pub struct TylluanConfig {
 
     #[serde(default)]
     pub logging: LoggingConfig,
+
+    /// T-DSH-130 (ADR-025 R4): apagado ordenado con deadline de join y corte
+    /// duro opcional. Por defecto NO se fuerza la salida (lo activa el
+    /// operador); el timeout solo acota la espera.
+    #[serde(default)]
+    pub runtime: RuntimeConfig,
+}
+
+/// T-DSH-130 (ADR-025 R4): limites del apagado.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfig {
+    /// Maximo de espera del join de tareas de fondo antes del corte duro.
+    /// `0` = sin deadline (comportamiento historico).
+    #[serde(default = "default_shutdown_timeout_ms")]
+    pub shutdown_timeout_ms: u64,
+
+    /// Si `true`, tras la secuencia ordenada se sale con `std::process::exit`
+    /// aunque queden tareas/hilos del runtime sin terminar. Apagado por
+    /// defecto: lo decide el operador tras medir (T-DSH-130).
+    #[serde(default = "default_shutdown_force_exit")]
+    pub shutdown_force_exit: bool,
+}
+
+fn default_shutdown_timeout_ms() -> u64 { 5000 }
+fn default_shutdown_force_exit() -> bool { false }
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            shutdown_timeout_ms: default_shutdown_timeout_ms(),
+            shutdown_force_exit: default_shutdown_force_exit(),
+        }
+    }
 }
 
 /// D-4: `[logging]` — rotación de `logs/kernel.log` por tamaño.
@@ -3758,5 +3791,29 @@ interval_secs = 86400
             .unwrap();
         assert!(section.contains("api_key_env = \"MY_KEY_ENV\""));
         assert!(!section.contains("sk-"), "la seccion no debe contener valores de clave");
+    }
+}
+
+
+#[cfg(test)]
+mod t130_runtime_config_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_shutdown_defaults_are_5s_and_no_force_exit() {
+        let cfg = RuntimeConfig::default();
+        assert_eq!(cfg.shutdown_timeout_ms, 5000);
+        assert!(!cfg.shutdown_force_exit, "el corte duro no se activa por defecto");
+        let root = TylluanConfig::default();
+        assert_eq!(root.runtime.shutdown_timeout_ms, 5000);
+        assert!(!root.runtime.shutdown_force_exit);
+    }
+
+    #[test]
+    fn runtime_section_parses_from_toml() {
+        let toml = "[runtime]\nshutdown_timeout_ms = 2500\nshutdown_force_exit = true\n";
+        let cfg: TylluanConfig = toml::from_str(toml).expect("toml valido");
+        assert_eq!(cfg.runtime.shutdown_timeout_ms, 2500);
+        assert!(cfg.runtime.shutdown_force_exit);
     }
 }
