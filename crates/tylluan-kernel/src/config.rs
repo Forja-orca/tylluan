@@ -745,6 +745,16 @@ pub struct MemoryConfig {
     pub background_concurrency: usize,
     #[serde(default = "default_background_max_wait_secs")]
     pub background_max_wait_secs: u64,
+
+    /// T-DSH-136: pausa por nodo del bucle de `POST /memory/reindex`
+    /// (api_memory.rs). Default 200 ms = comportamiento historico; 0 = sin
+    /// pausa (solo para test-run/aceleracion controlada).
+    #[serde(default = "default_reindex_node_delay_ms")]
+    pub reindex_node_delay_ms: u64,
+}
+
+fn default_reindex_node_delay_ms() -> u64 {
+    200
 }
 
 impl Default for MemoryConfig {
@@ -755,6 +765,7 @@ impl Default for MemoryConfig {
             vector_dimensions: default_dimensions(),
             background_concurrency: default_background_concurrency(),
             background_max_wait_secs: default_background_max_wait_secs(),
+            reindex_node_delay_ms: default_reindex_node_delay_ms(),
         }
     }
 }
@@ -3840,5 +3851,28 @@ mod t130_runtime_config_tests {
         let cfg: TylluanConfig = toml::from_str(toml).expect("toml valido");
         assert_eq!(cfg.runtime.shutdown_timeout_ms, 2500);
         assert!(cfg.runtime.shutdown_force_exit);
+    }
+}
+
+
+#[cfg(test)]
+mod t136_reindex_delay_tests {
+    use super::*;
+
+    #[test]
+    fn reindex_node_delay_default_is_200ms() {
+        assert_eq!(MemoryConfig::default().reindex_node_delay_ms, 200);
+        let cfg = TylluanConfig::default();
+        assert_eq!(cfg.memory.reindex_node_delay_ms, 200, "default identico al comportamiento historico");
+    }
+
+    #[test]
+    fn reindex_node_delay_parses_from_toml() {
+        let toml = "[memory]\nreindex_node_delay_ms = 5\n";
+        let cfg: TylluanConfig = toml::from_str(toml).expect("toml valido");
+        assert_eq!(cfg.memory.reindex_node_delay_ms, 5);
+        // sin la clave sigue en 200
+        let cfg2: TylluanConfig = toml::from_str("[memory]\n").expect("toml valido");
+        assert_eq!(cfg2.memory.reindex_node_delay_ms, 200);
     }
 }
