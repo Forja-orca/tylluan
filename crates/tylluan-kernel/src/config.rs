@@ -253,6 +253,29 @@ pub struct LoggingConfig {
     /// El writer aplica un mínimo de 1.
     #[serde(default = "default_log_max_files")]
     pub max_files: usize,
+
+    /// H-47C: escribir CONTENIDO de intents/queries/payloads en el log. Por
+    /// defecto NO: solo `canal=len+sha`. Con true, el contenido pasa primero
+    /// por `logging::scrub` (máscaras sk-/Bearer/token=/JWT/base64-hex>=32)
+    /// y se recorta a `log_content_max_chars`. Solo la fuente de entrada
+    /// (MCP/REST) puede emitir contenido; los 6 puntos internos usan siempre
+    /// len+sha. Cambiar esto sobre el disco exige reload de config (o
+    /// reinicio): ver `docs/internal/IMPL_H-47C_hermes_2026-10.md`.
+    #[serde(default = "default_log_content")]
+    pub log_content: bool,
+
+    /// H-47C: tope de caracteres del contenido ya scrubado (default 200).
+    /// El recorte ocurre SIEMPRE después del scrub, nunca antes.
+    #[serde(default = "default_log_content_max_chars")]
+    pub log_content_max_chars: usize,
+}
+
+fn default_log_content() -> bool {
+    false
+}
+
+fn default_log_content_max_chars() -> usize {
+    200
 }
 
 fn default_log_max_size_mb() -> u64 {
@@ -268,6 +291,8 @@ impl Default for LoggingConfig {
         Self {
             max_file_size_mb: default_log_max_size_mb(),
             max_files: default_log_max_files(),
+            log_content: default_log_content(),
+            log_content_max_chars: default_log_content_max_chars(),
         }
     }
 }

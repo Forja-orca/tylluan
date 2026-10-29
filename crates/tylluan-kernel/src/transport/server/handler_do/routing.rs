@@ -225,8 +225,8 @@ pub(crate) async fn resolve_guild_name(
 
                 // Log routing decision with agent context for observability
                 info!(
-                    "🎯 Routing: '{}' → guild='{}' method={:?} score={:.3} agent_role={}",
-                    intent, m.guild_name, m.method, m.score,
+                    "🎯 Routing: {} → guild='{}' method={:?} score={:.3} agent_role={}",
+                    crate::logging::redacted("do_routing", intent), m.guild_name, m.method, m.score,
                     agent_id.unwrap_or("anonymous")
                 );
                 trace.push(format!("semantic_match='{}' score={:.3} method={:?}", m.guild_name, m.score, m.method));

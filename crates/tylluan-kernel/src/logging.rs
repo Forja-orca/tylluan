@@ -25,6 +25,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// Writer con rotación por tamaño, pensado para `tracing_subscriber`.
 pub struct RotatingFileWriter {
@@ -126,6 +127,253 @@ impl Write for RotatingFileWriter {
 
     fn flush(&mut self) -> io::Result<()> {
         self.file.flush()
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H-47C (diseño §5 B1-B4 en docs/internal/IMPL_H-47A_hermes_2026-10.md):
+// helper único de redacción de logs.
+//
+// Medido en prod (H-47A): 7 fuentes logueaban el texto entero de
+// intent/query/payload. Un secreto escrito por un agente en content se
+// quedaba raw en disco ~25 días (rotación 50 MiB × 5 a 0,42 MB/h).
+//
+// Reglas aprobadas por el TL (T2060, «tal cual»):
+// - Default `log_content=false`: SOLO `canal=… len=<chars> sha=<sha256[:12]>`.
+// - Las 6 fuentes internas usan `redacted()`: jamas contenido, ni con opt-in.
+// - Unica fuente con contenido posible: la de entrada (`mcp_payload()`), y
+//   solo con opt-in, con field-walk que scrubuta SOLO strings (id/num/bool
+//   crudos para correlacionar).
+// - Orden obligatorio: scrub ANTES del recorte. Cortar dentro de un secreto
+//   filtra su prefijo (el corte ~100 car. del matcher hacia exactamente eso).
+// - Mascara sk-/Bearer/token=/JWT/base64-hex≥32 incluso con opt-in.
+// - El sha correlaciona las 7 líneas de una misma petición sin contenido:
+//   mismo texto → mismo sha.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Config `[logging]` leida una vez en el primer uso del helper. Editar el
+/// fichero en disco NO se aplica con `config::reload()`: el helper fija el
+/// valor en el primer uso y exige reinicio (riesgo B6 aprobado en el diseno).
+fn redaction_cfg() -> crate::config::LoggingConfig {
+    static CFG: OnceLock<crate::config::LoggingConfig> = OnceLock::new();
+    CFG.get_or_init(|| {
+        crate::config::TylluanConfig::load()
+            .map(|c| c.logging)
+            .unwrap_or_default()
+    })
+    .clone()
+}
+
+fn scrub_patterns() -> &'static [regex::Regex] {
+    static RE: OnceLock<Vec<regex::Regex>> = OnceLock::new();
+    RE.get_or_init(|| {
+        [
+            // JWT primero: si no, la corrida base64 se comería sus segmentos.
+            r"[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}",
+            r"sk-[A-Za-z0-9_-]{8,}",
+            r"(?i)bearer\s+[A-Za-z0-9._+/=-]{6,}",
+            r#"(?i)\btoken\b\s*[=:]\s*[^\s"]{4,}"#,
+            r"[A-Fa-f0-9]{32,}",
+            r"[A-Za-z0-9+/]{32,}={0,2}",
+        ]
+        .iter()
+        .map(|p| regex::Regex::new(p).expect("regex de scrub invalido"))
+        .collect()
+    })
+}
+
+/// Enmascara secretos: cada coincidencia se sustituye entera por
+/// `«scrubbed»`, de modo que no queda ningún fragmento interior que una
+/// truncación posterior pudiera devolver.
+pub fn scrub(text: &str) -> String {
+    let mut out = text.to_string();
+    for re in scrub_patterns() {
+        out = re.replace_all(&out, "\u{ab}scrubbed\u{bb}").into_owned();
+    }
+    out
+}
+
+fn sha12(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(text.as_bytes());
+    let mut s = String::with_capacity(12);
+    for b in &digest[..6] {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+fn cap_chars(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    text.chars().take(max_chars).collect()
+}
+
+/// Lo que las 6 fuentes internas deben loguear: NUNCA contenido (B2).
+pub fn redacted(canal: &str, text: &str) -> String {
+    format!("canal={canal} len={} sha={}", text.chars().count(), sha12(text))
+}
+
+/// Fuente de entrada con opt-in (B1): default → len+sha; con
+/// `log_content=true` → contenido ya scrubado y recortado (recorte detras
+/// del scrub, jamas antes).
+pub fn safe(canal: &str, text: &str) -> String {
+    safe_with(&redaction_cfg(), canal, text)
+}
+
+pub fn safe_with(cfg: &crate::config::LoggingConfig, canal: &str, text: &str) -> String {
+    if cfg.log_content {
+        format!(
+            "canal={canal} content={}",
+            cap_chars(&scrub(text), cfg.log_content_max_chars.max(1))
+        )
+    } else {
+        redacted(canal, text)
+    }
+}
+
+/// Línea para el payload JSON-RPC de MCP: unica fuente con contenido posible
+/// (B2/B3). Default: method+id+len+sha. Opt-in: field-walk que scrubuta solo
+/// strings; el recorte va detras del scrub completo.
+pub fn mcp_payload(payload: &serde_json::Value) -> String {
+    mcp_payload_with(&redaction_cfg(), payload)
+}
+
+pub fn mcp_payload_with(cfg: &crate::config::LoggingConfig, payload: &serde_json::Value) -> String {
+    let method = payload.get("method").and_then(|v| v.as_str()).unwrap_or("?");
+    let id = payload
+        .get("id")
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let raw = payload.to_string();
+    let base = format!(
+        "[MCP] method={method} id={id} len={} sha={}",
+        raw.chars().count(),
+        sha12(&raw)
+    );
+    if !cfg.log_content {
+        return base;
+    }
+    let walked = cap_chars(&scrub_json(payload), cfg.log_content_max_chars.max(1));
+    format!("{base} content={walked}")
+}
+
+fn scrub_json(value: &serde_json::Value) -> String {
+    use serde_json::{Map, Value};
+    fn walk(v: &Value) -> Value {
+        match v {
+            Value::String(s) => Value::String(scrub(s)),
+            Value::Array(items) => Value::Array(items.iter().map(walk).collect()),
+            Value::Object(map) => {
+                let mut out = Map::with_capacity(map.len());
+                for (k, val) in map {
+                    out.insert(k.clone(), walk(val));
+                }
+                Value::Object(out)
+            }
+            other => other.clone(),
+        }
+    }
+    walk(value).to_string()
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::*;
+
+    const SK: &str = "sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjT0kS6mEYxjW7qL3nZ9cQrT1uV8pX4";
+
+    /// Ningún fragmento contiguo de 8 chars del secreto sobrevive.
+    fn assert_no_leak(scrubbed: &str, secret: &str) {
+        let chars: Vec<char> = secret.chars().collect();
+        for w in chars.windows(8) {
+            let frag: String = w.iter().collect();
+            assert!(!scrubbed.contains(&frag), "fragmento sobrevive: {frag}");
+        }
+    }
+
+    fn cfg_on() -> crate::config::LoggingConfig {
+        crate::config::LoggingConfig {
+            log_content: true,
+            log_content_max_chars: 200,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn scrub_mask_every_pattern_class() {
+        let hex = "0123456789abcdef0123456789abcdef01234567";
+        let text = format!("clave {SK} y Bearer eyJhbGciOiJIUzI1NiJ9x y token=abcdef12 y {JWT} y hash {hex} fin");
+        let out = scrub(&text);
+        for secret in [SK, "eyJhbGciOiJIUzI1NiJ9x", "abcdef12", JWT, hex] {
+            assert_no_leak(&out, secret);
+        }
+        assert!(out.contains("\u{ab}scrubbed\u{bb}"));
+        assert!(out.contains("clave") && out.contains("fin"));
+    }
+
+    #[test]
+    fn scrub_runs_before_cap_so_no_prefix_survives() {
+        // Secreto cruzando el corte: 90 chars + SK(43) + cola; cap=100.
+        let text = format!("{}{SK} fin", "a".repeat(90));
+        let out = cap_chars(&scrub(&text), 100);
+        assert_no_leak(&out, SK);
+    }
+
+    #[test]
+    fn internal_sites_never_leak_content_shape_is_len_sha() {
+        let line = redacted("do_routing", "contenido secreto aquí");
+        assert!(re_shape().is_match(&line), "forma inesperada: {line}");
+        assert!(!line.contains("secreto") && !line.contains("aquí"));
+    }
+
+    fn re_shape() -> regex::Regex {
+        regex::Regex::new(r"^canal=[a-z_]+ len=\d+ sha=[0-9a-f]{12}$").unwrap()
+    }
+
+    #[test]
+    fn sha_correlates_same_text_across_sites_and_chars_not_bytes() {
+        assert_eq!(sha12("mismo intent"), sha12("mismo intent"));
+        assert_ne!(sha12("mismo intent"), sha12("mismo intent."));
+        let (a, b) = (redacted("matcher", "ñandú"), redacted("recall", "ñandú"));
+        let sha = |s: &str| s.split("sha=").nth(1).unwrap().to_string();
+        assert_eq!(sha(&a), sha(&b), "mismo texto debe dar mismo sha en otra fuente");
+        let line = redacted("matcher", "áéí");
+        assert!(line.contains("len=3"), "len debe contar chars: {line}");
+    }
+
+    #[test]
+    fn mcp_default_hides_content_keeps_correlation_fields() {
+        let payload = serde_json::json!({
+            "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": {"name": "tylluan_do", "arguments": {"intent": SK}}
+        });
+        let line = mcp_payload_with(&crate::config::LoggingConfig::default(), &payload);
+        assert_no_leak(&line, SK);
+        assert!(line.contains("method=tools/call") && line.contains("id=7"));
+        assert!(!line.contains("content="));
+    }
+
+    #[test]
+    fn mcp_opt_in_scrubs_nested_strings_keeps_scalars_and_caps() {
+        let payload = serde_json::json!({
+            "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": {"arguments": {"content": SK, "limit": 5, "plan": true}}
+        });
+        let line = mcp_payload_with(&cfg_on(), &payload);
+        assert_no_leak(&line, SK);
+        assert!(line.contains("tools/call") && line.contains("\"id\":7") && line.contains("\"limit\":5"));
+    }
+
+    #[test]
+    fn logging_config_defaults_are_redacting() {
+        let d = crate::config::LoggingConfig::default();
+        assert!(!d.log_content);
+        assert_eq!(d.log_content_max_chars, 200);
+        let p: crate::config::LoggingConfig = serde_json::from_str("{}").unwrap();
+        assert!(!p.log_content && p.log_content_max_chars == 200);
     }
 }
 

@@ -236,7 +236,7 @@ impl HybridMemory {
             gen_ai.operation.name = "retrieval",
             gen_ai.request.model = "hybrid/bge-m3+bm25",
             gen_ai.request.max_results = limit as u64,
-            query = %query,
+            query = %crate::logging::redacted("hybrid_search", query),
             "Hybrid memory search"
         );
         let safe_query = query.chars().take(1000).collect::<String>();

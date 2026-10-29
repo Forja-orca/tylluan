@@ -130,7 +130,7 @@ pub async fn observe_scheduling(
 
     info!(
         target: "scheduler::observe",
-        intent = %obs.intent,
+        intent = %crate::logging::redacted("scheduler_observe", obs.intent),
         agent_id = %ctx.caller_agent_id,
         routed_guild = %obs.guild_name,
         routed_tool = %obs.tool_name,
