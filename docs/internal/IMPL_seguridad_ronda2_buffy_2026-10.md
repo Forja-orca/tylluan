@@ -1,6 +1,6 @@
 # IMPL Seguridad ronda 2 (B-1 a B-4) — Buffy
 
-Fecha: 2026-10-28 · Agente: Buffy · Base: `d4f2537` (HEAD == `origin/main`) · Worktree: `E:\tylluan-wt-buffy`
+Fecha: 2026-10-28 (ronda), 2026-10-29 (test de regresión) · Agente: Buffy · Base original: `d4f2537`; base del cierre: **`4f0cb3a`** · Worktree: `E:\tylluan-wt-buffy`
 
 Fuente de la tarea: `docs/internal/COLA_buffy_2026-10-28_ronda2.md` (CLAUDE, turno 2033 de Coloquio).
 Alcance: **solo informe**. No hay cambios en código de producción; sí tres sondas reproducibles y su evidencia literal.
@@ -153,9 +153,70 @@ Detalle de legibilidad (no es un defecto): `compare_versions(current, latest)` d
 
 ---
 
+## Cierre del pendiente: test de regresión de B-1 (2026-10-29)
+
+Base rebasada a **`4f0cb3a`** (`origin/main` del 2026-10-29) antes de escribir nada. Ese `git fetch` encontró que **AUD-04 (`0441cda`) ya había tocado `api_contracts.rs`**, así que el hallazgo se reescribe contra el código de hoy en vez de repetir el de la víspera.
+
+### Qué cambió AUD-04 y qué no cerró
+
+AUD-04 añadió al handler dos checks: `deliver` y `vote` rechazan un `agent_id` **fuera del roster** (403) y `deliver` rechaza la **segunda entrega** del mismo participante (409); el quórum pasó a medirse sobre el roster.
+
+Eso **no** es la ligadura token→agente. Sigue sin compararse `req.agent_id` con `current_bound_agent_id()`, así que basta con reclamar el nombre de **otro miembro del equipo**. Más aún: con una sola entrega por participante, suplantar a `bob` **consume su turno** y a `bob` se le devuelve **409** cuando lo intente de verdad. El hallazgo no se estrechó en gravedad, se estrechó en requisitos del atacante (tiene que saber un nombre del roster, que está en el `GET` del contrato).
+
+### Fichero añadido
+
+`crates/tylluan-kernel/tests/bwc_agent_binding.rs` — usa el harness compartido `support::test_state` y el `task_local` real del middleware (`ACL_AGENT_ID.scope`), así que reproduce exactamente lo que hace `bearer_auth_middleware`.
+
+| Test | Estado | Qué afirma |
+|---|---|---|
+| `bound_agent_is_visible_inside_scope_and_absent_outside` | **pasa** | control: la identidad ligada se ve dentro del scope, vacía fuera. Si esto se rompe, los otros dos dejarían de probar nada |
+| `deliver_rejects_claim_of_another_bound_agent` | **`#[ignore]`** | bearer de `alice` entregando como `bob` → **403** |
+| `vote_rejects_claim_of_another_bound_agent` | **`#[ignore]`** | bearer de `alice` votando como `bob` → **403** |
+
+Los dos ignorados describen la conducta correcta, por eso **fallan hoy**. Van con `#[ignore]` para no dejar el árbol en rojo sin borrar la deuda, igual que los de M-BUFFY-14.
+
+### Ejecución literal (base `4f0cb3a`)
+
+```
+$ cargo test -p tylluan-kernel --test bwc_agent_binding
+test bound_agent_is_visible_inside_scope_and_absent_outside ... ok
+test result: ok. 1 passed; 0 failed; 2 ignored
+
+$ cargo test -p tylluan-kernel --test bwc_agent_binding -- --ignored
+test deliver_rejects_claim_of_another_bound_agent ... FAILED
+  assertion `left == right` failed: el bearer ligado a 'alice' no puede entregar como 'bob'.
+    Respuesta: {"all_delivered":false,"deliveries":1,"status":"delivered","team_size":2}
+    left: 200   right: 403
+test vote_rejects_claim_of_another_bound_agent ... FAILED
+  assertion `left == right` failed: el bearer ligado a 'alice' no puede votar como 'bob'.
+    Respuesta: {"approves":1,"majority":false,"status":"open","votes":1}
+    left: 200   right: 403
+test result: FAILED. 0 passed; 2 failed
+```
+
+`cargo clippy -p tylluan-kernel --test bwc_agent_binding -- -D warnings` → limpio (0 warnings propios).
+
+### Cómo se cierra
+
+En el handler, antes de escribir la entrega o el voto:
+
+```rust
+if let Some(bound) = crate::transport::http::auth::current_bound_agent_id()
+    && bound != req.agent_id
+{
+    return (StatusCode::FORBIDDEN, Json(/* ... */));
+}
+```
+
+El patrón exacto ya existe en `a2a.rs:443` (mismo mensaje, misma distinción «sin ligadura no se comprueba»). Al aplicarlo, se borra el `#[ignore]` de los dos tests y deben pasar tal cual, sin tocarlos. `close` tiene el mismo hueco (el consolidador se fija en el `create`) y no está cubierto por estos dos tests.
+
+---
+
 ## Impact
 
-- **Cero cambios en código de producción.** Este informe añade un fichero (`docs/internal/IMPL_seguridad_ronda2_buffy_2026-10.md`) y deja tres sondas reproducibles en `test-run-buffy-r2/`, que está **sin trackear** y cuyo `tylluan.toml` cae en la regla `.gitignore` existente.
+- **Cero cambios en código de producción.** Los añadidos son: este informe, `crates/tylluan-kernel/tests/bwc_agent_binding.rs` (test de integración nuevo, **sin commitear**) y tres sondas reproducibles en `test-run-buffy-r2/`, que está **sin trackear** y cuyo `tylluan.toml` cae en la regla `.gitignore` existente.
+- El test nuevo es un target de integración, así que **no altera el recuento de lib tests** que valida `scripts/check_test_count.sh`. No añade dependencias a `Cargo.toml`.
+- El checkout compartido `E:\tylluan` quedó **limpio**: el fichero de test se escribió ahí por error de ruta y se movió al worktree en el mismo minuto; `git status -- crates/tylluan-kernel/tests/` en el compartido no devuelve nada.
 - Sin secretos en lo añadido: el token maestro de prueba se lee de `.tylluan-token` (ignorado); borré el `.creds.json` que había usado al principio para no dejar un secreto en un fichero que git **no** ignora.
 - No toca `transport/`, `guilds/`, `integrations/` ni ningún `tylluan*.toml` versionado.
 - El kernel de producción (47004, commit `d4f2537`) no se ha tocado: todas las peticiones fueron a 47093 y ese proceso está detenido.
@@ -163,7 +224,8 @@ Detalle de legibilidad (no es un defecto): `compare_versions(current, latest)` d
 
 ## No verificado
 
-- **No** he escrito el test de regresión de B-1. Propuesta concreta: un test de integración con el harness de `tests/support` que cree un contrato y afirme `403` al entregar con un `agent_id` distinto del ligado; hoy fallaría, así que iría `#[ignore]` como los de M-BUFFY-14. No lo he escrito por tiempo, no por falta de medio.
+- **Resuelto el 2026-10-29**: el test de regresión de B-1 está escrito (sección «Cierre del pendiente»). Sigue pendiente el **arreglo** del handler, que no es mío según el reparto (Rust → Deep) y no he tocado.
+- **No** hay test para el hueco de `close` (misma clase que B-1): el consolidador se fija en el `create`, así que suplantarlo es escribir su nombre en el JSON, pero no lo reproduje en vivo ni lo cubrí con test.
 - **No** he probado B-4 en vivo (motivos arriba). Los «obtenido» de su tabla son lectura de código, no ejecución.
 - **No** he probado el flujo OAuth con un cliente MCP real (Claude Desktop); usé PKCE a mano contra el kernel de prueba.
 - **No** he medido cuántas claves hay en `token_agent_bindings` de producción (está vacío en lo que leí) ni si algún consumidor real usa BWC con varios agentes: la severidad práctica de B-1 depende de eso y no la he medido.
