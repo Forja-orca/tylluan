@@ -641,7 +641,12 @@ impl super::SilvaDB {
     /// sparse signature at the same choke point. This is what makes
     /// `[silva] hybrid_sparse_enabled` safe to enable on an existing DB —
     /// signatures backfill automatically within one reindex tick.
-    pub async fn get_stale_embeddings(&self, current_model: &str, current_hash: Option<&str>) -> Result<Vec<String>> {
+    pub async fn get_stale_embeddings(
+        &self,
+        current_model: &str,
+        current_hash: Option<&str>,
+        skip_types: &[String],
+    ) -> Result<Vec<String>> {
         let sparse_backfill = self.sparse_engine_ref().is_some();
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
@@ -650,15 +655,31 @@ impl super::SilvaDB {
             } else {
                 ""
             };
+            // T-DSH-138 (C-1): tipos excluidos (lista vacia = consulta historica).
+            let skip_clause = if skip_types.is_empty() {
+                String::new()
+            } else {
+                let ph: Vec<String> = (0..skip_types.len()).map(|i| format!("?{}", i + 4)).collect();
+                format!(" AND n.type NOT IN ({})", ph.join(", "))
+            };
             let sql = format!(
                 "SELECT DISTINCT n.id FROM nodes n
                  LEFT JOIN node_embeddings e ON n.id = e.node_id
-                 WHERE e.node_id IS NULL
+                 WHERE (e.node_id IS NULL
                     OR e.model_name != ?1
-                    OR (e.model_hash IS NOT NULL AND e.model_hash != ?3 AND ?2 IS NOT NULL AND e.model_hash != ?2){extra_missing_sparse}"
+                    OR (e.model_hash IS NOT NULL AND e.model_hash != ?3 AND ?2 IS NOT NULL AND e.model_hash != ?2){extra_missing_sparse}){skip_clause}"
             );
             let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(params![current_model, current_hash, MODEL_HASH_UNKNOWN], |row| row.get(0))?;
+            let mut all_params: Vec<Box<dyn rusqlite::ToSql>> = vec![
+                Box::new(current_model.to_string()),
+                Box::new(current_hash.map(|s| s.to_string())),
+                Box::new(MODEL_HASH_UNKNOWN.to_string()),
+            ];
+            for t in skip_types {
+                all_params.push(Box::new(t.clone()));
+            }
+            let params_ref: Vec<&dyn rusqlite::ToSql> = all_params.iter().map(|b| b.as_ref()).collect();
+            let rows = stmt.query_map(params_ref.as_slice(), |row| row.get(0))?;
             let mut results = Vec::new();
             for res in rows { results.push(res?); }
             Ok(results)

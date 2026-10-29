@@ -1931,6 +1931,10 @@ async fn main() -> anyhow::Result<()> {
     let silva_reindex = silva.clone();
     let matcher_reindex = matcher.clone();
     let budget_reindex = background_budget.clone();
+    // T-DSH-138 (C-1): parametros configurables, defaults identicos a hoy.
+    let reindex_per_tick = config.memory.reindex_nodes_per_tick;
+    let reindex_tick_secs = config.memory.reindex_tick_secs;
+    let reindex_skip_types = config.memory.reindex_skip_types.clone();
     bg_spawn!(background_tasks, "reindexer", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         // tokio::time::interval fires its FIRST tick immediately by default --
         // this reindexer would then compete for the shared embedding model
@@ -1942,9 +1946,9 @@ async fn main() -> anyhow::Result<()> {
         // the first fire by the same 600s cadence, same pattern already used
         // for Retrolink Orphans below (10s startup delay).
         let mut reindex_interval = tokio::time::interval_at(
-            tokio::time::Instant::now() + Duration::from_secs(600),
-            Duration::from_secs(600),
-        ); // 10 minutes for toaster-friendly
+            tokio::time::Instant::now() + Duration::from_secs(reindex_tick_secs),
+            Duration::from_secs(reindex_tick_secs),
+        ); // 600s por defecto (toaster-friendly)
         loop {
             reindex_interval.tick().await;
             // Latency budget: skip this tick if the background budget is
@@ -1953,6 +1957,8 @@ async fn main() -> anyhow::Result<()> {
 
             let silva_inner = silva_reindex.clone();
             let matcher_inner = matcher_reindex.clone();
+            // T-DSH-138: el closure async consume la lista en cada iteracion.
+            let skip_types_inner = reindex_skip_types.clone();
 
             let guard = GuardedTask::new("Agnostic RE-INDEXING", Duration::from_secs(120));
             let _ = guard.run(async move {
@@ -1970,11 +1976,13 @@ async fn main() -> anyhow::Result<()> {
                     let model_id = engine.engine_id();
                     let model_hash = engine.engine_hash();
 
-                    let stale_nodes = silva_inner.get_stale_embeddings(&model_id, model_hash.as_deref()).await?;
+                    let stale_nodes = silva_inner
+                        .get_stale_embeddings(&model_id, model_hash.as_deref(), &skip_types_inner)
+                        .await?;
                     if !stale_nodes.is_empty() {
                         info!("🧠 Agnostic Indexer: Found {} stale nodes. Re-indexing...", stale_nodes.len());
                         let batch_size: usize = 32;
-                        let nodes_vec: Vec<&String> = stale_nodes.iter().take(100).collect();
+                        let nodes_vec: Vec<&String> = stale_nodes.iter().take(reindex_per_tick).collect();
                         for chunk in nodes_vec.chunks(batch_size) {
                             let mut texts: Vec<String> = Vec::with_capacity(chunk.len());
                             let mut nodes: Vec<(String, String, String)> = Vec::with_capacity(chunk.len());
