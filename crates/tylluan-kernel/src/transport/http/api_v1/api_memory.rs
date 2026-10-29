@@ -9,6 +9,11 @@ use std::sync::Arc;
 use crate::memory::silva::nodes::build_contextual_text;
 use crate::transport::http::{HttpState, MemorySearchQuery};
 
+/// T-DSH-134: id unico por escritura de memoria.
+fn new_memory_write_node_id() -> String {
+    format!("memory_write:{}", uuid::Uuid::new_v4())
+}
+
 pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req): Json<serde_json::Value>) -> impl IntoResponse {
     let content = match req.get("content").and_then(|v| v.as_str()) {
         Some(c) => c,
@@ -33,7 +38,10 @@ pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req)
     // overwrote the same node instead of creating a new one, losing all
     // prior content on each write. Generate a unique id per call, same
     // pattern as handler_remember.rs's task_id/nid generation.
-    let node_id = format!("memory_write:{}", chrono::Utc::now().timestamp_millis());
+    // T-DSH-134: antes `memory_write:{millis}`; dos escrituras concurrentes en
+    // el mismo milisegundo compartian id y la segunda sobrescribia a la primera
+    // (ambas devolvian 200). uuid v4 elimina la colision.
+    let node_id = new_memory_write_node_id();
     // Accept optional agent_id/owner_scope/node_type so callers can attribute
     // what they write instead of it landing as an anonymous "entity" node --
     // closes the gap where coloquio_digest.py summaries had no structured
@@ -332,5 +340,38 @@ pub async fn quarantine_release_handler(
             Json(serde_json::json!({ "error": e.to_string() })),
         )
             .into_response(),
+    }
+}
+
+
+#[cfg(test)]
+mod t134_memory_write_id_tests {
+    use super::new_memory_write_node_id;
+    use std::collections::HashSet;
+
+    #[test]
+    fn ids_are_unique_in_a_tight_loop() {
+        // Con el formato anterior (timestamp_millis) 1000 llamadas seguidas
+        // colisionaban en el mismo milisegundo; con uuid no debe repetirse ninguna.
+        let ids: HashSet<String> = (0..1000).map(|_| new_memory_write_node_id()).collect();
+        assert_eq!(ids.len(), 1000, "los node_id de memory_write deben ser unicos");
+    }
+
+    #[test]
+    fn ids_are_unique_under_concurrent_calls() {
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    (0..200).map(|_| new_memory_write_node_id()).collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut all = HashSet::new();
+        for h in handles {
+            for id in h.join().expect("thread") {
+                all.insert(id);
+            }
+        }
+        assert_eq!(all.len(), 1600, "8x200 node_id concurrentes deben ser unicos");
     }
 }
