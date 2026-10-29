@@ -2256,6 +2256,22 @@ async fn main() -> anyhow::Result<()> {
     let _ = std::fs::remove_file(&pid_file);
 
     info!("👋 TylluanNexus stopped. No orphan processes left.");
+    // T-DSH-130 (ADR-025 R4/R6): deadline de join + corte duro opcional.
+    // Hoy main no conserva los JoinHandle de las tareas de fondo (los
+    // tokio::spawn no se guardan); la lista va vacia hasta el TaskRegistry
+    // (ADR-025 R2), pero el deadline ya acota la espera y el corte duro evita
+    // que el runtime siga vivo esperando hilos de ONNX/SQLite (T-DSH-123/125).
+    let shutdown_deadline = tylluan_kernel::runtime::shutdown::ShutdownDeadline::start(
+        config.runtime.shutdown_timeout_ms,
+    );
+    let pending = shutdown_deadline.wait_for(Vec::new()).await;
+    let exit_code = if http_failure.is_some() { 1 } else { 0 };
+    tylluan_kernel::runtime::shutdown::force_exit_after_shutdown(
+        &pending,
+        exit_code,
+        config.runtime.shutdown_force_exit,
+    );
+
     // D-46: un fallo del HTTP es un fallo de arranque, no una parada normal.
     if http_failure.is_some() {
         std::process::exit(1);
