@@ -1,6 +1,6 @@
 # ADR-025: Runtime de Tylluan y subruntimes — contrato único para los flujos de fondo
 
-- **Estado:** 📐 **PROPUESTO** — borrador del Tech Lead (Claude). **La aprobación es de José**; nada de lo que sigue se implementa hasta que la dé, fase por fase (§9).
+- **Estado:** ✅ **APROBADO por José (2026-10-29)** — borrador del Tech Lead (Claude), aprobado en la revisión de decisiones del 2026-10-29. Se implementa fase por fase (§9); T-DSH-130 y T-DSH-132 ya están en `main`.
 - **Fecha:** 2026-10-28
 - **Origen:** pregunta de José (2026-10-28): ¿debe Tylluan ser un runtime completo, con sus flujos organizados en runtime y subruntimes? Conecta con su motivo fundacional (`docs/architecture/tylluan_as_living_organism.md`): "todo Tylluan debe ser un pipeline, un mega workflow donde sus circuitos se conectan y crean flujos".
 - **Insumos (todos en el repo):** `crates/tylluan-kernel/src/main.rs`, `guard.rs`, `memory/background_budget.rs`, `registry/supervisor.rs`, `registry/lifecycle.rs`, `router/scheduler/mod.rs`, `docs/architecture/DESIGN_cognitive_scheduler.md`, ADR-013, ADR-014, ADR-024, `docs/reference/research/2026-10-28_H42_diseno_reembed_b3_onnx_cpu_hermes.md`, `..._H43_...`, `..._H45_...`.
