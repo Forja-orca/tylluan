@@ -2340,3 +2340,119 @@ async fn t16_peer_ingest_preserves_protected_and_weight() {
         assert!((w - 1.0).abs() < 1e-9, "other callers unaffected: weight raised to 1.0 (got {w})");
     }
 }
+
+// -- H-51 (T2099): silva.coloquio_retention_turns (propuesta C de H-49) ----
+// Default 0 = OFF: cero cambio de comportamiento. Con N>0, NightConsolidation
+// borra coloquio_memory con mas de N turnos de antiguedad por canal. En
+// produccion nunca se activa (borrado de datos, decision del operador T2099).
+
+fn coloquio_meta(channel: &str, turn: i64) -> String {
+    serde_json::json!({
+        "channel_id": channel,
+        "turn": turn,
+        "author_id": "agente",
+        "source": "coloquio_flywheel",
+    })
+    .to_string()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn h51_coloquio_retention_cero_no_borra() {
+    let db = test_silva().await;
+    for t in 1..=12i64 {
+        db.upsert_node(
+            &format!("coloquio_general_{t}"),
+            "coloquio_memory",
+            &format!("msg {t}"),
+            &coloquio_meta("general", t),
+        )
+        .await
+        .unwrap();
+    }
+    // Default 0 = funcion apagada: ni los nodos mas viejos se borran.
+    assert_eq!(db.prune_coloquio_retention(0).await.unwrap(), 0);
+    let g = db.conn_lock();
+    let c = g.lock().await;
+    let n: i64 = c
+        .query_row("SELECT COUNT(*) FROM nodes WHERE type='coloquio_memory'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 12, "retention 0 no debe borrar nada");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn h51_coloquio_retention_por_canal_sin_huerfanos() {
+    let db = test_silva().await;
+    for t in 1..=10i64 {
+        db.upsert_node(
+            &format!("coloquio_general_{t}"),
+            "coloquio_memory",
+            &format!("g{t}"),
+            &coloquio_meta("general", t),
+        )
+        .await
+        .unwrap();
+    }
+    for t in 1..=4i64 {
+        db.upsert_node(
+            &format!("coloquio_dev_{t}"),
+            "coloquio_memory",
+            &format!("d{t}"),
+            &coloquio_meta("dev", t),
+        )
+        .await
+        .unwrap();
+    }
+    // coloquio_memory legacy sin metadata de flywheel (hybrid_migration): nunca afectado.
+    db.upsert_node("coloquio_legacy", "coloquio_memory", "sin turn", "{}").await.unwrap();
+    // Sustrato para la cascada: arista y embedding denso apuntando a un nodo condenado.
+    {
+        let g = db.conn_lock();
+        let c = g.lock().await;
+        c.execute(
+            "INSERT INTO edges (source, target, type) VALUES ('coloquio_general_1', 'coloquio_general_10', 'autolink')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO node_embeddings (node_id, embedding) VALUES ('coloquio_general_1', X'0000')",
+            [],
+        )
+        .unwrap();
+    }
+    // keep=3: general (max turno 10) borra t1..t7; dev (max 4) borra t1. Total 8.
+    assert_eq!(db.prune_coloquio_retention(3).await.unwrap(), 8);
+    let g = db.conn_lock();
+    let c = g.lock().await;
+    let left: i64 = c
+        .query_row("SELECT COUNT(*) FROM nodes WHERE type='coloquio_memory'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(left, 7, "deben quedar los 3 turnos mas recientes por canal + el legacy");
+    let supervivientes: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM nodes WHERE id IN ('coloquio_general_7', 'coloquio_general_8')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(supervivientes, 1, "t7 cae (turno <= 10-3) y t8 queda entre los 3 ultimos");
+    let edges_huerfanos: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM edges WHERE source NOT IN (SELECT id FROM nodes) OR target NOT IN (SELECT id FROM nodes)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(edges_huerfanos, 0, "la cascada dej6 aristas huerfanas");
+    let embeddings_huerfanos: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(embeddings_huerfanos, 0, "la cascada dej6 embeddings huerfanos");
+    let legacy: i64 = c
+        .query_row("SELECT COUNT(*) FROM nodes WHERE id='coloquio_legacy'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(legacy, 1, "coloquio_memory legacy (sin turno en metadata) no se borra");
+}

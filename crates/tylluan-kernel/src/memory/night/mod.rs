@@ -96,6 +96,10 @@ pub struct PhaseContext {
     pub server: Arc<RwLock<TylluanServer>>,
     pub data_dir: PathBuf,
     pub matcher: Arc<GuildMatcher>,
+    /// H-51: retencion acotada de coloquio_memory (config
+    /// `silva.coloquio_retention_turns`, default 0 = APAGADO). Lo consume
+    /// DecayPhase; 0 lo propaga el resto de contextos de prueba.
+    pub coloquio_retention_turns: u64,
 }
 
 pub struct PhaseReport {
@@ -232,6 +236,7 @@ mod tests {
             server: Arc::new(RwLock::new(test_server().await)),
             data_dir: tmp,
             matcher: Arc::new(GuildMatcher::new(builtin_catalog())),
+            coloquio_retention_turns: 0,
         }
     }
 
@@ -611,6 +616,7 @@ mod tests {
             server: Arc::new(RwLock::new(server)),
             data_dir: tmp,
             matcher,
+            coloquio_retention_turns: 0,
         };
         let report = AgentPhase.run(&ctx).await;
         assert!(report.ok, "AgentPhase with experiences: {}", report.detail);

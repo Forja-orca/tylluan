@@ -525,6 +525,61 @@ impl super::SilvaDB {
             Ok(deleted)
         })
     }
+    /// H-51 (T2099, propuesta C de H-49): retencion acotada de `coloquio_memory`
+    /// por canal. `keep_turns == 0` es un no-op deliberado (config
+    /// `silva.coloquio_retention_turns`, default 0 = APAGADO): con 0 nunca se
+    /// borra, ni siquiera el nodo mas viejo del canal mas activo. Con N>0: para
+    /// cada canal presente en la metadata del flywheel se borran los
+    /// `coloquio_memory` cuyo `turn` queda a mas de N turnos del turno maximo
+    /// de ese canal (se conservan los N turnos mas recientes por canal). Los
+    /// nodos clasificados como `coloquio_memory` sin `turn`/`channel_id` en
+    /// metadata (legacy de hybrid_migration) no se ven afectados: no hay forma
+    /// honesta de acotarlos por turno. Cascada manual de
+    /// edges/node_embeddings/node_sparse_embeddings: `PRAGMA foreign_keys`
+    /// nunca esta ON en esta conexion (nodes.rs:1106), el cascade del esquema
+    /// esta muerto, mismo patron que `prune_dead_nodes`.
+    pub async fn prune_coloquio_retention(&self, keep_turns: u64) -> Result<usize> {
+        if keep_turns == 0 {
+            return Ok(0);
+        }
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let deleted = super::fts::delete_nodes_where(
+                &conn,
+                "type = 'coloquio_memory'
+                   AND protected = 0
+                   AND json_extract(metadata, '$.channel_id') IS NOT NULL
+                   AND json_extract(metadata, '$.turn') IS NOT NULL
+                   AND json_extract(metadata, '$.turn') <= (
+                        SELECT MAX(json_extract(m2.metadata, '$.turn'))
+                        FROM nodes m2
+                        WHERE m2.type = 'coloquio_memory'
+                          AND json_extract(m2.metadata, '$.channel_id') =
+                              json_extract(nodes.metadata, '$.channel_id')
+                    ) - ?1",
+                &[&keep_turns],
+            )?;
+            let _ = conn.execute(
+                "DELETE FROM edges WHERE source NOT IN (SELECT id FROM nodes) OR target NOT IN (SELECT id FROM nodes)",
+                [],
+            )?;
+            let _ = conn.execute(
+                "DELETE FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+                [],
+            )?;
+            let _ = conn.execute(
+                "DELETE FROM node_sparse_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+                [],
+            )?;
+            if deleted > 0 {
+                info!(
+                    "🧹 coloquio_retention: eliminados {} nodos coloquio_memory con mas de {} turnos por canal",
+                    deleted, keep_turns
+                );
+            }
+            Ok(deleted)
+        })
+    }
     /// ADR-012 lifecycle state machine — Fase 2/3 transitions, run by
     /// `LifecyclePhase` in NightConsolidation.
     ///
