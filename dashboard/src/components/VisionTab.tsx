@@ -114,10 +114,7 @@ export function VisionTab({ bridge, notify }: Props) {
     // Browser never exposes the real local path — upload to kernel first
     if (!bridge) { notify('No bridge connection', 'error'); return; }
     try {
-      const form = new FormData();
-      form.append('file', file, file.name);
-      const res = await fetch('/api/v1/ingest/upload', { method: 'POST', body: form });
-      const json = await res.json() as { file?: string; status?: string };
+      const json = await bridge.uploadFile(file);
       if (json.file) {
         // Kernel saves to data/ingest/ relative to workspace root
         const serverPath = `data/ingest/${json.file}`;
