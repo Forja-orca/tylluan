@@ -188,7 +188,7 @@ pub async fn handle_tylluan_do(
     tracing::info!(
         gen_ai.operation.name = "tylluan_do",
         gen_ai.request.model = %guild_hint.as_deref().unwrap_or("semantic_router"),
-        intent = %intent,
+        intent = %crate::logging::redacted("do_entry", &intent),
         "Handling tylluan_do"
     );
 

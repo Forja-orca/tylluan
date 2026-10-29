@@ -351,7 +351,7 @@ pub async fn mcp_handler(
         },
     };
     let id = payload.get("id").cloned();
-    tracing::info!("📥 [MCP] Received payload: {}", payload);
+    tracing::info!("📥 {}", crate::logging::mcp_payload(&payload));
     let method = payload.get("method").and_then(|v| v.as_str()).unwrap_or("");
     let stateless_meta = match parse_stateless_request_meta(&headers, &payload) {
         Ok(meta) => meta,

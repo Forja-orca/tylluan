@@ -365,7 +365,7 @@ impl GuildMatcher {
         // biases the weighted blend toward keyword; RRF is scale-free.
         let mut candidates_raw: Vec<(String, f32, f32)> = Vec::new();
 
-        info!("🔍 Matcher: hybrid scoring '{}'", query);
+        info!("🔍 Matcher: hybrid scoring {}", crate::logging::redacted("matcher", query));
         for guild in &self.catalog {
             // Semantic score from pre-computed guild embedding (BGE-M3 cosine similarity)
             let sem_score = q_emb.and_then(|qe| {
@@ -546,7 +546,7 @@ impl GuildMatcher {
         // Confidence gate: reject sub-threshold matches
         if let Some(ref m) = keyword_result {
             if m.score < 0.1 {
-                tracing::warn!(query = %query, guild = %m.guild_name, score = m.score, "Match below confidence floor (0.1)");
+                tracing::warn!(query = %crate::logging::redacted("matcher_floor", query), guild = %m.guild_name, score = m.score, "Match below confidence floor (0.1)");
                 return None;
             }
         } else {

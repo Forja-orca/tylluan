@@ -336,7 +336,7 @@ pub(super) async fn resolve_and_prepare_tool_call(
         name: tool_name.clone().into(),
         arguments: Some(tool_args.as_object().cloned().unwrap_or_default()),
     };
-    info!("🔀 tylluan_do: intent='{}' → guild='{}' → tool='{}'", intent, guild_name, tool_name);
+    info!("🔀 tylluan_do: intent={} → guild='{}' → tool='{}'", crate::logging::redacted("do_prepare", intent), guild_name, tool_name);
 
     Ok(ResolvedToolCall { guild_name, tool_name, tool_args, routing_trace, call_params })
 }

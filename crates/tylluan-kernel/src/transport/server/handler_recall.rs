@@ -168,7 +168,7 @@ async fn handle_tylluan_recall_inner(
         gen_ai.operation.name = "tylluan_recall",
         gen_ai.request.model = "silva",
         gen_ai.request.max_results = limit as u64,
-        query = %query,
+        query = %crate::logging::redacted("recall", &query),
         mode = %mode,
         "Handling tylluan_recall"
     );
