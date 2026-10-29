@@ -41,5 +41,5 @@ The attestation proves the archive was built by this repository's release workfl
 Tylluan is experimental research software. Key security gaps are documented in [DISCLAIMER.md](DISCLAIMER.md). The most significant:
 
 1. No sandbox by default: bash/code guilds run with user privileges unless the opt-in Docker sandbox is enabled (`[security.sandbox]`, off by default)
-2. The bearer token grants full access by default; an opt-in role ACL exists (`[security.acl]`, `default_role = "admin"` means no restriction until configured)
+2. The master bearer token is operator-class; every other credential falls back to the fail-closed `[security.acl] default_role = "guest"` (no guilds) unless explicitly mapped to a role/token. Configure `[security.acl.roles]`/`tokens` for agents.
 3. No automatic detection of rogue agents; a manual local kill switch exists (`POST /api/v1/admin/emergency-kill`)

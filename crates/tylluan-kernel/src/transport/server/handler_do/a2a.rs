@@ -52,20 +52,16 @@ pub(crate) async fn handle_a2a_agent_prefix(
     if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
         let cfg = config_lock.read().await;
         let acl = &cfg.security.acl;
-        if !acl.roles.is_empty() || !acl.tokens.is_empty() {
-            let Some(role) = crate::transport::http::auth::current_acl_role() else {
-                return Some(Err(McpError::internal_error(
-                    "ACCESS_DENIED: ACL context unavailable for this invocation",
-                    None,
-                )));
-            };
-            if !crate::transport::http::auth::acl_can_access(&role, "a2a", acl) {
-                let msg = format!(
-                    "ACCESS_DENIED: role '{role}' does not have access to 'a2a' external agents. \
-                     Contact your administrator to update [security.acl] in tylluan.toml."
-                );
-                return Some(Ok(error_result(&msg)));
-            }
+        // D-68: evaluate the virtual guild gate whenever an HTTP role is
+        // present, independent of whether roles/tokens were explicitly set.
+        if let Some(role) = crate::transport::http::auth::current_acl_role()
+            && !crate::transport::http::auth::acl_can_access(&role, "a2a", acl)
+        {
+            let msg = format!(
+                "ACCESS_DENIED: role '{role}' does not have access to 'a2a' external agents. \
+                 Contact your administrator to update [security.acl] in tylluan.toml."
+            );
+            return Some(Ok(error_result(&msg)));
         }
     }
 

@@ -173,6 +173,10 @@ pub struct CreateContractRequest {
     pub team: Vec<String>,
     pub consolidator: String,
     pub channel_id: String,
+    /// D-69: optional declarative creator identity. When a bearer is bound,
+    /// this (or `consolidator` if absent) must match the binding.
+    #[serde(default)]
+    pub agent_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -235,6 +239,25 @@ fn now_unix() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
+/// D-69: a bearer bound to an agent_id cannot act as a different participant.
+/// Without a binding (`None`) the historical behavior is preserved.
+fn bound_agent_mismatch(
+    declared: &str,
+) -> Option<(StatusCode, Json<serde_json::Value>)> {
+    let bound = crate::transport::http::auth::current_bound_agent_id()?;
+    if bound == declared {
+        return None;
+    }
+    Some((
+        StatusCode::FORBIDDEN,
+        Json(serde_json::json!({
+            "error": "agent_identity_mismatch",
+            "declared_agent_id": declared,
+            "authenticated_agent_id": bound,
+        })),
+    ))
+}
+
 /// D-57: la persistencia de un contrato no puede fallar en silencio. La
 /// respuesta HTTP no cambia; el error queda en el log con el id.
 fn persist_contract(
@@ -273,6 +296,12 @@ pub async fn contract_create_handler(
     State(state): State<Arc<HttpState>>,
     Json(req): Json<CreateContractRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // D-69: the creator identity is explicit when supplied; otherwise the
+    // consolidator is the acting identity for binding checks.
+    let declared_agent = req.agent_id.as_deref().unwrap_or(&req.consolidator);
+    if let Some(response) = bound_agent_mismatch(declared_agent) {
+        return response;
+    }
     let id = format!("bwc-{}", uuid::Uuid::new_v4());
     let budget = req.budget.unwrap_or(15).clamp(1, 100);
     let contract = WorkContract {
@@ -403,6 +432,9 @@ pub async fn contract_deliver_handler(
     Path(id): Path<String>,
     Json(req): Json<DeliverRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(response) = bound_agent_mismatch(&req.agent_id) {
+        return response;
+    }
     let mut entry = match state.contract_registry.contracts.get_mut(&id) {
         Some(e) => e,
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "contract not found"}))),
@@ -453,6 +485,9 @@ pub async fn contract_vote_handler(
     Path(id): Path<String>,
     Json(req): Json<VoteRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(response) = bound_agent_mismatch(&req.agent_id) {
+        return response;
+    }
     let mut entry = match state.contract_registry.contracts.get_mut(&id) {
         Some(e) => e,
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "contract not found"}))),
@@ -539,6 +574,9 @@ pub async fn contract_close_handler(
     Path(id): Path<String>,
     Json(req): Json<CloseRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(response) = bound_agent_mismatch(&req.agent_id) {
+        return response;
+    }
     let mut entry = match state.contract_registry.contracts.get_mut(&id) {
         Some(e) => e,
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "contract not found"}))),

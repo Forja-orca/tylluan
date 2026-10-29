@@ -64,20 +64,18 @@ pub(super) async fn resolve_and_prepare_tool_call(
     if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
         let cfg = config_lock.read().await;
         let acl = &cfg.security.acl;
-        if !acl.roles.is_empty() || !acl.tokens.is_empty() {
-            let Some(role) = crate::transport::http::auth::current_acl_role() else {
-                let msg = "ACCESS_DENIED: ACL context unavailable for this invocation";
-                warn!("{}", msg);
-                return Err(error_result(msg));
-            };
-            if !crate::transport::http::auth::acl_can_access(&role, &guild_name, acl) {
-                let msg = format!(
-                    "ACCESS_DENIED: role '{role}' does not have access to guild '{guild_name}'. \
-                     Contact your administrator to update [security.acl] in tylluan.toml."
-                );
-                warn!("{}", msg);
-                return Err(error_result(&msg));
-            }
+        // D-68: the gate runs whenever an HTTP role is present, not only when
+        // [security.acl.roles] is non-empty. No role means a direct/internal
+        // invocation, not an HTTP caller with the default role.
+        if let Some(role) = crate::transport::http::auth::current_acl_role()
+            && !crate::transport::http::auth::acl_can_access(&role, &guild_name, acl)
+        {
+            let msg = format!(
+                "ACCESS_DENIED: role '{role}' does not have access to guild '{guild_name}'. \
+                 Contact your administrator to update [security.acl] in tylluan.toml."
+            );
+            warn!("{}", msg);
+            return Err(error_result(&msg));
         }
         if !acl.agent_permissions.is_empty() {
             let aid = agent_id.as_deref().unwrap_or("anonymous");

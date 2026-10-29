@@ -55,6 +55,7 @@ async fn new_contract(state: &Arc<HttpState>) -> String {
             team: vec![ALICE.to_string(), BOB.to_string()],
             consolidator: ALICE.to_string(),
             channel_id: "general".to_string(),
+            agent_id: None,
         }),
     )
     .await;
@@ -93,7 +94,6 @@ async fn bound_agent_is_visible_inside_scope_and_absent_outside() {
 /// El bearer de `ALICE` no puede entregar como `BOB`.
 /// Hoy: 200 + entrega a nombre de `BOB`. Esperado: 403.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "B-1 abierto: api_contracts.rs no compara agent_id con current_bound_agent_id()"]
 async fn deliver_rejects_claim_of_another_bound_agent() {
     let state = support::test_state("bwc_agent_binding_deliver").await;
     let id = new_contract(&state).await;
@@ -124,7 +124,6 @@ async fn deliver_rejects_claim_of_another_bound_agent() {
 /// El bearer de `ALICE` no puede votar como `BOB`.
 /// Hoy: 200 + voto a nombre de `BOB`. Esperado: 403.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "B-1 abierto: api_contracts.rs no compara agent_id con current_bound_agent_id()"]
 async fn vote_rejects_claim_of_another_bound_agent() {
     let state = support::test_state("bwc_agent_binding_vote").await;
     let id = new_contract(&state).await;
