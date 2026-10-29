@@ -440,6 +440,9 @@ pub async fn start_http_server(
     state: Arc<HttpState>,
     bound_tx: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // T-DSH-125: token para la parada ordenada del HTTP (se clona antes de mover
+    // `state` a build_router).
+    let shutdown_token = state.cancel_token.clone();
     let app = build_router(state);
     
     // Read the old port before we overwrite it to perform a true hot-swap
@@ -499,10 +502,16 @@ pub async fn start_http_server(
         let _ = tx.send(());
     }
 
+    // T-DSH-125 (AUD-02): parada ordenada del HTTP — deja de aceptar conexiones
+    // en cuanto se cancela el token de apagado, en vez de seguir aceptando hasta
+    // que el proceso muere. El token lo cancela POST /api/v1/admin/shutdown y el
+    // camino de apagado de main.rs.
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    ).await?;
+    )
+    .with_graceful_shutdown(async move { shutdown_token.cancelled().await })
+    .await?;
     Ok(())
 }
 

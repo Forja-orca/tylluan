@@ -55,6 +55,17 @@ pub async fn test_state(identity_tag: &str) -> Arc<HttpState> {
 
 /// Parameterized variant for auth/middleware tests (Fase 1: OAuth gate).
 pub async fn test_state_custom(identity_tag: &str, auth_token: Option<String>, dev_mode: bool) -> Arc<HttpState> {
+    build_state(identity_tag, auth_token, dev_mode, ":memory:").await
+}
+
+/// T-DSH-124: variante con `contract_db` en un fichero propio, para poder
+/// forzar un fallo de persistencia (p. ej. dropeando la tabla desde otra
+/// conexion) y comprobar que el handler devuelve 500.
+pub async fn test_state_with_contract_db(identity_tag: &str, contract_db_path: &str) -> Arc<HttpState> {
+    build_state(identity_tag, None, true, contract_db_path).await
+}
+
+async fn build_state(identity_tag: &str, auth_token: Option<String>, dev_mode: bool, contract_db_path: &str) -> Arc<HttpState> {
     // T-DSH-2: GuildRegistry persists registry.json into its root on every
     // register()/save(), so rooting it at CWD littered crates/tylluan-kernel/
     // with runtime state that later tests read as if it were config
@@ -134,7 +145,7 @@ pub async fn test_state_custom(identity_tag: &str, auth_token: Option<String>, d
         journal: Arc::new(tylluan_kernel::transport::http::api_v1::api_journal::JournalDb::open(":memory:").unwrap()),
         agent_registry: tylluan_kernel::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
         contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
-        contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
+        contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(contract_db_path).unwrap()),
         peer_db: Arc::new(tylluan_kernel::federation::PeerDb::open(":memory:").unwrap()),
         node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(
             &std::env::temp_dir().join(format!("tylluan_id_{}_{}", identity_tag, test_counter_next())),
