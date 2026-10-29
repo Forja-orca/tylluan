@@ -2167,6 +2167,7 @@ async fn main() -> anyhow::Result<()> {
         data_dir.to_path_buf(),
         matcher.clone(),
         config.night.clone(),
+        config.silva.coloquio_retention_turns,
     ));
 
 
@@ -2307,6 +2308,9 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+// El ctx de NightConsolidation se construye argumento a argumento desde main;
+// el octavo (coloquio_retention_turns, H-51) anade una clave de config leaf, no un nuevo subsistema.
+#[allow(clippy::too_many_arguments)] // mirrors the PhaseContext field set 1:1 (H-51)
 async fn run_night_consolidation_loop(
     silva: Arc<SilvaDB>,
     agent_profiles: Option<Arc<Mutex<AgentProfileStore>>>,
@@ -2315,6 +2319,7 @@ async fn run_night_consolidation_loop(
     data_dir: PathBuf,
     matcher: Arc<GuildMatcher>,
     night_config: tylluan_kernel::config::NightConfig,
+    coloquio_retention_turns: u64,
 ) {
     use tylluan_kernel::memory::night::{PhaseOrchestrator, PhaseContext, production_phases};
 
@@ -2331,6 +2336,7 @@ async fn run_night_consolidation_loop(
         server,
         data_dir,
         matcher,
+        coloquio_retention_turns,
     };
 
     // AG-9: Subsequent cycles must not start until interval_secs (with a safe minimum

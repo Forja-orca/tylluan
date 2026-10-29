@@ -1546,6 +1546,19 @@ pub struct SilvaConfig {
     /// el coalescing todavia. Default true (comportamiento actual).
     #[serde(default = "default_bool_true")]
     pub reranker_enabled: bool,
+
+    /// H-51 (propuesta C de H-49, T2099): retencion acotada de `coloquio_memory`
+    /// por canal, ejecutada por NightConsolidation (DecayPhase via
+    /// `SilvaDB::prune_coloquio_retention`). Con N>0 se borran los nodos del
+    /// flywheel coloquio cuyo `turn` queda a mas de N turnos del turno maximo
+    /// de su canal (se conservan los N turnos mas recientes por canal); la
+    /// cascada de edges/embeddings es manual (igual que `prune_dead_nodes`).
+    /// Default 0 = APAGADO: cero cambio de comportamiento. Es BORRADO de datos:
+    /// activarlo en produccion exige decision explicita del operador (Jose,
+    /// T2099). Los `coloquio_memory` sin metadata de flywheel (clasificados por
+    /// hybrid_migration, sin `turn`) nunca se ven afectados.
+    #[serde(default)]
+    pub coloquio_retention_turns: u64,
 }
 
 impl Default for SilvaConfig {
@@ -1565,6 +1578,7 @@ impl Default for SilvaConfig {
             embed_warm_start: true,
             reranker_enabled: true,
             recall_abstain_min_score: default_recall_abstain_min_score(),
+            coloquio_retention_turns: 0,
         }
     }
 }

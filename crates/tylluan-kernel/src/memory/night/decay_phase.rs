@@ -31,6 +31,19 @@ impl Phase for DecayPhase {
                 details.push(format!("purged {count} contaminated lesson nodes"));
             }
 
+        // H-51: retencion acotada de coloquio_memory (silva.coloquio_retention_turns,
+        // default 0 = APAGADO, cero cambio de comportamiento). Es BORRADO de datos:
+        // opt-in del operador, nunca activado en produccion sin decision explicita
+        // (T2099). Solo corre aqui, en NightConsolidation.
+        match ctx.silva.prune_coloquio_retention(ctx.coloquio_retention_turns).await {
+            Ok(count) if count > 0 => details.push(format!(
+                "coloquio retention: {} nodos coloquio_memory eliminados (retencion {} turnos/canal)",
+                count, ctx.coloquio_retention_turns
+            )),
+            Ok(_) => {}
+            Err(e) => details.push(format!("coloquio retention failed: {e}")),
+        }
+
         let detail = if details.is_empty() { "no decay needed".to_string() } else { details.join(", ") };
         PhaseReport { name: self.name(), duration_ms: 0, ok: true, detail }
     }

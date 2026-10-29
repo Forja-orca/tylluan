@@ -358,6 +358,7 @@ mod tests {
             ))),
             data_dir: tmp.clone(),
             matcher: Arc::new(crate::router::matcher::GuildMatcher::new(crate::router::catalog::builtin_catalog())),
+            coloquio_retention_turns: 0,
         };
 
         let (inputs, targets) = build_training_data(&ctx).await.unwrap();
