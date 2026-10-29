@@ -255,10 +255,24 @@ fn persist_contract(
 
 // --- Handlers ---------------------------------------------------------------
 
+/// AUD-05: un fallo de persistencia no puede ser silencioso; el handler
+/// devuelve 500 con el id para que el llamante sepa que el contrato NO quedo
+/// guardado (antes era `let _ = persist_contract(...)`).
+fn persist_error_response(entry_id: &str, e: rusqlite::Error) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+            "error": "contract_persist_failed",
+            "contract_id": entry_id,
+            "detail": e.to_string()
+        })),
+    )
+}
+
 pub async fn contract_create_handler(
     State(state): State<Arc<HttpState>>,
     Json(req): Json<CreateContractRequest>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<serde_json::Value>) {
     let id = format!("bwc-{}", uuid::Uuid::new_v4());
     let budget = req.budget.unwrap_or(15).clamp(1, 100);
     let contract = WorkContract {
@@ -279,8 +293,10 @@ pub async fn contract_create_handler(
     let status = contract.status.clone();
     state.contract_registry.contracts.insert(id.clone(), contract);
 
-    if let Some(c) = state.contract_registry.contracts.get(&id) {
-        let _ = persist_contract(&state.contract_db, &c);
+    if let Some(c) = state.contract_registry.contracts.get(&id)
+        && let Err(e) = persist_contract(&state.contract_db, &c)
+    {
+        return persist_error_response(&id, e);
     }
 
     (
@@ -297,7 +313,7 @@ pub async fn contract_tick_handler(
     State(state): State<Arc<HttpState>>,
     Path(id): Path<String>,
     Json(_req): Json<TickRequest>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<serde_json::Value>) {
     let mut entry = match state.contract_registry.contracts.get_mut(&id) {
         Some(e) => e,
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "contract not found"}))),
@@ -314,7 +330,9 @@ pub async fn contract_tick_handler(
                 "ts": now_unix()
             }));
         }
-        let _ = persist_contract(&state.contract_db, &entry);
+        if let Err(e) = persist_contract(&state.contract_db, &entry) {
+            return persist_error_response(&id, e);
+        }
         return (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -329,7 +347,9 @@ pub async fn contract_tick_handler(
         entry.status = "in_progress".to_string();
     }
 
-    let _ = persist_contract(&state.contract_db, &entry);
+    if let Err(e) = persist_contract(&state.contract_db, &entry) {
+        return persist_error_response(&id, e);
+    }
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -382,11 +402,27 @@ pub async fn contract_deliver_handler(
     State(state): State<Arc<HttpState>>,
     Path(id): Path<String>,
     Json(req): Json<DeliverRequest>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<serde_json::Value>) {
     let mut entry = match state.contract_registry.contracts.get_mut(&id) {
         Some(e) => e,
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "contract not found"}))),
     };
+
+    // AUD-04: solo un miembro del roster puede entregar, y una sola entrega
+    // por participante (antes se aceptaba cualquier agent_id y se contaban
+    // duplicados como entregas distintas).
+    if !entry.team.iter().any(|m| m == &req.agent_id) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "agent not in contract roster", "agent_id": req.agent_id})),
+        );
+    }
+    if entry.deliveries.iter().any(|d| d.agent_id == req.agent_id) {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "duplicate delivery", "agent_id": req.agent_id})),
+        );
+    }
 
     entry.deliveries.push(ContractDelivery {
         agent_id: req.agent_id,
@@ -398,7 +434,9 @@ pub async fn contract_deliver_handler(
     let team_count = entry.team.len();
     let all_delivered = delivered_count >= team_count;
 
-    let _ = persist_contract(&state.contract_db, &entry);
+    if let Err(e) = persist_contract(&state.contract_db, &entry) {
+        return persist_error_response(&id, e);
+    }
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -414,12 +452,21 @@ pub async fn contract_vote_handler(
     State(state): State<Arc<HttpState>>,
     Path(id): Path<String>,
     Json(req): Json<VoteRequest>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<serde_json::Value>) {
     let mut entry = match state.contract_registry.contracts.get_mut(&id) {
         Some(e) => e,
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "contract not found"}))),
     };
 
+    // AUD-04: solo vota un miembro del roster; el quorum se mide sobre el
+    // roster completo, no sobre los votos emitidos (antes 1 voto de 1 era
+    // mayoria). Un voto por participante (retractar y revotar sigue valiendo).
+    if !entry.team.iter().any(|m| m == &req.agent_id) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "agent not in contract roster", "agent_id": req.agent_id})),
+        );
+    }
     entry.votes.retain(|v| v.agent_id != req.agent_id);
     entry.votes.push(ContractVote {
         agent_id: req.agent_id,
@@ -429,7 +476,8 @@ pub async fn contract_vote_handler(
 
     let approves = entry.votes.iter().filter(|v| v.vote == "approve").count();
     let total = entry.votes.len();
-    let majority = total > 0 && approves > total / 2;
+    let roster = entry.team.len();
+    let majority = roster > 0 && approves * 2 > roster;
 
     if majority && entry.status == "blocked" && entry.extensions < 2 {
         let approved_cycles: Vec<i32> = entry.votes.iter()
@@ -448,7 +496,9 @@ pub async fn contract_vote_handler(
             "extensions": entry.extensions,
             "ts": now_unix()
         }));
-        let _ = persist_contract(&state.contract_db, &entry);
+        if let Err(e) = persist_contract(&state.contract_db, &entry) {
+            return persist_error_response(&id, e);
+        }
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -458,7 +508,9 @@ pub async fn contract_vote_handler(
             }))
         )
     } else if majority {
-        let _ = persist_contract(&state.contract_db, &entry);
+        if let Err(e) = persist_contract(&state.contract_db, &entry) {
+            return persist_error_response(&id, e);
+        }
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -467,7 +519,9 @@ pub async fn contract_vote_handler(
             }))
         )
     } else {
-        let _ = persist_contract(&state.contract_db, &entry);
+        if let Err(e) = persist_contract(&state.contract_db, &entry) {
+            return persist_error_response(&id, e);
+        }
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -484,7 +538,7 @@ pub async fn contract_close_handler(
     State(state): State<Arc<HttpState>>,
     Path(id): Path<String>,
     Json(req): Json<CloseRequest>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<serde_json::Value>) {
     let mut entry = match state.contract_registry.contracts.get_mut(&id) {
         Some(e) => e,
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "contract not found"}))),
@@ -504,7 +558,9 @@ pub async fn contract_close_handler(
         "ts": now_unix()
     }));
 
-    let _ = persist_contract(&state.contract_db, &entry);
+    if let Err(e) = persist_contract(&state.contract_db, &entry) {
+        return persist_error_response(&id, e);
+    }
 
     // TCC-3 (bwc-58310353): close hook — if a task-context capsule exists,
     // synthesize it into SilvaDB memory (structured node, not a raw JSON

@@ -2228,7 +2228,20 @@ async fn main() -> anyhow::Result<()> {
     // 0b. Tear down tunnel rules (WSL portproxy cleanup)
     tunnel_manager.stop();
 
-    // 1. Kill all active guilds
+    // 1. Kill all active guilds (T-DSH-125/AUD-02: `reap_idle` solo recogia
+    // guilds inactivos; aqui se paran EXPLICITAMENTE todos los que sigan vivos).
+    if let Ok(statuses) = registry.status_all().await {
+        let mut stopped = 0usize;
+        for gs in &statuses {
+            match registry.kill_guild(&gs.name).await {
+                Ok(()) => stopped += 1,
+                Err(e) => tracing::warn!("shutdown: no se pudo parar guild '{}': {e}", gs.name),
+            }
+        }
+        if stopped > 0 {
+            tracing::info!("shutdown: {} guild(s) activos parados explicitamente", stopped);
+        }
+    }
     registry.reap_idle().await;
 
     // 2. Shut down auxiliary services 
