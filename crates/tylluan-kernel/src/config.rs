@@ -2411,7 +2411,7 @@ fn default_mcp_heartbeat_ms() -> u64 { 8_000 }
 fn default_sandbox_image() -> String { "python:3.12-slim".to_string() }
 fn default_sandbox_memory() -> String { "512m".to_string() }
 fn default_sandbox_timeout_secs() -> u64 { 30 }
-fn default_acl_default_role() -> String { "admin".to_string() }
+fn default_acl_default_role() -> String { "guest".to_string() }
 
 /// Guild category for timeout assignment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]

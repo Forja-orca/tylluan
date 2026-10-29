@@ -27,6 +27,7 @@ async fn new_contract(state: &Arc<HttpState>) -> String {
             team: TEAM.iter().map(|s| s.to_string()).collect(),
             consolidator: "alice".to_string(),
             channel_id: "general".to_string(),
+            agent_id: None,
         }),
     )
     .await;
@@ -205,4 +206,115 @@ async fn close_by_non_consolidator_is_forbidden() {
     )
     .await;
     assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "close: {body}");
+}
+
+// D-69: bearer token binding must also protect the BWC REST handlers, not only
+// the general tool dispatcher. These tests scope the same task-local installed
+// by bearer_auth_middleware; no network or live kernel is involved.
+use tylluan_kernel::transport::http::auth::ACL_AGENT_ID;
+
+fn create_request(agent_id: Option<&str>) -> CreateContractRequest {
+    CreateContractRequest {
+        task: "D-69 binding".to_string(),
+        budget: Some(5),
+        team: TEAM.iter().map(|s| s.to_string()).collect(),
+        consolidator: "alice".to_string(),
+        channel_id: "general".to_string(),
+        agent_id: agent_id.map(str::to_string),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn create_rejects_declared_agent_different_from_bearer_binding() {
+    let state = support::test_state("contracts_d69_create_mismatch").await;
+    let (status, Json(body)) = ACL_AGENT_ID
+        .scope("alice".to_string(), async {
+            contract_create_handler(
+                State(state.clone()),
+                Json(create_request(Some("bob"))),
+            )
+            .await
+        })
+        .await;
+    assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "create: {body}");
+    assert_eq!(body["error"], "agent_identity_mismatch");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn create_allows_declared_agent_matching_bearer_binding() {
+    let state = support::test_state("contracts_d69_create_match").await;
+    let (status, Json(body)) = ACL_AGENT_ID
+        .scope("alice".to_string(), async {
+            contract_create_handler(
+                State(state.clone()),
+                Json(create_request(Some("alice"))),
+            )
+            .await
+        })
+        .await;
+    assert_eq!(status, axum::http::StatusCode::CREATED, "create: {body}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn deliver_rejects_agent_different_from_bearer_binding() {
+    let state = support::test_state("contracts_d69_deliver").await;
+    let id = new_contract(&state).await;
+    let (status, Json(body)) = ACL_AGENT_ID
+        .scope("bob".to_string(), async {
+            contract_deliver_handler(
+                State(state.clone()),
+                Path(id.clone()),
+                Json(DeliverRequest {
+                    agent_id: "alice".to_string(),
+                    summary: "spoof".to_string(),
+                }),
+            )
+            .await
+        })
+        .await;
+    assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "deliver: {body}");
+    assert_eq!(body["error"], "agent_identity_mismatch");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn vote_rejects_agent_different_from_bearer_binding() {
+    let state = support::test_state("contracts_d69_vote").await;
+    let id = new_contract(&state).await;
+    let (status, Json(body)) = ACL_AGENT_ID
+        .scope("bob".to_string(), async {
+            contract_vote_handler(
+                State(state.clone()),
+                Path(id.clone()),
+                Json(VoteRequest {
+                    agent_id: "alice".to_string(),
+                    vote: "approve".to_string(),
+                    cycles: Some(5),
+                }),
+            )
+            .await
+        })
+        .await;
+    assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "vote: {body}");
+    assert_eq!(body["error"], "agent_identity_mismatch");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn close_rejects_agent_different_from_bearer_binding() {
+    let state = support::test_state("contracts_d69_close").await;
+    let id = new_contract(&state).await;
+    let (status, Json(body)) = ACL_AGENT_ID
+        .scope("bob".to_string(), async {
+            contract_close_handler(
+                State(state.clone()),
+                Path(id.clone()),
+                Json(CloseRequest {
+                    agent_id: "alice".to_string(),
+                    summary: "spoof close".to_string(),
+                }),
+            )
+            .await
+        })
+        .await;
+    assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "close: {body}");
+    assert_eq!(body["error"], "agent_identity_mismatch");
 }

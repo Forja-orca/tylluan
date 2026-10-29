@@ -52,17 +52,16 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
     if let Ok(cfg_lock) = crate::config::TylluanConfig::load_cached() {
         {   let cfg = cfg_lock.read().await;
             let acl = &cfg.security.acl;
-            if !acl.roles.is_empty() {
-                let Some(role) = crate::transport::http::auth::current_acl_role() else {
-                    return (StatusCode::FORBIDDEN, Json(serde_json::json!({
-                        "error": "ACL context unavailable; refusing guild access"
-                    }))).into_response();
-                };
-                if !crate::transport::http::auth::acl_can_access(&role, &guild, acl) {
-                    return (StatusCode::FORBIDDEN, Json(serde_json::json!({
-                        "error": format!("Role '{}' does not have access to guild '{}'", role, guild)
-                    }))).into_response();
-                }
+            // D-68: evaluate the guild gate for every authenticated HTTP
+            // request, even when [security.acl.roles] is absent. A missing
+            // task-local means an internal/direct call (no HTTP boundary),
+            // not an unknown HTTP role.
+            if let Some(role) = crate::transport::http::auth::current_acl_role()
+                && !crate::transport::http::auth::acl_can_access(&role, &guild, acl)
+            {
+                return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+                    "error": format!("Role '{}' does not have access to guild '{}'", role, guild)
+                }))).into_response();
             }
         }
     }

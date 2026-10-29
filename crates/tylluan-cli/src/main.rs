@@ -1621,11 +1621,14 @@ fn update_binary_names() -> [String; 2] {
 /// Extract exactly the two expected binaries, each into its own path. Entry
 /// paths from the archive are never used as destinations, so a malicious `../`
 /// member cannot escape the staging directory.
+const MAX_UPDATE_UNCOMPRESSED_BYTES: u64 = 512 * 1024 * 1024;
+
 fn extract_update_binaries(bytes: &[u8], stage: &Path) -> Result<Vec<(String, PathBuf)>> {
     use std::collections::HashMap;
 
     let names = update_binary_names();
     let mut found: HashMap<String, PathBuf> = HashMap::new();
+    let mut extracted_bytes: u64 = 0;
     let decoder = flate2::read::GzDecoder::new(bytes);
     let mut archive = tar::Archive::new(decoder);
 
@@ -1640,6 +1643,27 @@ fn extract_update_binaries(bytes: &[u8], stage: &Path) -> Result<Vec<(String, Pa
         }
         if found.contains_key(&name) {
             anyhow::bail!("Release archive contains duplicate {name}");
+        }
+        // D-70: only regular files are installable. This rejects symlinks,
+        // directories, hardlinks and device entries with a familiar name.
+        if !entry.header().entry_type().is_file() {
+            anyhow::bail!(
+                "Release archive entry {name} is not a regular file (type {:?})",
+                entry.header().entry_type()
+            );
+        }
+        let size = entry
+            .header()
+            .size()
+            .with_context(|| format!("Could not read declared size of {name}"))?;
+        extracted_bytes = extracted_bytes
+            .checked_add(size)
+            .ok_or_else(|| anyhow::anyhow!("Release archive size overflow"))?;
+        if extracted_bytes > MAX_UPDATE_UNCOMPRESSED_BYTES {
+            anyhow::bail!(
+                "Release archive expands beyond the {} MiB update limit",
+                MAX_UPDATE_UNCOMPRESSED_BYTES / 1024 / 1024
+            );
         }
         let destination = stage.join(&name);
         entry
@@ -2278,5 +2302,62 @@ mod update_tests {
             error.to_string().contains(&names[1]),
             "error must name the missing binary, got: {error}"
         );
+    }
+}
+
+#[cfg(test)]
+mod d70_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn archive_with(name: &str, entry_type: tar::EntryType, size: u64, data: &[u8]) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(entry_type);
+        header.set_size(size);
+        header.set_mode(0o755);
+        if entry_type.is_symlink() {
+            header.set_link_name("target").expect("set symlink target");
+        }
+        header.set_cksum();
+        builder
+            .append_data(&mut header, name, data)
+            .expect("append synthetic tar entry");
+        let tar_bytes = builder.into_inner().expect("finish synthetic tar");
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(&tar_bytes).expect("gzip synthetic tar");
+        encoder.finish().expect("finish synthetic gzip")
+    }
+
+    #[test]
+    fn rejects_symlink_named_like_a_release_binary() {
+        let names = update_binary_names();
+        let archive = archive_with(&names[0], tar::EntryType::Symlink, 0, b"");
+        let stage = tempfile::tempdir().expect("tempdir");
+        let error = extract_update_binaries(&archive, stage.path()).unwrap_err();
+        assert!(error.to_string().contains("not a regular file"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_directory_named_like_a_release_binary() {
+        let names = update_binary_names();
+        let archive = archive_with(&names[0], tar::EntryType::Directory, 0, b"");
+        let stage = tempfile::tempdir().expect("tempdir");
+        let error = extract_update_binaries(&archive, stage.path()).unwrap_err();
+        assert!(error.to_string().contains("not a regular file"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_an_entry_that_exceeds_the_decompression_limit() {
+        let names = update_binary_names();
+        let archive = archive_with(
+            &names[0],
+            tar::EntryType::Regular,
+            MAX_UPDATE_UNCOMPRESSED_BYTES + 1,
+            b"",
+        );
+        let stage = tempfile::tempdir().expect("tempdir");
+        let error = extract_update_binaries(&archive, stage.path()).unwrap_err();
+        assert!(error.to_string().contains("update limit"), "got: {error}");
     }
 }

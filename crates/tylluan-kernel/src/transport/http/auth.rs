@@ -348,6 +348,18 @@ pub fn operator_gate_allows(kind: Option<AclAuthKind>) -> bool {
     )
 }
 
+/// D-68: the master credential is explicitly operator-class for ACL purposes.
+/// It must not inherit `default_role` (which is now `guest`, not `admin`).
+/// Query-string master remains authenticated but cannot satisfy the operator
+/// gate; it still gets the operator ACL role for guild access.
+pub fn acl_role_for_auth_kind(kind: AclAuthKind) -> Option<&'static str> {
+    matches!(
+        kind,
+        AclAuthKind::MasterToken | AclAuthKind::MasterTokenQuery | AclAuthKind::DevBypass
+    )
+    .then_some("admin")
+}
+
 /// D-34: the ONE audited exception where a guild credential may cross into the
 /// operator class (Jose/TL 2026-10-23, option A). `guilds/core/silva_utils.py`
 /// writes knowledge triples through this route and no non-operator path exists
@@ -639,7 +651,9 @@ pub async fn bearer_auth_middleware(
     } else {
         None
     };
-    let acl_role = if guild_identity.is_some() {
+    let acl_role = if let Some(role) = acl_role_for_auth_kind(auth_kind) {
+        role.to_string()
+    } else if guild_identity.is_some() {
         let config = state.config.read().await;
         config.security.acl.default_role.clone()
     } else {
@@ -1480,5 +1494,38 @@ mod mcp_origin_guard_tests {
             MCP_ORIGIN_GUARD_PATHS,
             ["/messages", "/mcp", "/api/v1/mcp", "/sse", "/sse/download"]
         );
+    }
+}
+
+#[cfg(test)]
+mod d68_acl_tests {
+    use super::*;
+
+    #[test]
+    fn default_acl_role_is_guest_and_denies_every_guild() {
+        let acl = AclConfig::default();
+        assert_eq!(acl.default_role, "guest");
+        assert!(acl.roles.is_empty(), "default roles must be empty");
+        assert!(!acl_can_access("guest", "bash", &acl));
+        assert!(!acl_can_access("guest", "knowledge", &acl));
+        assert!(acl_can_access("admin", "bash", &acl), "admin remains the explicit operator role");
+    }
+
+    #[test]
+    fn master_credential_is_explicit_operator_role() {
+        assert_eq!(acl_role_for_auth_kind(AclAuthKind::MasterToken), Some("admin"));
+        assert_eq!(acl_role_for_auth_kind(AclAuthKind::MasterTokenQuery), Some("admin"));
+        assert_eq!(acl_role_for_auth_kind(AclAuthKind::DevBypass), Some("admin"));
+        assert_eq!(acl_role_for_auth_kind(AclAuthKind::OAuthJwt), None);
+        assert_eq!(acl_role_for_auth_kind(AclAuthKind::GuildToken), None);
+    }
+
+    #[test]
+    fn unlisted_oauth_identity_gets_guest_not_admin() {
+        let acl = AclConfig::default();
+        let contract = crate::security::agents_contract::AgentsContract::empty();
+        let role = resolve_acl_role_inner(Some("jwt-without-mapping"), Some("agent-x"), &acl, &contract);
+        assert_eq!(role, "guest");
+        assert!(!acl_can_access(&role, "bash", &acl));
     }
 }
