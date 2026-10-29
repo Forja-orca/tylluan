@@ -154,3 +154,33 @@ async fn master_token_still_passes_operator_gate() {
         "master token passes the gate; handler answers peer-not-found"
     );
 }
+
+/// D-72: the dashboard needs a stable machine-readable reason to show
+/// "missing token" instead of guessing from a generic 401.
+#[tokio::test(flavor = "multi_thread")]
+async fn unauthorized_without_credentials_has_missing_token_code() {
+    let state = support::test_state_custom(
+        "oauth_f2_scope_missing_token",
+        Some("master-test-token".to_string()),
+        false,
+    )
+    .await;
+    let app = build_router(state);
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(OPERATOR_READ)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let bytes = axum::body::to_bytes(resp.into_body(), 16 * 1024)
+        .await
+        .expect("read 401 body");
+    let json: serde_json::Value = serde_json::from_slice(&bytes).expect("401 body is JSON");
+    assert_eq!(json["code"], "missing_token", "body: {json}");
+}

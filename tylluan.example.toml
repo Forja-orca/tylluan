@@ -251,6 +251,16 @@ admin = ["*"]
 # "my-reader-token-here" = "reader"
 # "my-writer-token-here" = "writer"
 
+# D-71: an OAuth JWT has no static entry in [security.acl.tokens]; it falls
+# back to default_role="guest" unless it identifies itself. For a read-only
+# OAuth client, send `X-Agent-Id: oauth-reader` and declare that id in
+# .tylluan/agents.toml with `role = "reader"` (the `reader` role must exist
+# above). Without both pieces the JWT remains guest and guild calls return 403.
+# Example .tylluan/agents.toml:
+#   [agents.oauth-reader]
+#   role = "reader"
+#   description = "read-only OAuth client"
+
 # M31-P0: deterministic pre/post hooks around the 6 sovereign tools (tylluan_do,
 # tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph, tylluan_decide) plus tylluan_ingest.
 # Runs once for every MCP client (Claude Desktop, Claude Code, LM Studio, ...) --

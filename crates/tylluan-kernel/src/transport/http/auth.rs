@@ -580,11 +580,16 @@ pub async fn bearer_auth_middleware(
 
     if !is_authorized {
         warn!("🚫 Unauthorized request to {}", request.uri());
+        let no_credentials = headers.get("authorization").is_none()
+            && !query.split('&').any(|pair| {
+                pair.starts_with("token=") || pair.starts_with("Authorization=")
+            });
         return (
             StatusCode::UNAUTHORIZED,
             [(WWW_AUTHENTICATE, bearer_challenge(&state.oauth, request.headers()))],
             Json(serde_json::json!({
                 "error": "unauthorized",
+                "code": if no_credentials { "missing_token" } else { "invalid_token" },
                 "message": "Valid Bearer token required. Check your .tylluan-token file."
             })),
         ).into_response();
@@ -1527,5 +1532,59 @@ mod d68_acl_tests {
         let role = resolve_acl_role_inner(Some("jwt-without-mapping"), Some("agent-x"), &acl, &contract);
         assert_eq!(role, "guest");
         assert!(!acl_can_access(&role, "bash", &acl));
+    }
+}
+
+#[cfg(test)]
+mod d71_oauth_reader_tests {
+    use super::*;
+    use crate::security::agents_contract::{AgentContractEntry, AgentsContract};
+
+    fn reader_acl_and_contract() -> (AclConfig, AgentsContract) {
+        let mut roles = std::collections::HashMap::new();
+        roles.insert(
+            "reader".to_string(),
+            vec!["knowledge".to_string(), "monitor".to_string()],
+        );
+        let acl = AclConfig {
+            default_role: "guest".to_string(),
+            roles,
+            ..Default::default()
+        };
+
+        let mut agents = std::collections::HashMap::new();
+        agents.insert(
+            "oauth-reader".to_string(),
+            AgentContractEntry {
+                role: "reader".to_string(),
+                description: "read-only OAuth client".to_string(),
+                wake: None,
+            },
+        );
+        (acl, AgentsContract { agents })
+    }
+
+    #[test]
+    fn mapped_oauth_agent_gets_reader_and_unmapped_stays_guest() {
+        let (acl, contract) = reader_acl_and_contract();
+
+        let mapped = resolve_acl_role_inner(
+            Some("opaque-oauth-jwt"),
+            Some("oauth-reader"),
+            &acl,
+            &contract,
+        );
+        assert_eq!(mapped, "reader");
+        assert!(acl_can_access(&mapped, "knowledge", &acl));
+        assert!(!acl_can_access(&mapped, "bash", &acl));
+
+        let unmapped = resolve_acl_role_inner(
+            Some("opaque-oauth-jwt"),
+            None,
+            &acl,
+            &contract,
+        );
+        assert_eq!(unmapped, "guest");
+        assert!(!acl_can_access(&unmapped, "knowledge", &acl));
     }
 }
