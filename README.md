@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/assets/hero/2026-10-29_guardianes.jpg" alt="Illustration: a large blue owl with a glowing ring of connected nodes spreads its wings over a stone hall while a party of small armoured and cloaked characters, animals, a lobster and a robot, stands ready" width="760">
+</p>
+
+<p align="center">
   <img src="assets/branding/logo.jpg" alt="Tylluan" width="140">
 </p>
 
@@ -173,7 +177,7 @@ Two or more Tylluan instances can sync memories with peers you approve one by on
 
 ## Status
 
-1512 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
+1516 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
 
 - **Latest release:** v0.17.2 (2026-10-27). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
 - **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
