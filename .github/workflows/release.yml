@@ -89,6 +89,8 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      id-token: write       # firma sin clave (Sigstore) de la atestacion de procedencia
+      attestations: write
     outputs:
       release_id: ${{ steps.create_draft.outputs.id }}
     steps:
@@ -163,6 +165,15 @@ jobs:
         run: |
           sha256sum tylluan-*.tar.gz > checksums.txt
           cat checksums.txt
+
+      - name: Attest build provenance
+        # Decision de Jose (2026-10-29): sumas de verificacion + atestacion de procedencia
+        # de GitHub, sin claves propias. Verificar: gh attestation verify <fichero> -R Forja-orca/tylluan
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            tylluan-*.tar.gz
+            checksums.txt
 
       - name: Create Draft Release
         id: create_draft

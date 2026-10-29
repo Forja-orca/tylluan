@@ -44,3 +44,6 @@ Fuente: https://github.com/CodebuffAI/freebuff/issues/947 (leída hoy; abierta, 
 - Que `opencode run --auto` respete todas las denegaciones del agente propio: no lo probé, no lanzo modelos sin permiso.
 - Los plugins comunitarios `opencode-scheduler` y `opencode-tasks` aparecieron en el buscador; no leí sus repositorios.
 - El efecto de dos agentes más compilando Rust en continuo sobre el bloqueo del directorio de compilación del pre-push.
+
+## Decisión de José (2026-10-29)
+Buffy no puede automatizarse con Freebuff y Deep no se automatiza a través de Windows: ambos siguen bajo supervisión del TL y de José (relevo manual, Coloquio y archivo de cola). Las opciones de arriba quedan como referencia; no se activa ningún planificador.
