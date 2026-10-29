@@ -751,10 +751,34 @@ pub struct MemoryConfig {
     /// pausa (solo para test-run/aceleracion controlada).
     #[serde(default = "default_reindex_node_delay_ms")]
     pub reindex_node_delay_ms: u64,
+
+    /// T-DSH-138 (C-1): nodos que procesa el reindexer periodico por tick.
+    /// Default 100 = comportamiento historico.
+    #[serde(default = "default_reindex_nodes_per_tick")]
+    pub reindex_nodes_per_tick: usize,
+
+    /// T-DSH-138 (C-1): cadencia del reindexer periodico en segundos.
+    /// Default 600 = comportamiento historico.
+    #[serde(default = "default_reindex_tick_secs")]
+    pub reindex_tick_secs: u64,
+
+    /// T-DSH-138 (C-1): tipos de nodo excluidos de `get_stale_embeddings`
+    /// (p. ej. ["session_digest", "routing_anchor"], que recall no usa).
+    /// Default vacio = comportamiento historico.
+    #[serde(default)]
+    pub reindex_skip_types: Vec<String>,
 }
 
 fn default_reindex_node_delay_ms() -> u64 {
     200
+}
+
+fn default_reindex_nodes_per_tick() -> usize {
+    100
+}
+
+fn default_reindex_tick_secs() -> u64 {
+    600
 }
 
 impl Default for MemoryConfig {
@@ -766,6 +790,9 @@ impl Default for MemoryConfig {
             background_concurrency: default_background_concurrency(),
             background_max_wait_secs: default_background_max_wait_secs(),
             reindex_node_delay_ms: default_reindex_node_delay_ms(),
+            reindex_nodes_per_tick: default_reindex_nodes_per_tick(),
+            reindex_tick_secs: default_reindex_tick_secs(),
+            reindex_skip_types: Vec::new(),
         }
     }
 }
@@ -3874,5 +3901,32 @@ mod t136_reindex_delay_tests {
         // sin la clave sigue en 200
         let cfg2: TylluanConfig = toml::from_str("[memory]\n").expect("toml valido");
         assert_eq!(cfg2.memory.reindex_node_delay_ms, 200);
+    }
+}
+
+
+#[cfg(test)]
+mod t138_reindex_config_tests {
+    use super::*;
+
+    #[test]
+    fn reindex_defaults_are_identical_to_today() {
+        let cfg = MemoryConfig::default();
+        assert_eq!(cfg.reindex_nodes_per_tick, 100);
+        assert_eq!(cfg.reindex_tick_secs, 600);
+        assert!(cfg.reindex_skip_types.is_empty());
+        let root = TylluanConfig::default();
+        assert_eq!(root.memory.reindex_nodes_per_tick, 100);
+        assert_eq!(root.memory.reindex_tick_secs, 600);
+        assert!(root.memory.reindex_skip_types.is_empty());
+    }
+
+    #[test]
+    fn reindex_keys_parse_from_toml() {
+        let toml = "[memory]\nreindex_nodes_per_tick = 7\nreindex_tick_secs = 30\nreindex_skip_types = [\"session_digest\", \"routing_anchor\"]\n";
+        let cfg: TylluanConfig = toml::from_str(toml).expect("toml valido");
+        assert_eq!(cfg.memory.reindex_nodes_per_tick, 7);
+        assert_eq!(cfg.memory.reindex_tick_secs, 30);
+        assert_eq!(cfg.memory.reindex_skip_types, vec!["session_digest".to_string(), "routing_anchor".to_string()]);
     }
 }

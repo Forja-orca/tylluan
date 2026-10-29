@@ -2234,10 +2234,41 @@ async fn stale_embeddings_detects_real_hash_mismatch_but_not_pre_hash_sentinel()
     // history just because tracing was added).
     db.save_embedding("h3", &v, "bge-m3-v2-onnx", Some(MODEL_HASH_UNKNOWN)).await.unwrap();
 
-    let stale = db.get_stale_embeddings("bge-m3-v2-onnx", Some("sha256:aaa")).await.unwrap();
+    let stale = db
+        .get_stale_embeddings("bge-m3-v2-onnx", Some("sha256:aaa"), &[])
+        .await
+        .unwrap();
     assert!(!stale.contains(&"h1".to_string()), "matching hash is not stale");
     assert!(stale.contains(&"h2".to_string()), "real hash mismatch IS stale");
     assert!(!stale.contains(&"h3".to_string()), "unknown-pre-hash sentinel never triggers re-embed");
+}
+
+/// T-DSH-138 (C-1): `reindex_skip_types` excluye tipos del listado stale.
+#[tokio::test(flavor = "multi_thread")]
+async fn stale_embeddings_skip_types_filters_only_listed_types() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("skip:digest", "session_digest", "d", "{}").await.unwrap();
+    db.upsert_node("skip:anchor", "routing_anchor", "a", "{}").await.unwrap();
+    db.upsert_node("skip:episode", "episode", "e", "{}").await.unwrap();
+
+    // Lista vacia: mismo resultado que el comportamiento historico (los 3 estan stale).
+    let all = db.get_stale_embeddings("mxbai", Some("sha256:x"), &[]).await.unwrap();
+    for id in ["skip:digest", "skip:anchor", "skip:episode"] {
+        assert!(all.contains(&id.to_string()), "{id} deberia estar stale con lista vacia");
+    }
+
+    // Con la lista, solo se excluye el tipo indicado.
+    let filtered = db
+        .get_stale_embeddings(
+            "mxbai",
+            Some("sha256:x"),
+            &["session_digest".to_string()],
+        )
+        .await
+        .unwrap();
+    assert!(!filtered.contains(&"skip:digest".to_string()), "session_digest excluido");
+    assert!(filtered.contains(&"skip:anchor".to_string()));
+    assert!(filtered.contains(&"skip:episode".to_string()));
 }
 
 /// T16 (ADR-019 step 2): federation peer ingestion must NEVER change

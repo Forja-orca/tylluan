@@ -117,7 +117,7 @@ fn bench_cascade_gate_rate_latency_and_quality_overlap() {
         // the engines were installed mid-lifecycle — this is exactly the
         // enable-on-existing-DB backfill path the product now guarantees.
         let model_id = "bench-bge-m3";
-        let stale = db.get_stale_embeddings(model_id, None).await.unwrap();
+        let stale = db.get_stale_embeddings(model_id, None, &[]).await.unwrap();
         println!("[setup] reindexer would heal {} nodes (dense+sparse)", stale.len());
         assert!(stale.len() >= 300, "stale scan must catch missing sparse signatures");
         for id in &stale {

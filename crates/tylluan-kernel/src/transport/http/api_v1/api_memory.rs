@@ -127,12 +127,18 @@ pub async fn reindex_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
 
     let model_id = engine.engine_id();
     let model_hash = engine.engine_hash();
-    let total = silva.node_count().await.unwrap_or(0);
-    let stale_nodes = silva.get_stale_embeddings(&model_id, model_hash.as_deref()).await.unwrap_or_default();
-    let stale_count = stale_nodes.len();
     // T-DSH-136: pausa por nodo configurable ([memory] reindex_node_delay_ms,
-    // default 200 ms = comportamiento historico).
-    let reindex_delay_ms = state.config.read().await.memory.reindex_node_delay_ms;
+    // default 200 ms = comportamiento historico). T-DSH-138: tipos excluidos.
+    let (reindex_delay_ms, reindex_skip_types) = {
+        let cfg = state.config.read().await;
+        (cfg.memory.reindex_node_delay_ms, cfg.memory.reindex_skip_types.clone())
+    };
+    let total = silva.node_count().await.unwrap_or(0);
+    let stale_nodes = silva
+        .get_stale_embeddings(&model_id, model_hash.as_deref(), &reindex_skip_types)
+        .await
+        .unwrap_or_default();
+    let stale_count = stale_nodes.len();
 
     tokio::spawn(async move {
         let _ = broadcast.send(serde_json::json!({
