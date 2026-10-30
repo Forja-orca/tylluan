@@ -25,7 +25,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 /// Writer con rotación por tamaño, pensado para `tracing_subscriber`.
 pub struct RotatingFileWriter {
@@ -131,7 +131,91 @@ impl Write for RotatingFileWriter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// H-47C (diseño §5 B1-B4 en docs/internal/IMPL_H-47A_hermes_2026-10.md):
+// H-54: capa de auditoría LOCAL con contenido FIEL (sin scrub).
+//
+// Arquitectura (espec T2112 + H-47C):
+//   - APAGADA por defecto (`audit_layer=false`). No es un default de "seguro
+//     por olvido": es un default de "no escribir contenido fiel a disco
+//     sin que el operador lo pida conscientemente".
+//   - El contenido fiel SOLO existe en los helpers: `redacted()`,
+//     `safe_with()`, `mcp_payload_with()` reciben el texto CRUDO antes de
+//     scrub/recorte. Ahí instalamos el hook de auditoría: si la capa está
+//     encendida, escribimos el texto crudo a `audit.log` (paralelo, sin
+//     scrub). El vivo (tracing) recibe SIEMPRE la versión ya scrubada/len+sha
+//     exactamente como hoy (H-47C). No hay un solo writer "dual".
+//   - El fichero de auditoría es `audit.log` en `audit_dir` (default
+//     `./data/audit`), rotado por tamaño igual que el vivo, con limpieza por
+//     edad (`audit_retention_days`) al abrir y al rotar.
+//   - `data/` está en `.gitignore` (línea 12): el fichero de auditoría nunca
+//     llega al repo público.
+//   - Test obligatorio: "la capa de producción nunca contiene texto" → el
+//     vivo siempre usa `redacted`/`safe`/`mcp_payload` con su scrub; la
+//     auditoría es un ESPEJO paralelo y opcional del texto crudo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+use crate::config::LoggingConfig;
+
+/// Limpieza por edad de los `audit.log.N` más antiguos.
+fn prune_audit_by_age(dir: &Path, max_files: usize, retention_days: u64) {
+    if retention_days == 0 {
+        return;
+    }
+    let now = std::time::SystemTime::now();
+    let cutoff = now - std::time::Duration::from_secs(retention_days * 86_400);
+    for i in 1..max_files {
+        let p = dir.join(format!("audit.log.{i}"));
+        if let Ok(meta) = fs::metadata(&p)
+            && meta.created().or(meta.modified()).map(|t| t < cutoff).unwrap_or(false)
+        {
+            let _ = fs::remove_file(&p);
+        }
+    }
+}
+
+/// Crea (o reabre) el writer de auditoría, aplicando la rotación inicial y la
+/// limpieza por edad. Devuelve `None` si `audit_layer` está apagada o si la
+/// creación falla (no es fatal: el kernel sigue sin ella).
+pub fn audit_writer(cfg: &LoggingConfig) -> Option<RotatingFileWriter> {
+    if !cfg.audit_layer {
+        return None;
+    }
+    let dir = PathBuf::from(&cfg.audit_dir);
+    if let Err(e) = fs::create_dir_all(&dir) {
+        tracing::warn!("audit_layer=true pero no se puede crear {}: {e}", cfg.audit_dir);
+        return None;
+    }
+    prune_audit_by_age(&dir, cfg.audit_max_files, cfg.audit_retention_days);
+    RotatingFileWriter::open(&dir, "audit.log", cfg.audit_max_bytes(), cfg.audit_max_files)
+        .map_err(|e| {
+            tracing::warn!("audit_layer=true pero no se puede abrir audit.log: {e}");
+        })
+        .ok()
+}
+
+/// Sink global de auditoría: se inicializa en el primer uso del helper
+/// (`redacted`/`safe_with`/`mcp_payload_with`) leyendo `[logging]` de la
+/// config. Si `audit_layer=false` el sink es `None` (cero overhead).
+fn audit_sink() -> &'static Option<Mutex<RotatingFileWriter>> {
+    static SINK: OnceLock<Option<Mutex<RotatingFileWriter>>> = OnceLock::new();
+    SINK.get_or_init(|| audit_writer(&redaction_cfg()).map(Mutex::new))
+}
+
+/// Escribe una línea de auditoría (texto crudo, JSON compacto). No falla:
+/// si el sink está apagado o el lock/contención falla, se ignora silenciosamente.
+fn audit_write(canal: &str, text: &str) {
+    if let Some(w) = audit_sink().as_ref() {
+        let _ = w.lock().ok().map(|mut w| {
+            let rec = serde_json::json!({
+                "ts": chrono::Utc::now().to_rfc3339(),
+                "canal": canal,
+                "len": text.chars().count(),
+                "text": text
+            });
+            writeln!(w, "{rec}").ok();
+        });
+    }
+}
+
 // helper único de redacción de logs.
 //
 // Medido en prod (H-47A): 7 fuentes logueaban el texto entero de
@@ -212,6 +296,7 @@ fn cap_chars(text: &str, max_chars: usize) -> String {
 
 /// Lo que las 6 fuentes internas deben loguear: NUNCA contenido (B2).
 pub fn redacted(canal: &str, text: &str) -> String {
+    audit_write(canal, text);
     format!("canal={canal} len={} sha={}", text.chars().count(), sha12(text))
 }
 
@@ -224,6 +309,7 @@ pub fn safe(canal: &str, text: &str) -> String {
 
 pub fn safe_with(cfg: &crate::config::LoggingConfig, canal: &str, text: &str) -> String {
     if cfg.log_content {
+        audit_write(canal, text);
         format!(
             "canal={canal} content={}",
             cap_chars(&scrub(text), cfg.log_content_max_chars.max(1))
@@ -247,6 +333,7 @@ pub fn mcp_payload_with(cfg: &crate::config::LoggingConfig, payload: &serde_json
         .map(|v| v.to_string())
         .unwrap_or_else(|| "-".to_string());
     let raw = payload.to_string();
+    audit_write("mcp_payload", &raw);
     let base = format!(
         "[MCP] method={method} id={id} len={} sha={}",
         raw.chars().count(),
@@ -276,6 +363,63 @@ fn scrub_json(value: &serde_json::Value) -> String {
         }
     }
     walk(value).to_string()
+}
+
+/// H-54: true si `mtime` es más antigua de `days` días antes de `now`.
+/// Clock-skew (mtime > now) → false (conservador: no borra).
+pub fn is_expired(mtime: std::time::SystemTime, now: std::time::SystemTime, days: u64) -> bool {
+    if days == 0 {
+        return false;
+    }
+    match now.duration_since(mtime) {
+        Ok(age) => age > std::time::Duration::from_secs(days * 86_400),
+        Err(_) => false,
+    }
+}
+
+/// H-54: valida que el nombre solicitado sea `audit.log` o `audit.log.N`
+/// con N ≤ 9999. Previene traversal.
+pub fn valid_audit_name(name: &str) -> bool {
+    let re = regex::Regex::new(r"^audit\.log(\.[0-9]{1,4})?$").unwrap();
+    re.is_match(name)
+}
+
+/// H-54: lista de ficheros de auditoría (name, size, mtime_rfc3339).
+pub fn audit_listing(cfg: &LoggingConfig) -> io::Result<Vec<(String, u64, String)>> {
+    if !cfg.audit_layer {
+        return Ok(Vec::new());
+    }
+    let dir = PathBuf::from(&cfg.audit_dir);
+    let mut out = Vec::new();
+    for entry in fs::read_dir(&dir)? {
+        let e = entry?;
+        let name = e.file_name().to_string_lossy().to_string();
+        if !valid_audit_name(&name) {
+            continue;
+        }
+        let meta = e.metadata()?;
+        let mtime = meta
+            .modified()
+            .or_else(|_| meta.created())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        let mtime_str = chrono::DateTime::<chrono::Utc>::from(mtime).to_rfc3339();
+        out.push((name, meta.len(), mtime_str));
+    }
+    out.sort_by(|a, b| b.2.cmp(&a.2)); // más recientes primero
+    Ok(out)
+}
+
+/// H-54: lee el contenido de un fichero de auditoría validado.
+/// Devuelve `None` si no existe; error si el nombre no es válido.
+pub fn read_audit_file(cfg: &LoggingConfig, name: &str) -> io::Result<Option<String>> {
+    if !valid_audit_name(name) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid audit file name"));
+    }
+    let path = PathBuf::from(&cfg.audit_dir).join(name);
+    if !path.exists() {
+        return Ok(None);
+    }
+    fs::read_to_string(&path).map(Some)
 }
 
 #[cfg(test)]
@@ -374,6 +518,134 @@ mod redaction_tests {
         assert_eq!(d.log_content_max_chars, 200);
         let p: crate::config::LoggingConfig = serde_json::from_str("{}").unwrap();
         assert!(!p.log_content && p.log_content_max_chars == 200);
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // H-54 tests: capa de auditoría local
+    // ───────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn audit_defaults_off_no_dir_created() {
+        let d = crate::config::LoggingConfig::default();
+        assert!(!d.audit_layer);
+        assert_eq!(d.audit_dir, "./data/audit");
+        assert_eq!(d.audit_max_mb, 20);
+        assert_eq!(d.audit_max_files, 10);
+        assert_eq!(d.audit_retention_days, 14);
+        let p: crate::config::LoggingConfig = serde_json::from_str("{}").unwrap();
+        assert!(!p.audit_layer && p.audit_retention_days == 14);
+        // Writer devuelve None, no crea directorio
+        let w = crate::logging::audit_writer(&p);
+        assert!(w.is_none());
+    }
+
+    #[test]
+    fn is_expired_pure_logic() {
+        let now = std::time::SystemTime::now();
+        // 31 días → expirado con retención 30
+        let old = now - std::time::Duration::from_secs(31 * 86_400);
+        assert!(crate::logging::is_expired(old, now, 30));
+        // 29 días → NO expirado
+        let recent = now - std::time::Duration::from_secs(29 * 86_400);
+        assert!(!crate::logging::is_expired(recent, now, 30));
+        // days=0 → nunca expirado
+        assert!(!crate::logging::is_expired(old, now, 0));
+        // mtime en el futuro (clock-skew) → false (conservador)
+        let future = now + std::time::Duration::from_secs(86_400);
+        assert!(!crate::logging::is_expired(future, now, 30));
+    }
+
+    #[test]
+    fn valid_audit_name_validation() {
+        assert!(crate::logging::valid_audit_name("audit.log"));
+        assert!(crate::logging::valid_audit_name("audit.log.1"));
+        assert!(crate::logging::valid_audit_name("audit.log.9999"));
+        assert!(!crate::logging::valid_audit_name("audit.log.10000")); // 5 dígitos
+        assert!(!crate::logging::valid_audit_name("audit.log.1/../secret"));
+        assert!(!crate::logging::valid_audit_name("../../etc/passwd"));
+        assert!(!crate::logging::valid_audit_name("audit.logx"));
+        assert!(!crate::logging::valid_audit_name("other.log"));
+    }
+
+    #[test]
+    fn audit_layer_writes_raw_audit_prod_stays_redacted() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let cfg = crate::config::LoggingConfig {
+            audit_layer: true,
+            audit_dir: dir.path().to_string_lossy().to_string(),
+            audit_max_mb: 10,
+            audit_max_files: 5,
+            audit_retention_days: 14,
+            ..Default::default()
+        };
+        // Escritura directa por el sink (sin pasar por helpers: prueba del writer)
+        let mut w = crate::logging::audit_writer(&cfg).expect("writer creado");
+        let secret = "sk-real-secret-1234567890";
+        let rec = serde_json::json!({
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "canal": "test",
+            "len": secret.chars().count(),
+            "text": secret
+        });
+        writeln!(w, "{rec}").unwrap();
+        w.flush().unwrap();
+        drop(w);
+        // El fichero de auditoría contiene el secreto EN CLARO
+        let content = std::fs::read_to_string(dir.path().join("audit.log")).unwrap();
+        assert!(content.contains("sk-real-secret-1234567890"), "audit contiene secreto crudo: {content}");
+        assert!(content.contains("test"));
+        // Producción: redacted() sigue devolviendo len+sha (sin contenido)
+        let prod = crate::logging::redacted("test", secret);
+        assert!(!prod.contains("sk-rea...7890"), "producción no puede contener el crudo: {prod}");
+        assert!(re_shape().is_match(&prod));
+        // safe_with (default cfg sin log_content) → producción redacted
+        let safe_prod = crate::logging::safe_with(&crate::config::LoggingConfig::default(), "test", secret);
+        assert!(!safe_prod.contains("sk-rea...7890"), "safe_with default no puede contener el crudo: {safe_prod}");
+        assert!(re_shape().is_match(&safe_prod));
+        // mcp_payload default → sin content=
+        let payload = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{"intent": secret}}});
+        let mcp_prod = crate::logging::mcp_payload_with(&crate::config::LoggingConfig::default(), &payload);
+        assert!(!mcp_prod.contains("content="));
+        assert!(mcp_prod.contains("method=tools/call"));
+    }
+
+    #[test]
+    fn audit_listing_and_read_end_to_end() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let cfg = crate::config::LoggingConfig {
+            audit_layer: true,
+            audit_dir: dir.path().to_string_lossy().to_string(),
+            audit_max_mb: 10,
+            audit_max_files: 5,
+            audit_retention_days: 14,
+            ..Default::default()
+        };
+        let mut w = crate::logging::audit_writer(&cfg).unwrap();
+        let rec1 = serde_json::json!({"ts":"2026-10-30T00:00:00Z","canal":"a","len":5,"text":"hello"});
+        let rec2 = serde_json::json!({"ts":"2026-10-30T00:00:01Z","canal":"b","len":5,"text":"world"});
+        writeln!(w, "{rec1}").unwrap();
+        writeln!(w, "{rec2}").unwrap();
+        w.flush().unwrap();
+        drop(w);
+        // listing
+        let list = crate::logging::audit_listing(&cfg).unwrap();
+        // Solo existe el fichero vivo: la rotacion es por tamano (10 MB) y dos
+        // registros no la disparan. Lo que se prueba es que el listing ve Y
+        // nombra el fichero real, no un numero arbitrario de entradas.
+        assert_eq!(list.len(), 1, "listing: {list:?}");
+        assert_eq!(list[0].0, "audit.log"); // live file
+        assert!(list[0].1 > 0, "tamano registrado en listing");
+        // read
+        let content = crate::logging::read_audit_file(&cfg, "audit.log").unwrap().unwrap();
+        assert!(content.contains("hello"));
+        assert!(content.contains("world"));
+        // nombre inválido → error
+        assert!(crate::logging::read_audit_file(&cfg, "audit.log.1/../etc").is_err());
+        // inexistente → None
+        let none = crate::logging::read_audit_file(&cfg, "audit.log.999").unwrap();
+        assert!(none.is_none());
     }
 }
 

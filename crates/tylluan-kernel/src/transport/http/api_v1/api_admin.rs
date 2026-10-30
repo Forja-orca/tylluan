@@ -771,6 +771,20 @@ pub async fn audit_logs_handler() -> impl IntoResponse {
     Json(serde_json::json!({ "logs": events, "count": events.len() }))
 }
 
+/// H-52 (C-2, AUD-08): bloque de contadores del filtro de huella de embeddings
+/// para `/api/v1/system/status` (endpoint existente, sin ruta nueva). Claves
+/// fijas; los dos `would_exclude_*` cuentan lo que el filtro EXCLUIRIA si
+/// estuviera activo (`filter_enabled=false` = observación pura).
+fn fingerprint_status_json(db: &crate::memory::silva::SilvaDB) -> serde_json::Value {
+    let (would_model, would_dim, excluded) = db.fingerprint_observation();
+    serde_json::json!({
+        "filter_enabled": db.fingerprint_filter_enabled(),
+        "would_exclude_model": would_model,
+        "would_exclude_dim": would_dim,
+        "excluded": excluded,
+    })
+}
+
 pub async fn system_status_handler(
     State(state): State<Arc<HttpState>>,
 ) -> impl IntoResponse {
@@ -794,7 +808,10 @@ pub async fn system_status_handler(
             "used_memory_mb": report.system.used_memory_mb,
             "total_memory_mb": report.system.total_memory_mb,
             "process_count": report.system.process_count,
-        }
+        },
+        // H-52 (C-2, AUD-08): contadores globales del filtro de huella de
+        // embeddings. Solo lectura; el filtro sigue apagado por defecto.
+        "embedding_fingerprint": fingerprint_status_json(&state.silva)
     });
 
     crate::transport::http::Utf8Json(status_json)

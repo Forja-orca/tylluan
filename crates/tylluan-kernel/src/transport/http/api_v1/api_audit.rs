@@ -299,6 +299,77 @@ pub async fn audit_latency_stats_handler(
         .into_response()
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// H-54: endpoints admin para la capa de auditoría local (/api/v1/admin/audit*)
+// ─────────────────────────────────────────────────────────────────────────────
+
+use crate::config::LoggingConfig;
+
+/// GET /api/v1/admin/audit — lista los ficheros de auditoría (capa opt-in).
+pub async fn admin_audit_list() -> impl axum::response::IntoResponse {
+    let cfg: LoggingConfig = crate::config::TylluanConfig::load()
+        .map(|c| c.logging)
+        .unwrap_or_default();
+    match crate::logging::audit_listing(&cfg) {
+        Ok(files) => {
+            let mut out = Vec::new();
+            for (name, size, mtime) in files {
+                out.push(serde_json::json!({"name": name, "size_bytes": size, "mtime": mtime}));
+            }
+            (axum::http::StatusCode::OK, Json(serde_json::json!({
+                "enabled": cfg.audit_layer,
+                "dir": cfg.audit_dir,
+                "retention_days": cfg.audit_retention_days,
+                "files": out
+            })))
+        }
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": e.to_string()})),
+        ),
+    }
+}
+
+/// GET /api/v1/admin/audit/file?file=audit.log[.N] — contenido del fichero.
+pub async fn admin_audit_file(
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl axum::response::IntoResponse {
+    let name = match q.get("file") {
+        Some(s) => s.clone(),
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"ok": false, "error": "missing 'file' query param"})),
+            )
+                .into_response();
+        }
+    };
+    let cfg: LoggingConfig = crate::config::TylluanConfig::load()
+        .map(|c| c.logging)
+        .unwrap_or_default();
+    match crate::logging::read_audit_file(&cfg, &name) {
+        Ok(Some(content)) => {
+            let mut resp = axum::response::Response::new(axum::body::Body::from(content));
+            resp.headers_mut().insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/plain; charset=utf-8"),
+            );
+            resp.into_response()
+        }
+        Ok(None) => (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"ok": false, "error": "file not found"})),
+        )
+            .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
