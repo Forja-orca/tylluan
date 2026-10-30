@@ -7,13 +7,37 @@ use crate::transport::http::HttpState;
 use crate::security::sentinel::{self, SentinelMode};
 
 /// ADR-011 §2.5 observability: cumulative Coherence Gate counters since kernel start.
+///
+/// H-53 (C-3): el endpoint ya existía y solo exponía 3 contadores. Para poder
+/// **validar** `coherence_semantic_scope` en vivo hacen falta dos cosas más, y
+/// entran aquí sin ruta nueva:
+/// - `semantic_scope`: el valor de `[security] coherence_semantic_scope` leído
+///   de la config (el mismo que `main.rs` fija al arrancar; si el fichero cambia
+///   tras el arranque, lo que está EN EJECUCIÓN sigue siendo el del arranque —
+///   el valor mostrado es el de la config en este instante, no un snapshot del
+///   proceso).
+/// - Los contadores de capa semántica (`total_semantic_penalized` y compañía),
+///   que son la evidencia medible del efecto del scope.
 pub async fn coherence_gate_stats() -> impl axum::response::IntoResponse {
     let stats = coherence_gate::cumulative_stats();
+    let cfg_scope = crate::config::TylluanConfig::load()
+        .map(|c| c.security.coherence_semantic_scope)
+        .unwrap_or_else(|_| coherence_gate::SEMANTIC_SCOPE_ALL.to_string());
+    let known = matches!(
+        cfg_scope.as_str(),
+        coherence_gate::SEMANTIC_SCOPE_ALL | coherence_gate::SEMANTIC_SCOPE_CONFLICTING_TOP
+    );
     Json(serde_json::json!({
         "ok": true,
         "total_seen": stats.total_seen,
         "total_eliminated": stats.total_eliminated,
         "total_penalized": stats.total_penalized,
+        "total_pattern_eliminated": stats.total_pattern_eliminated,
+        "total_provenance_penalized": stats.total_provenance_penalized,
+        "total_semantic_penalized": stats.total_semantic_penalized,
+        "semantic_scope": cfg_scope,
+        "semantic_scope_known": known,
+        "semantic_scope_note": "valor de [security] coherence_semantic_scope en la config actual; el proceso fija el suyo al arrancar (main.rs), un cambio posterior en el fichero no se aplica sin reinicio. Un valor desconocido se comporta como 'all' (semantic_scope_penalizes: match _ => true).",
         "note": "counters since last kernel start, not a persisted historical log",
     }))
 }

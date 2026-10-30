@@ -268,6 +268,35 @@ pub struct LoggingConfig {
     /// El recorte ocurre SIEMPRE después del scrub, nunca antes.
     #[serde(default = "default_log_content_max_chars")]
     pub log_content_max_chars: usize,
+
+    /// H-54: capa de auditoría LOCAL con contenido completo (sin scrub).
+    /// APAGADA por defecto: el registro fiel de contenido solo existe si el
+    /// operador lo enciende conscientemente. Escribe `audit.log` (rotado por
+    /// tamaño igual que el log vivo) en `audit_dir`, fichero gitignored
+    /// (`/data/` lo cubre). No afecta NI una coma a la capa de producción:
+    /// las líneas `len+sha`/scrubadas siguen exactamente igual.
+    #[serde(default = "default_audit_layer")]
+    pub audit_layer: bool,
+
+    /// H-54: directorio de la capa de auditoría (default `./data/audit`).
+    #[serde(default = "default_audit_dir")]
+    pub audit_dir: String,
+
+    /// H-54: MiB por fichero vivo de auditoría antes de rotar (default 20;
+    /// 0 = sin rotación por tamaño, solo por edad).
+    #[serde(default = "default_audit_max_mb")]
+    pub audit_max_mb: u64,
+
+    /// H-54: ficheros de auditoría conservados en total, contando el vivo
+    /// (default 10; mínimo 1).
+    #[serde(default = "default_audit_max_files")]
+    pub audit_max_files: usize,
+
+    /// H-54: días de retención por edad; los `audit.log.N` con mtime más
+    /// antiguo se borran al abrir y al rotar (default 14; 0 = sin limpieza
+    /// por edad). La rotación por tamaño pone el techo duro de disco.
+    #[serde(default = "default_audit_retention_days")]
+    pub audit_retention_days: u64,
 }
 
 fn default_log_content() -> bool {
@@ -276,6 +305,26 @@ fn default_log_content() -> bool {
 
 fn default_log_content_max_chars() -> usize {
     200
+}
+
+fn default_audit_layer() -> bool {
+    false
+}
+
+fn default_audit_dir() -> String {
+    "./data/audit".to_string()
+}
+
+fn default_audit_max_mb() -> u64 {
+    20
+}
+
+fn default_audit_max_files() -> usize {
+    10
+}
+
+fn default_audit_retention_days() -> u64 {
+    14
 }
 
 fn default_log_max_size_mb() -> u64 {
@@ -293,6 +342,11 @@ impl Default for LoggingConfig {
             max_files: default_log_max_files(),
             log_content: default_log_content(),
             log_content_max_chars: default_log_content_max_chars(),
+            audit_layer: default_audit_layer(),
+            audit_dir: default_audit_dir(),
+            audit_max_mb: default_audit_max_mb(),
+            audit_max_files: default_audit_max_files(),
+            audit_retention_days: default_audit_retention_days(),
         }
     }
 }
@@ -301,6 +355,11 @@ impl LoggingConfig {
     /// Límite efectivo en bytes. `0` significa "sin rotación".
     pub fn max_file_size_bytes(&self) -> u64 {
         self.max_file_size_mb.saturating_mul(1024 * 1024)
+    }
+
+    /// H-54: límite de tamaño del fichero vivo de auditoría, en bytes.
+    pub fn audit_max_bytes(&self) -> u64 {
+        self.audit_max_mb.saturating_mul(1024 * 1024)
     }
 }
 

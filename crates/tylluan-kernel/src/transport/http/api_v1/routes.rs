@@ -184,6 +184,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // Admin endpoints
         .route("/api/v1/admin/reload", post(admin_reload_handler))
         .route("/api/v1/admin/meta-prune", post(meta_prune_handler))
+        .route("/api/v1/admin/audit", get(api_audit::admin_audit_list))
+        .route("/api/v1/admin/audit/file", get(api_audit::admin_audit_file))
 
         // Federation (M3)
         .route("/api/v1/federation/peers", get(federation_list_peers).post(federation_add_peer))

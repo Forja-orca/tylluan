@@ -1129,6 +1129,55 @@ mod tests {
     use super::*;
     use crate::memory::silva::SilvaDB;
 
+    // ── H-53 (C-3): validación de `coherence_semantic_scope` ────────────────
+    // El contrato que se comprueba aquí es la función pura que decide si la
+    // capa 3 penaliza: `all` castiga a cualquier candidato en desacuerdo;
+    // `conflicting_top` solo a los fuertes (score >= mediana); CUALQUIER otro
+    // valor cae en la rama `_ => true`, o sea se comporta como `all`.
+
+    #[test]
+    fn semantic_scope_all_penalizes_any_disagreeing_candidate() {
+        // cosim < 0.85 = en desacuerdo. Score bajo O alto: ambos penalizan.
+        assert!(semantic_scope_penalizes("all", 0.50, 0.01, 0.50));
+        assert!(semantic_scope_penalizes("all", 0.50, 0.99, 0.50));
+        // En acuerdo (>= umbral): nunca penaliza, sea cual sea el scope.
+        assert!(!semantic_scope_penalizes("all", 0.90, 0.99, 0.50));
+    }
+
+    #[test]
+    fn semantic_scope_conflicting_top_spares_weak_candidates() {
+        // Fuerte y en desacuerdo -> penaliza (senal de riesgo real).
+        assert!(semantic_scope_penalizes("conflicting_top", 0.50, 0.70, 0.50));
+        assert!(semantic_scope_penalizes("conflicting_top", 0.50, 0.50, 0.50)); // >= mediana
+        // Debil y en desacuerdo -> NO penaliza (ya esta abajo en el ranking).
+        assert!(!semantic_scope_penalizes("conflicting_top", 0.50, 0.49, 0.50));
+        // El umbral de coseno sigue mandando: en acuerdo no penaliza.
+        assert!(!semantic_scope_penalizes("conflicting_top", 0.95, 0.99, 0.50));
+    }
+
+    #[test]
+    fn semantic_scope_unknown_value_behaves_as_all_documented_gap() {
+        // HALLAZGO de la validacion: un typo o un valor no reconocido NO es
+        // error ni warning: cae en `match _ => true` y se comporta como `all`
+        // (el modo MAS agresivo). El endpoint de stats lo expone con
+        // `semantic_scope_known=false` para que sea detectable en vivo.
+        for bogus in ["", "ALL", "Conflicting_Top", "conflicting_top ", "all2", "ninguno"] {
+            assert!(
+                semantic_scope_penalizes(bogus, 0.50, 0.01, 0.50),
+                "scope {bogus:?} deberia caer en la rama _ => true (igual que all)"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_scope_default_is_all_in_config_struct() {
+        // El default del struct es "all": coincide con el de serde
+        // (default_coherence_semantic_scope en config.rs) y con el del server
+        // (transport/server/mod.rs). Si alguno cambia, este test lo avisa.
+        let cfg = crate::config::SecurityConfig::default();
+        assert_eq!(cfg.coherence_semantic_scope, SEMANTIC_SCOPE_ALL);
+    }
+
     /// Guard that serializes every test which observes or moves the
     /// process-global `RECALL_COUNTER` (private to the parent module).
     ///
