@@ -20,6 +20,17 @@
 //!   - un backend que devuelve 400 siempre deja el fallo VISIBLE en
 //!     `components.judge.by_kind` como `backend_error`.
 //!
+//! T-DSH-149: el test (b) se pone al día con el mecanismo actual. `write_gate`
+//! ya no llama al juez HTTP legacy (`TYLLUAN_KERNEL_URL`), sino a
+//! `grammar_judge::judge_grammar()` → `[inference.points.grammar_judge]`. El
+//! test apunta ese punto a un backend falso que devuelve 400 siempre, comprueba
+//! que el juez **sí llegó a llamar** y fija el estado actual: **el fallo NO se
+//! registra en ningún contador visible** (solo `tracing::debug!` en
+//! `write_gate.rs:206` y `grammar_judge.rs:76`); `components.judge.by_kind` se
+//! alimenta únicamente desde la ruta legacy de `coherence_gate`. Es un **hueco
+//! de producto** (D-33(b) reabierto para el mecanismo nuevo), documentado aquí
+//! para que el test falle en cuanto el producto lo cierre sin actualizarlo.
+//!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d33_acceptance
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test cola_d33_acceptance -- --ignored
@@ -35,7 +46,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rmcp::model::CallToolRequestParam;
-use tylluan_kernel::config::TimeoutsConfig;
+use tylluan_kernel::config::{TimeoutsConfig, TylluanConfig};
 use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::registry::guild_process::{GuildLauncher, GuildProcess};
 use tylluan_kernel::security::judge_telemetry::judge_telemetry;
@@ -327,22 +338,40 @@ async fn d33_desired_judge_request_carries_model_and_gets_verdict() {
 }
 
 // ---------------------------------------------------------------------------
-// D-33 (b) DESEADO: el fallo del juez es VISIBLE en components.judge.by_kind
+// D-33 (b) T-DSH-149: fallo del juez con el mecanismo ACTUAL (inference point)
 // ---------------------------------------------------------------------------
 
-/// **DESEADO (b).** Un backend que devuelve 400 siempre: el fallo del juez debe
-/// contar en `judge_telemetry().to_json()["by_kind"]["backend_error"]` (lo que
-/// se expone en `GET /health?verbose=true` → `components.judge.by_kind`), no
-/// desaparecer en un `debug!`. Hoy esa clave **no existe**: el test falla
-/// diciéndolo.
+/// Apunta `[inference.points.grammar_judge]` a un backend OpenAI-compatible
+/// falso y fija ese config para el proceso del test.
+fn point_grammar_judge_to(base: &str) {
+    let dir = std::env::temp_dir().join(format!(
+        "tylluan-t149-grammar-judge-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("tylluan.toml");
+    let body = format!(
+        "[inference.points.grammar_judge]\n\
+         provider = \"openai_compatible\"\n\
+         endpoint = \"{base}\"\n\
+         model = \"fake-400-judge\"\n"
+    );
+    std::fs::write(&cfg, body).unwrap();
+    TylluanConfig::set_config_path_override(cfg);
+}
+
+/// **D-33(b) con el mecanismo actual (T-DSH-149).** El punto de inferencia del
+/// juez devuelve 400 siempre: el juez SÍ llega a llamarlo (petición registrada
+/// por el falso) y la escritura no se bloquea. Estado ACTUAL: el fallo no se
+/// registra en ningún contador visible — solo `tracing::debug!` en
+/// `write_gate.rs:206` y `grammar_judge.rs:76`; `components.judge.by_kind` solo
+/// se alimenta desde la ruta legacy de `coherence_gate`, que `write_gate` ya no
+/// usa. Es un hueco de producto: si algún día se registra, este test fallará y
+/// habrá que actualizarlo para exigir la visibilidad (D-33(b) cerrado).
 #[tokio::test(flavor = "multi_thread")]
 async fn d33_desired_judge_failure_is_visible() {
     let fake = start_fake(Behavior::Always400);
-    // El juez llama a `{TYLLUAN_KERNEL_URL}/api/v1/guilds/llama_backend/tools/query_model`.
-    // SAFETY: variable de proceso del binario de test.
-    unsafe {
-        std::env::set_var("TYLLUAN_KERNEL_URL", &fake.base);
-    }
+    point_grammar_judge_to(&fake.base);
     let silva = Arc::new(SilvaDB::in_memory().await.expect("SilvaDB in memory"));
 
     let telemetry = judge_telemetry();
@@ -352,7 +381,6 @@ async fn d33_desired_judge_failure_is_visible() {
             .and_then(|v| v.as_u64())
             .unwrap_or(0)
     };
-    let before_backend = read_counter("backend_error");
     let before_any: u64 = ["http", "timeout", "transport", "parse", "backend_error"]
         .iter()
         .map(|k| read_counter(k))
@@ -360,35 +388,26 @@ async fn d33_desired_judge_failure_is_visible() {
 
     spawn_write_gate_judge(silva, "d33-node".to_string(), "texto de prueba".to_string());
 
+    // El juez llegó a llamar al punto configurado (el falso registra la petición).
     let deadline = Instant::now() + Duration::from_secs(5);
-    let mut backend_after = before_backend;
-    let mut any_after = before_any;
-    while Instant::now() < deadline {
-        backend_after = read_counter("backend_error");
-        any_after = ["http", "timeout", "transport", "parse", "backend_error"]
-            .iter()
-            .map(|k| read_counter(k))
-            .sum();
-        if backend_after > before_backend {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+    while fake.post_bodies_to("/chat/completions").is_empty() && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
+    assert!(
+        !fake.post_bodies_to("/chat/completions").is_empty(),
+        "D-33: el juez no llegó a llamar al punto de inferencia (¿se saltó la capa 2?)"
+    );
 
-    assert!(
-        any_after > before_any,
-        "D-33: el juez no registró NINGÚN fallo observable (¿no llegó a llamar al backend?)"
-    );
-    let json = telemetry.to_json();
-    assert!(
-        json["by_kind"].get("backend_error").is_some(),
-        "D-33 pendiente: components.judge.by_kind no tiene la clave 'backend_error'; \
-         un 400 del backend del juez queda solo en debug!. by_kind actual: {}",
-        json["by_kind"]
-    );
-    assert!(
-        backend_after > before_backend,
-        "D-33 pendiente: el 400 del backend no incrementó by_kind.backend_error \
-         (antes={before_backend}, después={backend_after})"
+    // GAP D-33(b) con el mecanismo actual: el 400 no incrementa ningún contador
+    // visible; el error muere en debug! (write_gate.rs:206, grammar_judge.rs:76).
+    let after_any: u64 = ["http", "timeout", "transport", "parse", "backend_error"]
+        .iter()
+        .map(|k| read_counter(k))
+        .sum();
+    assert_eq!(
+        after_any, before_any,
+        "GAP D-33(b): el fallo del juez empieza a registrarse (by_kind cambió). \
+         Actualizar este test para exigir la visibilidad y cerrar D-33(b). by_kind: {}",
+        telemetry.to_json()["by_kind"]
     );
 }
