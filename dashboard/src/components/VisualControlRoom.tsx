@@ -196,9 +196,9 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
 
     // 6. Red y Enlace
     // Formula: health.components.tunnel.ok ? 100 : 0 (Aislamiento local soberano = 0%, sin error)
-    let redPercent = 0;
-    let redState: SubruntimeStatus['state'] = 'nodata';
-    let redDetails = 'P2P Mesh / Federación';
+    let redPercent: number;
+    let redState: SubruntimeStatus['state'];
+    let redDetails: string;
     if (healthDetailed?.components?.tunnel) {
       const t = healthDetailed.components.tunnel;
       redState = t.ok ? 'running' : 'idle';
