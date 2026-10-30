@@ -7,6 +7,7 @@ import {
   Cpu,
   Settings,
   Beaker,
+  Activity,
   Wifi, WifiOff,
   AlertTriangle,
   Zap,
@@ -43,6 +44,7 @@ const MemoryConsolidated = lazy(() => import('./components/MemoryConsolidated'))
 const ModelsTab = lazy(() => import('./components/ModelsTab').then(m => ({ default: m.ModelsTab })))
 const SettingsTab = lazy(() => import('./components/SettingsTab').then(m => ({ default: m.SettingsTab })))
 const DiagnosticTab = lazy(() => import('./components/DiagnosticTab').then(m => ({ default: m.DiagnosticTab })))
+const VisualControlRoom = lazy(() => import('./components/VisualControlRoom').then(m => ({ default: m.VisualControlRoom })))
 
 function App() {
   const { activeTab, setActiveTab: setTab, toasts, addToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, showMentionsDropdown, setShowMentionsDropdown } = useAppStore()
@@ -96,6 +98,14 @@ function App() {
       }
     };
     window.addEventListener('nexus_switch_tab', onSwitchTab);
+
+    // Support URL ?tab= query param for direct view access & headless audits
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryTab = urlParams.get('tab');
+    if (queryTab) {
+      handleTabChange(queryTab);
+    }
+
     return () => window.removeEventListener('nexus_switch_tab', onSwitchTab);
   }, [handleTabChange]);
 
@@ -198,6 +208,7 @@ function App() {
       badge?: number | null;
     }> = [
       { id: 'overview', name: 'Estado y Salud', icon: LayoutDashboard },
+      { id: 'control-room', name: 'Sala de Control', icon: Activity },
       { id: 'coloquio', name: 'Coloquio', icon: MessageSquare, badge: coloquioUnread > 0 ? coloquioUnread : null },
       { id: 'approvals', name: 'Aprobaciones', icon: ShieldCheck, badge: approvals.length > 0 ? approvals.length : null },
       { id: 'memory', name: 'Memoria', icon: Database },
@@ -512,7 +523,7 @@ function App() {
 
           {/* Consolidated View Panels */}
           <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-400">Cargando vista...</div>}>
-            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'approvals' || activeTab === 'audit' || activeTab === 'models' || activeTab === 'settings' || activeTab === 'diagnostic') ? "overflow-y-auto p-3 sm:p-6" : "p-3 sm:p-6")}>
+            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'control-room' || activeTab === 'approvals' || activeTab === 'audit' || activeTab === 'models' || activeTab === 'settings' || activeTab === 'diagnostic') ? "overflow-y-auto p-3 sm:p-6" : "p-3 sm:p-6")}>
               {/* 1. Estado y Salud */}
               {activeTab === 'overview' && (
                 <ErrorBoundary>
@@ -533,6 +544,16 @@ function App() {
                     notify={notify}
                     onClearLogs={clearLogs}
                     refreshData={refreshData}
+                  />
+                </ErrorBoundary>
+              )}
+
+              {/* 1b. Sala de Control Visual (AG-17) */}
+              {activeTab === 'control-room' && (
+                <ErrorBoundary>
+                  <VisualControlRoom
+                    bridge={bridge}
+                    online={online}
                   />
                 </ErrorBoundary>
               )}
