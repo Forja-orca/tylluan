@@ -2361,3 +2361,167 @@ mod d70_tests {
         assert!(error.to_string().contains("update limit"), "got: {error}");
     }
 }
+
+/// B-8 — ataques que D-70 deja sin test propio: `..` en el nombre, entradas
+/// duplicadas, hardlink y la matriz de comparación de versiones (el caso
+/// «versión menor» de la COLA).
+#[cfg(test)]
+mod b8_tests {
+    use super::*;
+    use std::cmp::Ordering;
+    use std::io::Write;
+
+    /// Construye un `.tar.gz` con entradas de nombre arbitrario. A diferencia
+    /// de `Builder::append_data` (que valida la ruta), aquí el nombre se
+    /// escribe tal cual en la cabecera ustar: es la única forma de fabricar un
+    /// miembro con `..` como el de un archivo hostil real.
+    fn tar_gz_raw(entries: &[(&str, u8, &[u8])]) -> Vec<u8> {
+        let mut tar_bytes = Vec::new();
+        for (name, typeflag, data) in entries {
+            let mut header = [0u8; 512];
+            let name_bytes = name.as_bytes();
+            assert!(name_bytes.len() <= 100, "name too long for ustar: {name}");
+            header[..name_bytes.len()].copy_from_slice(name_bytes);
+            // mode 0000755\0, uid/gid 0, size octal, mtime 0.
+            header[100..108].copy_from_slice(b"0000755\0");
+            header[108..116].copy_from_slice(b"0000000\0");
+            header[116..124].copy_from_slice(b"0000000\0");
+            let size = format!("{:011o}\0", data.len());
+            header[124..136].copy_from_slice(size.as_bytes());
+            header[136..148].copy_from_slice(b"00000000000\0");
+            header[148..156].copy_from_slice(b"        ");
+            header[156] = *typeflag;
+            header[257..263].copy_from_slice(b"ustar\0");
+            header[263..265].copy_from_slice(b"00");
+            let sum: u32 = header.iter().map(|b| *b as u32).sum();
+            let cksum = format!("{:06o}\0 ", sum);
+            header[148..156].copy_from_slice(cksum.as_bytes());
+            tar_bytes.extend_from_slice(&header);
+            tar_bytes.extend_from_slice(data);
+            let pad = (512 - (data.len() % 512)) % 512;
+            tar_bytes.extend(std::iter::repeat_n(0u8, pad));
+        }
+        tar_bytes.extend(std::iter::repeat_n(0u8, 1024));
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(&tar_bytes).expect("gzip archive");
+        encoder.finish().expect("finish archive")
+    }
+
+    const REGULAR: u8 = b'0';
+    const HARDLINK: u8 = b'1';
+
+    #[test]
+    fn parent_traversal_in_entry_name_cannot_escape_the_stage() {
+        let names = update_binary_names();
+        let nested = format!("../../{}", names[0]);
+        let archive = tar_gz_raw(&[
+            (nested.as_str(), REGULAR, b"nexus-payload"),
+            (names[1].as_str(), REGULAR, b"cli-payload"),
+        ]);
+        let stage = tempfile::tempdir().expect("tempdir");
+        let found = extract_update_binaries(&archive, stage.path()).expect("extract both");
+
+        // El destino se elige por `file_name()`, nunca por la ruta del miembro:
+        // el fichero queda dentro del stage con el nombre desnudo y su contenido.
+        assert_eq!(found[0].1.file_name().and_then(|n| n.to_str()), Some(names[0].as_str()));
+        assert_eq!(std::fs::read(&found[0].1).unwrap(), b"nexus-payload");
+        assert!(found[0].1.starts_with(stage.path()));
+
+        // Y ningún ancestro del stage recibió un fichero con ese nombre.
+        for ancestor in stage.path().ancestors().skip(1).take(3) {
+            assert!(
+                !ancestor.join(&names[0]).exists(),
+                "the binary escaped into {}",
+                ancestor.display()
+            );
+        }
+    }
+
+    #[test]
+    fn nested_entry_path_cannot_choose_the_destination() {
+        let names = update_binary_names();
+        let nested = format!("sub/dir/{}", names[0]);
+        let archive = tar_gz_raw(&[
+            (nested.as_str(), REGULAR, b"nexus-payload"),
+            (names[1].as_str(), REGULAR, b"cli-payload"),
+        ]);
+        let stage = tempfile::tempdir().expect("tempdir");
+        let found = extract_update_binaries(&archive, stage.path()).expect("extract both");
+        assert_eq!(std::fs::read(&found[0].1).unwrap(), b"nexus-payload");
+        assert!(
+            !stage.path().join("sub").exists(),
+            "the archive path must not be recreated inside the stage"
+        );
+    }
+
+    #[test]
+    fn duplicate_binaries_are_rejected() {
+        let names = update_binary_names();
+        let archive = tar_gz_raw(&[
+            (names[0].as_str(), REGULAR, b"first"),
+            (names[0].as_str(), REGULAR, b"second"),
+            (names[1].as_str(), REGULAR, b"cli"),
+        ]);
+        let stage = tempfile::tempdir().expect("tempdir");
+        let error = extract_update_binaries(&archive, stage.path()).unwrap_err();
+        assert!(
+            error.to_string().contains("duplicate"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn hardlink_named_like_a_binary_is_rejected() {
+        let names = update_binary_names();
+        let archive = tar_gz_raw(&[(names[0].as_str(), HARDLINK, b"")]);
+        let stage = tempfile::tempdir().expect("tempdir");
+        let error = extract_update_binaries(&archive, stage.path()).unwrap_err();
+        assert!(
+            error.to_string().contains("not a regular file"),
+            "got: {error}"
+        );
+    }
+
+    /// El caso «versión menor» de la COLA: una release publicada más antigua
+    /// que la instalada no puede tratarse como actualización.
+    #[test]
+    fn a_lower_published_version_is_never_an_update() {
+        assert_eq!(
+            compare_versions("0.17.2", "0.17.1").unwrap(),
+            Ordering::Less,
+            "latest older than current must sort as Less (no downgrade)"
+        );
+        assert_eq!(
+            compare_versions("0.17.2", "0.17.3").unwrap(),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_versions("0.17.2", "0.17.2").unwrap(),
+            Ordering::Equal
+        );
+        // Prefijo `v` y comparación numérica, no léxica: 0.17.10 > 0.17.9.
+        assert_eq!(
+            compare_versions("v0.17.9", "0.17.10").unwrap(),
+            Ordering::Greater
+        );
+        // Pre-release no puede colarse como más nueva que la estable.
+        assert_eq!(
+            compare_versions("0.17.2", "0.17.2-rc.1").unwrap(),
+            Ordering::Less
+        );
+    }
+
+    /// Un checksums.txt que solo autentica otro asset no sirve para éste.
+    #[test]
+    fn checksum_for_another_asset_does_not_authorize_this_one() {
+        let archive_name = "tylluan-x86_64-unknown-linux-gnu.tar.gz";
+        let other = format!("{}  tylluan-aarch64-unknown-linux-gnu.tar.gz\n", "a".repeat(64));
+        assert!(checksum_for_asset(&other, archive_name).is_none());
+        // Línea con hash malformado: se ignora aunque el nombre coincida.
+        let malformed = format!("deadbeef  {archive_name}\n");
+        assert!(checksum_for_asset(&malformed, archive_name).is_none());
+        // Y un hash válido pero del archivo equivocado falla la verificación.
+        let right = "b".repeat(64);
+        assert!(verify_sha256(b"payload", &right).is_err());
+    }
+}
