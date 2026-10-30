@@ -70,7 +70,7 @@ D-71/D-72 no cambiaron esto a peor: un JWT emitido por el propio `/oauth/authori
 propio y hereda `default_role`. **Es la razón por la que `default_role = "guest"` importa**: con
 `admin` (valor anterior), ese mismo JWT tendría `["*"]`.
 
-Nota lateral, no es hallazgo: el JWT lleva `aud: "http://localhost:47093"` mientras el issuer es
+Nota lateral, no es hallazgo: el JWT lleva `aud` con el puerto del kernel de prueba mientras el issuer es
 `127.0.0.1` — inconsistencia de host, no de seguridad, en este montaje.
 
 ## 3. B-7 — suite repetida 10 veces

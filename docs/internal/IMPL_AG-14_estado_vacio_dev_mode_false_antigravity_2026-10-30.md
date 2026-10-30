@@ -50,7 +50,7 @@ pnpm build
 - `vite v5.4.21 building for production...`: 1865 módulos transformados, chunks generados limpiamente en `dist/` en 24.48s.
 
 ### 3.3. Captura Viva
-- Se generó la captura [ag14_missing_token.png](file:///e:/tylluan-wt-antigravity/docs/internal/screenshots/ag14_missing_token.png) verificando la fidelidad visual, la coherencia de estilos con la paleta Salvia y la ausencia de desbordamientos.
+- Se generó la captura [ag14_missing_token.png](screenshots/ag14_missing_token.png) verificando la fidelidad visual, la coherencia de estilos con la paleta Salvia y la ausencia de desbordamientos.
 
 ---
 
