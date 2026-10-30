@@ -1935,6 +1935,8 @@ async fn main() -> anyhow::Result<()> {
     let reindex_per_tick = config.memory.reindex_nodes_per_tick;
     let reindex_tick_secs = config.memory.reindex_tick_secs;
     let reindex_skip_types = config.memory.reindex_skip_types.clone();
+    // T-DSH-140 (ADR-025 R2): primera tarea migrada al TaskRegistry.
+    tylluan_kernel::runtime::tasks::global().register("reindexer", "Memoria");
     bg_spawn!(background_tasks, "reindexer", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         // tokio::time::interval fires its FIRST tick immediately by default --
         // this reindexer would then compete for the shared embedding model
@@ -1954,6 +1956,8 @@ async fn main() -> anyhow::Result<()> {
             // Latency budget: skip this tick if the background budget is
             // exhausted (another heavy job holding permits > wait budget).
             let Some(_bg) = budget_reindex.acquire().await else { continue };
+            let task_registry = tylluan_kernel::runtime::tasks::global();
+            task_registry.mark_running("reindexer");
 
             let silva_inner = silva_reindex.clone();
             let matcher_inner = matcher_reindex.clone();
@@ -2030,6 +2034,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Ok::<(), anyhow::Error>(())
             }).await;
+            task_registry.mark_idle("reindexer");
         }
     });
 

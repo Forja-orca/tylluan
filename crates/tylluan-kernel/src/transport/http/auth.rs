@@ -285,6 +285,7 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
         // T1253: operator-class diagnostic reads (audit + conflict views)
         || path == "/api/v1/decide/shadow"
         || path == "/api/v1/silva/conflicted"
+        || path == "/api/v1/runtime/tasks"
     {
         return true;
     }

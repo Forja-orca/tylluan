@@ -324,5 +324,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // AG-4 (2026-10-26): GET /api/v1/whoami (read-only identity introspection,
         // symmetric with tylluan_do whoami).
         .route("/api/v1/whoami", get(api_agents::whoami_handler))
+
+        // T-DSH-140 (ADR-025 R2): vista de solo lectura del TaskRegistry.
+        // Clase operador (auth::operator_class_required), sin tool MCP nueva.
+        .route("/api/v1/runtime/tasks", get(api_runtime::runtime_tasks_handler))
 }
 
