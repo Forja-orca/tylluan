@@ -20,11 +20,12 @@ COPY docs/ ./docs/
 # Dashboard build
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
+    && corepack enable \
     && rm -rf /var/lib/apt/lists/*
 COPY packages/ ./packages/
-RUN cd packages/tylluan-ui-core && npm install && npm run build
+RUN cd packages/tylluan-ui-core && npm ci && npm run build
 COPY dashboard/ ./dashboard/
-RUN cd dashboard && npm install && npm run build
+RUN cd dashboard && pnpm install --frozen-lockfile && pnpm run build
 
 RUN cargo build --release --locked -p tylluan-kernel -p tylluan-cli --features encryption,bundled-dashboard
 
