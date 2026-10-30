@@ -37,6 +37,7 @@ pub mod api_contracts;
 pub mod api_a2a_agents;
 pub mod api_mesh;
 pub mod api_repo_map;
+pub mod api_runtime;
 pub mod api_dispatches;
 pub mod api_decide;
 pub mod mcp;
