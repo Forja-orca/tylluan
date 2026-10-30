@@ -29,6 +29,7 @@ import { useAppStore } from './stores/useAppStore'
 import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthModal } from './components/ui/AuthModal'
+import { MissingTokenBanner } from './components/ui/MissingTokenBanner'
 
 import React, { lazy, Suspense } from 'react'
 import { OverviewConsolidated } from './components/OverviewConsolidated'
@@ -485,24 +486,28 @@ function App() {
         {/* Main Content Area */}
         <main className="flex-1 min-h-0 flex flex-col overflow-hidden bg-slate-950">
           {error && (
-            <div className="m-3 md:m-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-sm font-bold text-red-400">Error de Comunicación</h4>
-                  <p className="text-xs text-red-500/80 mt-1">{error}</p>
+            error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('token') ? (
+              <MissingTokenBanner onOpenAuthModal={() => setAuthModalOpen(true)} />
+            ) : (
+              <div className="m-3 md:m-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-bold text-red-400">Error de Comunicación</h4>
+                    <p className="text-xs text-red-500/80 mt-1">{error}</p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  disabled={retrying}
+                  onClick={handleRetry}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-300 text-xs font-semibold shrink-0 cursor-pointer disabled:cursor-not-allowed transition-all focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+                >
+                  {retrying && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                  <span>{retrying ? 'Reintentando...' : 'Reintentar'}</span>
+                </button>
               </div>
-              <button
-                type="button"
-                disabled={retrying}
-                onClick={handleRetry}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-300 text-xs font-semibold shrink-0 cursor-pointer disabled:cursor-not-allowed transition-all focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
-              >
-                {retrying && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-                <span>{retrying ? 'Reintentando...' : 'Reintentar'}</span>
-              </button>
-            </div>
+            )
           )}
 
           {/* Consolidated View Panels */}
