@@ -584,7 +584,7 @@ mod embedding_failure_tests {
         assert!(captured.contains("node-42"), "warn debe nombrar el nodo: {captured}");
         assert!(captured.contains("agent-7"), "warn debe nombrar el agente: {captured}");
         assert!(captured.contains("embedding"), "warn debe explicar el embedding: {captured}");
-        assert_eq!(embedding_save_failures(), before + 1);
+        assert!(embedding_save_failures() > before, "el contador global (compartido entre tests en paralelo) debe subir");
     }
 
     /// T-DSH-94: aunque el embedding falle, el nodo sigue guardado (BM25).
@@ -605,7 +605,7 @@ mod embedding_failure_tests {
             persist_memory_embedding(&silva, "n-embed-94", "agent-7", &[0.1f32; 1024], "test-model", None)
                 .await;
         assert!(!saved, "con la DB en solo-lectura el embedding no se persiste");
-        assert_eq!(embedding_save_failures(), before + 1);
+        assert!(embedding_save_failures() > before, "el contador global (compartido entre tests en paralelo) debe subir");
         assert!(
             silva.get_node("n-embed-94").await.unwrap().is_some(),
             "el nodo debe seguir guardado aunque falle el embedding (recall BM25 intacto)"
