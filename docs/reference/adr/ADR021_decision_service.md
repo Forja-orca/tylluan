@@ -121,6 +121,12 @@ Salida: por pregunta, el valor, las probabilidades, la confianza o la **abstenci
 
 ---
 
+### 5.6 Enmienda ligera (2026-10-30, auditoría AUD-07): herramientas mínimas necesarias
+Decidido por José: el contrato puede crecer si hace falta, sin rigidez y diciendo siempre la verdad.
+- **Por defecto, seis:** `tools/list` devuelve exactamente las seis herramientas soberanas. Cambiar esa lista por defecto exige una enmienda como esta.
+- **Más, solo si el operador lo pide:** `[nexus] expose_guild_tools = true` añade las herramientas de utilidad y de guilds. Está apagado por defecto y el kernel avisa al arrancar con el número de herramientas expuestas (`main.rs`, aviso `[SECURITY]`).
+- **Verdad en la documentación:** el kernel expone las herramientas mínimas necesarias, y `README.md`, `AGENTS.md`, `CLAUDE.md` y `STATUS.md` dicen lo que hace de verdad, incluida esta excepción.
+
 ## 6. Primer caso de prueba medible
 **Hipótesis:** un modelo de decisión pequeño, junto al generador, mejora al agente completo en decisiones acotadas. No vuelve más inteligente al generador por dentro.
 - **Caso:** un agente de código que propone cambios.
