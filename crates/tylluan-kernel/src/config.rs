@@ -1618,6 +1618,18 @@ pub struct SilvaConfig {
     /// hybrid_migration, sin `turn`) nunca se ven afectados.
     #[serde(default)]
     pub coloquio_retention_turns: u64,
+
+    /// T-DSH-154: política del DCR (`tylluan_remember` near-duplicate merge).
+    ///
+    /// `legacy` (DEFAULT): comportamiento histórico, fusiona con similitud
+    /// mayor o igual a 0.87 sin mirar agente ni tipo. No cambia nada hasta que se mida.
+    /// `strict`: fusiona solo si es el MISMO agent_id, el MISMO tipo de nodo
+    /// y la similitud >= 0.95; si hay un parecido >= 0.87 pero no cumple,
+    /// crea nodo propio y lo enlaza al parecido con una arista
+    /// `near_duplicate` (no se pierde el texto).
+    /// Cualquier valor desconocido se comporta como `legacy` (fail-safe).
+    #[serde(default = "default_dcr_policy")]
+    pub dcr_policy: String,
 }
 
 impl Default for SilvaConfig {
@@ -1638,6 +1650,7 @@ impl Default for SilvaConfig {
             reranker_enabled: true,
             recall_abstain_min_score: default_recall_abstain_min_score(),
             coloquio_retention_turns: 0,
+            dcr_policy: default_dcr_policy(),
         }
     }
 }
@@ -2504,6 +2517,9 @@ pub fn default_cascade_enabled() -> bool { false }
 pub fn default_embedding_fingerprint_filter() -> bool { false }
 
 pub fn default_recall_abstain_min_score() -> f64 { 0.0 }
+
+/// T-DSH-154: DCR en modo histórico hasta medir strict con A/B (decisión TL).
+pub fn default_dcr_policy() -> String { "legacy".to_string() }
 fn default_system_guild_ms() -> u64 { 15_000 }
 fn default_analysis_guild_ms() -> u64 { 60_000 }
 fn default_heavy_guild_ms() -> u64 { 180_000 }

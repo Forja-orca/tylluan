@@ -29,6 +29,60 @@ pub(crate) fn merge_near_duplicate_content(existing: &str, incoming: &str) -> Op
     Some(merged)
 }
 
+/// T-DSH-154: qué hacer con un candidato del DCR.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DcrAction {
+    /// Fusionar el texto entrante en el nodo existente (append).
+    Merge,
+    /// No fusionar: crear nodo propio y enlazarlo al parecido.
+    Link,
+    /// No es un near-duplicate: flujo normal de escritura.
+    Skip,
+}
+
+/// T-DSH-154: decisión pura y testeable de la política DCR.
+///
+/// - `legacy` (default): fusiona con similitud >= 0.87, como siempre.
+/// - `strict`: fusiona solo con MISMO agent_id, MISMO tipo y similitud >= 0.95;
+///   si hay parecido >= 0.87 pero no cumple, se enlaza sin fusionar.
+pub(crate) fn dcr_action(policy: &str, sim: f32, same_agent: bool, same_type: bool) -> DcrAction {
+    const LEGACY_THRESHOLD: f32 = 0.87;
+    const STRICT_MERGE_THRESHOLD: f32 = 0.95;
+    match policy {
+        "strict" => {
+            if sim >= STRICT_MERGE_THRESHOLD && same_agent && same_type {
+                DcrAction::Merge
+            } else if sim >= LEGACY_THRESHOLD {
+                DcrAction::Link
+            } else {
+                DcrAction::Skip
+            }
+        }
+        // Cualquier valor desconocido se comporta como legacy (fail-safe).
+        _ => {
+            if sim >= LEGACY_THRESHOLD {
+                DcrAction::Merge
+            } else {
+                DcrAction::Skip
+            }
+        }
+    }
+}
+
+/// T-DSH-154: ¿el nodo existente pertenece al mismo agente? Los nodos de
+/// `agent_memory` guardan `agent_id` en metadata; los anónimos no lo llevan.
+pub(crate) fn dcr_same_agent(existing_metadata: &str, aid: &str) -> bool {
+    match serde_json::from_str::<serde_json::Value>(existing_metadata)
+        .ok()
+        .as_ref()
+        .and_then(|m| m.get("agent_id"))
+        .and_then(|v| v.as_str())
+    {
+        Some(existing_aid) => existing_aid == aid,
+        None => aid == "anonymous",
+    }
+}
+
 /// T-DSH-94: contador visible de embeddings que no se pudieron persistir.
 /// El nodo YA está guardado (la memoria no se pierde); solo el recall semántico
 /// de ese nodo queda degradado, y eso ya no puede ser silencioso.
@@ -211,21 +265,36 @@ pub async fn handle_tylluan_remember(
     }
 
     // DCR — Dedup Check Remember (R21-3)
-    // Compute embedding early to detect near-duplicates before writing to silva.
-    // Threshold 0.87: blocks content that is semantically similar (broader dedup than 0.93).
-    // On hit: reinforces the existing node and returns it instead of creating a duplicate.
+    // T-DSH-154: política configurable `[silva] dcr_policy = legacy|strict`.
+    // legacy (default): fusiona con sim >= 0.87 (comportamiento histórico).
+    // strict: fusiona solo con mismo agent_id, mismo tipo y sim >= 0.95; si hay
+    // parecido >= 0.87 sin cumplir, crea nodo propio y lo enlaza (Link).
     const DCR_THRESHOLD: f32 = 0.87;
+    let dcr_policy = server.dcr_policy.clone();
+    let mut dcr_link_to: Option<String> = None;
     let early_embedding = server.matcher.engine()
         .and_then(|e| tokio::task::block_in_place(|| e.embed_batch_coalesced_routing(content.trim())).ok()
             .map(|emb| (emb, e.engine_id())));
     if let Some((ref emb, _)) = early_embedding
         && let Ok(candidates) = server.silva.search_vector(emb, 3).await
-            && let Some((existing_node, sim)) = candidates.into_iter().find(|(_, s)| *s >= DCR_THRESHOLD) {
+        && let Some((existing_node, sim)) = candidates.into_iter().find(|(_, s)| *s >= DCR_THRESHOLD)
+    {
+        let aid = rem_agent_id.as_deref().unwrap_or("anonymous");
+        let same_agent = dcr_same_agent(&existing_node.metadata, aid);
+        let new_type = if is_pending_task {
+            "task"
+        } else if rem_agent_id.is_some() {
+            "agent_memory"
+        } else {
+            "memory"
+        };
+        let same_type = existing_node.node_type == new_type;
+        match dcr_action(&dcr_policy, sim, same_agent, same_type) {
+            DcrAction::Merge => {
                 // T-DSH-95: si el texto entrante aporta información nueva, se
                 // fusiona en el nodo existente en vez de descartarlo (bug: el
                 // DCR reforzaba el nodo y perdía lo nuevo).
                 if let Some(merged) = merge_near_duplicate_content(&existing_node.content, &content) {
-                    let aid = rem_agent_id.as_deref().unwrap_or("anonymous");
                     let merged_embedding = server.matcher.engine().and_then(|e| {
                         tokio::task::block_in_place(|| e.embed_batch_coalesced_routing(&merged))
                             .ok()
@@ -260,10 +329,11 @@ pub async fn handle_tylluan_remember(
                                 merged.clone(),
                             );
                             tracing::info!(
-                                "DCR: near-duplicate merged (sim={:.3}) existing={} added_chars={}",
+                                "DCR: near-duplicate merged (sim={:.3}) existing={} added_chars={} policy={}",
                                 sim,
                                 existing_node.id,
-                                content.trim().chars().count()
+                                content.trim().chars().count(),
+                                dcr_policy
                             );
                             let preview = merged.chars().take(120).collect::<String>();
                             return Ok(CallToolResult {
@@ -287,9 +357,10 @@ pub async fn handle_tylluan_remember(
                     }
                 }
                 tracing::info!(
-                    "🔄 DCR: near-duplicate blocked (sim={:.3}) existing={} agent={}",
+                    "🔄 DCR: near-duplicate blocked (sim={:.3}) existing={} agent={} policy={}",
                     sim, existing_node.id,
-                    rem_agent_id.as_deref().unwrap_or("anonymous")
+                    rem_agent_id.as_deref().unwrap_or("anonymous"),
+                    dcr_policy
                 );
                 let _ = server.silva.reinforce_node(&existing_node.id, 1.05).await;
                 if rem_agent_id.is_some() {
@@ -317,6 +388,16 @@ pub async fn handle_tylluan_remember(
                     is_error: Some(false),
                 });
             }
+            DcrAction::Link => {
+                tracing::info!(
+                    "DCR strict: parecido sin fusión (sim={:.3}, same_agent={}, same_type={}) existing={} — se crea nodo propio enlazado",
+                    sim, same_agent, same_type, existing_node.id
+                );
+                dcr_link_to = Some(existing_node.id.clone());
+            }
+            DcrAction::Skip => {}
+        }
+    }
 
     if let Some(ref completes_id) = task_to_complete {
         let aid = rem_agent_id.as_deref().unwrap_or("anonymous");
@@ -447,6 +528,17 @@ pub async fn handle_tylluan_remember(
         }
         nid
     };
+    // T-DSH-154 (strict): si el DCR no fusionó por política pero había un
+    // parecido >= 0.87, el nodo nuevo queda enlazado al existente para no
+    // perder la relación semántica (el texto entrante se conserva íntegro).
+    if let Some(target) = dcr_link_to
+        && let Err(e) = server
+            .silva
+            .add_edge(&node_id, &target, "near_duplicate", 0.9, "{}")
+            .await
+    {
+        tracing::warn!("DCR strict: no se pudo enlazar {node_id} -> {target}: {e}");
+    }
     // ASI06 Layer 2: fire-and-forget LLM judge, runs after the node already
     // exists. Does not block this response and never fails the write -- Layer 1
     // (above, before any write) already rejected known injection patterns hard;
@@ -628,6 +720,53 @@ mod embedding_failure_tests {
     fn dcr_merge_does_not_duplicate_exact_text() {
         assert!(merge_near_duplicate_content("misma nota", " misma nota ").is_none());
         assert!(merge_near_duplicate_content("vieja", "   ").is_none());
+    }
+
+    /// T-DSH-154: `legacy` fusiona con >= 0.87 sin mirar agente ni tipo;
+    /// cualquier valor desconocido se comporta como legacy (fail-safe).
+    #[test]
+    fn dcr_policy_legacy_merges_similar_regardless_of_agent_and_type() {
+        assert_eq!(dcr_action("legacy", 0.87, false, false), DcrAction::Merge);
+        assert_eq!(dcr_action("legacy", 0.99, true, true), DcrAction::Merge);
+        assert_eq!(dcr_action("legacy", 0.86, true, true), DcrAction::Skip);
+        assert_eq!(dcr_action("desconocida", 0.90, false, false), DcrAction::Merge);
+    }
+
+    /// T-DSH-154: `strict` solo fusiona con MISMO agente, MISMO tipo y >= 0.95;
+    /// con parecido >= 0.87 pero sin cumplir, enlaza sin fusionar.
+    #[test]
+    fn dcr_policy_strict_merges_only_exact_context() {
+        assert_eq!(dcr_action("strict", 0.95, true, true), DcrAction::Merge);
+        assert_eq!(dcr_action("strict", 0.99, true, true), DcrAction::Merge);
+        // mismo agente/tipo pero por debajo de 0.95 -> enlaza
+        assert_eq!(dcr_action("strict", 0.94, true, true), DcrAction::Link);
+        // >= 0.95 pero otro agente o tipo -> enlaza
+        assert_eq!(dcr_action("strict", 0.99, false, true), DcrAction::Link);
+        assert_eq!(dcr_action("strict", 0.99, true, false), DcrAction::Link);
+        // por debajo del umbral legacy -> flujo normal
+        assert_eq!(dcr_action("strict", 0.86, true, true), DcrAction::Skip);
+    }
+
+    /// T-DSH-154: `same_agent` sale de `metadata.agent_id`; los anónimos no
+    /// llevan la clave y solo casan con `anonymous`.
+    #[test]
+    fn dcr_same_agent_reads_metadata() {
+        assert!(dcr_same_agent(r#"{"agent_id":"dsh"}"#, "dsh"));
+        assert!(!dcr_same_agent(r#"{"agent_id":"otro"}"#, "dsh"));
+        assert!(dcr_same_agent("{}", "anonymous"));
+        assert!(!dcr_same_agent("{}", "dsh"));
+        assert!(!dcr_same_agent("no-json", "dsh"));
+    }
+
+    /// T-DSH-154: la config nueva tiene default `legacy` y parsea `strict`.
+    #[test]
+    fn dcr_policy_defaults_to_legacy_and_parses_strict() {
+        assert_eq!(crate::config::SilvaConfig::default().dcr_policy, "legacy");
+        let empty: crate::config::TylluanConfig = toml::from_str("").expect("empty config parses");
+        assert_eq!(empty.silva.dcr_policy, "legacy");
+        let strict: crate::config::TylluanConfig =
+            toml::from_str("[silva]\ndcr_policy = \"strict\"\n").expect("strict parses");
+        assert_eq!(strict.silva.dcr_policy, "strict");
     }
 
     /// T-DSH-95: `update_node_content` persiste la fusión y recalcula el hash.
