@@ -82,6 +82,10 @@ pub struct TylluanServer {
     /// ([security] coherence_semantic_scope). Default `"all"` = comportamiento
     /// histórico; `"conflicting_top"` es opt-in (solo fuertes en desacuerdo).
     pub coherence_gate_semantic_scope: String,
+    /// T-DSH-154: política del DCR ([silva] dcr_policy). Default `"legacy"`;
+    /// `"strict"` exige mismo agente, mismo tipo y similitud >= 0.95 para
+    /// fusionar, y enlaza sin fusionar por debajo. Se inyecta desde main.
+    pub dcr_policy: String,
     /// Opt-in gate for the DeepEvalPhase night phase ([eval] deep_eval_enabled).
     /// Defaults to false: the phase runs the J-6/J-7 DeepEval pilot as a
     /// subprocess whose llama_backend judge can auto-start a real
@@ -174,6 +178,7 @@ impl TylluanServer {
             recall_cascade_enabled: false,
             coherence_gate_hybrid_enabled: false,
             coherence_gate_semantic_scope: "all".to_string(),
+            dcr_policy: "legacy".to_string(),
             deep_eval_enabled: false,
             deep_eval_interval_hours: 24,
             slm_society_eval_enabled: false,
