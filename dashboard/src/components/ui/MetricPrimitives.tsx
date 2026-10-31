@@ -9,15 +9,15 @@ export function MetricCard({ icon: Icon, label, value, unit, sub, valueClass }: 
   valueClass?: string;
 }) {
   return (
-    <div className="p-3.5 rounded border border-border bg-card relative">
-      <div className="flex items-center gap-1.5 text-muted-foreground text-xs font-sans font-semibold mb-1">
-        {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />}
-        <span>{label}</span>
+    <div className="p-2 rounded-sm border border-[#ACA899] dark:border-border bg-white dark:bg-card relative">
+      <div className="flex items-center justify-between text-[11px] font-bold text-[#01285F] dark:text-primary mb-1">
+        <span className="truncate">{label}</span>
+        {Icon && <Icon className="w-3.5 h-3.5 opacity-60 shrink-0" aria-hidden="true" />}
       </div>
-      <p className={`text-2xl font-bold font-sans ${valueClass || 'text-foreground'}`}>
-        {value}{unit && <span className="text-xs text-muted-foreground ml-1 font-normal font-mono">{unit}</span>}
+      <p className={`text-base font-bold font-mono leading-tight ${valueClass || 'text-[#000000] dark:text-foreground'}`}>
+        {value}{unit && <span className="text-[11px] text-[#555555] dark:text-muted-foreground ml-1 font-normal font-mono">{unit}</span>}
       </p>
-      {sub && <p className="text-[11px] text-muted-foreground mt-1 font-mono">{sub}</p>}
+      {sub && <p className="text-[10px] text-[#555555] dark:text-muted-foreground mt-1 font-mono truncate">{sub}</p>}
     </div>
   );
 }
@@ -35,7 +35,7 @@ export function RelativeTime({ ts }: { ts: number }) {
 
 import { resolveCanvasColor } from '../../lib/canvas-color';
 
-export function MiniSparkline({ data, color = 'hsl(var(--blue-400))', w = 80, h = 28 }: {
+export function MiniSparkline({ data, color = 'hsl(var(--blue-400))', w = 80, h = 24 }: {
   data: number[];
   color?: string;
   w?: number;
@@ -71,7 +71,7 @@ export function MiniSparkline({ data, color = 'hsl(var(--blue-400))', w = 80, h 
     ctx.lineTo(pad + (pts.length - 1) * xStep, h - pad);
     ctx.lineTo(pad, h - pad);
     ctx.closePath();
-    ctx.fillStyle = fill(0.2);
+    ctx.fillStyle = fill(0.15);
     ctx.fill();
 
     // stroke line
@@ -82,7 +82,7 @@ export function MiniSparkline({ data, color = 'hsl(var(--blue-400))', w = 80, h 
       if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
     });
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.2;
     ctx.lineJoin = 'round';
     ctx.stroke();
   }, [data, color, w, h]);

@@ -2,6 +2,8 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+const kernelTarget = process.env.VITE_KERNEL_TARGET || 'http://127.0.0.1:47004'
+
 export default defineConfig({
   plugins: [
     react(),
@@ -62,7 +64,7 @@ export default defineConfig({
         // target viejo :4000 apuntaba a un kernel que no existe en este repo —
         // con él, el dashboard dev arrancaba sin datos (queja original: el grafo
         // "no me parota nada").
-        target: 'http://127.0.0.1:47004',
+        target: kernelTarget,
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyRes', (_proxyRes, _req, res) => {
@@ -73,14 +75,14 @@ export default defineConfig({
         },
       },
       '/api': {
-        target: 'http://127.0.0.1:47004',
+        target: kernelTarget,
         changeOrigin: true,
         // WebSocket upgrade support (canvas /api/v1/canvas/ws) — Vite does not
         // enable ws proxying on custom proxy entries by default.
         ws: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:47004',
+        target: kernelTarget,
         changeOrigin: true,
       },
     },
@@ -90,7 +92,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api/v1/events': {
-        target: 'http://127.0.0.1:47004',
+        target: kernelTarget,
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyRes', (_proxyRes, _req, res) => {
@@ -101,12 +103,12 @@ export default defineConfig({
         },
       },
       '/api': {
-        target: 'http://127.0.0.1:47004',
+        target: kernelTarget,
         changeOrigin: true,
         ws: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:47004',
+        target: kernelTarget,
         changeOrigin: true,
       },
     },

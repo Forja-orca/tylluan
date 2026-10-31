@@ -116,12 +116,12 @@ describe('Coloquio VirtualMessageList (@tanstack/react-virtual) — Lote AC', ()
   it('handles message count indicator in header', () => {
     renderColoquioPanel({ messages: generateMessages(50) });
 
-    expect(screen.getByText(/50 messages/i)).toBeInTheDocument();
+    expect(screen.getByText(/50 (messages|mensajes)/i)).toBeInTheDocument();
   });
 
   it('renders 500 accumulated messages gracefully with virtualizer', () => {
     const { unmount } = renderColoquioPanel({ messages: generateMessages(500) });
-    expect(screen.getByText(/500 messages/i)).toBeInTheDocument();
+    expect(screen.getByText(/500 (messages|mensajes)/i)).toBeInTheDocument();
 
     const historyRegion = screen.getByRole('region', { name: /historial de mensajes de coloquio/i });
     expect(historyRegion).toBeInTheDocument();

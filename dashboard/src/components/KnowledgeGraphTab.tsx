@@ -322,86 +322,86 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           )}
         </div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col space-y-4 animate-in fade-in duration-300">
-          <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 min-h-0 flex flex-col space-y-3 font-sans">
+          <div className="flex items-center justify-between gap-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border p-2 rounded-sm">
             <div className="flex gap-2 flex-1 max-w-3xl items-center">
               {results.length > 0 && (
-                <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">{results.length} patterns</span>
+                <span className="text-[11px] font-bold text-[#0A246A] dark:text-primary whitespace-nowrap">{results.length} recuerdos</span>
               )}
               <div className="flex-1 relative">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#555555]" aria-hidden="true" />
                 <input
                   type="text"
-                  aria-label="Search memory nodes"
+                  aria-label="Buscar nodos en memoria SilvaDB"
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowSearchPanel(true)}
-                  placeholder="Search in memory..."
-                  className="w-full pl-10 pr-10 py-2 bg-slate-900/80 rounded text-sm focus:ring-1 ring-primary transition-all"
+                  placeholder="Buscar en memoria SilvaDB..."
+                  className="w-full pl-8 pr-8 py-1 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none text-[11px] text-foreground focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
-                    aria-label="Clear search query"
+                    aria-label="Borrar búsqueda"
                     onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-50 focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none rounded"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
-                    <X className="w-4 h-4" aria-hidden="true" />
+                    <X className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
                 )}
               </div>
               <button
                 type="button"
-                aria-label="Toggle Recent Nodes (Past 24h)"
+                aria-label="Alternar nodos recientes (últimas 24h)"
                 aria-pressed={showRecentSidebar}
                 onClick={() => setShowRecentSidebar(!showRecentSidebar)}
                 className={cn(
-                  "p-2 rounded transition-all focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
-                  showRecentSidebar ? "bg-primary/20 text-primary" : "bg-slate-900 text-slate-400 hover:text-slate-50"
+                  "p-1.5 rounded-sm border transition-all cursor-pointer",
+                  showRecentSidebar ? "bg-[#0A246A] text-white border-[#0A246A]" : "bg-white dark:bg-muted text-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
                 )}
-                title="Past 24h"
+                title="Últimas 24 h"
               >
-                <Clock className="w-4 h-4" aria-hidden="true" />
+                <Clock className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
               <button
                 type="button"
                 onClick={runClustering}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-1.5 rounded bg-primary/10 text-xs font-medium text-primary hover:bg-primary/20 transition-all focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#0A246A] dark:text-primary border border-[#ACA899] transition-all cursor-pointer"
               >
-                <Zap className="w-3.5 h-3.5" aria-hidden="true" /> Detect Communities
+                <Zap className="w-3.5 h-3.5" aria-hidden="true" /> Detectar comunidades
               </button>
               <button
                 type="button"
                 onClick={() => void loadRecent(false)}
                 disabled={loading || isBackgroundRefreshing}
-                className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-900 text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-foreground border border-[#ACA899] transition-colors cursor-pointer"
               >
-                <RefreshCw className={cn("w-3.5 h-3.5", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Refresh
+                <RefreshCw className={cn("w-3 h-3 text-[#0A246A]", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Actualizar
               </button>
               <button
                 type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded text-sm font-medium flex items-center gap-2 focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none cursor-pointer"
+                className="px-3 py-1 bg-[#0A246A] hover:bg-[#081C52] text-white text-[11px] font-bold border border-[#0A246A] rounded-sm flex items-center gap-1.5 cursor-pointer"
               >
-                {searching ? <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Database className="w-4 h-4" aria-hidden="true" />} Explore
+                {searching ? <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" /> : <Database className="w-3 h-3" aria-hidden="true" />} Explorar
               </button>
             </div>
-            <div className="flex bg-slate-900 border border-border rounded p-1 shrink-0 gap-1 items-center">
-              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none", view === 'grid' ? "bg-slate-800 text-primary" : "text-slate-400 hover:text-slate-200")}>Grid</button>
-              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none", view === 'table' ? "bg-slate-800 text-primary" : "text-slate-400 hover:text-slate-200")}>Table</button>
-              <div className="w-px bg-slate-800 self-stretch my-0.5 mx-1"></div>
+            <div className="flex bg-white dark:bg-muted border border-[#ACA899] rounded-sm p-0.5 shrink-0 gap-0.5 items-center">
+              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'grid' ? "bg-[#0A246A] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Cuadrícula</button>
+              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'table' ? "bg-[#0A246A] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Tabla</button>
+              <div className="w-px bg-[#ACA899] self-stretch my-0.5 mx-0.5"></div>
               <button 
                 type="button" 
                 aria-pressed={compactMode}
                 onClick={() => setCompactMode(!compactMode)} 
                 className={cn(
-                  "px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
-                  compactMode ? "bg-primary/10 text-primary" : "text-slate-400 hover:text-slate-200"
+                  "px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors",
+                  compactMode ? "bg-[#ECE9D8] text-[#0A246A]" : "text-[#444444] hover:bg-[#F5F4EA]"
                 )}
               >
-                {compactMode ? "Compact" : "Full View"}
+                {compactMode ? "Compacto" : "Completo"}
               </button>
             </div>
           </div>

@@ -17,49 +17,49 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
   const contradictedCount = stats?.contradicted_count ?? stats?.conflicted_count ?? null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col space-y-4 h-full">
-      {/* Sub Navigation */}
-      <div className="flex max-w-full overflow-x-auto border-b border-border pb-2 gap-2 flex-shrink-0 scrollbar-thin" role="group" aria-label="SilvaDB Memory Views">
+    <div className="flex-1 min-h-0 flex flex-col space-y-3 h-full font-sans">
+      {/* Sub Navigation - Classic Win32 Property Sheet Tabs */}
+      <div className="flex max-w-full overflow-x-auto border-b border-[#ACA899] dark:border-border gap-1 flex-shrink-0" role="group" aria-label="Vistas de memoria SilvaDB">
         <button
           type="button"
           aria-pressed={subTab === 'graph'}
           onClick={() => setSubTab('graph')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
             subTab === 'graph'
-              ? 'bg-primary/10 border-primary/30 text-primary'
-              : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
           <Network className="w-3.5 h-3.5" aria-hidden="true" />
-          Knowledge Graph
+          Grafo de Conocimiento
         </button>
         <button
           type="button"
           aria-pressed={subTab === 'nodes'}
           onClick={() => setSubTab('nodes')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
             subTab === 'nodes'
-              ? 'bg-primary/10 border-primary/30 text-primary'
-              : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
           <Radio className="w-3.5 h-3.5" aria-hidden="true" />
-          Nodes
+          Nodos de la Flota
         </button>
         <button
           type="button"
           aria-pressed={subTab === 'contradictions'}
           onClick={() => setSubTab('contradictions')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
             subTab === 'contradictions'
-              ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
-              : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
           <GitCompare className="w-3.5 h-3.5" aria-hidden="true" />
-          Contradictions
+          Contradicciones Cognitivas
           {contradictedCount !== null && contradictedCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs">
+            <span className="px-1.5 py-0.2 rounded-none bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/40 text-[10px] font-mono font-bold">
               {contradictedCount}
             </span>
           )}

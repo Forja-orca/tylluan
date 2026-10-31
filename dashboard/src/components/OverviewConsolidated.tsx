@@ -42,44 +42,44 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
   const [subTab, setSubTab] = useState('summary');
 
   return (
-    <div className="space-y-6 font-sans">
-      {/* Substrate Telemetry Header */}
-      <div className="min-w-0 p-4 bg-card border border-border rounded flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="space-y-3 font-sans">
+      {/* Substrate Telemetry Header - Windows 2000/XP Classic Header */}
+      <div className="min-w-0 p-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border rounded-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div className="min-w-0 flex items-center gap-3">
-          <TylluanLogo size="lg" animated={false} showText={false} />
+          <TylluanLogo size="md" animated={false} showText={false} />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2 font-mono">
-              <span className="text-sm font-bold text-foreground">Sustrato Cognitivo Tylluan</span>
-              <span className="px-2 py-0.5 text-[11px] font-bold bg-muted text-foreground border border-border rounded">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-[#0A246A] dark:text-primary">Sustrato Cognitivo Tylluan</span>
+              <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#000000] dark:text-foreground border border-[#7F9DB9] dark:border-border rounded-none">
                 {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.2'}
               </span>
-              <span className="px-2 py-0.5 text-[11px] font-bold bg-primary/10 text-primary border border-primary/30 rounded">
-                CI En Verde
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-white dark:bg-primary/10 text-[#008000] dark:text-emerald-400 border border-[#7F9DB9] dark:border-emerald-500/30 rounded-none">
+                Estado: Activo
               </span>
             </div>
-            <p className="break-words text-xs text-muted-foreground mt-0.5 font-mono">
-              Kernel Local Soberano • Malla P2P Noise XK • Bucle de Señales ADR-011 Activo
+            <p className="break-words text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5 font-sans">
+              Kernel Local Soberano • Malla P2P Noise XK • Bucle de Señales ADR-011
             </p>
           </div>
         </div>
 
-        <div className="flex max-w-full flex-wrap items-center gap-3 font-mono text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted border border-border rounded">
+        <div className="flex max-w-full flex-wrap items-center gap-2 text-[11px] text-[#444444] dark:text-muted-foreground">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-muted border border-[#ACA899] dark:border-border rounded-sm">
             <span>Barrera de Coherencia:</span>
-            <span className="text-foreground font-bold">Capas 1/2/3 Activas</span>
+            <span className="text-[#000000] dark:text-foreground font-bold">Capas 1, 2 y 3 activas</span>
           </div>
         </div>
       </div>
 
-      {/* Sub Navigation */}
-      <div role="group" aria-label="Secciones de Estado" className="flex max-w-full overflow-x-auto border-b border-border pb-2 gap-2 font-mono scrollbar-thin">
+      {/* Sub Navigation - Classic Win32 Property Sheet Tabs */}
+      <div role="group" aria-label="Secciones de Estado" className="flex max-w-full overflow-x-auto border-b border-[#ACA899] dark:border-border gap-1 font-sans">
         <button
           aria-pressed={subTab === 'summary'}
           onClick={() => setSubTab('summary')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold rounded border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
             subTab === 'summary'
-              ? 'bg-primary/15 border-primary/40 text-primary'
-              : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
           Resumen General
@@ -87,10 +87,10 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'interoception'}
           onClick={() => setSubTab('interoception')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold rounded border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
             subTab === 'interoception'
-              ? 'bg-primary/15 border-primary/40 text-primary'
-              : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
           Interocepción
@@ -98,10 +98,10 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'system'}
           onClick={() => setSubTab('system')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold rounded border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
             subTab === 'system'
-              ? 'bg-primary/15 border-primary/40 text-primary'
-              : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
           Configuración del Sistema
@@ -111,7 +111,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
       {/* Tab Panels */}
       <div>
         {subTab === 'summary' && (
-          <div className="space-y-6">
+          <div className="space-y-3">
             <OverviewTab
               bridge={props.bridge}
               goldenSignals={props.goldenSignals}
