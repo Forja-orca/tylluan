@@ -195,9 +195,34 @@ fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// T-DSH-155: intérprete Python con el SDK `mcp` 1.x (`mcp.server.fastmcp`)
+/// disponible. En Linux solo existe `python3` (no `python`), y en CI el SDK
+/// puede no estar instalado o ser 2.x (FastMCP renombrado): en ese caso los
+/// tests que arrancan el guild se SALTAN (entorno, no defecto de producto).
+/// Devuelve el primer candidato cuyo preflight real (`FastMCP` importable) pasa.
+fn guild_python() -> Option<String> {
+    let candidates: &[&str] = if cfg!(windows) {
+        &["python", "python3"]
+    } else {
+        &["python3", "python"]
+    };
+    candidates.iter().find_map(|py| {
+        std::process::Command::new(py)
+            // El guild usa `mcp.server.fastmcp` (mcp 1.x); con mcp 2.x el
+            // import falla y el handshake MCP muere: preflight real.
+            .args(["-c", "from mcp.server.fastmcp import FastMCP"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .ok()
+            .filter(|status| status.success())
+            .map(|_| (*py).to_string())
+    })
+}
+
 /// Arranca el guild `llama_backend` REAL (Python, MCP stdio) apuntando al
 /// backend falso por la vía de detección legacy (`OPENAI_BASE_URL`).
-async fn spawn_llama_backend(fake: &FakeServer, tag: &str) -> GuildProcess {
+async fn spawn_llama_backend(fake: &FakeServer, tag: &str, python: &str) -> GuildProcess {
     let repo = repo_root();
     let mut env = HashMap::new();
     env.insert("OPENAI_BASE_URL".to_string(), format!("{}/v1", fake.base));
@@ -207,7 +232,7 @@ async fn spawn_llama_backend(fake: &FakeServer, tag: &str) -> GuildProcess {
     let mut process = GuildProcess::new(
         &name,
         GuildLauncher::External {
-            command: "python".to_string(),
+            command: python.to_string(),
             args: vec!["-m".to_string(), "guilds.core.llama_backend".to_string()],
             cwd: Some(repo.clone()),
             env: Some(env),
@@ -265,8 +290,12 @@ fn body_has_model(body: &str) -> bool {
 /// capa 2 moria sin que nada lo mostrara.
 #[tokio::test(flavor = "multi_thread")]
 async fn d33_judge_request_carries_model_and_succeeds() {
+    let Some(python) = guild_python() else {
+        eprintln!("SKIP d33_judge_request_carries_model_and_succeeds: no hay Python con el SDK mcp (entorno)");
+        return;
+    };
     let fake = start_fake(Behavior::OpenAiCompatible);
-    let mut process = spawn_llama_backend(&fake, "current").await;
+    let mut process = spawn_llama_backend(&fake, "current", &python).await;
     let (text, is_error) = call_query_model(&mut process).await;
 
     let bodies = fake.post_bodies_to("/chat/completions");
@@ -307,8 +336,12 @@ async fn d33_judge_request_carries_model_and_succeeds() {
 /// responde 400.
 #[tokio::test(flavor = "multi_thread")]
 async fn d33_desired_judge_request_carries_model_and_gets_verdict() {
+    let Some(python) = guild_python() else {
+        eprintln!("SKIP d33_desired_judge_request_carries_model_and_gets_verdict: no hay Python con el SDK mcp (entorno)");
+        return;
+    };
     let fake = start_fake(Behavior::OpenAiCompatible);
-    let mut process = spawn_llama_backend(&fake, "desired").await;
+    let mut process = spawn_llama_backend(&fake, "desired", &python).await;
     let (text, is_error) = call_query_model(&mut process).await;
 
     let bodies = fake.post_bodies_to("/chat/completions");

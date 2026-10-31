@@ -341,6 +341,18 @@ fn v5_file_replacement_and_permission_notes() {
         let link = file_in(&dir);
         let _ = std::fs::remove_file(&link);
         std::os::unix::fs::symlink(&other, &link).unwrap();
+        // T-DSH-155: en Linux el mtime puede tener granularidad de tick: la
+        // escritura anterior (persist) y `otro.json` pueden caer en el MISMO
+        // tick y el store (que compara mtime) no detecta el cambio -> falso
+        // negativo solo en Linux. Fijamos un mtime posterior explícito para
+        // medir el seguimiento del symlink, no la resolución del reloj del fs.
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(2);
+        std::fs::File::options()
+            .write(true)
+            .open(&other)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(20));
         assert!(store.valid_consent("c3", R1).is_some(), "sigue el symlink al leer");
     }
