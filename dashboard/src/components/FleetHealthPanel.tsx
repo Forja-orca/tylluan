@@ -308,9 +308,9 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
   return (
     <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-y-auto">
       {/* Top Header Card */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded border border-slate-800 bg-slate-900/40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+          <div className="w-10 h-10 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
             <Activity className="w-5 h-5 animate-pulse" />
           </div>
           <div>
@@ -378,7 +378,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/30 p-2.5 rounded-xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/30 p-2.5 rounded border border-slate-800">
         <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -386,7 +386,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Filter by agent, keywords or content..."
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500/50 font-mono"
+            className="w-full bg-slate-950/80 border border-slate-800 rounded pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-primary font-mono"
           />
           {searchQuery && (
             <button
@@ -411,9 +411,9 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
               key={f.id}
               onClick={() => setStatusFilter(f.id)}
               className={cn(
-                'px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg border transition-all whitespace-nowrap',
+                'px-2.5 py-1 text-[11px] font-mono font-medium rounded border transition-colors whitespace-nowrap',
                 statusFilter === f.id
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  ? 'bg-primary/10 border-primary/30 text-primary'
                   : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
               )}
             >
@@ -425,7 +425,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
 
       {/* Agents Loop Health Grid */}
       {filteredSummaries.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-12 border border-slate-800 border-dashed rounded-xl text-center bg-slate-900/20">
+        <div className="flex-1 flex flex-col items-center justify-center p-12 border border-slate-800 border-dashed rounded text-center bg-slate-900/20">
           <ShieldCheck className="w-10 h-10 text-slate-400 mb-3" />
           <h3 className="text-sm font-bold text-slate-300 font-sans">No matching agent loops</h3>
           <p className="text-xs text-slate-400 font-mono mt-1 max-w-sm">
@@ -455,7 +455,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
               <div
                 key={summary.authorId}
                 className={cn(
-                  'flex flex-col p-4 rounded-xl border bg-slate-900/40 backdrop-blur-md transition-all',
+                  'flex flex-col p-4 rounded border bg-slate-900/40 transition-colors',
                   summary.status === 'incident'
                     ? 'border-rose-800/40 hover:border-rose-600/50'
                     : 'border-slate-800 hover:border-slate-700'
@@ -466,7 +466,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
                   <div className="flex items-center gap-3">
                     <div
                       className={cn(
-                        'w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm border shadow-sm font-sans',
+                        'w-10 h-10 rounded flex items-center justify-center font-bold text-sm border shadow-none font-sans',
                         style.bg,
                         style.color,
                         style.border
@@ -597,14 +597,14 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
 
       {/* History Inspector Modal */}
       {inspectAgent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-800 rounded w-full max-w-3xl max-h-[85vh] flex flex-col shadow-none overflow-hidden">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/40">
               <div className="flex items-center gap-3">
                 <div
                   className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs border font-sans',
+                    'w-8 h-8 rounded flex items-center justify-center font-bold text-xs border font-sans',
                     agentStyle(inspectAgent.authorId).bg,
                     agentStyle(inspectAgent.authorId).color,
                     agentStyle(inspectAgent.authorId).border
@@ -623,7 +623,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
               </div>
               <button
                 onClick={() => setInspectAgent(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -632,7 +632,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
             {/* Modal Content / Timeline */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono">
               {inspectAgent.history.map(msg => (
-                <div key={msg.msg_id || msg.turn} className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+                <div key={msg.msg_id || msg.turn} className="p-3 rounded border border-slate-800 bg-slate-950/60">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2 border-b border-slate-800/60 pb-1.5">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-indigo-300">Turn #{msg.turn}</span>

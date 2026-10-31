@@ -250,9 +250,9 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
   return (
     <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-y-auto">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded border border-slate-800 bg-slate-900/40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="w-10 h-10 rounded bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
             <Briefcase className="w-5 h-5" />
           </div>
           <div>
@@ -260,7 +260,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
               <h2 className="text-base font-bold text-slate-100 font-sans tracking-tight">
                 Bounded Work Contracts (BWC)
               </h2>
-              <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase rounded bg-indigo-950/60 border border-indigo-700/50 text-indigo-300">
+              <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase rounded bg-primary/10 border border-primary/30 text-primary">
                 Finite Protocol · BWC-1..4
               </span>
             </div>
@@ -336,11 +336,11 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
 
       {/* Hero Card: Active Work Contract */}
       {activeContract ? (
-        <div className="p-5 rounded-xl border border-indigo-800/40 bg-indigo-950/20 backdrop-blur-md relative overflow-hidden">
+        <div className="p-5 rounded border border-primary/40 bg-primary/10 relative overflow-hidden">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div className="space-y-2 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono text-indigo-300 font-bold">
+                <span className="text-xs font-mono text-primary font-bold">
                   ACTIVE CONTRACT · {activeContract.id}
                 </span>
                 <div
@@ -358,8 +358,8 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
               </div>
 
               {/* Task Statement */}
-              <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800/80 text-xs font-mono text-slate-200 leading-relaxed">
-                <span className="text-[11px] uppercase font-bold text-indigo-400 block mb-1">
+              <div className="p-3.5 rounded bg-slate-950/80 border border-slate-800/80 text-xs font-mono text-slate-200 leading-relaxed">
+                <span className="text-[11px] uppercase font-bold text-primary block mb-1">
                   Task Specification & Deliverable:
                 </span>
                 {activeContract.task}
@@ -375,7 +375,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                     <div
                       key={member}
                       className={cn(
-                        'flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono border',
+                        'flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono border',
                         mStyle.bg,
                         mStyle.color,
                         mStyle.border
@@ -395,7 +395,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
             </div>
 
             {/* Right Budget Meter */}
-            <div className="w-full md:w-56 p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 font-mono space-y-2.5">
+            <div className="w-full md:w-56 p-3 rounded bg-slate-950/60 border border-slate-800/80 font-mono space-y-2.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400 text-[11px] uppercase">Turn Budget</span>
                 <span className="font-bold text-slate-100">
@@ -403,10 +403,10 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                 </span>
               </div>
               {/* Progress Bar */}
-              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-slate-800 rounded overflow-hidden">
                 <div
                   className={cn(
-                    'h-full transition-all duration-300',
+                    'h-full transition-colors duration-300',
                     activeContract.budget_remaining <= 3 ? 'bg-rose-500' : 'bg-emerald-500'
                   )}
                   style={{
@@ -423,7 +423,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
               </div>
               <button
                 onClick={() => setSelectedContract(activeContract)}
-                className="w-full mt-1 py-1.5 text-center text-xs text-indigo-300 hover:text-indigo-200 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-800/50 rounded-lg transition-all"
+                className="w-full mt-1 py-1.5 text-center text-xs text-primary hover:underline bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded transition-colors"
               >
                 Inspect Details & Deliverables
               </button>
@@ -431,7 +431,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
           </div>
         </div>
       ) : (
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex items-center justify-between">
+        <div className="p-4 rounded border border-slate-800 bg-slate-900/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
             <div>
@@ -445,7 +445,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
       )}
 
       {/* Contract Search & Manual Lookup */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/30 p-2.5 rounded-xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/30 p-2.5 rounded border border-slate-800">
         <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -453,7 +453,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Filter contracts by task, id or agent..."
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500/50 font-mono"
+            className="w-full bg-slate-950/80 border border-slate-800 rounded pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-primary font-mono"
           />
           {searchQuery && (
             <button
@@ -486,12 +486,12 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
 
       {/* Contracts Ledger Table / Grid */}
       <div className="space-y-3">
-        <h3 className="text-xs font-bold text-slate-300 font-sans uppercase tracking-wider">
+        <h3 className="text-xs font-bold text-slate-300 font-sans">
           Tracked Work Contracts ({filteredContracts.length})
         </h3>
 
         {filteredContracts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 border border-slate-800 border-dashed rounded-xl text-center bg-slate-900/20">
+          <div className="flex flex-col items-center justify-center p-8 border border-slate-800 border-dashed rounded text-center bg-slate-900/20">
             <FileText className="w-8 h-8 text-slate-500 mb-2" />
             <p className="text-xs text-slate-400 font-mono">No work contracts matching query.</p>
           </div>
@@ -504,13 +504,13 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
               return (
                 <div
                   key={contract.id}
-                  className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition-all flex flex-col justify-between space-y-3"
+                  className="p-4 rounded border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition-colors flex flex-col justify-between space-y-3"
                 >
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-indigo-300">
+                          <span className="font-mono text-xs font-bold text-primary">
                             {contract.id}
                           </span>
                           <button
@@ -557,7 +557,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
 
                     <button
                       onClick={() => setSelectedContract(contract)}
-                      className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                      className="text-primary hover:underline flex items-center gap-1 font-semibold"
                     >
                       <span>Inspect</span>
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -572,8 +572,8 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
 
       {/* Contract Detail Modal */}
       {selectedContract && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden font-mono">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-800 rounded w-full max-w-2xl max-h-[85vh] flex flex-col shadow-none overflow-hidden font-mono">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/40">
               <div>

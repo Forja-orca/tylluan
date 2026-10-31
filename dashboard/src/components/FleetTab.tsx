@@ -142,14 +142,14 @@ async function fetchFleetData(bridge: NexusBridge): Promise<FleetData> {
 function KernelCard({ k }: { k: KernelHealth }) {
   const ok = k.status === 'ok' || k.status === 'healthy';
   return (
-    <div className="rounded-xl bg-slate-900/60 p-4 space-y-3">
+    <div className="rounded bg-slate-900/60 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Zap className="w-4 h-4 text-indigo-400" />
           <span className="text-xs font-semibold text-slate-200">Kernel</span>
           <span className="text-[11px] text-slate-500">{k.version}</span>
         </div>
-        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full',
+        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded',
           ok ? 'bg-emerald-950/60 text-emerald-400' : 'bg-amber-950/60 text-amber-400')}>
           {k.status}
         </span>
@@ -180,10 +180,10 @@ function AgentCard({ a }: { a: AgentActivity }) {
   const label = s.label;
 
   return (
-    <div className={cn('rounded-xl p-3 flex items-start gap-3 transition-colors', s.bg,
+    <div className={cn('rounded p-3 flex items-start gap-3 transition-colors', s.bg,
       status === 'online' ? 'ring-1 ring-emerald-500/20' : status === 'idle' ? 'ring-1 ring-amber-500/15' : 'opacity-60')}>
       <div className="relative shrink-0 mt-0.5">
-        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ring-1', s.bg, s.color, s.ring)}>
+        <div className={cn('w-8 h-8 rounded flex items-center justify-center text-xs font-bold ring-1', s.bg, s.color, s.ring)}>
           {s.initial}
         </div>
         <div
@@ -221,7 +221,7 @@ function GuildBar({ online, total }: { online: number; total: number }) {
   const pct = total > 0 ? Math.round((online / total) * 100) : 0;
   const color = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-rose-500';
   return (
-    <div className="rounded-xl bg-slate-900/60 p-4 space-y-2">
+    <div className="rounded bg-slate-900/60 p-4 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Radio className="w-4 h-4 text-indigo-400" />
@@ -229,8 +229,8 @@ function GuildBar({ online, total }: { online: number; total: number }) {
         </div>
         <span className="text-xs font-mono text-slate-300">{online}<span className="text-slate-600">/{total}</span></span>
       </div>
-      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
+      <div className="h-1.5 bg-slate-800 rounded overflow-hidden">
+        <div className={cn('h-full rounded transition-all', color)} style={{ width: `${pct}%` }} />
       </div>
       <div className="grid grid-cols-3 gap-1.5 pt-1">
         {pct >= 80
@@ -305,7 +305,7 @@ export function FleetTab() {
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-indigo-400" />
           <h2 className="text-sm font-bold text-slate-200">Fleet Status</h2>
-          <span className="text-[11px] bg-indigo-950/60 text-indigo-400 px-2 py-0.5 rounded-full font-mono">
+          <span className="text-[11px] bg-indigo-950/60 text-indigo-400 px-2 py-0.5 rounded font-mono">
             {onlineCount} active
           </span>
         </div>
@@ -331,7 +331,7 @@ export function FleetTab() {
         <div className="text-[11px] font-medium text-slate-500 mb-2 px-0.5">Agents</div>
         <div className="grid grid-cols-1 gap-2">
           {data.agents.length === 0 ? (
-            <div className="px-4 py-8 text-center text-xs text-slate-500 italic border border-dashed border-slate-800 rounded-xl">
+            <div className="px-4 py-8 text-center text-xs text-slate-500 italic border border-dashed border-slate-800 rounded">
               No registered fleet agent activity detected
             </div>
           ) : (

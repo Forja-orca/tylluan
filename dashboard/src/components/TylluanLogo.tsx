@@ -60,7 +60,7 @@ export function TylluanLogo({
         {/* Sovereign Card Base */}
         <div
           className={cn(
-            'relative w-full h-full rounded-2xl bg-slate-950 border border-primary/30 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300 group-hover:border-primary/60',
+            'relative w-full h-full rounded bg-slate-950 border border-primary/30 overflow-hidden flex items-center justify-center transition-colors group-hover:border-primary/60',
             animated && 'animate-sovereign-aura',
             ringPadding[size]
           )}
@@ -71,7 +71,7 @@ export function TylluanLogo({
               <img
                 src="/tylluan-logo.jpg"
                 alt="Tylluan Owl Official Logo"
-                className="w-full h-full object-cover rounded-xl shadow-inner transition-transform duration-500 group-hover:scale-[1.02]"
+                className="w-full h-full object-cover rounded shadow-none"
                 onError={() => setImgLoaded(false)}
               />
             ) : (
@@ -88,9 +88,6 @@ export function TylluanLogo({
               </svg>
             )}
           </div>
-
-          {/* Clean Subtle Vignette Overlay for Depth */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/20 pointer-events-none z-20" />
         </div>
       </div>
 
@@ -98,14 +95,14 @@ export function TylluanLogo({
       {showText && (
         <div className="font-mono leading-none">
           <div className="flex items-center gap-1.5 font-bold tracking-tight text-slate-100 text-sm">
-            <span className="text-primary tracking-wider uppercase drop-shadow-[0_0_8px_hsl(var(--primary)/0.35)]">
+            <span className="text-primary font-bold">
               TYLLUAN
             </span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/30 uppercase tracking-widest font-extrabold">
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30 font-bold">
               o3
             </span>
           </div>
-          <div className="text-[11px] text-slate-400 tracking-widest uppercase font-semibold mt-1 flex items-center gap-1.5">
+          <div className="text-[11px] text-slate-400 font-semibold mt-1 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-beacon" />
             <span>Sovereign Substrate</span>
           </div>
