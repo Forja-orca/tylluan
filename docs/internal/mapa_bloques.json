@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-10-30T01:00:00Z",
+  "actualizado": "2026-10-31T03:00:00Z",
   "criterio": "verde = verificado y sin pendientes. ambar = funciona pero con defectos conocidos o una decision pendiente. rojo = roto en lo esencial, sin verificar, o lo que ve primero el usuario sin publicar. El mod lee este fichero; el TL lo actualiza al cerrar cada ciclo.",
   "regla_atencion": "Ningun bloque se lleva la mayor parte del esfuerzo del TL mas de 2 ciclos seguidos mientras otro este en rojo.",
   "bloques": [
@@ -8,7 +8,7 @@
       "nombre": "Seguridad",
       "frente": "seguridad",
       "estado": "ambar",
-      "falta": "Hecho (en main): B-1 cerrado (D-69, test de Buffy 3 de 3 y close 2 de 2), ACL cerrada por defecto en el codigo (D-68), update endurecido (D-70), subida de Vision con bearer (AG-13), 401 con code=missing_token (D-72), mapeo OAuth documentado (D-71). Falta: AG-14 (aviso falta token en el panel), prueba conjunta de Buffy (B-5), D-74 y D-75 (modelo de amenazas de transcritos), y que Jose decida dev_mode=false.",
+      "falta": "Hecho: texto invisible/codificado normalizado (D-80: etiquetas Unicode, ANSI, bidi, ancho cero) con rechazo solo del payload oculto en Coloquio. Falta: D-82/D-83 (endurecer release.yml, ONNX con checksum, hashes Python), D-74 (amenazas de transcritos), dev_mode=false (decisión de José), rotar claves de proveedor si OpenCode Console les afectó.",
       "dueno": "Buffy y Deep (por relevo de Jose); decide Jose"
     },
     {
@@ -16,15 +16,15 @@
       "nombre": "Pilar Recordar (investigacion)",
       "frente": "producto",
       "estado": "ambar",
-      "falta": "Vía 1 analizada (canales MCP sin tocar el cliente: instructions, descripciones, resultados) pero los 4 experimentos NO se han medido; criterio go/no-go abierto (15 puntos de Recall@5 en 3 clientes). Idea de Jose registrada: sesion por agente con registro fiel y sintesis (H-56, T-DSH-142, D-75).",
-      "dueno": "TL, Hermes, DSH, Deep"
+      "falta": "PRIORIDAD Nº1 desde 2026-10-30: Tylluan ES la copia (todo escrito en Tylluan en tiempo real, cabe en un USB, sin nube). Medido por Buffy (B-9/B-10): la fusión DCR no actualizaba nodes_fts (arreglado, T-DSH-153) y colapsa notas con la misma plantilla (política strict/legacy, T-DSH-154, A/B de Hermes H-58 pendiente); la copia cubre 5 de 12 bases y restore solo in situ (H-60, B-11, B-12). Faltan: AgentSession persistente (T-DSH-152), registro fiel del diálogo, volcado al USB y simulacro de restauración.",
+      "dueno": "TL, Hermes, DSH, Buffy, Deep"
     },
     {
       "id": "MEM",
       "nombre": "Memoria y recuperacion",
       "frente": "producto",
       "estado": "ambar",
-      "falta": "Hecho: id unico en memory/write (T-DSH-134), reindexer configurable (T-DSH-136, T-DSH-138), retencion de Coloquio acotada y apagada por defecto (H-51; Jose la activa con N=3000 en el proximo reinicio). Falta: 964 coloquio_memory sin vector (T-DSH-139 simula tres opciones con A/B), desglose de la RAM (T-DSH-141), TaskRegistry (T-DSH-140 por verificar).",
+      "falta": "Hecho: índice FTS sincronizado al fusionar (T-DSH-153), política DCR configurable con legacy por defecto (T-DSH-154). Falta: medir Recall@5 legacy frente a strict (H-58), otras actualizaciones de metadata sin espejo FTS, 964 coloquio_memory sin vector.",
       "dueno": "DSH, Hermes, TL"
     },
     {
@@ -48,7 +48,7 @@
       "nombre": "Dashboard",
       "frente": "producto",
       "estado": "ambar",
-      "falta": "Hecho: AG-13. Falta: AG-14 (estado vacio sin token), AG-15 (literales en espanol, capturas vivas), AG-17 (maqueta de la Sala de control visual: anillos, mapa de flujo, mapa de calor) y decidir el panel embebido en las releases.",
+      "falta": "La Sala de control (AG-17) está en main con el estilo que José rechaza; guía de interfaz vieja escuela en docs/design. Falta AG-21: rehacer el estilo del dashboard con la guía.",
       "dueno": "Antigravity; decide Jose lo embebido"
     },
     {
@@ -64,7 +64,7 @@
       "nombre": "Instalacion y release",
       "frente": "seguridad",
       "estado": "ambar",
-      "falta": "Release v0.17.2 publicada (2026-10-27). La siguiente lleva atestacion de procedencia (sin probar en un release real). Sin reverificar: tylluan-cli install lanza un kernel y token en el cwd. install.sh rechaza macOS Intel con mensaje claro (sin binario).",
+      "falta": "Instalador sin conocimientos técnicos: maqueta clásica 560x420 aceptada (AG-20, docs/design/installer_mockup). Falta: medir el instalador actual en un Windows limpio (T-DSH-150 bloqueada), decidir tecnología del instalador real, Windows sin certificado de pago con evidencia comprobable, fase final VPN local. Release atestada sin probar en real.",
       "dueno": "TL; Deep (D-62)"
     },
     {
@@ -80,7 +80,7 @@
       "nombre": "Proceso de flota",
       "frente": "producto",
       "estado": "ambar",
-      "falta": "Flota en marcha con plan de cierre G1-G10 (docs/internal/PLAN_cierre_produccion_2026-10-29.md). Codex caido: sus tareas pasaron a DSH y Hermes. Deep y Buffy siguen por relevo de Jose (decision 2026-10-29). Produccion va por detras de main: el reinicio esta preparado.",
+      "falta": "Prod reiniciado por José a las 01:16 con f79d8b4 (binario compilado por su launcher); tylluan.toml.next (retención 3000, apagado rápido, sin marcadores de prueba) preparado pero NO aplicado; limpieza de privacidad (H-57) probada en copia, falta H-59 y GO; CI a --tests pendiente de 0 rojos.",
       "dueno": "TL",
       "ignoraAtencion": true
     }
