@@ -151,6 +151,18 @@ fn resolve_sources(extras: &[String], with_secrets: bool) -> Result<Vec<PathBuf>
     resolve_sources_from(Path::new("tylluan.toml"), extras, with_secrets)
 }
 
+/// T-DSH-158: el kernel honra `TYLLUAN_DATA_DIR` para TODAS las bases del hub
+/// (incluida `journal.db`, que abre en `<DATA_DIR>/journal.db`). El backup debe
+/// resolver el MISMO DATA_DIR: si el env var esta definido, manda sobre
+/// `tylluan.toml` (que puede tener rutas relativas al cwd y no ser el DATA_DIR
+/// real del kernel).
+fn data_dir_env() -> Option<PathBuf> {
+    std::env::var("TYLLUAN_DATA_DIR")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from)
+}
+
 /// Default sources: `[silva].db_path` and `[memory].db_path` from tylluan.toml
 /// (fallbacks `./data/silva.db` / `./data/tylluan.db`) plus the 12 canonical
 /// databases of the data dir (T-DSH-156). Extras (`--db`) are names relative
@@ -160,11 +172,19 @@ fn resolve_sources_from(
     extras: &[String],
     with_secrets: bool,
 ) -> Result<Vec<PathBuf>> {
-    let silva = load_silva_db_path(toml_path)?
-        .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
-    let memory = load_memory_db_path(toml_path)?
-        .unwrap_or_else(|| PathBuf::from("./data/tylluan.db"));
-    let data_dir = data_dir_of(&silva);
+    // T-DSH-158: misma resolucion que el kernel: TYLLUAN_DATA_DIR manda y
+    // TODAS las bases (incluida journal.db) salen de ese DATA_DIR.
+    let (silva, memory, data_dir) = match data_dir_env() {
+        Some(base) => (base.join("silva.db"), base.join("tylluan.db"), base),
+        None => {
+            let silva = load_silva_db_path(toml_path)?
+                .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
+            let memory = load_memory_db_path(toml_path)?
+                .unwrap_or_else(|| PathBuf::from("./data/tylluan.db"));
+            let data_dir = data_dir_of(&silva);
+            (silva, memory, data_dir)
+        }
+    };
     let mut sources: Vec<PathBuf> = Vec::new();
     for candidate in [silva, memory] {
         if !sources.contains(&candidate) {
@@ -383,10 +403,17 @@ pub(crate) fn plan_restore(dir: &Path, target_dir: Option<&Path>) -> Result<Rest
     let pre_dir = match target_dir {
         Some(base) => base.join(format!("pre_restore_{ts}")),
         None => {
-            let toml = Path::new("tylluan.toml");
-            let silva = load_silva_db_path(toml)?
-                .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
-            let data_dir = data_dir_of(&silva);
+            // T-DSH-158: el snapshot in situ tambien vive en el DATA_DIR del
+            // kernel (TYLLUAN_DATA_DIR si esta definido), no en el cwd.
+            let data_dir = match data_dir_env() {
+                Some(base) => base,
+                None => {
+                    let toml = Path::new("tylluan.toml");
+                    let silva = load_silva_db_path(toml)?
+                        .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
+                    data_dir_of(&silva)
+                }
+            };
             data_dir.join(format!("pre_restore_{ts}"))
         }
     };

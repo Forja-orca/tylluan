@@ -251,3 +251,70 @@ fn restore_refuses_when_target_port_has_health() {
     );
     assert!(!target.exists() || std::fs::read_dir(&target).unwrap().next().is_none());
 }
+
+/// T-DSH-158: el kernel resuelve TODAS sus bases (incluida `journal.db`) desde
+/// `TYLLUAN_DATA_DIR`; el backup/restore deben hacer lo mismo aunque el cwd sea
+/// distinto. Antes del arreglo no habia tylluan.toml en el cwd y el backup
+/// resolvia `./data/*` relativo al cwd (vacio) -> fallaba sin copiar nada.
+#[test]
+fn backup_and_restore_resolve_journal_from_data_dir_env() {
+    let root = tempfile::tempdir().unwrap();
+    let data = root.path().join("custom-data");
+    std::fs::create_dir_all(&data).unwrap();
+    for (i, name) in DATA_DBS.iter().enumerate() {
+        make_db(&data.join(name), &format!("env-marker-{i}"));
+    }
+    // A proposito NO hay tylluan.toml: solo el env define el DATA_DIR real.
+
+    let backup = root.path().join("backup-env");
+    let out = Command::new(bin())
+        .args(["backup", backup.to_str().unwrap()])
+        .current_dir(root.path())
+        .env("TYLLUAN_DATA_DIR", &data)
+        .output()
+        .expect("ejecutar tylluan-cli backup");
+    assert!(
+        out.status.success(),
+        "backup con TYLLUAN_DATA_DIR fallo: stdout={} stderr={}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let names = names_of(&manifest_of(&backup));
+    assert!(
+        names.iter().any(|n| n == "journal.db"),
+        "journal.db debe resolverse desde TYLLUAN_DATA_DIR (no desde el cwd): {names:?}"
+    );
+    for db in DATA_DBS {
+        assert!(names.iter().any(|n| n == db), "falta {db} en el backup: {names:?}");
+    }
+
+    // Restore a otro directorio con su propio puerto: journal.db tambien viaja.
+    let target = root.path().join("restored-env");
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let out = Command::new(bin())
+        .args([
+            "restore",
+            backup.to_str().unwrap(),
+            "--target-dir",
+            target.to_str().unwrap(),
+            "--port",
+            &port.to_string(),
+        ])
+        .current_dir(root.path())
+        .env("TYLLUAN_DATA_DIR", &data)
+        .output()
+        .expect("ejecutar tylluan-cli restore");
+    assert!(
+        out.status.success(),
+        "restore con TYLLUAN_DATA_DIR fallo: stdout={} stderr={}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let journal = target.join("journal.db");
+    assert!(journal.exists(), "journal.db debe restaurarse en el target-dir");
+    let expected = format!("env-marker-{}", DATA_DBS.iter().position(|d| *d == "journal.db").unwrap());
+    assert_eq!(read_marker(&journal), expected, "contenido de journal.db restaurado");
+}
