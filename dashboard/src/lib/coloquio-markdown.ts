@@ -1,3 +1,35 @@
+// eslint-disable-next-line no-control-regex
+const ANSI_CSI = /\u001b\[[0-?]*[ -/]*[@-~]/g;
+// eslint-disable-next-line no-control-regex
+const ANSI_OSC = /\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g;
+const INVISIBLE_FORMAT = /[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+const TAG_SEQUENCE = /[\u{e0000}-\u{e007f}]+/gu;
+
+function decodeTagSequence(sequence: string): string {
+  return Array.from(sequence)
+    .map(ch => String.fromCodePoint((ch.codePointAt(0) ?? 0) - 0xe0000))
+    .join('');
+}
+
+/**
+ * D-80: remove terminal controls and invisible Unicode from rendered text.
+ * Unicode tag characters are decoded only to decide whether they are one of
+ * the three legitimate subdivision flags (England, Scotland, Wales); any other
+ * tag payload is dropped instead of rendering as an invisible instruction.
+ */
+export function sanitizeDisplayText(text: string): string {
+  const cleaned = text
+    .replace(ANSI_CSI, '')
+    .replace(ANSI_OSC, '')
+    .replace(INVISIBLE_FORMAT, '');
+  return cleaned.replace(TAG_SEQUENCE, (sequence, offset, whole) => {
+    const decoded = decodeTagSequence(sequence).replace(/\u007f/g, '');
+    const before = whole.slice(Math.max(0, offset - 2), offset);
+    const legitimateFlag = before === '\u{1f3f4}' && ['gbeng', 'gbsct', 'gbwls'].includes(decoded);
+    return legitimateFlag ? sequence : '';
+  });
+}
+
 /**
  * Markdown renderer for Coloquio messages.
  * Handles code blocks, inline code, bold, italics, quotes, lists, turn jumps, and mentions.
@@ -6,7 +38,7 @@
  * snake_case identifiers, file paths, and URLs (e.g. scripts/check_test_count.sh).
  */
 export function parseMarkdown(text: string): string {
-  let h = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let h = sanitizeDisplayText(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const codeBlocks: string[] = [];
   h = h.replace(/```([^\r\n]*)\r?\n([\s\S]*?)\r?\n```/g, (_, lang, code) => {
