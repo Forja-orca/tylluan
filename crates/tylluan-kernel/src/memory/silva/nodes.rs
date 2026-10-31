@@ -293,18 +293,45 @@ impl super::SilvaDB {
     /// T-DSH-95: reemplaza el `content` de un nodo existente (fusión DCR).
     /// Recalcula `content_hash` y refresca `updated_at`; no toca peso, metadata
     /// ni procedencia. Devuelve error si el nodo no existe.
+    ///
+    /// T-DSH-153: el `UPDATE` y el refresco de `nodes_fts` van en la MISMA
+    /// transacción. Antes solo se actualizaba `nodes`, así que BM25 seguía
+    /// viendo el texto viejo del nodo fusionado y lo añadido no era buscable.
     pub async fn update_node_content(&self, id: &str, content: &str) -> Result<()> {
         use sha2::Digest as _;
         let content_hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
         tokio::task::block_in_place(|| {
-            let conn = self.conn_timed();
-            let changed = conn.execute(
+            let mut conn = self.conn_timed();
+            let tx = conn.transaction()?;
+            // nodes_fts es FTS5 de contenido externo (content=nodes): para
+            // reindexar hay que borrar con el comando 'delete' usando los
+            // valores VIEJOS, así que se leen antes del UPDATE.
+            let old = tx.query_row(
+                "SELECT rowid, id, content, metadata FROM nodes WHERE id = ?1",
+                rusqlite::params![id],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)),
+            );
+            let (rowid, old_id, old_content, old_metadata) = match old {
+                Ok(v) => v,
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    anyhow::bail!("Node not found: {id}");
+                }
+                Err(e) => return Err(e.into()),
+            };
+            tx.execute(
                 "UPDATE nodes SET content = ?1, content_hash = ?2, updated_at = datetime('now') WHERE id = ?3",
                 rusqlite::params![content, content_hash, id],
             )?;
-            if changed == 0 {
-                anyhow::bail!("Node not found: {id}");
-            }
+            tx.execute(
+                "INSERT INTO nodes_fts(nodes_fts, rowid, id, content, metadata) \
+                 VALUES ('delete', ?1, ?2, ?3, ?4)",
+                rusqlite::params![rowid, old_id, old_content, old_metadata],
+            )?;
+            tx.execute(
+                "INSERT INTO nodes_fts(rowid, id, content, metadata) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![rowid, id, content, old_metadata],
+            )?;
+            tx.commit()?;
             Ok::<(), anyhow::Error>(())
         })
     }
@@ -505,11 +532,39 @@ impl super::SilvaDB {
         let node_id = node_id.to_string();
         let metadata = metadata.to_string();
         tokio::task::block_in_place(move || {
-            let conn = self.conn.blocking_lock();
-            conn.execute(
+            let mut conn = self.conn.blocking_lock();
+            // T-DSH-153: metadata también está indexada en nodes_fts
+            // (id, content, metadata). FTS5 de contenido externo: se borra con
+            // el comando 'delete' y los valores VIEJOS, leídos antes del UPDATE.
+            let tx = conn.transaction()?;
+            let old = tx.query_row(
+                "SELECT rowid, id, content, metadata FROM nodes WHERE id = ?1",
+                params![node_id],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)),
+            );
+            let (rowid, old_id, old_content, old_metadata) = match old {
+                Ok(v) => v,
+                // Misma semántica que antes: un id inexistente no es error.
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    tx.commit()?;
+                    return Ok(());
+                }
+                Err(e) => return Err(e.into()),
+            };
+            tx.execute(
                 "UPDATE nodes SET metadata = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
                 params![metadata, node_id],
             )?;
+            tx.execute(
+                "INSERT INTO nodes_fts(nodes_fts, rowid, id, content, metadata) \
+                 VALUES ('delete', ?1, ?2, ?3, ?4)",
+                params![rowid, old_id, old_content, old_metadata],
+            )?;
+            tx.execute(
+                "INSERT INTO nodes_fts(rowid, id, content, metadata) VALUES (?1, ?2, ?3, ?4)",
+                params![rowid, node_id, old_content, metadata],
+            )?;
+            tx.commit()?;
             Ok(())
         })
     }

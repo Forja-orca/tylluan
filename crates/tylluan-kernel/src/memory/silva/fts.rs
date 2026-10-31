@@ -516,5 +516,33 @@ mod desync_paths {
             admin.contains("fts_clear_all"),
             "el purge masivo de api_admin debe vaciar el índice FTS"
         );
+
+        // T-DSH-153: las actualizaciones de columnas indexadas (content y
+        // metadata) también deben refrescar nodes_fts. Si alguien añade un
+        // UPDATE nuevo de esas columnas sin espejo FTS, este test falla.
+        assert_eq!(
+            nodes.matches("UPDATE nodes SET content").count(),
+            1,
+            "solo update_node_content cambia content: debe refrescar nodes_fts en la misma transacción"
+        );
+        assert_eq!(
+            nodes.matches("UPDATE nodes SET metadata = ?1").count(),
+            1,
+            "solo update_node_metadata reescribe metadata completa: debe refrescar nodes_fts en la misma transacción"
+        );
+        assert_eq!(
+            nodes
+                .matches("INSERT INTO nodes_fts(nodes_fts, rowid, id, content, metadata)")
+                .count(),
+            2,
+            "update_node_content y update_node_metadata deben borrar del índice con el comando 'delete' (valores viejos)"
+        );
+        assert!(
+            nodes
+                .matches("INSERT INTO nodes_fts(rowid, id, content, metadata) VALUES")
+                .count()
+                >= 3,
+            "upsert_node_with_validity, update_node_content y update_node_metadata deben reinsertar en nodes_fts"
+        );
     }
 }
