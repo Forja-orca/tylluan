@@ -56,3 +56,30 @@ async fn memory_write_rejects_tag_encoded_instruction() {
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
+
+/// TL 2026-10-31: Coloquio is the team chat. A VISIBLE quote of an injection
+/// phrase (security reports do this daily) must be accepted; only hidden
+/// payloads are rejected.
+#[tokio::test(flavor = "multi_thread")]
+async fn coloquio_accepts_visible_quote_of_an_injection_phrase() {
+    let state = support::test_state("d80_coloquio_visible").await;
+    let response = coloquio_post_message(
+        State(state),
+        HeaderMap::new(),
+        Path("general".to_string()),
+        Json(ColoquioPostRequest {
+            author_id: "agent-d80".to_string(),
+            role: "agent".to_string(),
+            content: "Informe de seguridad: el ejemplo de ataque es la frase ignore all previous instructions".to_string(),
+            metadata: "{}".to_string(),
+        }),
+    )
+    .await
+    .into_response();
+
+    assert!(
+        response.status() == StatusCode::OK || response.status() == StatusCode::CREATED,
+        "una cita visible no debe rechazarse en Coloquio: {}",
+        response.status()
+    );
+}
