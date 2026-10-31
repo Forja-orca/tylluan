@@ -159,12 +159,22 @@ enum Commands {
         /// Extra database to include (file name relative to the data dir, or a full path)
         #[arg(long)]
         db: Vec<String>,
+        /// Include the sensitive files identity.key and oauth_jwt_secret
+        /// (only to a trusted destination; never a repo)
+        #[arg(long = "with-secrets")]
+        with_secrets: bool,
     },
     /// Restore hub databases from a directory produced by `tylluan-cli backup`
-    /// (refuses to run while the kernel is up; snapshots current state first)
+    /// (refuses to run while the kernel of the target is up; snapshots current state first)
     Restore {
         /// Backup directory containing backup-manifest.json + .db files
         dir: PathBuf,
+        /// Restore into this directory instead of the original manifest paths
+        #[arg(long = "target-dir")]
+        target_dir: Option<PathBuf>,
+        /// Port of the kernel instance to check for restore (default 47004)
+        #[arg(long)]
+        port: Option<u16>,
     },
     /// Inference points registry (T-DSH-116): read or change a point (operator)
     Inference {
@@ -1139,11 +1149,11 @@ def test_{snake}_tool_registered():
                 Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
             }
         }
-        Commands::Backup { dir, db } => {
-            backup::run_backup(&dir, &db)?;
+        Commands::Backup { dir, db, with_secrets } => {
+            backup::run_backup(&dir, &db, with_secrets)?;
         }
-        Commands::Restore { dir } => {
-            backup::run_restore(&dir, DEFAULT_PORT).await?;
+        Commands::Restore { dir, target_dir, port } => {
+            backup::run_restore(&dir, port.unwrap_or(DEFAULT_PORT), target_dir.as_deref()).await?;
         }
     }
 

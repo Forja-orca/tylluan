@@ -7,11 +7,20 @@
 //! (Windows does not ship it). It works while the kernel is live — the source
 //! is only read, WAL included.
 //!
-//! Restore refuses to run while the kernel is up: SQLite has no safe hot
-//! restore (a live kernel would keep writing to the file we replace, and a
-//! stale `-wal` sidecar next to the restored file corrupts it). Before
-//! touching anything, restore snapshots the current databases to
-//! `data/pre_restore_<timestamp>/`.
+//! T-DSH-156 (H-60): the default source list covers the 12 databases the
+//! kernel keeps in DATA_DIR (agent_profiles, audit, contracts, curriculum,
+//! jobs, journal, mailbox, peers, pending_dispatches, silva, task_context,
+//! tylluan). Before this, only 5 were backed up. `--with-secrets` adds the two
+//! sensitive files (`identity.key`, `oauth_jwt_secret`); they are copied
+//! verbatim (not SQLite) and only to a trusted destination.
+//!
+//! Restore refuses to run while the kernel that would use the target is up:
+//! SQLite has no safe hot restore (a live kernel would keep writing to the
+//! file we replace, and a stale `-wal` sidecar next to the restored file
+//! corrupts it). With `--target-dir` the guard only checks the given `--port`
+//! (a kernel of ANOTHER data dir, e.g. production on :47004, does not block a
+//! restore to a different directory). Before touching anything, restore
+//! snapshots the current databases to `pre_restore_<timestamp>/`.
 
 use anyhow::{bail, Context, Result};
 use chrono::Local;
@@ -26,6 +35,26 @@ use sysinfo::{ProcessesToUpdate, System};
 pub(crate) const MANIFEST_NAME: &str = "backup-manifest.json";
 const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
 
+/// T-DSH-156 (H-60): the 12 databases the kernel keeps in DATA_DIR. The list
+/// mirrors the inventory measured in T-DSH-133 ("12/12 bases").
+pub(crate) const DATA_DBS: &[&str] = &[
+    "agent_profiles.db",
+    "audit.db",
+    "contracts.db",
+    "curriculum.db",
+    "jobs.db",
+    "journal.db",
+    "mailbox.db",
+    "peers.db",
+    "pending_dispatches.db",
+    "silva.db",
+    "task_context.db",
+    "tylluan.db",
+];
+
+/// T-DSH-156: sensitive files, copied verbatim and only with `--with-secrets`.
+pub(crate) const SECRET_FILES: &[&str] = &["identity.key", "oauth_jwt_secret"];
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Manifest {
     pub created_at: String,
@@ -36,9 +65,14 @@ pub struct Manifest {
 pub struct ManifestEntry {
     /// Plain file name inside the backup dir (no path separators).
     pub name: String,
-    /// Where the database came from (informational; restore targets this).
+    /// Where the database came from (informational; restore targets this
+    /// unless `--target-dir` is given).
     pub source: String,
     pub size: u64,
+    /// T-DSH-156: true for `identity.key` / `oauth_jwt_secret` (copied only
+    /// with `--with-secrets`, not SQLite). Old manifests default to false.
+    #[serde(default)]
+    pub secret: bool,
 }
 
 /// Escape a string for inlining as a SQLite single-quoted literal.
@@ -113,25 +147,33 @@ fn data_dir_of(memory_db: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("./data"))
 }
 
-/// Default sources: `[silva].db_path` from tylluan.toml (fallback `./data/silva.db`),
-/// `[memory].db_path` from tylluan.toml (fallback `./data/tylluan.db`) plus `peers.db`,
-/// `mailbox.db` and `audit.db` next to them — mirrors where the kernel keeps them.
-/// Extras (`--db`) are names relative to that data dir, or full paths.
-fn resolve_sources(extras: &[String]) -> Result<Vec<PathBuf>> {
-    let toml = Path::new("tylluan.toml");
-    let silva = load_silva_db_path(toml)?
+fn resolve_sources(extras: &[String], with_secrets: bool) -> Result<Vec<PathBuf>> {
+    resolve_sources_from(Path::new("tylluan.toml"), extras, with_secrets)
+}
+
+/// Default sources: `[silva].db_path` and `[memory].db_path` from tylluan.toml
+/// (fallbacks `./data/silva.db` / `./data/tylluan.db`) plus the 12 canonical
+/// databases of the data dir (T-DSH-156). Extras (`--db`) are names relative
+/// to that data dir, or full paths. `--with-secrets` appends `SECRET_FILES`.
+fn resolve_sources_from(
+    toml_path: &Path,
+    extras: &[String],
+    with_secrets: bool,
+) -> Result<Vec<PathBuf>> {
+    let silva = load_silva_db_path(toml_path)?
         .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
-    let memory = load_memory_db_path(toml)?
+    let memory = load_memory_db_path(toml_path)?
         .unwrap_or_else(|| PathBuf::from("./data/tylluan.db"));
     let data_dir = data_dir_of(&silva);
     let mut sources: Vec<PathBuf> = Vec::new();
-    for candidate in [
-        silva,
-        memory,
-        data_dir.join("peers.db"),
-        data_dir.join("mailbox.db"),
-        data_dir.join("audit.db"),
-    ] {
+    for candidate in [silva, memory] {
+        if !sources.contains(&candidate) {
+            sources.push(candidate);
+        }
+    }
+    // T-DSH-156 (H-60): las 12 bases canonicas del DATA_DIR (antes solo 5).
+    for name in DATA_DBS {
+        let candidate = data_dir.join(name);
         if !sources.contains(&candidate) {
             sources.push(candidate);
         }
@@ -144,13 +186,22 @@ fn resolve_sources(extras: &[String]) -> Result<Vec<PathBuf>> {
             sources.push(resolved);
         }
     }
+    if with_secrets {
+        for name in SECRET_FILES {
+            let candidate = data_dir.join(name);
+            if !sources.contains(&candidate) {
+                sources.push(candidate);
+            }
+        }
+    }
     Ok(sources)
 }
 
 /// Back up `sources` into `dir` and write the manifest.
-/// Missing or non-SQLite files are skipped with a warning; a failing
+/// Missing or non-SQLite database files are skipped with a warning; a failing
 /// `quick_check` on the source is a warning too (a rescue copy of a damaged
-/// database is better than none — the restore side re-validates).
+/// database is better than none — the restore side re-validates). Sensitive
+/// files (`SECRET_FILES`) are copied verbatim.
 pub(crate) fn backup_files(dir: &Path, sources: &[PathBuf]) -> Result<Manifest> {
     fs::create_dir_all(dir)
         .with_context(|| format!("creating backup dir {}", dir.display()))?;
@@ -172,19 +223,22 @@ pub(crate) fn backup_files(dir: &Path, sources: &[PathBuf]) -> Result<Manifest> 
             println!("  ⚠️  {} not found, skipping", src.display());
             continue;
         }
-        if !has_sqlite_header(src)? {
-            println!(
-                "  ⚠️  {} is not a plain SQLite file (encrypted build?) — skipping",
-                src.display()
-            );
-            continue;
-        }
-        match quick_check(src) {
-            Ok(status) if status == "ok" => {}
-            Ok(status) => println!(
-                "  ⚠️  {name} quick_check: {status} — attempting rescue backup anyway"
-            ),
-            Err(e) => println!("  ⚠️  {name} quick_check failed: {e} — attempting rescue backup anyway"),
+        let secret = SECRET_FILES.contains(&name.as_str());
+        if !secret {
+            if !has_sqlite_header(src)? {
+                println!(
+                    "  ⚠️  {} is not a plain SQLite file (encrypted build?) — skipping",
+                    src.display()
+                );
+                continue;
+            }
+            match quick_check(src) {
+                Ok(status) if status == "ok" => {}
+                Ok(status) => println!(
+                    "  ⚠️  {name} quick_check: {status} — attempting rescue backup anyway"
+                ),
+                Err(e) => println!("  ⚠️  {name} quick_check failed: {e} — attempting rescue backup anyway"),
+            }
         }
 
         let dest = dir.join(&name);
@@ -193,7 +247,11 @@ pub(crate) fn backup_files(dir: &Path, sources: &[PathBuf]) -> Result<Manifest> 
             fs::remove_file(&tmp)
                 .with_context(|| format!("removing stale {}", tmp.display()))?;
         }
-        {
+        if secret {
+            fs::copy(src, &tmp).with_context(|| {
+                format!("copying sensitive file {}", src.display())
+            })?;
+        } else {
             let conn = open_source(src)?;
             let sql = format!("VACUUM INTO '{}'", escape_sq_literal(&tmp.to_string_lossy()));
             conn.execute_batch(&sql)
@@ -209,8 +267,14 @@ pub(crate) fn backup_files(dir: &Path, sources: &[PathBuf]) -> Result<Manifest> 
         let size = fs::metadata(&dest)
             .with_context(|| format!("stat {}", dest.display()))?
             .len();
-        println!("  ✅ {name} ({size} bytes)");
-        entries.push(ManifestEntry { name: name.clone(), source: src.display().to_string(), size });
+        let kind = if secret { "sensible" } else { "db" };
+        println!("  ✅ {name} ({kind}, {size} bytes)");
+        entries.push(ManifestEntry {
+            name: name.clone(),
+            source: src.display().to_string(),
+            size,
+            secret,
+        });
         seen_names.push(name);
     }
 
@@ -227,8 +291,14 @@ pub(crate) fn backup_files(dir: &Path, sources: &[PathBuf]) -> Result<Manifest> 
     Ok(manifest)
 }
 
-pub(crate) fn run_backup(dir: &Path, extras: &[String]) -> Result<()> {
-    let sources = resolve_sources(extras)?;
+pub(crate) fn run_backup(dir: &Path, extras: &[String], with_secrets: bool) -> Result<()> {
+    if with_secrets {
+        println!(
+            "🔐 --with-secrets: se incluiran identity.key y oauth_jwt_secret. \
+             Copia el backup solo a un destino de confianza (nunca a un repo)."
+        );
+    }
+    let sources = resolve_sources(extras, with_secrets)?;
     println!("🗄️  Backing up {} database source(s) → {}", sources.len(), dir.display());
     let manifest = backup_files(dir, &sources)?;
     println!(
@@ -241,17 +311,20 @@ pub(crate) fn run_backup(dir: &Path, extras: &[String]) -> Result<()> {
 }
 
 /// A restore plan: each backup file mapped to its target path (the recorded
-/// source location, resolved against the current directory — same machine,
-/// hub dir → exact round-trip), validated before anything is replaced.
+/// source location, or `--target-dir` when given), validated before anything
+/// is replaced.
 #[derive(Debug)]
 pub(crate) struct RestorePlan {
     pub steps: Vec<(PathBuf, PathBuf)>,
     pub pre_dir: PathBuf,
+    /// T-DSH-156: el plan incluye ficheros sensibles (identity.key / oauth).
+    pub has_secrets: bool,
 }
 
 /// Read + validate the manifest and every backup file: name traversal guard,
-/// presence, size match, SQLite header, fresh `quick_check`.
-pub(crate) fn plan_restore(dir: &Path) -> Result<RestorePlan> {
+/// presence, size match, SQLite header and fresh `quick_check` for databases
+/// (sensitive files are only checked for presence/size).
+pub(crate) fn plan_restore(dir: &Path, target_dir: Option<&Path>) -> Result<RestorePlan> {
     let mpath = dir.join(MANIFEST_NAME);
     let mtext = fs::read_to_string(&mpath).with_context(|| {
         format!("{} is not a tylluan backup (missing {MANIFEST_NAME})", dir.display())
@@ -263,6 +336,7 @@ pub(crate) fn plan_restore(dir: &Path) -> Result<RestorePlan> {
     }
 
     let mut steps: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut has_secrets = false;
     for entry in &manifest.entries {
         let name_path = Path::new(&entry.name);
         if entry.name.is_empty()
@@ -287,28 +361,40 @@ pub(crate) fn plan_restore(dir: &Path) -> Result<RestorePlan> {
                 actual
             );
         }
-        if !has_sqlite_header(&src)? {
-            bail!("{} is not a plain SQLite file (encrypted or corrupt?)", entry.name);
+        if entry.secret || SECRET_FILES.contains(&entry.name.as_str()) {
+            has_secrets = true;
+        } else {
+            if !has_sqlite_header(&src)? {
+                bail!("{} is not a plain SQLite file (encrypted or corrupt?)", entry.name);
+            }
+            let status = quick_check(&src)?;
+            if status != "ok" {
+                bail!("{} failed quick_check: {status}", entry.name);
+            }
         }
-        let status = quick_check(&src)?;
-        if status != "ok" {
-            bail!("{} failed quick_check: {status}", entry.name);
-        }
-        steps.push((src, PathBuf::from(&entry.source)));
+        let target = match target_dir {
+            Some(base) => base.join(&entry.name),
+            None => PathBuf::from(&entry.source),
+        };
+        steps.push((src, target));
     }
 
     let ts = Local::now().format("%Y%m%d_%H%M%S");
-    let toml = Path::new("tylluan.toml");
-    let silva = load_silva_db_path(toml)?
-        .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
-    let data_dir = data_dir_of(&silva);
-    Ok(RestorePlan { steps, pre_dir: data_dir.join(format!("pre_restore_{ts}")) })
+    let pre_dir = match target_dir {
+        Some(base) => base.join(format!("pre_restore_{ts}")),
+        None => {
+            let toml = Path::new("tylluan.toml");
+            let silva = load_silva_db_path(toml)?
+                .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
+            let data_dir = data_dir_of(&silva);
+            data_dir.join(format!("pre_restore_{ts}"))
+        }
+    };
+    Ok(RestorePlan { steps, pre_dir, has_secrets })
 }
 
-/// Refuse the restore while the kernel is up. Two signals, mirroring
-/// `tylluan-cli status` / `tylluan-cli stop`: the health endpoint and the
-/// process table (`tylluan-nexus`).
-pub(crate) async fn kernel_running(port: u16) -> Result<Option<String>> {
+/// HTTP `/health` probe for the kernel that would own the target port.
+async fn health_running(port: u16) -> Result<Option<String>> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()
@@ -319,15 +405,32 @@ pub(crate) async fn kernel_running(port: u16) -> Result<Option<String>> {
     {
         return Ok(Some(format!("health endpoint {url} is responding")));
     }
+    Ok(None)
+}
 
+/// Process-table probe (`tylluan-nexus`). Only used for in-place restores:
+/// with `--target-dir` a kernel of another data dir must not block us.
+fn kernel_process_running() -> Option<String> {
     let mut sys = System::new();
     sys.refresh_processes(ProcessesToUpdate::All, true);
     for (pid, process) in sys.processes() {
         if process.name().to_string_lossy().contains("tylluan-nexus") {
-            return Ok(Some(format!("kernel process {pid} ({:?}) is running", process.name())));
+            return Some(format!("kernel process {pid} ({:?}) is running", process.name()));
         }
     }
-    Ok(None)
+    None
+}
+
+/// Refuse the restore while the kernel is up. Two signals, mirroring
+/// `tylluan-cli status` / `tylluan-cli stop`: the health endpoint and the
+/// process table (`tylluan-nexus`). Solo lo usan los tests; `run_restore`
+/// separa las dos senales (con `--target-dir` no mira la tabla de procesos).
+#[cfg(test)]
+pub(crate) async fn kernel_running(port: u16) -> Result<Option<String>> {
+    if let Some(reason) = health_running(port).await? {
+        return Ok(Some(reason));
+    }
+    Ok(kernel_process_running())
 }
 
 /// Execute a validated plan: snapshot every existing target (database +
@@ -395,16 +498,38 @@ pub(crate) fn execute_restore(plan: &RestorePlan) -> Result<PathBuf> {
     Ok(plan.pre_dir.clone())
 }
 
-pub(crate) async fn run_restore(dir: &Path, port: u16) -> Result<()> {
-    if let Some(reason) = kernel_running(port).await? {
+/// T-DSH-156: `target_dir` redirige los destinos (restore fuera de sitio) y
+/// `port` es el puerto del kernel que se comprobara; un kernel de otro DATA_DIR
+/// (produccion) no bloquea la restauracion a un directorio distinto.
+pub(crate) async fn run_restore(
+    dir: &Path,
+    port: u16,
+    target_dir: Option<&Path>,
+) -> Result<()> {
+    if let Some(reason) = health_running(port).await? {
         bail!(
             "refusing to restore: the kernel appears to be running ({reason}). \
              SQLite cannot be restored safely in hot mode — stop it first: \
              tylluan-cli stop"
         );
     }
-    let plan = plan_restore(dir)?;
+    if target_dir.is_none()
+        && let Some(reason) = kernel_process_running()
+    {
+        bail!(
+            "refusing to restore: the kernel appears to be running ({reason}). \
+             SQLite cannot be restored safely in hot mode — stop it first: \
+             tylluan-cli stop (or use --target-dir to restore elsewhere)"
+        );
+    }
+    let plan = plan_restore(dir, target_dir)?;
     println!("♻️  Restoring {} database(s) from {}", plan.steps.len(), dir.display());
+    if plan.has_secrets {
+        println!(
+            "  🔐 el backup incluye ficheros sensibles (identity.key / oauth_jwt_secret): \
+             restaura solo a un destino de confianza"
+        );
+    }
     let pre_dir = execute_restore(&plan)?;
     println!("✅ Restore complete.");
     if pre_dir.exists() {
@@ -431,6 +556,16 @@ mod tests {
     fn read_marker(path: &Path) -> String {
         let conn = Connection::open(path).unwrap();
         conn.query_row("SELECT v FROM t", [], |r| r.get(0)).unwrap()
+    }
+
+    fn write_toml(dir: &Path) {
+        // TOML en Windows: barras normales para no escapar `\` como secuencia.
+        let base = dir.display().to_string().replace('\\', "/");
+        fs::write(
+            dir.join("tylluan.toml"),
+            format!("[silva]\ndb_path = \"{base}/silva.db\"\n[memory]\ndb_path = \"{base}/tylluan.db\"\n"),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -512,11 +647,68 @@ mod tests {
     }
 
     #[test]
+    fn resolve_sources_covers_all_twelve_databases() {
+        let dir = tempfile::tempdir().unwrap();
+        write_toml(dir.path());
+        let toml = dir.path().join("tylluan.toml");
+        let sources = resolve_sources_from(&toml, &[], false).unwrap();
+        let names: Vec<String> = sources
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .collect();
+        for expected in DATA_DBS {
+            assert!(
+                names.iter().any(|n| n == expected),
+                "falta {expected} en las fuentes por defecto: {names:?}"
+            );
+        }
+        assert!(
+            !names.iter().any(|n| SECRET_FILES.contains(&n.as_str())),
+            "sin --with-secrets no deben aparecer secretos: {names:?}"
+        );
+    }
+
+    #[test]
+    fn with_secrets_adds_identity_and_oauth_secret() {
+        let dir = tempfile::tempdir().unwrap();
+        write_toml(dir.path());
+        let toml = dir.path().join("tylluan.toml");
+        let sources = resolve_sources_from(&toml, &[], true).unwrap();
+        let names: Vec<String> = sources
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .collect();
+        for secret in SECRET_FILES {
+            assert!(names.iter().any(|n| n == secret), "falta {secret}: {names:?}");
+        }
+    }
+
+    #[test]
+    fn backup_copies_secret_files_verbatim() {
+        let dir = tempfile::tempdir().unwrap();
+        let identity = dir.path().join("identity.key");
+        fs::write(&identity, b"dsh-identity-bytes").unwrap();
+        let oauth = dir.path().join("oauth_jwt_secret");
+        fs::write(&oauth, b"ab".repeat(32)).unwrap();
+
+        let out = dir.path().join("out");
+        let manifest = backup_files(&out, &[identity, oauth]).unwrap();
+        assert_eq!(manifest.entries.len(), 2);
+        assert!(manifest.entries.iter().all(|e| e.secret));
+        assert_eq!(fs::read(out.join("identity.key")).unwrap(), b"dsh-identity-bytes");
+
+        // plan_restore accepts secret entries (no SQLite quick_check).
+        let plan = plan_restore(&out, Some(dir.path())).unwrap();
+        assert!(plan.has_secrets);
+        assert_eq!(plan.steps.len(), 2);
+    }
+
+    #[test]
     fn restore_rejects_bad_manifests_and_truncated_files() {
         let dir = tempfile::tempdir().unwrap();
 
         // No manifest at all.
-        let err = plan_restore(dir.path()).unwrap_err();
+        let err = plan_restore(dir.path(), None).unwrap_err();
         assert!(err.to_string().contains("not a tylluan backup"), "got: {err}");
 
         // Build a real backup, then truncate one file.
@@ -529,7 +721,7 @@ mod tests {
         let full_len = fs::metadata(&db).unwrap().len();
         let data = fs::read(&db).unwrap();
         fs::write(&db, &data[..full_len as usize - 1]).unwrap();
-        let err = plan_restore(&out).unwrap_err();
+        let err = plan_restore(&out, None).unwrap_err();
         assert!(err.to_string().contains("size mismatch"), "got: {err}");
 
         // Restore requires path-safe names.
@@ -540,11 +732,26 @@ mod tests {
                 name: "..\\evil.db".into(),
                 source: "x".into(),
                 size: 1,
+                secret: false,
             }],
         };
         fs::write(out.join(MANIFEST_NAME), serde_json::to_string(&evil).unwrap()).unwrap();
-        let err = plan_restore(&out).unwrap_err();
+        let err = plan_restore(&out, None).unwrap_err();
         assert!(err.to_string().contains("unsafe name"), "got: {err}");
+    }
+
+    #[test]
+    fn plan_restore_target_dir_redirects_targets() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("tylluan.db");
+        make_db(&src, "state");
+        let out = dir.path().join("out");
+        backup_files(&out, std::slice::from_ref(&src)).unwrap();
+
+        let target = dir.path().join("restored");
+        let plan = plan_restore(&out, Some(&target)).unwrap();
+        assert_eq!(plan.steps[0].1, target.join("tylluan.db"));
+        assert!(plan.pre_dir.starts_with(&target));
     }
 
     #[test]
@@ -567,7 +774,7 @@ mod tests {
         let shm = PathBuf::from(shm);
         fs::write(&shm, b"stale-shm-bytes").unwrap();
 
-        let plan = plan_restore(&out).unwrap();
+        let plan = plan_restore(&out, None).unwrap();
         let pre_dir = execute_restore(&plan).unwrap();
 
         // Target now holds the backup content; stale sidecars are gone.
@@ -600,7 +807,7 @@ mod tests {
 
     #[test]
     fn resolve_sources_includes_silva_db_by_default() {
-        let sources = resolve_sources(&[]).unwrap();
+        let sources = resolve_sources(&[], false).unwrap();
         let file_names: Vec<String> = sources
             .iter()
             .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
