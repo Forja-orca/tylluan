@@ -137,7 +137,7 @@ export function VisionTab({ bridge, notify }: Props) {
     <div className="space-y-4">
       {/* Guild Status Banner */}
       {!visionRunning && (
-        <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-3 text-xs text-amber-300">
+        <div className="bg-amber-900/30 border border-amber-700/50 rounded p-3 text-xs text-amber-300">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -166,7 +166,7 @@ export function VisionTab({ bridge, notify }: Props) {
                   setStarting(false);
                 }
               }}
-              className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 rounded font-bold uppercase tracking-wider text-[11px] flex items-center gap-1 shrink-0"
+              className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 rounded font-bold text-[11px] flex items-center gap-1 shrink-0"
             >
               {starting && <RefreshCw className="w-3 h-3 animate-spin" />}
               {starting ? 'Loading vision model...' : 'Warm-up Vision Guild'}
@@ -177,7 +177,7 @@ export function VisionTab({ bridge, notify }: Props) {
 
       {/* Model availability banner */}
       {visionRunning && (
-        <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 text-xs text-blue-300">
+        <div className="bg-blue-900/20 border border-blue-700/30 rounded p-3 text-xs text-blue-300">
           <div className="flex items-center gap-2">
             <ImageIcon className="w-4 h-4 flex-shrink-0" />
             <span>SmolVLM2 model loaded — running in degraded mode (fallback OCR available)</span>
@@ -185,9 +185,9 @@ export function VisionTab({ bridge, notify }: Props) {
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden">
+      <div className="rounded border border-slate-800 bg-slate-900/50 overflow-hidden">
         <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
-          <span className="text-xs font-medium uppercase tracking-widest text-slate-400">Sovereign Visual Intelligence</span>
+          <span className="text-xs font-medium text-slate-400">Sovereign Visual Intelligence</span>
           <div className={cn("flex items-center gap-1.5 text-[11px] font-bold",
             visionRunning ? "text-emerald-400" : "text-slate-600"
           )}>
@@ -202,8 +202,8 @@ export function VisionTab({ bridge, notify }: Props) {
             onDragOver={handleDragOver}
             onDragLeave={() => setIsDragging(false)}
             className={cn(
-              "border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer relative overflow-hidden",
-              isDragging ? "border-emerald-500 bg-emerald-500/10 scale-[1.01]" : "border-slate-600 hover:border-emerald-500"
+              "border-2 border-dashed rounded p-8 text-center transition-colors cursor-pointer relative overflow-hidden",
+              isDragging ? "border-primary bg-primary/10" : "border-slate-600 hover:border-primary"
             )}
           >
             {imagePreview && (
@@ -275,14 +275,14 @@ export function VisionTab({ bridge, notify }: Props) {
       </div>
 
       {/* Result section */}
-      <div className="rounded-lg border border-slate-800 bg-slate-950 overflow-hidden">
-        <div className="px-4 py-1.5 border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-widest flex items-center gap-2">
+      <div className="rounded border border-slate-800 bg-slate-950 overflow-hidden">
+        <div className="px-4 py-1.5 border-b border-slate-800 text-[11px] text-slate-500 flex items-center gap-2">
           <FileJson className="w-3 h-3" />
           Analysis Result
         </div>
         {loading ? (
           <div className="p-8 min-h-[100px] flex flex-col items-center justify-center gap-3">
-            <RefreshCw className="w-8 h-8 text-emerald-500 animate-spin" />
+            <RefreshCw className="w-8 h-8 text-primary animate-spin" />
             <p className="text-xs text-slate-500 animate-pulse font-sans">Running SmolVLM2 on CPU...</p>
           </div>
         ) : parsedResult ? (
@@ -291,7 +291,7 @@ export function VisionTab({ bridge, notify }: Props) {
             {parsedResult.status && (
               <div className="flex items-center gap-2">
                 <span className={cn(
-                  "px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider",
+                  "px-2 py-0.5 rounded text-[11px] font-bold",
                   parsedResult.status === 'ok' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
                   parsedResult.status === 'degraded' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
                   parsedResult.status === 'error' ? "bg-red-500/20 text-red-400 border border-red-500/30" :
@@ -301,13 +301,13 @@ export function VisionTab({ bridge, notify }: Props) {
                 </span>
                 {/* SilvaDB node_id badge */}
                 {parsedResult.node_id && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     SilvaDB Node: {parsedResult.node_id.slice(0, 12)}...
                   </span>
                 )}
                 {/* Triples count */}
                 {parsedResult.triples_extracted !== undefined && parsedResult.triples_extracted > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
                     Triples: {parsedResult.triples_extracted}
                   </span>
                 )}

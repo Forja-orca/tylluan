@@ -75,7 +75,7 @@ describe('Coloquio Markdown Renderer — Lote X (X1 + X2)', () => {
       let h = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       h = h.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) =>
         `<pre class="bg-slate-950/90 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-200">` +
-        `<div class="text-[11px] text-slate-400 uppercase tracking-widest font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
+        `<div class="text-[11px] text-slate-400 font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
         `<code>${code}</code></pre>`
       );
       h = h.replace(/`([^`]+)`/g, '<code class="bg-slate-200/80 dark:bg-slate-950 border border-slate-300/80 dark:border-slate-700/50 px-1 py-0.5 rounded font-mono text-[11px] text-indigo-700 dark:text-indigo-300">$1</code>');

@@ -116,15 +116,15 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
   return (
     <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-y-auto">
       {/* Header banner */}
-      <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 rounded-xl p-4 shrink-0">
+      <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 rounded p-4 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+          <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
               HITL Push Dispatch Queue
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 BWC-2 Active
               </span>
             </h2>
@@ -137,7 +137,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
         <button
           onClick={fetchDispatches}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 text-xs font-mono rounded-lg border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 text-xs font-mono rounded border border-slate-700 transition-colors cursor-pointer disabled:opacity-50"
         >
           <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           Refresh
@@ -148,7 +148,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
       {feedback && (
         <div
           className={cn(
-            'p-3 rounded-lg border text-xs font-mono flex items-center justify-between shrink-0',
+            'p-3 rounded border text-xs font-mono flex items-center justify-between shrink-0',
             feedback.type === 'success' && 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300',
             feedback.type === 'conflict' && 'bg-amber-950/40 border-amber-500/30 text-amber-300',
             feedback.type === 'error' && 'bg-red-950/40 border-red-500/30 text-red-300'
@@ -164,7 +164,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
       {/* Dispatches List */}
       <div className="space-y-3">
         {dispatches.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-900/30 border border-slate-800/60 rounded-xl">
+          <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-900/30 border border-slate-800/60 rounded">
             <ShieldCheck className="w-10 h-10 text-slate-600 mb-3" />
             <p className="text-sm font-semibold text-slate-300">No Pending Dispatches</p>
             <p className="text-xs text-slate-500 max-w-sm mt-1">
@@ -180,14 +180,14 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
             return (
               <div
                 key={d.id}
-                className="bg-slate-900/70 border border-slate-800 hover:border-slate-700/80 rounded-xl p-4 transition-all shadow-sm flex flex-col gap-3"
+                className="bg-slate-900/70 border border-slate-800 hover:border-slate-700/80 rounded p-4 transition-colors shadow-none flex flex-col gap-3"
               >
                 {/* Meta row */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
-                        'px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono border flex items-center gap-1',
+                        'px-2.5 py-0.5 rounded text-[11px] font-bold font-mono border flex items-center gap-1',
                         targetStyle.bg,
                         targetStyle.color,
                         targetStyle.border
@@ -219,8 +219,8 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
                 </div>
 
                 {/* Content Snapshot */}
-                <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3">
-                  <div className="text-[11px] font-mono uppercase text-slate-500 tracking-wider mb-1 font-bold">
+                <div className="bg-slate-950/60 border border-slate-800/80 rounded p-3">
+                  <div className="text-[11px] font-mono text-slate-500 mb-1 font-bold">
                     Message Snapshot (Exact Reviewer Context)
                   </div>
                   <p className="text-xs text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
@@ -229,7 +229,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
                 </div>
 
                 {/* Command and SHA-256 Hash */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/50 text-[11px] font-mono">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-slate-950/40 p-2.5 rounded border border-slate-800/50 text-[11px] font-mono">
                   <div className="flex items-center gap-1.5 text-slate-400 truncate max-w-full">
                     <Terminal className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                     <span className="text-slate-300 font-bold truncate">
@@ -257,7 +257,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
                   <button
                     onClick={() => handleReject(d)}
                     disabled={isProcessing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/30 hover:bg-red-900/40 border border-red-500/30 text-red-300 text-xs font-mono font-bold transition-all cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-950/30 hover:bg-red-900/40 border border-red-500/30 text-red-300 text-xs font-mono font-bold transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <X className="w-3.5 h-3.5" />
                     Reject
@@ -266,7 +266,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
                   <button
                     onClick={() => handleApprove(d)}
                     disabled={isProcessing}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-mono font-bold transition-all shadow-lg hover:shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-mono font-bold transition-colors shadow-none cursor-pointer disabled:opacity-50"
                   >
                     {isProcessing ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />

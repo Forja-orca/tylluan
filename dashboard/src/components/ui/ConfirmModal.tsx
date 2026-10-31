@@ -48,9 +48,9 @@ export function ConfirmModal({
 
   return (
     // Obsidian Nocturne overlay (#0A0D14 / slate-950 at 80%)
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-200">
       {/* Owl Slate card surface */}
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden p-6 space-y-4">
+      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded shadow-none overflow-hidden p-6 space-y-4">
         <button
           onClick={onCancel}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 transition-colors"
@@ -59,7 +59,7 @@ export function ConfirmModal({
         </button>
 
         <div className="flex items-start gap-3">
-          <div className={`p-2.5 rounded-lg border flex-shrink-0 ${iconColor}`}>
+          <div className={`p-2.5 rounded border flex-shrink-0 ${iconColor}`}>
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div className="space-y-1">
@@ -71,13 +71,13 @@ export function ConfirmModal({
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/80">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-xs font-mono font-semibold text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/60 transition-all"
+            className="px-4 py-2 text-xs font-mono font-semibold text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800 rounded border border-slate-700/60 transition-colors"
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
-            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-mono font-bold rounded-lg transition-all shadow-lg ${btnColor}`}
+            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-mono font-bold rounded transition-colors shadow-none ${btnColor}`}
           >
             <Check className="w-3.5 h-3.5" />
             <span>{confirmText}</span>

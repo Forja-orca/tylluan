@@ -76,13 +76,13 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
               placeholder="Filter sessions..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="bg-slate-900 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-emerald-500/50 transition-colors w-64"
+              className="bg-slate-900 rounded pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-primary transition-colors w-64"
             />
           </div>
           <button 
             onClick={() => refreshData()}
             disabled={globalLoading}
-            className="p-2 bg-slate-900 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-50"
+            className="p-2 bg-slate-900 rounded hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={cn("w-4 h-4 text-slate-400", globalLoading && "animate-spin")} />
           </button>
@@ -90,7 +90,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
       </div>
 
       {/* Sessions Table */}
-      <div className="bg-slate-900/50 rounded-2xl overflow-hidden">
+      <div className="bg-slate-900/50 rounded overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-800/30 border-b border-slate-800 text-[11px] font-medium text-slate-500">
@@ -155,7 +155,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
                       onClick={() => revokeSession(session.id)}
                       disabled={revokingIds.has(session.id)}
                       className={cn(
-                        "p-2 rounded-xl transition-all",
+                        "p-2 rounded transition-colors",
                         revokingIds.has(session.id) 
                           ? "bg-slate-800 cursor-not-allowed" 
                           : "bg-red-500/10 hover:bg-red-500/20 text-red-400"
@@ -180,13 +180,13 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
             <Users className="w-12 h-12 mb-4 opacity-20" />
             <p className="text-sm font-medium italic">{searchTerm ? 'No sessions match your filter' : 'No active MCP sessions'}</p>
             {!searchTerm && <p className="text-[11px] mt-2 text-slate-500 max-w-xs">Sessions appear here when an MCP client connects to the kernel. Connect a client to start a session.</p>}
-            {searchTerm && <p className="text-[11px] mt-1 uppercase tracking-widest opacity-50">Adjust your filter or search term</p>}
+            {searchTerm && <p className="text-[11px] mt-1 opacity-50">Adjust your filter or search term</p>}
           </div>
         )}
       </div>
 
       {/* Footer Info */}
-      <div className="flex items-center gap-4 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10">
+      <div className="flex items-center gap-4 p-4 rounded bg-amber-500/5 border border-amber-500/10">
         <Shield className="w-5 h-5 text-amber-500/60 shrink-0" />
         <div className="text-[11px] text-slate-500 leading-relaxed">
           <span className="font-bold text-amber-500/80 mr-2">Security Note:</span>

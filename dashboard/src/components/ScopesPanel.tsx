@@ -71,10 +71,10 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
   return (
     <div className="flex flex-col space-y-4 h-full">
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-900 border border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded bg-slate-900 border border-slate-800">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">Multi-Tenant Hierarchical Scopes (J-8)</h3>
+            <h3 className="text-sm font-bold text-slate-50">Multi-Tenant Hierarchical Scopes (J-8)</h3>
           </div>
           <p className="text-[11px] text-slate-500 font-mono">Query lightweight nodes by hierarchical owner scope prefix</p>
         </div>
@@ -87,24 +87,24 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
               value={prefix}
               onChange={(e) => setPrefix(e.target.value)}
               placeholder="e.g. user:alice"
-              className="w-full pl-10 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-xs focus:ring-1 ring-emerald-500 text-slate-200 transition-all placeholder:text-slate-600"
+              className="w-full pl-10 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded text-xs focus:ring-1 ring-primary text-slate-200 transition-colors placeholder:text-slate-600"
             />
           </div>
           <button
             onClick={() => fetchNodes(prefix)}
-            className="px-3 py-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs font-bold text-slate-300 rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+            className="px-3 py-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs font-bold text-slate-300 rounded transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
           >
-            {loading ? <Layers className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <Search className="w-3.5 h-3.5" />}
+            {loading ? <Layers className="w-3.5 h-3.5 animate-spin text-primary" /> : <Search className="w-3.5 h-3.5" />}
             Search
           </button>
         </div>
       </div>
 
       {/* Nodes List */}
-      <div className="flex-1 min-h-0 bg-slate-900/50 rounded-xl border border-slate-800 p-4 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 bg-slate-900/50 rounded border border-slate-800 p-4 flex flex-col overflow-hidden">
         {loading ? (
           <div className="flex-grow flex items-center justify-center text-xs text-slate-500 font-mono gap-2">
-            <Layers className="w-4 h-4 animate-spin text-emerald-400" /> Loading nodes by scope...
+            <Layers className="w-4 h-4 animate-spin text-primary" /> Loading nodes by scope...
           </div>
         ) : nodes.length === 0 ? (
           <div className="flex-grow flex flex-col items-center justify-center text-slate-600 py-12">
@@ -114,10 +114,10 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
           </div>
         ) : (
           <div className="flex-grow overflow-y-auto">
-            <div className="rounded-lg border border-slate-800/80 bg-slate-950 overflow-hidden">
+            <div className="rounded border border-slate-800/80 bg-slate-950 overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-900 border-b border-slate-800 text-[11px] uppercase tracking-widest text-slate-500 font-bold">
+                  <tr className="bg-slate-900 border-b border-slate-800 text-[11px] text-slate-500 font-bold">
                     <th className="px-4 py-3 font-bold w-1/4">Identifier</th>
                     <th className="px-4 py-3 font-bold w-12 text-center">Type</th>
                     <th className="px-4 py-3 font-bold w-1/3">Hierarchy (owner_scope)</th>
