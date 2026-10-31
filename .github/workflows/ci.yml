@@ -25,7 +25,7 @@ jobs:
           components: clippy
 
       - run: cargo check -p tylluan-kernel
-      - run: cargo test -p tylluan-kernel --lib
+      - run: cargo test -p tylluan-kernel --lib --tests --no-fail-fast
       - run: cargo clippy -p tylluan-kernel --all-targets -- -D warnings
       - run: cargo test -p tylluan-cli
       # Optional features get no --features anywhere else in CI, so tylluan-link's
