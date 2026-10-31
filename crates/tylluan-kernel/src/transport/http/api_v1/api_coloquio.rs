@@ -238,6 +238,15 @@ pub async fn coloquio_post_message(
     if req.content.trim().is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "content cannot be empty" }))).into_response();
     }
+    // D-80: Coloquio is another write surface. Apply the same layer-1
+    // normalizer used by remember/memory-write so tag characters, zero-width
+    // splits, bidi and ANSI cannot smuggle an instruction into the transcript.
+    if crate::security::poison_patterns::matches_injection_pattern(&req.content) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "injection_pattern_rejected",
+            "reason": "content matches a known prompt-injection pattern and was not stored"
+        }))).into_response();
+    }
     // WS7 battery guard: reject nonexistent non-slug channel ids BEFORE the
     // DB layer with a 400 whose message contains no client input (the old
     // path surfaced them as a 500 echoing the raw id). Existing channels of

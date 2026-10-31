@@ -139,6 +139,14 @@ pub async fn handle_tylluan_recall(
 ) -> Result<CallToolResult, McpError> {
     let started = std::time::Instant::now();
     let result = handle_tylluan_recall_inner(server, arguments).await;
+    let result = result.map(|mut r| {
+        for content in r.content.iter_mut() {
+            if let RawContent::Text(text) = &mut **content {
+                text.text = crate::security::poison_patterns::sanitize_display_text(&text.text);
+            }
+        }
+        r
+    });
     if let Ok(ref r) = result {
         let empty = r.content.iter().any(|c| {
             c.as_text()
@@ -1664,5 +1672,32 @@ mod tests {
             msg_zero,
             "⚠️ 6 resultados filtrados por control de coherencia"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d80_recall_output_is_sanitized() {
+        let server = test_server().await;
+        let hidden: String = "hidden-tag-payload"
+            .chars()
+            .map(|c| char::from_u32(0xe0000 + c as u32).unwrap())
+            .collect();
+        server
+            .silva
+            .upsert_node("d80_recall", "concept", &format!("visible {hidden} text"), "{}")
+            .await
+            .unwrap();
+
+        let args = Some(serde_json::Map::from_iter([(
+            "query".to_string(),
+            serde_json::json!("visible"),
+        )]));
+        let res = handle_tylluan_recall(&server, args).await.unwrap();
+        let text = res
+            .content
+            .first()
+            .and_then(|c| c.as_text().map(|t| t.text.clone()))
+            .unwrap_or_default();
+        assert!(text.contains("visible"), "unexpected recall output: {text}");
+        assert!(!text.contains('\u{E0069}'), "recall output must not expose tag payload");
     }
 }
