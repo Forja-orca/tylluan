@@ -5,13 +5,8 @@ import {
   AlertTriangle,
   Database,
   TrendingUp,
-  ShieldCheck,
   CheckCircle,
-  Cpu,
-  Clock,
-  History,
-  Zap,
-  User
+  Cpu
 } from 'lucide-react';
 import type {
   GoldenSignals,
@@ -355,14 +350,6 @@ export function OverviewTab({
     return 'text-red-400';
   };
 
-  const getAgentColor = (id: string) => {
-    const lid = id.toLowerCase();
-    if (lid.includes('claude')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-    if (lid.includes('gemini') || lid.includes('antigravity')) return 'bg-red-500/20 text-red-400 border-red-500/30';
-    if (lid.includes('qwen')) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-    return 'bg-slate-800 text-slate-400 border-slate-700';
-  };
-
   const { agentProfiles } = useNexus();
   const isProfileResolved = Boolean(agentProfiles && agentProfiles.length > 0);
 
@@ -415,12 +402,12 @@ export function OverviewTab({
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* What is Tylluan doing now — human-readable status */}
-      <div className={`rounded-xl border p-4 ${tylluanStatus.color} transition-all duration-500`}>
+      <div className={`rounded border p-3.5 bg-card ${tylluanStatus.color} transition-all duration-300 font-sans`}>
         <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full ${tylluanStatus.pulse ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} aria-hidden="true" />
+          <div className={`w-3 h-3 rounded-full ${tylluanStatus.pulse ? 'bg-emerald-600 animate-pulse' : 'bg-muted-foreground'}`} aria-hidden="true" />
           <div>
             <h3 className="text-sm font-semibold">Tylluan is {tylluanStatus.text.toLowerCase()}</h3>
-            <p className="text-[11px] opacity-70 mt-0.5">{tylluanStatus.subtext}</p>
+            <p className="text-[11px] opacity-80 mt-0.5">{tylluanStatus.subtext}</p>
           </div>
         </div>
       </div>
@@ -430,67 +417,67 @@ export function OverviewTab({
 
       {/* Health Banner */}
       {healthDetailed && typeof healthDetailed.score === 'number' && healthDetailed.score < 70 && (
-        <div role="alert" className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 animate-pulse">
-          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" aria-hidden="true" />
+        <div role="alert" className="p-3.5 rounded bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" aria-hidden="true" />
           <div className="flex-1">
-            <h4 className="text-sm font-bold text-amber-400">Degraded Performance (Health: {healthDetailed.score}%)</h4>
-            <p className="text-xs text-amber-500/70">The kernel is experiencing high latency or resource constraints (RAM/Embeddings).</p>
+            <h4 className="text-xs font-bold text-amber-600">Rendimiento Degradado (Salud: {healthDetailed.score}%)</h4>
+            <p className="text-[11px] text-muted-foreground">El kernel experimenta mayor latencia o restricciones de memoria/embeddings.</p>
           </div>
           <button 
             type="button"
-            aria-label="Run Vacuum Maintenance Fix"
+            aria-label="Ejecutar corrección de mantenimiento VACUUM"
             onClick={() => bridge?.fetchRaw('/api/v1/maintenance/vacuum', { method: 'POST' })}
-            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-lg text-[11px] font-bold border border-amber-500/30 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 rounded text-xs font-bold border border-amber-500/40 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             VACUUM FIX
           </button>
         </div>
       )}
 
-      {/* Hub Status Pills (sin role=status / aria-live en contenido sondeado) */}
-      <div aria-label="System Telemetry Summary" className="flex flex-wrap gap-2">
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+      {/* Hub Status Badges */}
+      <div aria-label="Resumen de Telemetría del Sistema" className="flex flex-wrap gap-2 font-mono text-xs">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
           <div className={cn("w-2 h-2 rounded-full", kernelHealth.dotClass)} aria-hidden="true"></div>
-          <span className="text-[11px] font-semibold text-slate-300">Kernel: <span className={cn("font-mono", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
+          <span className="text-[11px] text-muted-foreground">Kernel: <span className={cn("font-bold text-foreground", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
           <div className={cn("w-2 h-2 rounded-full", embeddingsState.dotClass)} aria-hidden="true"></div>
-          <span className="text-[11px] font-semibold text-slate-300">Embeddings: <span className={cn("font-mono", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
+          <span className="text-[11px] text-muted-foreground">Embeddings: <span className={cn("font-bold text-foreground", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
           <div className={cn("w-2 h-2 rounded-full", sovereignToolsState.dotClass)} aria-hidden="true"></div>
-          <span className="text-[11px] font-semibold text-slate-300">Sovereign Tools: <span className={cn("font-mono", sovereignToolsState.colorClass)}>{sovereignToolsState.label}</span></span>
+          <span className="text-[11px] text-muted-foreground">Herramientas Soberanas: <span className={cn("font-bold text-foreground", sovereignToolsState.colorClass)}>{sovereignToolsState.label}</span></span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <span className="text-[11px] font-bold text-emerald-400">{liveMetrics?.activeAgents || 0}</span>
-          <span className="text-[11px] font-semibold text-slate-300">Agentes activos</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
+          <span className="text-[11px] font-bold text-emerald-600">{liveMetrics?.activeAgents || 0}</span>
+          <span className="text-[11px] text-muted-foreground">Agentes activos</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <span className="text-[11px] font-bold text-violet-400">{memoryStats?.node_count || 0}</span>
-          <span className="text-[11px] font-semibold text-slate-300">Silva Nodes</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
+          <span className="text-[11px] font-bold text-primary">{memoryStats?.node_count || 0}</span>
+          <span className="text-[11px] text-muted-foreground">Nodos Silva</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <MiniSparkline data={cpuHistory} color="hsl(var(--blue-500))" />
-          <span className="text-[11px] font-semibold text-slate-300">CPU</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
+          <MiniSparkline data={cpuHistory} color="hsl(var(--primary))" />
+          <span className="text-[11px] text-muted-foreground">CPU</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <MiniSparkline data={memHistory} color="hsl(var(--emerald-500))" />
-          <span className="text-[11px] font-semibold text-slate-300">RAM</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
+          <MiniSparkline data={memHistory} color="hsl(var(--primary))" />
+          <span className="text-[11px] text-muted-foreground">RAM</span>
         </div>
       </div>
 
       {/* T-DSH-114: centinela de write_gate L2 (opt-in, default off) */}
-      <div className="mt-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+      <div className="mt-4 p-3.5 rounded bg-card border border-border font-sans">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h4 className="text-sm font-bold text-slate-200">Centinela (write_gate L2)</h4>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <h4 className="text-xs font-bold text-foreground">Centinela (write_gate L2)</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
               {sentinel
                 ? `modo ${sentinel.mode ?? 'off'} · cargado ${sentinel.loaded ? 'sí' : 'no'} · fallbacks ${sentinel.fallbacks ?? 0} · saltos CPU ${sentinel.cpu_skips ?? 0} (umbral ${sentinel.max_cpu_pct ?? 85}%)`
                 : 'estado no disponible'}
             </p>
             {sentinel?.verdicts && (
-              <p className="text-[11px] font-mono text-slate-500 mt-1">
+              <p className="text-[11px] font-mono text-muted-foreground mt-1">
                 safe {sentinel.verdicts.safe ?? 0} · controversial {sentinel.verdicts.controversial ?? 0} · unsafe {sentinel.verdicts.unsafe ?? 0} · unavailable {sentinel.verdicts.unavailable ?? 0}
               </p>
             )}
@@ -502,10 +489,10 @@ export function OverviewTab({
                 type="button"
                 disabled={sentinelBusy || !bridge}
                 onClick={() => setSentinelMode(m)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
+                className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
                   sentinel?.mode === m
-                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                    ? 'bg-primary/20 border-primary/40 text-primary'
+                    : 'bg-muted border-border text-foreground hover:bg-muted/80'
                 }`}
               >
                 {m.toUpperCase()}
@@ -525,43 +512,43 @@ export function OverviewTab({
             { label: 'Difusiones/h', value: liveMetrics.broadcastsLastHour, icon: Wifi },
             { label: 'Nodos en Memoria', value: liveMetrics.graphNodes, icon: Database },
           ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="bg-card border border-border rounded-xl p-3 text-center hover:bg-muted/40 transition-colors group">
-              <Icon className="w-3 h-3 text-muted-foreground mx-auto mb-1 group-hover:text-primary transition-colors" aria-hidden="true" />
-              <div className="text-lg font-bold font-mono text-foreground">{value}</div>
-              <div className="text-[11px] font-medium text-muted-foreground mt-0.5">{label}</div>
+            <div key={label} className="bg-card border border-border rounded p-2.5 text-center">
+              <Icon className="w-3.5 h-3.5 text-muted-foreground mx-auto mb-1" aria-hidden="true" />
+              <div className="text-base font-bold font-mono text-foreground">{value}</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
             </div>
           ))}
         </div>
       )}
       {sysStatus && (
-        <div className="mt-4 flex gap-3 flex-wrap">
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.silva_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
+        <div className="mt-4 flex gap-2 flex-wrap font-mono text-xs">
+          <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.silva_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
             SilvaDB: {sysStatus.silva_healthy ? '● CORRECTO' : '■ ERROR'}
           </span>
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.mailbox_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
+          <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.mailbox_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
             Buzón: {sysStatus.mailbox_healthy ? '● CORRECTO' : '■ ERROR'}
           </span>
-          <span className="text-xs px-2 py-1 rounded-full bg-muted border border-border text-foreground">
+          <span className="text-[11px] px-2 py-0.5 rounded bg-muted border border-border text-foreground">
             Curriculum: {sysStatus.curriculum_entries ?? 0} entradas
           </span>
-          <span className="text-xs px-2 py-1 rounded-full bg-muted border border-border text-foreground">
+          <span className="text-[11px] px-2 py-0.5 rounded bg-muted border border-border text-foreground">
             Activo: {Math.floor((sysStatus.uptime_secs ?? 0) / 60)}m
           </span>
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
+          <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.embeddings_loaded
             ? 'bg-primary/15 text-primary border border-primary/30'
             : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'}`}>
             Embeddings: {sysStatus.embeddings_loaded ? 'mxbai-embed-large' : '▲ FTS5 fallback'}
           </span>
         </div>
       )}
-      <div className="flex items-center justify-between bg-card border border-border rounded-xl p-4 relative overflow-hidden group">
-        <div className="flex items-center gap-4 relative z-10">
+      <div className="flex items-center justify-between bg-card border border-border rounded p-4 relative font-sans">
+        <div className="flex items-center gap-4">
           <div className="relative">
-            <div className="w-14 h-14 rounded-full border border-primary/30 flex items-center justify-center bg-primary/10">
-              <Activity className="w-7 h-7 text-primary" aria-hidden="true" />
+            <div className="w-12 h-12 rounded border border-primary/30 flex items-center justify-center bg-primary/10">
+              <Activity className="w-6 h-6 text-primary" aria-hidden="true" />
             </div>
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-card rounded-full flex items-center justify-center border border-border">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full" aria-hidden="true"></div>
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-card rounded flex items-center justify-center border border-border">
+              <div className="w-2 h-2 bg-emerald-600 rounded-full" aria-hidden="true"></div>
             </div>
           </div>
           <div>
@@ -569,7 +556,7 @@ export function OverviewTab({
             <p className="text-[11px] text-muted-foreground mt-0.5">MOTOR O3 · TIEMPO ACTIVO: {Math.floor((goldenSignals?.uptime_seconds || 0) / 3600)}h {Math.floor(((goldenSignals?.uptime_seconds || 0) % 3600) / 60)}m</p>
           </div>
         </div>
-        <div className="text-right relative z-10">
+        <div className="text-right">
           <div className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-muted-foreground")}>
             {sloSummary?.status ? (sloSummary.status === 'healthy' ? '● SALUDABLE' : sloSummary.status === 'degraded' ? '▲ DEGRADADO' : '■ CRÍTICO') : '○ TELEMETRÍA EN ESPERA'}
           </div>
@@ -580,28 +567,28 @@ export function OverviewTab({
       {/* Golden Signals Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard
-          icon={Wifi} label="Traffic"
+          icon={Wifi} label="Tráfico"
           value={goldenSignals?.traffic?.active_tools || 0} unit=" ops"
-          sub={`${activeGuilds} guilds active`}
-          valueClass="text-blue-400"
+          sub={`${activeGuilds} gremios activos`}
+          valueClass="text-primary"
         />
         <MetricCard
-          icon={AlertTriangle} label="Error Rate"
+          icon={AlertTriangle} label="Tasa de Error"
           value={errRate} unit="%"
-          sub={`${goldenSignals?.errors?.total_errors || 0} non-critical events`}
+          sub={`${goldenSignals?.errors?.total_errors || 0} eventos no críticos`}
           valueClass={getPercentColor(errRate)}
         />
         <MetricCard
-          icon={Database} label="Saturation"
+          icon={Database} label="Saturación"
           value={memSat} unit="%"
-          sub={`${memoryStats?.node_count || 0} nodes indexed`}
+          sub={`${memoryStats?.node_count || 0} nodos indexados`}
           valueClass={getPercentColor(memSat)}
         />
         <MetricCard
           icon={TrendingUp} label="SLO"
           value={sloSummary?.slo_target ?? 99.9} unit="%"
-          sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% budget left` : 'Target 99.9%'}
-          valueClass="text-violet-400"
+          sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% presupuesto restante` : 'Objetivo 99.9%'}
+          valueClass="text-primary"
         />
       </div>
 
@@ -610,19 +597,19 @@ export function OverviewTab({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: 'Homeostasis', value: interoceptionData.homeostasis, good: (v: number) => v > 0.7, warn: (v: number) => v > 0.4 },
-            { label: 'Stress', value: interoceptionData.stress_level, good: (v: number) => v < 0.3, warn: (v: number) => v < 0.6, invert: true },
-            { label: 'Silva Density', value: interoceptionData.graph_density, good: (v: number) => v > 0.001, warn: (v: number) => v > 0.0001 },
-            { label: 'Pheromone Activity', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
+            { label: 'Estrés', value: interoceptionData.stress_level, good: (v: number) => v < 0.3, warn: (v: number) => v < 0.6, invert: true },
+            { label: 'Densidad Silva', value: interoceptionData.graph_density, good: (v: number) => v > 0.001, warn: (v: number) => v > 0.0001 },
+            { label: 'Feromonas Activas', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
           ].map(({ label, value, good, warn, invert }) => {
             const pct = Math.min(100, value * 100);
             const colorClass = good(value) ? 'text-emerald-600 dark:text-emerald-400' : warn(value) ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
-            const bgClass = good(value) ? 'bg-emerald-500' : warn(value) ? 'bg-amber-500' : 'bg-red-500';
+            const bgClass = good(value) ? 'bg-emerald-600' : warn(value) ? 'bg-amber-600' : 'bg-red-600';
             return (
-              <div key={label} className="p-3 rounded-xl bg-slate-900/40">
-                <div className="text-[11px] font-medium text-slate-400 mb-1">{label}</div>
-                <div className={cn("text-lg font-black font-mono", colorClass)}>{pct.toFixed(0)}%</div>
-                <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className={cn("h-full rounded-full transition-all duration-1000", bgClass)} style={{ width: `${invert ? 100 - pct : pct}%` }} />
+              <div key={label} className="p-3 rounded bg-card border border-border">
+                <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
+                <div className={cn("text-lg font-bold font-mono", colorClass)}>{pct.toFixed(0)}%</div>
+                <div className="mt-1.5 h-1.5 bg-muted rounded overflow-hidden border border-border">
+                  <div className={cn("h-full rounded transition-all duration-500", bgClass)} style={{ width: `${invert ? 100 - pct : pct}%` }} />
                 </div>
               </div>
             );
@@ -631,56 +618,52 @@ export function OverviewTab({
       )}
 
       {/* Multi-Agent Activity */}
-      <div className="rounded-xl bg-card border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+      <div className="rounded bg-card border border-border overflow-hidden font-sans">
+        <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <History className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
-            <span className="text-[11px] font-medium text-muted-foreground">Sovereign Activity Stream</span>
+            <span className="text-xs font-bold text-foreground">Flujo de Actividad Soberana</span>
           </div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer select-none hover:text-slate-200 transition-colors">
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
               <input
                 type="checkbox"
                 checked={showHeartbeats}
                 onChange={e => setShowHeartbeats(e.target.checked)}
-                className="accent-emerald-500 w-2.5 h-2.5"
+                className="accent-primary w-3 h-3"
               />
-              Show heartbeats
+              Mostrar latidos
             </label>
-            <span className="text-[11px] text-slate-400 font-mono">LIVE EVENTS</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" aria-hidden="true" />
+            <span className="text-[11px] text-muted-foreground font-mono">EVENTOS EN VIVO</span>
+            <div className="w-2 h-2 rounded-full bg-emerald-600" aria-hidden="true" />
           </div>
         </div>
-        <div className="divide-y divide-slate-800/50">
+        <div className="divide-y divide-border/60 font-sans">
           {silvaDelta > 0 && (
-             <div className="px-4 py-2.5 flex items-center justify-between group hover:bg-slate-800/20 transition-colors">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]" />
-                  <span className="text-[11px] text-slate-300">
-                    <span className="font-bold text-emerald-400">{silvaDelta} new nodes</span> integrated in the last 30s
+             <div className="px-4 py-2 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <div className="w-2 h-2 rounded-full shrink-0 bg-emerald-600" />
+                  <span className="text-xs text-foreground">
+                    <span className="font-bold text-emerald-600">{silvaDelta} nodos nuevos</span> integrados en los últimos 30s
                   </span>
                 </div>
              </div>
           )}
 
-          <div className="px-4 py-3 flex flex-wrap gap-3 bg-slate-950/40 border-b border-slate-800/50">
+          <div className="px-4 py-2.5 flex flex-wrap gap-2.5 bg-muted/20 border-b border-border">
             {blackboard?.active_agents.map(agent => (
-              <div key={agent} className="flex items-center gap-2 group">
-                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center border transition-all group-hover:scale-110", getAgentColor(agent))}>
-                  <User className="w-4 h-4" />
+              <div key={agent} className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded flex items-center justify-center border border-border bg-muted font-mono font-bold text-[11px] text-foreground">
+                  {agent.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex flex-col">
-                   <span className="text-[11px] font-semibold text-slate-200">{agent.split('-')[0]}</span>
-                   <span className="text-[11px] text-slate-400">active</span>
+                   <span className="text-[11px] font-semibold text-foreground font-mono">@{agent.split('-')[0]}</span>
+                   <span className="text-[10px] text-muted-foreground">activo</span>
                 </div>
               </div>
             ))}
             {(!blackboard?.active_agents || blackboard.active_agents.length === 0) && (
-              <div className="flex items-center gap-2 text-slate-400">
-                <div className="w-7 h-7 rounded-full border border-slate-800 flex items-center justify-center opacity-30">
-                  <User className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] italic text-slate-400">No agents detected</span>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="text-xs italic text-muted-foreground">Sin agentes activos detectados</span>
               </div>
             )}
           </div>
@@ -689,7 +672,7 @@ export function OverviewTab({
             tabIndex={0}
             role="region"
             aria-label="Registro de eventos recientes"
-            className="max-h-96 overflow-y-auto divide-y divide-slate-800/30 focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+            className="max-h-96 overflow-y-auto divide-y divide-border/40 focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
           >
           {events
             .filter(e => ['tool_call', 'memory_added', 'memory_updated', 'heartbeat', 'log', 'maintenance_started', 'maintenance_finished'].includes(e.type))
@@ -698,21 +681,21 @@ export function OverviewTab({
             .map((e, i) => {
               const d = (e.data || {}) as Record<string, unknown>;
               return (
-              <div key={`${e.ts}-${i}`} className="px-4 py-2.5 flex items-center justify-between group hover:bg-slate-800/20 transition-colors">
-                <div className="flex items-center gap-3 overflow-hidden">
+              <div key={`${e.ts}-${i}`} className="px-4 py-2 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <div className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    e.type === 'tool_call' ? "bg-blue-400" : 
-                    e.type.startsWith('memory') ? "bg-violet-400" :
-                    e.type.startsWith('maintenance') ? "bg-amber-400" :
-                    e.type === 'heartbeat' ? "bg-emerald-400/50" : "bg-slate-500"
+                    "w-2 h-2 rounded-full shrink-0",
+                    e.type === 'tool_call' ? "bg-primary" : 
+                    e.type.startsWith('memory') ? "bg-primary" :
+                    e.type.startsWith('maintenance') ? "bg-amber-600" :
+                    e.type === 'heartbeat' ? "bg-emerald-600" : "bg-muted-foreground"
                   )} />
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[11px] font-bold text-slate-200 shrink-0 capitalize">
-                      {e.source === 'mcp' ? 'MCP' : String(d.agent_id || 'System')}
+                  <div className="flex items-center gap-1.5 min-w-0 text-xs font-mono">
+                    <span className="font-bold text-foreground shrink-0">
+                      {e.source === 'mcp' ? 'MCP' : String(d.agent_id || 'Sistema')}
                     </span>
-                    <span className="text-slate-500 text-[11px]">·</span>
-                    <span className="text-[11px] text-slate-400 truncate">
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-muted-foreground truncate">
                       {e.type === 'tool_call' ? `tool: ${String(d.tool ?? '')}` : 
                        e.type === 'heartbeat' ? `uptime: ${String(d.uptime_secs ?? '')}s` :
                        e.type.startsWith('maintenance') ? `maint: ${String(d.task ?? '')}` :
@@ -720,16 +703,15 @@ export function OverviewTab({
                     </span>
                   </div>
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono shrink-0 ml-4">
+                <div className="text-[11px] text-muted-foreground font-mono shrink-0 ml-4">
                   <RelativeTime ts={e.ts} />
                 </div>
               </div>
               );
             })}
             {events.length === 0 && !silvaDelta && !blackboard?.pending?.length && (
-              <div className="p-12 text-center flex flex-col items-center justify-center gap-2">
-                <Zap className="w-6 h-6 text-slate-800 animate-pulse" />
-                <span className="text-[11px] text-slate-400">Silent Mode — Awaiting Signal</span>
+              <div className="p-8 text-center text-xs text-muted-foreground font-mono">
+                Modo Silencioso — En espera de señales
               </div>
             )}
           </div>
@@ -737,73 +719,71 @@ export function OverviewTab({
       </div>
 
       {/* Running Guilds & Pending Approvals */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-xl bg-slate-900/50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
-            <span className="text-[11px] font-medium text-slate-400">Operational Guilds</span>
-            <span className="text-[11px] text-slate-400">{activeGuilds} / {guilds?.length || 0} online</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 font-sans">
+        <div className="lg:col-span-2 rounded bg-card border border-border overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+            <span className="text-xs font-bold text-foreground">Gremios Operacionales</span>
+            <span className="text-[11px] font-mono text-muted-foreground">{activeGuilds} / {guilds?.length || 0} activos</span>
           </div>
           <div
             tabIndex={0}
             role="region"
             aria-label="Lista de guilds operacionales"
-            className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
+            className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
           >
             {guilds?.map((g) => (
               <div key={g.name} className={cn(
-                "flex items-center justify-between p-2 rounded border transition-all",
-                g.running ? "bg-slate-950/50 border-emerald-500/20" : "bg-slate-900/20 border-transparent opacity-50"
+                "flex items-center justify-between p-2 rounded border transition-colors",
+                g.running ? "bg-muted/40 border-border" : "bg-card border-transparent opacity-50"
               )}>
                 <div className="flex items-center gap-2">
-                  <div className={cn("w-1.5 h-1.5 rounded-full", g.running ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-slate-700")}></div>
-                  <span className="text-xs font-mono text-slate-300">{g.name}</span>
+                  <div className={cn("w-2 h-2 rounded-full", g.running ? "bg-emerald-600" : "bg-muted-foreground")}></div>
+                  <span className="text-xs font-mono text-foreground">{g.name}</span>
                   {(g.restarts_5m ?? 0) > 3 && (
-                    <span className="text-[11px] bg-red-500 text-slate-50 px-1 rounded-sm font-bold animate-pulse">DEGRADED</span>
+                    <span className="text-[11px] bg-red-600 text-white px-1 rounded-sm font-bold">DEGRADADO</span>
                   )}
                 </div>
-                <div className="flex gap-1 shrink-0">
+                <div className="flex gap-1 shrink-0 font-mono">
                    {g.launcher_type && (
                     <span className={cn("text-[11px] px-1 rounded-sm uppercase font-bold flex items-center", 
-                      g.launcher_type === 'http' ? "text-violet-400 border border-violet-500/30" :
-                      g.launcher_type === 'stdio' ? "text-amber-400 border border-amber-500/30" :
-                      "text-blue-400 border border-blue-500/30"
+                      g.launcher_type === 'http' ? "text-primary border border-primary/30" :
+                      g.launcher_type === 'stdio' ? "text-amber-600 border border-amber-500/30" :
+                      "text-primary border border-primary/30"
                     )}>
                       {g.launcher_type}
                     </span>
                   )}
-                  <span className="text-[11px] text-slate-400 font-mono">{g.tools_count}T</span>
+                  <span className="text-[11px] text-muted-foreground">{g.tools_count}T</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-xl bg-card border border-border overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">HITL Gateway</span>
-            <ShieldCheck className="w-3 h-3 text-primary" />
+        <div className="rounded bg-card border border-border overflow-hidden flex flex-col font-sans">
+          <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+            <span className="text-xs font-bold text-foreground">Puerta HITL</span>
           </div>
           <div className="flex-1 p-4 flex flex-col items-center justify-center text-center">
             {approvals.length === 0 ? (
               <>
-                <CheckCircle className="w-10 h-10 text-emerald-500/20 mb-2" />
-                <p className="text-xs text-slate-400">Security Clearance High</p>
-                <p className="text-[11px] text-slate-400">No pending approvals required.</p>
+                <p className="text-xs font-semibold text-foreground">Autorización Máxima</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Sin aprobaciones pendientes requeridas.</p>
               </>
             ) : (
               <div className="w-full space-y-2">
-                <p className="text-xs font-bold text-amber-400 mb-3">{approvals.length} ACTIONS BLOCKED</p>
+                <p className="text-xs font-bold text-amber-600 mb-2">{approvals.length} ACCIONES BLOQUEADAS</p>
                 {approvals.slice(0, 3).map((a) => (
-                  <div key={a.id} className="p-2 bg-amber-500/5 border border-amber-500/20 rounded text-left overflow-hidden">
-                    <div className="text-[11px] font-mono text-amber-400 truncate">{a.id}</div>
-                    <div className="text-[11px] text-slate-300 truncate">{a.tool}</div>
+                  <div key={a.id} className="p-2 bg-amber-500/10 border border-amber-500/30 rounded text-left overflow-hidden">
+                    <div className="text-[11px] font-mono text-amber-600 truncate">{a.id}</div>
+                    <div className="text-[11px] text-foreground truncate">{a.tool}</div>
                   </div>
                 ))}
                 <button
                   type="button"
-                  className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded text-[11px] font-bold border border-amber-500/30 mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                  className="w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 rounded text-xs font-bold border border-amber-500/40 mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
-                  MANAGE APPROVALS
+                  GESTIONAR APROBACIONES
                 </button>
               </div>
             )}
@@ -812,36 +792,32 @@ export function OverviewTab({
       </div>
 
       {/* Guild Utilization, Memory Retention, Night Consolidation & Canary Assertions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
         {/* Tarjeta 1 — Guild Utilization */}
-        <div className="p-4 rounded-xl bg-card border border-border">
+        <div className="p-4 rounded bg-card border border-border">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 text-muted-foreground text-[11px] font-medium">
-              <Cpu className="w-3.5 h-3.5 text-primary" /> Guild Utilization
+            <div className="text-xs font-bold text-foreground">
+              Utilización de Gremios
             </div>
-            <span className="text-[11px] text-slate-400">
-              {guildsUtilization?.active || 0} / {guildsUtilization?.total || 0} active
-              <span className="ml-2 text-slate-500">·</span>
-              <span className="ml-2 text-slate-400">
-                {guilds?.reduce((s, g) => s + (g.total_calls || 0), 0) || 0} calls
-              </span>
+            <span className="text-[11px] font-mono text-muted-foreground">
+              {guildsUtilization?.active || 0} / {guildsUtilization?.total || 0}
             </span>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {(guildsUtilization?.active_guilds || []).slice(0, 6).map((guild: { name: string; idle_secs?: number }) => {
               const idleSecs = guild.idle_secs ?? 0;
               const utilPct = idleSecs < 60 ? 80 : idleSecs < 300 ? 40 : 10;
-              const barColor = utilPct >= 70 ? 'bg-emerald-500' : utilPct >= 40 ? 'bg-amber-500' : 'bg-slate-600';
+              const barColor = utilPct >= 70 ? 'bg-emerald-600' : utilPct >= 40 ? 'bg-amber-600' : 'bg-muted-foreground';
               
               return (
-                <div key={guild.name} className="space-y-1.5">
+                <div key={guild.name} className="space-y-1">
                   <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-slate-200 font-mono truncate mr-2">{guild.name}</span>
-                    <span className="text-slate-400 font-mono">{utilPct}%</span>
+                    <span className="text-foreground font-mono truncate mr-2">{guild.name}</span>
+                    <span className="text-muted-foreground font-mono">{utilPct}%</span>
                   </div>
-                  <div className="h-1.5 w-full bg-slate-800/50 rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-muted rounded overflow-hidden border border-border">
                     <div 
-                      className={cn("h-full transition-all duration-700 ease-out", barColor)} 
+                      className={cn("h-full rounded transition-all duration-500", barColor)} 
                       style={{ width: `${utilPct}%` }} 
                      />
                   </div>
@@ -850,40 +826,40 @@ export function OverviewTab({
             })}
             {(!guildsUtilization?.active_guilds || guildsUtilization.active_guilds.length === 0) && (
               <div className="py-6 text-center">
-                <p className="text-[11px] text-slate-400 italic">No active guilds monitored</p>
+                <p className="text-xs text-muted-foreground italic">Sin gremios activos monitorizados</p>
               </div>
             )}
           </div>
         </div>
 
         {/* Tarjeta 2 — Memory Retention */}
-        <div className="p-4 rounded-xl bg-slate-900/50 flex flex-col items-center justify-center text-center">
-          <div className="flex items-center gap-2 text-slate-300 text-[11px] font-medium mb-6">
-            <Database className="w-3.5 h-3.5 text-violet-400" /> Memory Retention
+        <div className="p-4 rounded bg-card border border-border flex flex-col items-center justify-center text-center">
+          <div className="text-xs font-bold text-foreground mb-4">
+            Retención de Memoria
           </div>
           
           {memoryRetention ? (
             <div className="space-y-2">
               <div className={cn(
-                "text-6xl font-black tracking-tighter transition-colors duration-500",
-                memoryRetention.silva.retention_rate_percent >= 80 ? "text-emerald-400" :
-                memoryRetention.silva.retention_rate_percent >= 60 ? "text-amber-400" : "text-red-400"
+                "text-5xl font-bold font-mono transition-colors duration-300",
+                memoryRetention.silva.retention_rate_percent >= 80 ? "text-emerald-600" :
+                memoryRetention.silva.retention_rate_percent >= 60 ? "text-amber-600" : "text-red-600"
               )}>
                 {memoryRetention.silva.retention_rate_percent}%
               </div>
               <div className="space-y-0.5">
-                <div className="text-sm font-bold text-slate-200 tracking-tight">
+                <div className="text-sm font-bold text-foreground font-mono">
                   {memoryRetention.silva.total_nodes.toLocaleString()}
                 </div>
-                <div className="text-[11px] text-slate-400 font-medium">
-                  Total Sovereign Nodes
+                <div className="text-[11px] text-muted-foreground">
+                  Nodos Soberanos Totales
                 </div>
               </div>
             </div>
           ) : (
             <div className="animate-pulse space-y-4">
-              <div className="h-12 w-24 bg-slate-800 rounded mx-auto" />
-              <div className="h-4 w-32 bg-slate-800 rounded mx-auto" />
+              <div className="h-12 w-24 bg-muted rounded mx-auto" />
+              <div className="h-4 w-32 bg-muted rounded mx-auto" />
             </div>
           )}
         </div>
@@ -896,10 +872,9 @@ export function OverviewTab({
       </div>
 
       {/* Recent Sessions (Digests) */}
-      <div className="rounded-xl bg-slate-900/50 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
-          <span className="text-[11px] font-medium text-slate-400">Recent Sessions</span>
-          <Clock className="w-3.5 h-3.5 text-blue-400" />
+      <div className="rounded bg-card border border-border overflow-hidden font-sans">
+        <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+          <span className="text-xs font-bold text-foreground">Sesiones Recientes</span>
         </div>
         <RecentSessions bridge={bridge} />
       </div>
@@ -935,22 +910,22 @@ function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
   }, [bridge]);
 
   if (loading) {
-    return <div className="p-8 text-center text-xs text-slate-400 animate-pulse">Analyzing hippocampus...</div>;
+    return <div className="p-6 text-center text-xs text-muted-foreground font-mono animate-pulse">Analizando hipocampo...</div>;
   }
 
   if (!digests || digests.length === 0) {
-    return <div className="p-8 text-center text-xs text-slate-400 italic">No session digests available.</div>;
+    return <div className="p-6 text-center text-xs text-muted-foreground italic font-mono">Sin resúmenes de sesión disponibles.</div>;
   }
 
   return (
-    <div className="divide-y divide-slate-800/50">
+    <div className="divide-y divide-border/60 font-sans">
       {digests.map((d, i) => (
-        <div key={i} className="p-4 hover:bg-slate-800/20 transition-colors">
-          <div className="flex justify-between items-start mb-2">
-            <div className="text-[11px] font-bold text-blue-400 font-mono">@{d.agent_id || 'anon'}</div>
-            <div className="text-[11px] text-slate-400 font-mono">{d.created_at}</div>
+        <div key={i} className="p-3.5 hover:bg-muted/30 transition-colors">
+          <div className="flex justify-between items-start mb-1">
+            <div className="text-xs font-bold text-primary font-mono">@{d.agent_id || 'anon'}</div>
+            <div className="text-[11px] text-muted-foreground font-mono">{d.created_at}</div>
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed line-clamp-2 italic">
+          <p className="text-xs text-foreground leading-relaxed line-clamp-2">
             "{d.content || d.summary}"
           </p>
         </div>

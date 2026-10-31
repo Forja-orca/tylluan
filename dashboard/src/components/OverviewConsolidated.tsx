@@ -5,14 +5,6 @@ import { InteroceptionTab } from './InteroceptionTab';
 import ResumeSessionWidget from './ResumeSessionWidget';
 import { usePolling } from '../hooks/usePolling';
 import RepoMapWidget from './RepoMapWidget';
-import { 
-  LayoutDashboard, 
-  Wrench, 
-  Activity, 
-  MessageSquare, 
-  ShieldCheck,
-  CheckCircle2
-} from 'lucide-react';
 import { TylluanLogo } from './TylluanLogo';
 import type {
   GoldenSignals,
@@ -52,17 +44,16 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
   return (
     <div className="space-y-6 font-sans">
       {/* Substrate Telemetry Header */}
-      <div className="min-w-0 p-4 bg-card border border-border rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="min-w-0 p-4 bg-card border border-border rounded flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="min-w-0 flex items-center gap-3">
           <TylluanLogo size="lg" animated={false} showText={false} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 font-mono">
               <span className="text-sm font-bold text-foreground">Sustrato Cognitivo Tylluan</span>
-              <span className="px-2 py-0.5 text-[11px] font-bold uppercase bg-muted text-foreground border border-border rounded">
+              <span className="px-2 py-0.5 text-[11px] font-bold bg-muted text-foreground border border-border rounded">
                 {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.2'}
               </span>
-              <span className="px-2 py-0.5 text-[11px] font-bold uppercase bg-primary/10 text-primary border border-primary/30 rounded flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" aria-hidden="true" />
+              <span className="px-2 py-0.5 text-[11px] font-bold bg-primary/10 text-primary border border-primary/30 rounded">
                 CI En Verde
               </span>
             </div>
@@ -73,8 +64,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         </div>
 
         <div className="flex max-w-full flex-wrap items-center gap-3 font-mono text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/40 border border-border rounded-xl">
-            <ShieldCheck className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted border border-border rounded">
             <span>Barrera de Coherencia:</span>
             <span className="text-foreground font-bold">Capas 1/2/3 Activas</span>
           </div>
@@ -86,37 +76,34 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'summary'}
           onClick={() => setSubTab('summary')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold rounded border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'summary'
               ? 'bg-primary/15 border-primary/40 text-primary'
               : 'bg-card border-border text-muted-foreground hover:text-foreground'
           }`}
         >
-          <LayoutDashboard className="w-3.5 h-3.5" aria-hidden="true" />
           Resumen General
         </button>
         <button
           aria-pressed={subTab === 'interoception'}
           onClick={() => setSubTab('interoception')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold rounded border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'interoception'
               ? 'bg-primary/15 border-primary/40 text-primary'
               : 'bg-card border-border text-muted-foreground hover:text-foreground'
           }`}
         >
-          <Activity className="w-3.5 h-3.5" aria-hidden="true" />
           Interocepción
         </button>
         <button
           aria-pressed={subTab === 'system'}
           onClick={() => setSubTab('system')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold rounded border transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'system'
               ? 'bg-primary/15 border-primary/40 text-primary'
               : 'bg-card border-border text-muted-foreground hover:text-foreground'
           }`}
         >
-          <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
           Configuración del Sistema
         </button>
       </div>
@@ -205,39 +192,38 @@ function TeamPulseWidget({ bridge }: { bridge: NexusBridge | null }) {
     window.dispatchEvent(new CustomEvent('nexus_switch_tab', { detail: 'team' }));
   };
 
-  const getAgentIcon = (authorId: string): string => {
+  const getAgentTag = (authorId: string): string => {
     const cleanId = authorId.toLowerCase();
-    if (cleanId.includes('claude')) return '🤖';
-    if (cleanId.includes('qwen')) return '🪁';
-    if (cleanId.includes('antigravity')) return '🪐';
-    if (cleanId.includes('opencode') || cleanId.includes('deep')) return '🧠';
-    if (cleanId.includes('jose') || cleanId.includes('human')) return '👤';
-    return '🤖';
+    if (cleanId.includes('claude')) return '[Claude]';
+    if (cleanId.includes('qwen')) return '[Qwen]';
+    if (cleanId.includes('antigravity')) return '[AG]';
+    if (cleanId.includes('opencode') || cleanId.includes('deep')) return '[Deep]';
+    if (cleanId.includes('jose') || cleanId.includes('human')) return '[José]';
+    return `[${authorId.slice(0, 6)}]`;
   };
 
   const formatRelativeTime = (secondsAgo: number): string => {
-    if (secondsAgo < 60) return 'now';
+    if (secondsAgo < 60) return 'hace un momento';
     const mins = Math.floor(secondsAgo / 60);
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 60) return `hace ${mins}m`;
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return `hace ${hours}h`;
     const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+    return `hace ${days}d`;
   };
 
   const nowSecs = Math.floor(Date.now() / 1000);
   const isIdle = messages.length === 0 || (nowSecs - messages[0].created_at) > 3600;
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden font-sans">
-      <div className="px-4 py-3 border-b border-border bg-muted/40 flex items-center justify-between font-mono">
+    <div className="rounded border border-border bg-card font-sans">
+      <div className="px-4 py-2.5 border-b border-border bg-muted/40 flex items-center justify-between font-mono">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-widest text-primary">Pulso del Equipo (Coloquio)</span>
+          <span className="text-xs font-bold text-foreground">Pulso del equipo (Coloquio)</span>
           {!isIdle && !loading && (
-            <span className="w-2 h-2 rounded-full bg-primary" aria-hidden="true" />
+            <span className="w-2 h-2 rounded-full bg-emerald-600" aria-hidden="true" />
           )}
         </div>
-        <MessageSquare className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
       </div>
 
       <div className="p-4">
@@ -259,10 +245,10 @@ function TeamPulseWidget({ bridge }: { bridge: NexusBridge | null }) {
                 <div
                   key={msg.msg_id}
                   onClick={handleMessageClick}
-                  className="py-3 first:pt-0 last:pb-0 flex items-start gap-3 hover:bg-muted/40 transition-all cursor-pointer rounded-lg px-2 -mx-2"
+                  className="py-2.5 first:pt-0 last:pb-0 flex items-start gap-3 hover:bg-muted/40 transition-colors cursor-pointer rounded px-2 -mx-2"
                 >
-                  <span className="text-base flex-shrink-0 mt-0.5" role="img" aria-label="avatar">
-                    {getAgentIcon(msg.author_id)}
+                  <span className="text-[11px] font-mono font-bold text-muted-foreground flex-shrink-0 mt-0.5">
+                    {getAgentTag(msg.author_id)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
