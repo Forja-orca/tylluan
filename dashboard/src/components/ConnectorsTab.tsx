@@ -239,17 +239,17 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         <button 
           onClick={() => setActiveSubTab('sessions')}
           className={cn(
-            "pb-3 text-sm font-bold tracking-tight transition-all border-b-2 relative -mb-[2px]",
+            "px-3 py-1 text-[11px] font-bold border transition-all cursor-pointer rounded-t-sm -mb-px",
             activeSubTab === 'sessions' 
-              ? "border-emerald-500 text-slate-50" 
-              : "border-transparent text-slate-500 hover:text-slate-300"
+              ? "bg-white dark:bg-card border-[#ACA899] dark:border-border border-b-transparent text-[#01285F] dark:text-primary shadow-none" 
+              : "bg-[#D8D4C4] dark:bg-muted/40 border-transparent text-[#555555] dark:text-muted-foreground hover:bg-[#EAE7DC] hover:text-[#000000]"
           )}
         >
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            <span>Active Client Sessions</span>
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <span>Sesiones Activas</span>
             {activeSessions.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-[11px] font-mono text-emerald-400 border border-emerald-500/20">
+              <span className="px-1.5 py-0.2 rounded-none bg-emerald-500/15 text-[10px] font-mono text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
                 {activeSessions.length}
               </span>
             )}
@@ -259,17 +259,17 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         <button 
           onClick={() => setActiveSubTab('catalog')}
           className={cn(
-            "pb-3 text-sm font-bold tracking-tight transition-all border-b-2 relative -mb-[2px]",
+            "px-3 py-1 text-[11px] font-bold border transition-all cursor-pointer rounded-t-sm -mb-px",
             activeSubTab === 'catalog' 
-              ? "border-emerald-500 text-slate-50" 
-              : "border-transparent text-slate-500 hover:text-slate-300"
+              ? "bg-white dark:bg-card border-[#ACA899] dark:border-border border-b-transparent text-[#01285F] dark:text-primary shadow-none" 
+              : "bg-[#D8D4C4] dark:bg-muted/40 border-transparent text-[#555555] dark:text-muted-foreground hover:bg-[#EAE7DC] hover:text-[#000000]"
           )}
         >
-          <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4" />
-            <span>Capabilities Catalog</span>
+          <div className="flex items-center gap-1.5">
+            <Cpu className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <span>Catálogo de Capacidades</span>
             {capabilities && (
-              <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-[11px] font-mono text-blue-400 border border-blue-500/20">
+              <span className="px-1.5 py-0.2 rounded-none bg-blue-500/15 text-[10px] font-mono text-blue-700 dark:text-blue-400 border border-blue-500/30">
                 {capabilities.guilds.length} Guilds
               </span>
             )}
@@ -279,33 +279,33 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         <button 
           onClick={() => setActiveSubTab('guides')}
           className={cn(
-            "pb-3 text-sm font-bold tracking-tight transition-all border-b-2 relative -mb-[2px]",
+            "px-3 py-1 text-[11px] font-bold border transition-all cursor-pointer rounded-t-sm -mb-px",
             activeSubTab === 'guides' 
-              ? "border-emerald-500 text-slate-50" 
-              : "border-transparent text-slate-500 hover:text-slate-300"
+              ? "bg-white dark:bg-card border-[#ACA899] dark:border-border border-b-transparent text-[#01285F] dark:text-primary shadow-none" 
+              : "bg-[#D8D4C4] dark:bg-muted/40 border-transparent text-[#555555] dark:text-muted-foreground hover:bg-[#EAE7DC] hover:text-[#000000]"
           )}
         >
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4" />
-            <span>Client Setup Guides</span>
+          <div className="flex items-center gap-1.5">
+            <BookOpen className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <span>Guías de Configuración</span>
           </div>
         </button>
       </div>
 
       {/* Tab Panels */}
-      <div className="space-y-6">
+      <div className="space-y-4">
         {activeSubTab === 'sessions' && (
-          <div className="space-y-4">
-            <div className="bg-card rounded border border-border overflow-hidden">
-              <table className="w-full text-left border-collapse">
+          <div className="space-y-3">
+            <div className="bg-white dark:bg-card rounded-none border border-[#ACA899] dark:border-border overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[11px] font-sans">
                 <thead>
-                  <tr className="bg-slate-800/30 border-b border-slate-800 text-[11px] font-semibold text-muted-foreground">
-                    <th className="px-6 py-4">Client / Process</th>
-                    <th className="px-6 py-4">Agent Identification</th>
-                    <th className="px-6 py-4 text-center">Tools Called</th>
-                    <th className="px-6 py-4">Active Guild</th>
-                    <th className="px-6 py-4">Last Activity</th>
-                    <th className="px-6 py-4 text-right">Revoke Access</th>
+                  <tr className="bg-[#ECE9D8] dark:bg-muted/60 border-b border-[#ACA899] dark:border-border text-[#01285F] dark:text-foreground font-bold">
+                    <th className="px-3 py-1.5 border-r border-[#ACA899] dark:border-border">Cliente / Proceso</th>
+                    <th className="px-3 py-1.5 border-r border-[#ACA899] dark:border-border">Identificación del Agente</th>
+                    <th className="px-3 py-1.5 text-center border-r border-[#ACA899] dark:border-border">Herramientas Invocadas</th>
+                    <th className="px-3 py-1.5 border-r border-[#ACA899] dark:border-border">Guild Activo</th>
+                    <th className="px-3 py-1.5 border-r border-[#ACA899] dark:border-border">Última Actividad</th>
+                    <th className="px-3 py-1.5 text-right">Revocar Acceso</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -367,12 +367,12 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                               ? "bg-slate-800 border-slate-700 cursor-not-allowed text-slate-500" 
                               : "bg-red-500/10 hover:bg-red-500/25 text-red-400 border-red-500/20 hover:border-red-500/40"
                           )}
-                          title="Revoke client token & disconnect"
+                          title="Revocar token de cliente y desconectar"
                         >
                           {revokingIds.has(session.id) ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                           ) : (
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           )}
                         </button>
                       </td>
@@ -382,11 +382,11 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               </table>
 
               {activeSessions.length === 0 && (
-                <div className="py-20 flex flex-col items-center justify-center text-slate-600 bg-slate-950/20">
-                  <Plug className="w-10 h-10 mb-3 opacity-25 text-emerald-400" />
-                  <p className="text-sm font-semibold italic text-slate-400">No active client sessions</p>
-                  <p className="text-xs mt-1 text-slate-500 max-w-xs text-center">
-                    Connect an external client like Cursor or Roo Code to start using the Sovereign microkernel.
+                <div className="py-12 flex flex-col items-center justify-center text-center p-4">
+                  <Plug className="w-8 h-8 mb-2 opacity-30 text-[#0A246A] dark:text-primary" />
+                  <p className="text-xs font-bold text-[#01285F] dark:text-foreground">Sin sesiones de clientes activas</p>
+                  <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-sm mt-0.5">
+                    Conecte un cliente externo compatible con MCP (Claude Desktop, Cursor, Code) para interactuar con las herramientas soberanas del microkernel.
                   </p>
                 </div>
               )}
@@ -395,16 +395,15 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         )}
 
         {activeSubTab === 'catalog' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             {/* Left Col: Sovereign Contract */}
-            <div className="space-y-4">
-              <div className="p-5 bg-card border border-border rounded">
-                <div className="flex items-center gap-2 mb-3">
-                  <Shield className="w-4.5 h-4.5 text-emerald-400" />
-                  <h3 className="text-sm font-bold font-sans text-slate-50">Sovereign Contract (6 Tools)</h3>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  CONTRACT-01 guarantees that clients always see exactly these 6 tools. Any guild work is requested through them, preventing context overload.
+            <div className="space-y-3">
+              <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none">
+                <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+                  Contrato Soberano (6 Herramientas)
+                </legend>
+                <p className="text-[11px] text-[#444444] dark:text-muted-foreground leading-normal mb-2.5">
+                  CONTRACT-01 garantiza que los clientes expongan exactamente estas 6 herramientas soberanas. El trabajo especializado se canaliza a través de ellas evitando la saturación de contexto.
                 </p>
 
                 <div className="space-y-2.5">
@@ -417,47 +416,45 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="text-xs text-slate-500 italic">No contract tools loaded</div>
                   )}
                 </div>
-              </div>
+              </fieldset>
 
               {/* MCP Handshake Catalog */}
-              <div className="p-5 bg-slate-900/30 border border-slate-800 rounded space-y-4">
-                <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-xs font-bold font-sans text-slate-50">MCP Discovery Registry</h3>
-                </div>
-                <div className="space-y-3">
+              <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none space-y-2.5">
+                <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+                  Registro de Descubrimiento MCP
+                </legend>
+                <div className="space-y-2.5">
                   <div>
-                    <div className="text-[11px] font-bold text-slate-400 mb-1">Prompts Catalog</div>
+                    <div className="text-[11px] font-bold text-[#01285F] dark:text-foreground mb-1">Catálogo de Plantillas (Prompts)</div>
                     {capabilities?.mcp.prompts.map((p) => (
-                      <div key={p.name} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded space-y-1">
-                        <div className="text-xs font-mono text-blue-400">{p.name}</div>
-                        <div className="text-[11px] text-slate-400">{p.description}</div>
+                      <div key={p.name} className="p-2 bg-[#F5F4EA] dark:bg-muted/40 border border-[#ACA899] dark:border-border rounded-none space-y-0.5">
+                        <div className="text-[11px] font-mono font-bold text-[#0A246A] dark:text-primary">{p.name}</div>
+                        <div className="text-[10px] text-[#444444] dark:text-muted-foreground">{p.description}</div>
                       </div>
                     ))}
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold text-slate-400 mb-1">Resources Catalog</div>
+                    <div className="text-[11px] font-bold text-[#01285F] dark:text-foreground mb-1">Catálogo de Recursos (Resources)</div>
                     {capabilities?.mcp.resources.map((r) => (
-                      <div key={r.uri} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded space-y-1">
-                        <div className="text-xs font-mono text-violet-400 truncate">{r.uri}</div>
-                        <div className="text-[11px] text-slate-300 font-medium">{r.name}</div>
-                        <div className="text-[11px] text-slate-500">{r.description}</div>
+                      <div key={r.uri} className="p-2 bg-[#F5F4EA] dark:bg-muted/40 border border-[#ACA899] dark:border-border rounded-none space-y-0.5">
+                        <div className="text-[11px] font-mono font-bold text-[#0A246A] dark:text-primary truncate">{r.uri}</div>
+                        <div className="text-[10px] text-[#000000] dark:text-foreground font-bold">{r.name}</div>
+                        <div className="text-[10px] text-[#444444] dark:text-muted-foreground">{r.description}</div>
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
+              </fieldset>
             </div>
 
             {/* Right Col: Active Guilds and schemas */}
-            <div className="lg:col-span-2 space-y-4">
-              <div className="p-5 bg-slate-900/30 border border-slate-800 rounded">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Cpu className="w-4.5 h-4.5 text-blue-400" />
-                    <h3 className="text-sm font-bold font-sans text-slate-50">Active Guild Modules</h3>
-                  </div>
-                  <span className="text-xs text-slate-500 font-mono">Total Underlying Tools: {capabilities?.all_guild_tools.length ?? 0}</span>
+            <div className="lg:col-span-2 space-y-3">
+              <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none">
+                <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+                  Módulos de Guilds Activos
+                </legend>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-[#444444] dark:text-muted-foreground font-mono">Total de herramientas subyacentes: {capabilities?.all_guild_tools.length ?? 0}</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -519,7 +516,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                   </div>
                 </div>
 
-              </div>
+              </fieldset>
             </div>
           </div>
         )}

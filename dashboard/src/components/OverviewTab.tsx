@@ -1,12 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Activity,
-  Wifi,
-  AlertTriangle,
-  Database,
-  TrendingUp,
-  CheckCircle,
-  Cpu
+  AlertTriangle
 } from 'lucide-react';
 import type {
   GoldenSignals,
@@ -617,7 +612,7 @@ export function OverviewTab({
               { label: 'Estrés', value: interoceptionData.stress_level, good: (v: number) => v < 0.3, warn: (v: number) => v < 0.6, invert: true },
               { label: 'Densidad Silva', value: interoceptionData.graph_density, good: (v: number) => v > 0.001, warn: (v: number) => v > 0.0001 },
               { label: 'Feromonas Activas', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
-            ].map(({ label, value, good, warn, invert }) => {
+            ].map(({ label, value, good, warn, invert: _invert }) => {
               const pct = Math.min(100, value * 100);
               const colorClass = good(value) ? 'text-emerald-600 dark:text-emerald-400' : warn(value) ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
               const bgClass = good(value) ? 'bg-emerald-600' : warn(value) ? 'bg-amber-600' : 'bg-red-600';

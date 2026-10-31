@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Send, Radio, Users, Cpu, Inbox } from 'lucide-react';
+import { RefreshCw, Send, Radio } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
 import { useNexus } from '../hooks/useNexus';

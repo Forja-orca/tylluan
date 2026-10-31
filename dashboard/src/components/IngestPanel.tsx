@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Upload, ChevronDown, ChevronUp, Clock, CheckCircle2, Layers } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp, CheckCircle2, Layers } from 'lucide-react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';

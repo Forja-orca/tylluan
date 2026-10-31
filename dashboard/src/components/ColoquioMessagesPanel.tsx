@@ -1,5 +1,5 @@
 import {
-  Sparkles, Hash, Search, X, Paperclip, Loader2, Send, Clock,
+  Hash, Search, X, Paperclip, Loader2, Clock,
   Check, Copy, Quote, FileText, Network, ChevronUp, ChevronLeft
 } from 'lucide-react';
 import { useRef, useLayoutEffect, useEffect, useCallback, useMemo, useState } from 'react';
