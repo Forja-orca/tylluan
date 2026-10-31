@@ -2073,7 +2073,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
         let has_cols = |cols: &std::collections::HashSet<String>| {
             ["score_rrf", "score_graph", "recency_score"].iter().all(|c| cols.contains(*c))
         };
-        let (version, cols_ok, v29_ok, old_row) = tokio::task::block_in_place(|| {
+        let (version, cols_ok, v29_ok, v30_ok, old_row) = tokio::task::block_in_place(|| {
             let conn = db.conn.blocking_lock();
             let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
             let mut stmt = conn.prepare("PRAGMA table_info(recall_feedback)").unwrap();
@@ -2093,16 +2093,22 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
             let v29 = ["model_identity", "model_latency_ms"]
                 .iter()
                 .all(|c| shadow_cols.contains(*c));
+            // v30 (T-DSH-152): tabla aditiva de sesiones de agente persistidas.
+            let v30: bool = conn.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
+                [], |r| r.get::<_, i64>(0),
+            ).unwrap() == 1;
             let old_row: (Option<f64>, Option<f64>, Option<f64>) = conn.query_row(
                 "SELECT score_rrf, score_graph, recency_score FROM recall_feedback WHERE memory_id = 'old-mem'",
                 [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             ).unwrap();
-            Ok::<_, anyhow::Error>((version, ok, v29, old_row))
+            Ok::<_, anyhow::Error>((version, ok, v29, v30, old_row))
         }).unwrap();
 
-        assert_eq!(version, 29, "user_version must be stamped to the latest (29 since ADR-020 phase 2 model columns)");
+        assert_eq!(version, 30, "user_version must be stamped to the latest (30 since T-DSH-152 agent_sessions)");
         assert!(cols_ok, "score_rrf/score_graph/recency_score columns must exist after migration");
         assert!(v29_ok, "model_identity/model_latency_ms must exist on decision_shadow_log after v29");
+        assert!(v30_ok, "agent_sessions must exist after v30 (T-DSH-152)");
         assert!(old_row.0.is_none() && old_row.1.is_none() && old_row.2.is_none(),
             "pre-migration rows must read back NULL (honest absence), not 0.0");
         assert!(cols_ok, "score_rrf/score_graph/recency_score columns must exist after migration");
@@ -2123,7 +2129,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
             assert!(has_cols(&cols2), "columns must still exist after a second init_schema run");
             Ok::<_, anyhow::Error>(version2)
         }).unwrap();
-        assert_eq!(version2, 29);
+        assert_eq!(version2, 30, "idempotencia: la segunda init_schema debe dejar la version actual (30)");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

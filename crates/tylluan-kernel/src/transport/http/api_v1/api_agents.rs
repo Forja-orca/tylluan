@@ -9,9 +9,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::transport::http::HttpState;
+use crate::memory::silva::SilvaDB;
 
 /// An autonomous agent session — one per watcher.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSession {
     pub agent_id: String,
     pub started_at_unix: u64,
@@ -28,6 +29,10 @@ pub struct AgentRegistry {
     pub sessions: Arc<dashmap::DashMap<String, AgentSession>>,
     pub max_responses: Arc<dashmap::DashMap<String, u32>>,
     pub ttl_secs: u64,
+    /// T-DSH-152: handle opcional a SilvaDB para persistir las sesiones en
+    /// `silva.db` (tabla aditiva `agent_sessions`) y que sobrevivan al
+    /// reinicio del kernel. `None` en los estados de test que no la necesitan.
+    silva: Arc<std::sync::Mutex<Option<Arc<SilvaDB>>>>,
 }
 
 impl AgentRegistry {
@@ -37,7 +42,89 @@ impl AgentRegistry {
             sessions: Arc::new(dashmap::DashMap::new()),
             max_responses: Arc::new(dashmap::DashMap::new()),
             ttl_secs,
+            silva: Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+
+    /// T-DSH-152: enlaza el registro con SilvaDB (lo llama el builder de
+    /// `HttpState` en produccion, y los tests que quieren persistencia).
+    pub fn set_silva(&self, silva: Arc<SilvaDB>) {
+        if let Ok(mut guard) = self.silva.lock() {
+            *guard = Some(silva);
+        }
+    }
+
+    fn silva_handle(&self) -> Option<Arc<SilvaDB>> {
+        self.silva.lock().ok().and_then(|guard| guard.clone())
+    }
+
+    /// T-DSH-152: escribe (upsert) la sesion en `agent_sessions`. Un fallo se
+    /// registra y no rompe la respuesta: la sesion sigue viva en memoria.
+    pub async fn persist_session(&self, session: &AgentSession) {
+        let Some(silva) = self.silva_handle() else {
+            return;
+        };
+        let conn = silva.conn.lock().await;
+        if let Err(e) = conn.execute(
+            "INSERT INTO agent_sessions
+                (agent_id, started_at_unix, last_heartbeat_unix, responses_sent, max_responses, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
+             ON CONFLICT(agent_id) DO UPDATE SET
+                started_at_unix = excluded.started_at_unix,
+                last_heartbeat_unix = excluded.last_heartbeat_unix,
+                responses_sent = excluded.responses_sent,
+                max_responses = excluded.max_responses,
+                status = excluded.status,
+                updated_at = datetime('now')",
+            rusqlite::params![
+                session.agent_id,
+                session.started_at_unix as i64,
+                session.last_heartbeat_unix as i64,
+                session.responses_sent as i64,
+                session.max_responses as i64,
+                session.status,
+            ],
+        ) {
+            tracing::warn!("T-DSH-152: no se pudo persistir la sesion de agente: {e}");
+        }
+    }
+
+    /// T-DSH-152: recarga en memoria las sesiones persistidas. Lo llama el
+    /// arranque del kernel (tras construir `HttpState`); devuelve cuantas
+    /// sesiones se recuperaron. Sin SilvaDB enlazada es un no-op.
+    pub async fn rehydrate(&self) -> anyhow::Result<usize> {
+        let Some(silva) = self.silva_handle() else {
+            return Ok(0);
+        };
+        let loaded: Vec<AgentSession> = {
+            let conn = silva.conn.lock().await;
+            let mut stmt = conn.prepare(
+                "SELECT agent_id, started_at_unix, last_heartbeat_unix,
+                        responses_sent, max_responses, status
+                 FROM agent_sessions",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok(AgentSession {
+                    agent_id: row.get(0)?,
+                    started_at_unix: row.get::<_, i64>(1)? as u64,
+                    last_heartbeat_unix: row.get::<_, i64>(2)? as u64,
+                    responses_sent: row.get::<_, i64>(3)? as u32,
+                    max_responses: row.get::<_, i64>(4)? as u32,
+                    status: row.get(5)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let count = loaded.len();
+        for session in loaded {
+            self.max_responses
+                .insert(session.agent_id.clone(), session.max_responses);
+            self.sessions.insert(session.agent_id.clone(), session);
+        }
+        if self.sessions.iter().any(|entry| entry.status == "active") {
+            self.active.store(true, Ordering::Release);
+        }
+        Ok(count)
     }
 
     pub fn is_session_valid(&self, agent_id: &str) -> bool {
@@ -132,8 +219,10 @@ pub async fn agent_session_start_handler(
     };
 
     state.agent_registry.max_responses.insert(req.agent_id.clone(), req.max_responses);
-    state.agent_registry.sessions.insert(req.agent_id.clone(), session);
+    state.agent_registry.sessions.insert(req.agent_id.clone(), session.clone());
     state.agent_registry.active.store(true, Ordering::Release);
+    // T-DSH-152: persistir para sobrevivir al reinicio del kernel.
+    state.agent_registry.persist_session(&session).await;
 
     (StatusCode::OK, Json(serde_json::json!({
         "session_id": req.agent_id.clone(),
@@ -157,11 +246,15 @@ pub async fn agent_session_stop_handler(
     };
 
     entry.status = "stopped".to_string();
+    let persisted = entry.clone();
+    drop(entry);
 
     let has_active = state.agent_registry.sessions.iter().any(|s| s.status == "active");
     if !has_active {
         state.agent_registry.active.store(false, Ordering::Release);
     }
+    // T-DSH-152: persistir el estado "stopped".
+    state.agent_registry.persist_session(&persisted).await;
 
     (StatusCode::OK, Json(serde_json::json!({
         "status": "stopped",
@@ -246,6 +339,9 @@ pub async fn agent_heartbeat_handler(
 
     if now > entry.started_at_unix + state.agent_registry.ttl_secs {
         entry.status = "expired".to_string();
+        let persisted = entry.clone();
+        drop(entry);
+        state.agent_registry.persist_session(&persisted).await;
         return (StatusCode::GONE, Json(serde_json::json!({
             "error": "session TTL expired",
             "status": "expired",
@@ -255,6 +351,9 @@ pub async fn agent_heartbeat_handler(
 
     if entry.responses_sent >= entry.max_responses {
         entry.status = "stopped".to_string();
+        let persisted = entry.clone();
+        drop(entry);
+        state.agent_registry.persist_session(&persisted).await;
         return (StatusCode::GONE, Json(serde_json::json!({
             "error": "max_responses budget exhausted",
             "status": "stopped",
@@ -263,14 +362,18 @@ pub async fn agent_heartbeat_handler(
     }
 
     entry.last_heartbeat_unix = now;
+    let persisted = entry.clone();
+    drop(entry);
+    // T-DSH-152: persistir el heartbeat para sobrevivir al reinicio.
+    state.agent_registry.persist_session(&persisted).await;
 
     (StatusCode::OK, Json(serde_json::json!({
         "status": "ok",
         "active": state.agent_registry.active.load(Ordering::Acquire),
         "agent_id": req.agent_id,
-        "responses_sent": entry.responses_sent,
-        "max_responses": entry.max_responses,
-        "ttl_remaining_secs": (entry.started_at_unix + state.agent_registry.ttl_secs).saturating_sub(now),
+        "responses_sent": persisted.responses_sent,
+        "max_responses": persisted.max_responses,
+        "ttl_remaining_secs": (persisted.started_at_unix + state.agent_registry.ttl_secs).saturating_sub(now),
     }))).into_response()
 }
 
