@@ -1,9 +1,15 @@
-//! T-DSH-27 â€” forma y linea base de los corpus ES (benigno + inyeccion).
+//! T-DSH-27 — forma y linea base de los corpus ES (benigno + inyeccion).
 //!
 //! Valida esquema y recuentos de `benchmarks/benign_corpus_es_v1.json` y
 //! `benchmarks/injection_corpus_es_v1.json`, y mide la LINEA BASE de la capa 1
-//! (`matches_injection_pattern`, solo patrones en ingles): hoy debe detectar
-//! 0 de las inyecciones en espanol y 0 de los textos benignos.
+//! (`matches_injection_pattern`).
+//!
+//! T-DSH-151 (2026-10-31, base b9f1331): la capa 1 ya cubre 13 de las
+//! inyecciones ES (antes 0: solo había patrones en inglés; D-31 y los patrones
+//! ES posteriores las detectan). El test fija ese recuento para que una
+//! regresión a menos detecciones o un salto raro se vean; si sube, actualizar
+//! con motivo (y comprobar que no son falsos positivos sobre benignos, que
+//! siguen exigiendo 0).
 //!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test corpus_es_shape -- --nocapture
@@ -134,8 +140,9 @@ fn injection_corpus_es_shape_and_layer1_baseline() {
     assert!(saw_cyrillic, "ninguna variante con homoglifo cirilico real");
     assert!(saw_punct_inside, "ninguna variante con puntuacion intercalada real");
     assert_eq!(
-        flagged, 0,
-        "linea base: la capa 1 ya detecta {flagged} inyecciones ES (se esperaba 0 hoy)"
+        flagged, 13,
+        "linea base actualizada (T-DSH-151): la capa 1 ya detecta {flagged} inyecciones ES; \
+         si baja, hay regresion; si sube, actualizar con motivo y revisar benignos"
     );
 
     println!("| injection_corpus_es_v1 | base {} | variantes {} | total {} | capa1 detectadas {} |", base, variants.len(), ms.len(), flagged);

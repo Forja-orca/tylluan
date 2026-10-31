@@ -456,7 +456,10 @@ fn exec_like_heuristic_measured_over_real_core_tools() {
             "browser.search_web".to_string(),
             "comfy_ui.generate_documentary_video".to_string(),
             "comfy_ui.generate_short".to_string(),
-            "llama_backend.query_model".to_string(),
+            // T-DSH-151: medido en b9f1331 — llama_backend expone ahora
+            // start_server/stop_server (exec-like) y query_model ya no lo es.
+            "llama_backend.start_server".to_string(),
+            "llama_backend.stop_server".to_string(),
             "mcp_bridge.mcp_call".to_string(),
             "mcp_bridge.mcp_list_tools".to_string(),
             "mcp_bridge.mcp_ping".to_string(),

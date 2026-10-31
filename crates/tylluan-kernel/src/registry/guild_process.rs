@@ -49,6 +49,10 @@ fn guild_inherited_env(key: &str) -> bool {
         // guilds/): never a token, never a secret.
         "TYLLUAN_ROOT", "TYLLUAN_KERNEL_URL", "TYLLUAN_AGENT_ID",
         "TYLLUAN_INBOX", "TYLLUAN_PENDING",
+        // T-DSH-151: llama_backend.py lee TYLLUAN_LLM_AUTODISCOVER (override
+        // operador de autodeteccion; default documentado, no es secreto) y el
+        // contrato D-34 no lo pasaba, asi que la guild nunca lo veia.
+        "TYLLUAN_LLM_AUTODISCOVER",
         // Deployment configuration the guilds read as overrides (kernel URL,
         // scheduler store, local service URLs, backend autodetection).
         "KERNEL_BASE", "SCHEDULER_DB", "SCHEDULER_POLL_SECS",
