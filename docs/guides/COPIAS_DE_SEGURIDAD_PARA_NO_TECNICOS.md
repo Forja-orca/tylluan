@@ -69,11 +69,11 @@ Sustituye `<letra-del-USB>` o `<punto-de-montaje-del-USB>` por el del USB que
 veas en tu equipo (en Windows: abre "Este equipo" en el Explorador y mira la
 letra del USB). Expulsa el USB de forma segura antes de desconectarlo.
 
-> **Aviso de seguridad (versión actual):** para parar Tylluan usa siempre
-> `tylluan-cli stop --port <puerto>`. **No** uses `tylluan-cli stop --data-dir`:
-> en esta versión puede parar un Tylluan distinto del que quieres (hay un fallo
-> conocido en esa opción). Si tienes varios Tylluan abiertos y no estás seguro,
-> pide ayuda antes de parar nada.
+> **Nota:** `tylluan-cli stop` solo para el Tylluan de la instancia que le
+> indicas (`--port`, y `--data-dir` si tu instalación guarda los datos en otra
+> carpeta). Si no encuentra esa instancia, te lo dice con el mensaje
+> `No hay kernel de esa instancia (puerto/carpeta); no toco otros kernels.` y
+> **no para ningún otro** Tylluan.
 
 ## 5. Secretos: solo si de verdad los necesitas
 
@@ -105,8 +105,23 @@ el programa guarda una "foto" del estado actual en una carpeta
    tylluan-cli stop --port <puerto>
    ```
 
-   > **Importante:** usa solo `--port`; **no** añadas `--data-dir` (fallo
-   > conocido en esta versión: puede parar otro Tylluan).
+   Si tu Tylluan guarda los datos en una carpeta distinta de la habitual,
+   añade también `--data-dir <carpeta-de-datos>`:
+
+   ```
+   tylluan-cli stop --port <puerto> --data-dir <carpeta-de-datos>
+   ```
+
+   Con esos datos, `stop` solo para el kernel de **esa** instancia. Si no la
+   encuentra (por ejemplo, porque el puerto o la carpeta no son los correctos),
+   verás este mensaje y **no se parará ningún otro Tylluan**:
+
+   ```
+   No hay kernel de esa instancia (puerto/carpeta); no toco otros kernels.
+   ```
+
+   Comprueba el puerto y la carpeta, y vuelve a intentarlo. Si sigue sin
+   encontrarlo, pide ayuda antes de probar otras opciones.
 
    (`<puerto>` es el puerto de tu kernel. Si no lo cambiaste, es el que use tu
    instalación; puedes verlo en la línea `port = ...` de la sección `[nexus]`
