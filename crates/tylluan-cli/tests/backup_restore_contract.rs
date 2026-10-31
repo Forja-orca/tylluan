@@ -246,8 +246,12 @@ fn restore_refuses_when_target_port_has_health() {
     assert!(!out.status.success(), "el restore debio negarse con /health respondiendo");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("refusing to restore"),
-        "mensaje esperado de refusal, got: {stderr}"
+        stderr.contains("rechazando restore in situ"),
+        "mensaje esperado de rechazo, got: {stderr}"
+    );
+    assert!(
+        stderr.contains(&port.to_string()),
+        "el mensaje debe incluir el puerto comprobado, got: {stderr}"
     );
     assert!(!target.exists() || std::fs::read_dir(&target).unwrap().next().is_none());
 }
@@ -317,4 +321,104 @@ fn backup_and_restore_resolve_journal_from_data_dir_env() {
     assert!(journal.exists(), "journal.db debe restaurarse en el target-dir");
     let expected = format!("env-marker-{}", DATA_DBS.iter().position(|d| *d == "journal.db").unwrap());
     assert_eq!(read_marker(&journal), expected, "contenido de journal.db restaurado");
+}
+
+/// T-DSH-159: restore IN SITU se niega si `/health` responde, con mensaje en
+/// espanol que incluye el puerto comprobado y el PID (aqui no hay fichero PID:
+/// "PID no identificado").
+#[test]
+fn in_place_restore_refuses_when_health_responds() {
+    let setup = Setup::new();
+    let backup = setup.root.path().join("backup-inplace-health");
+    let out = setup.run(&["backup", backup.to_str().unwrap()]);
+    assert!(out.status.success(), "backup fallo: {}", String::from_utf8_lossy(&out.stderr));
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            use std::io::{Read, Write};
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            );
+        }
+    });
+
+    let out = setup.run(&[
+        "restore",
+        backup.to_str().unwrap(),
+        "--port",
+        &port.to_string(),
+    ]);
+    assert!(!out.status.success(), "el restore in situ debio negarse con /health respondiendo");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("rechazando restore in situ"),
+        "mensaje esperado de rechazo, got: {stderr}"
+    );
+    assert!(stderr.contains(&port.to_string()), "el mensaje debe incluir el puerto: {stderr}");
+    assert!(stderr.contains("PID"), "el mensaje debe incluir el PID (o 'no identificado'): {stderr}");
+}
+
+/// T-DSH-159: restore IN SITU se niega si el fichero PID del DATA_DIR apunta a
+/// un proceso vivo, y el mensaje incluye ese PID y el puerto.
+#[test]
+fn in_place_restore_refuses_when_pid_file_is_alive() {
+    let setup = Setup::new();
+    let backup = setup.root.path().join("backup-inplace-pid");
+    let out = setup.run(&["backup", backup.to_str().unwrap()]);
+    assert!(out.status.success(), "backup fallo: {}", String::from_utf8_lossy(&out.stderr));
+
+    let pid = std::process::id();
+    std::fs::write(setup.data().join("tylluan-nexus.pid"), pid.to_string()).unwrap();
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let out = setup.run(&[
+        "restore",
+        backup.to_str().unwrap(),
+        "--port",
+        &port.to_string(),
+    ]);
+    assert!(!out.status.success(), "el restore in situ debio negarse con PID vivo");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("rechazando restore in situ"),
+        "mensaje esperado de rechazo, got: {stderr}"
+    );
+    assert!(stderr.contains(&format!("PID {pid}")), "el mensaje debe incluir PID {pid}: {stderr}");
+    assert!(stderr.contains(&port.to_string()), "el mensaje debe incluir el puerto: {stderr}");
+}
+
+/// T-DSH-159: si nada responde en el puerto y no hay kernel de este DATA_DIR,
+/// el restore IN SITU funciona (aunque haya un kernel de OTRO DATA_DIR vivo).
+#[test]
+fn in_place_restore_works_when_nothing_responds() {
+    let setup = Setup::new();
+    let backup = setup.root.path().join("backup-inplace-ok");
+    let out = setup.run(&["backup", backup.to_str().unwrap()]);
+    assert!(out.status.success(), "backup fallo: {}", String::from_utf8_lossy(&out.stderr));
+
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let out = setup.run(&[
+        "restore",
+        backup.to_str().unwrap(),
+        "--port",
+        &port.to_string(),
+    ]);
+    assert!(
+        out.status.success(),
+        "el restore in situ debio funcionar sin kernel de este DATA_DIR: stdout={} stderr={}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let journal = setup.data().join("journal.db");
+    assert!(journal.exists(), "journal.db debe seguir en el DATA_DIR tras el restore in situ");
 }

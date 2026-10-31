@@ -163,6 +163,17 @@ fn data_dir_env() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// T-DSH-159: DATA_DIR efectivo del kernel (env si esta, si no el derivado del
+/// toml). Se usa para el snapshot in situ y para localizar su fichero PID.
+fn resolve_data_dir(toml_path: &Path) -> Result<PathBuf> {
+    if let Some(base) = data_dir_env() {
+        return Ok(base);
+    }
+    let silva = load_silva_db_path(toml_path)?
+        .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
+    Ok(data_dir_of(&silva))
+}
+
 /// Default sources: `[silva].db_path` and `[memory].db_path` from tylluan.toml
 /// (fallbacks `./data/silva.db` / `./data/tylluan.db`) plus the 12 canonical
 /// databases of the data dir (T-DSH-156). Extras (`--db`) are names relative
@@ -402,20 +413,8 @@ pub(crate) fn plan_restore(dir: &Path, target_dir: Option<&Path>) -> Result<Rest
     let ts = Local::now().format("%Y%m%d_%H%M%S");
     let pre_dir = match target_dir {
         Some(base) => base.join(format!("pre_restore_{ts}")),
-        None => {
-            // T-DSH-158: el snapshot in situ tambien vive en el DATA_DIR del
-            // kernel (TYLLUAN_DATA_DIR si esta definido), no en el cwd.
-            let data_dir = match data_dir_env() {
-                Some(base) => base,
-                None => {
-                    let toml = Path::new("tylluan.toml");
-                    let silva = load_silva_db_path(toml)?
-                        .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
-                    data_dir_of(&silva)
-                }
-            };
-            data_dir.join(format!("pre_restore_{ts}"))
-        }
+        None => resolve_data_dir(Path::new("tylluan.toml"))?
+            .join(format!("pre_restore_{ts}")),
     };
     Ok(RestorePlan { steps, pre_dir, has_secrets })
 }
@@ -435,8 +434,10 @@ async fn health_running(port: u16) -> Result<Option<String>> {
     Ok(None)
 }
 
-/// Process-table probe (`tylluan-nexus`). Only used for in-place restores:
-/// with `--target-dir` a kernel of another data dir must not block us.
+/// Process-table probe (`tylluan-nexus`). Solo lo usa `kernel_running` en
+/// tests: `run_restore` ya no hace barrido global (T-DSH-159: solo el kernel
+/// de ESTE DATA_DIR, via fichero PID, bloquea el restore in situ).
+#[cfg(test)]
 fn kernel_process_running() -> Option<String> {
     let mut sys = System::new();
     sys.refresh_processes(ProcessesToUpdate::All, true);
@@ -446,6 +447,33 @@ fn kernel_process_running() -> Option<String> {
         }
     }
     None
+}
+
+/// T-DSH-159: fichero PID del kernel para un DATA_DIR (mismo nombre que
+/// `stop.rs`), para poder dar el PID en el mensaje de rechazo del restore.
+fn kernel_pid_file(data_dir: &Path) -> PathBuf {
+    data_dir.join(crate::stop::PID_FILE_NAME)
+}
+
+fn read_kernel_pid(data_dir: &Path) -> Option<u32> {
+    crate::stop::read_pid_file(&kernel_pid_file(data_dir))
+}
+
+fn pid_alive(pid: u32) -> bool {
+    let mut sys = System::new();
+    sys.refresh_processes(
+        ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+        true,
+    );
+    sys.process(sysinfo::Pid::from_u32(pid)).is_some()
+}
+
+/// Texto para el mensaje: "PID <n>" o "PID no identificado".
+fn describe_pid(data_dir: &Path) -> String {
+    match read_kernel_pid(data_dir) {
+        Some(pid) => format!("PID {pid}"),
+        None => "PID no identificado".to_string(),
+    }
 }
 
 /// Refuse the restore while the kernel is up. Two signals, mirroring
@@ -533,20 +561,28 @@ pub(crate) async fn run_restore(
     port: u16,
     target_dir: Option<&Path>,
 ) -> Result<()> {
+    let in_place = target_dir.is_none();
+    // T-DSH-159: restore in situ seguro. Se comprueba el kernel de ESTE
+    // DATA_DIR (su fichero PID y el /health del puerto indicado); un kernel de
+    // OTRO DATA_DIR no escribe estos ficheros y no debe bloquear el restore.
+    let data_dir = resolve_data_dir(Path::new("tylluan.toml"))?;
     if let Some(reason) = health_running(port).await? {
+        let pid = describe_pid(&data_dir);
         bail!(
-            "refusing to restore: the kernel appears to be running ({reason}). \
-             SQLite cannot be restored safely in hot mode — stop it first: \
-             tylluan-cli stop"
+            "rechazando restore in situ: el kernel parece estar vivo ({reason}). \
+             Puerto comprobado: {port}. {pid}. \
+             SQLite no se puede restaurar en caliente de forma segura; \
+             paralo primero con: tylluan-cli stop --port {port}"
         );
     }
-    if target_dir.is_none()
-        && let Some(reason) = kernel_process_running()
+    if in_place
+        && let Some(pid) = read_kernel_pid(&data_dir)
+        && pid_alive(pid)
     {
         bail!(
-            "refusing to restore: the kernel appears to be running ({reason}). \
-             SQLite cannot be restored safely in hot mode — stop it first: \
-             tylluan-cli stop (or use --target-dir to restore elsewhere)"
+            "rechazando restore in situ: el kernel de este DATA_DIR sigue vivo \
+             (PID {pid}, puerto {port}). Paralo primero con: \
+             tylluan-cli stop --port {port}"
         );
     }
     let plan = plan_restore(dir, target_dir)?;
