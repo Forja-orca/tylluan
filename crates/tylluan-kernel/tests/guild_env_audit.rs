@@ -74,6 +74,29 @@ fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// T-DSH-155: en Linux el intérprete es `python3` (no `python`). Elige el
+/// primero que exista para que el probe MCP mínimo arranque también allí.
+fn python_command() -> String {
+    let candidates: &[&str] = if cfg!(windows) {
+        &["python", "python3"]
+    } else {
+        &["python3", "python"]
+    };
+    candidates
+        .iter()
+        .find(|py| {
+            std::process::Command::new(py)
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false)
+        })
+        .map(|py| (*py).to_string())
+        .unwrap_or_else(|| "python".to_string())
+}
+
 /// Arranca una guild MCP mínima por el camino REAL (`GuildProcess::spawn`,
 /// launcher External) y devuelve su entorno tal y como lo vio el hijo.
 async fn spawn_probe_guild(tag: &str) -> (HashMap<String, String>, GuildProcess) {
@@ -87,7 +110,7 @@ async fn spawn_probe_guild(tag: &str) -> (HashMap<String, String>, GuildProcess)
     let mut process = GuildProcess::new(
         &guild_name,
         GuildLauncher::External {
-            command: "python".to_string(),
+            command: python_command(),
             args: vec![
                 script.to_string_lossy().to_string(),
                 dump.to_string_lossy().to_string(),

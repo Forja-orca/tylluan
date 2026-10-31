@@ -30,8 +30,18 @@ async fn test_mailbox_protocol_full_cycle() {
     // 3. Wait for expiry
     sleep(Duration::from_secs(3)).await;
 
-    // 4. Purge
-    let purged = mb.purge_expired().await.expect("Failed to purge");
+    // 4. Purge. T-DSH-155: bajo carga (o si el reloj de WSL salta) el segundo
+    // de `unixepoch()` puede no haber avanzado lo suficiente en un solo
+    // intento; se reintenta con margen en vez de asumir un único tick. El
+    // contrato es el mismo: la expirada debe purgarse.
+    let mut purged = 0;
+    for _ in 0..20 {
+        purged = mb.purge_expired().await.expect("Failed to purge");
+        if purged > 0 {
+            break;
+        }
+        sleep(Duration::from_millis(500)).await;
+    }
     assert_eq!(purged, 1, "Should have purged exactly 1 message");
 
     // 5. Verify it's gone

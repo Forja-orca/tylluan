@@ -18,6 +18,17 @@ use tracing::info;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_real_semantic_load() -> anyhow::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
+
+    // T-DSH-155: test E2E real (ONNX Runtime + modelo de embeddings ~2 GB).
+    // En CI/Linux sin ONNX Runtime o sin cache del modelo NO es un defecto de
+    // producto: se salta salvo que el operador lo pida explicitamente con
+    // TYLLUAN_E2E_EMBEDDINGS=1 (mismo patron que los tests E2E de embeddings).
+    if std::env::var("TYLLUAN_E2E_EMBEDDINGS").ok().as_deref() != Some("1")
+        || !tylluan_kernel::router::embeddings::onnx_runtime_ort_compatible()
+    {
+        eprintln!("SKIP test_real_semantic_load: E2E de embeddings desactivado (TYLLUAN_E2E_EMBEDDINGS!=1) o ONNX Runtime no disponible");
+        return Ok(());
+    }
     
     // 1. Setup temporary persistent DBs for real I/O measurement
     let data_dir = std::path::PathBuf::from("data/test_load");

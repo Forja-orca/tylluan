@@ -18,6 +18,17 @@ use tracing::{info, warn};
 #[tokio::test(flavor = "multi_thread")]
 async fn test_consensus_hardening_stress() -> Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
+
+    // T-DSH-155: test E2E real (ONNX Runtime + modelo de embeddings ~2 GB).
+    // En CI/Linux sin ONNX Runtime o sin cache del modelo NO es un defecto de
+    // producto: se salta salvo que el operador lo pida explicitamente con
+    // TYLLUAN_E2E_EMBEDDINGS=1 (mismo patron que los tests E2E de embeddings).
+    if std::env::var("TYLLUAN_E2E_EMBEDDINGS").ok().as_deref() != Some("1")
+        || !tylluan_kernel::router::embeddings::onnx_runtime_ort_compatible()
+    {
+        eprintln!("SKIP test_consensus_hardening_stress: E2E de embeddings desactivado (TYLLUAN_E2E_EMBEDDINGS!=1) o ONNX Runtime no disponible");
+        return Ok(());
+    }
     
     // 1. Environment Setup (Derive project root from crate manifest dir)
     let root_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
