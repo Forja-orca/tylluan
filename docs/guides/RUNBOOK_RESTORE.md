@@ -1,5 +1,7 @@
 # RUNBOOK — Backup, restore y simulacro de restauración
 
+> **Versión para personas no técnicas:** COPIAS_DE_SEGURIDAD_PARA_NO_TECNICOS.md, en esta misma carpeta.
+
 > **Por qué existe:** la memoria acumulada (`silva.db`, `tylluan.db`, `mailbox.db`, `peers.db`, `audit.db`)
 > vive en un solo disco de una sola máquina. Un backup que nunca se ha restaurado NO es un backup.
 > El simulacro se ejecuta **1 vez al mes** (primer lunes), dura ~15 minutos y **no toca el kernel de producción**.
@@ -12,9 +14,9 @@ Los nombres de fichero y las reglas de abajo salen de `crates/tylluan-cli/src/ba
 | Comando | Qué hace | Cuándo |
 |---|---|---|
 | `tylluan-cli backup <DIR>` | Copia consistente con `VACUUM INTO` **con el kernel encendido**. Escribe los `.db` y un `backup-manifest.json`. | Cuando quieras; no para el kernel. |
-| `tylluan-cli restore <DIR>` | Sustituye las bases de datos por las del backup. **Se niega a correr si hay cualquier proceso `tylluan-nexus` o `/health` responde.** Antes de tocar nada guarda el estado actual en `<data>/pre_restore_<fecha>/`. | Recuperación real, con el kernel parado (`tylluan-cli stop`). |
+| `tylluan-cli restore <DIR>` | Sustituye las bases de datos por las del backup. **Se niega a correr si el kernel de ese DATA_DIR sigue vivo** (responde `/health` en el `--port` indicado o su fichero PID está activo); el mensaje en español incluye el puerto y el PID. Un kernel de OTRO DATA_DIR no bloquea. Antes de tocar nada guarda el estado actual en `<data>/pre_restore_<fecha>/`. | Recuperación real, con el kernel parado (`tylluan-cli stop --port <puerto>`). |
 
-Fuentes por defecto del backup: `[silva].db_path` y `[memory].db_path` de `tylluan.toml` (si no hay, `./data/silva.db` y `./data/tylluan.db`) más `peers.db`, `mailbox.db` y `audit.db` junto a ellos. `--db <fichero>` añade bases extra. Los ficheros que no existen o no son SQLite se omiten con un aviso.
+Fuentes por defecto del backup: **las 12 bases del DATA_DIR** (`silva.db`, `tylluan.db`, `agent_profiles.db`, `audit.db`, `contracts.db`, `curriculum.db`, `jobs.db`, `journal.db`, `mailbox.db`, `peers.db`, `pending_dispatches.db`, `task_context.db`), resolviendo el mismo DATA_DIR que el kernel (`TYLLUAN_DATA_DIR` si está definido; si no, `[silva].db_path`/`[memory].db_path` de `tylluan.toml`). `--db <fichero>` añade bases extra. Los ficheros que no existen o no son SQLite se omiten con un aviso. `--with-secrets` añade `identity.key` y `oauth_jwt_secret` (solo a un destino de confianza).
 
 **Ejecuta ambos comandos desde el directorio que contiene `tylluan.toml`**: es donde leen la configuración y donde resuelven `./data`.
 
@@ -34,7 +36,7 @@ Desde el directorio de tu `tylluan.toml`:
 
 ```powershell
 $stamp = Get-Date -Format "yyyy-MM-dd"
-tylluan-cli backup "<raiz-repo>-restore-drill\$stamp\backup"
+tylluan-cli backup "E:\tylluan-restore-drill\$stamp\backup"
 ```
 
 Debe imprimir `N database(s) backed up` y crear `backup-manifest.json`. Si faltan bases de datos que esperabas, el aviso lo dirá.
@@ -44,11 +46,11 @@ Debe imprimir `N database(s) backed up` y crear `backup-manifest.json`. Si falta
 Nunca arranques el kernel de prueba desde el directorio de producción ni sobre su `data/`.
 
 ```powershell
-$drill = "<raiz-repo>-restore-drill\$stamp\run"
+$drill = "E:\tylluan-restore-drill\$stamp\run"
 New-Item -ItemType Directory -Force "$drill\data" | Out-Null
 
 # Los .db del backup son ficheros SQLite completos y consistentes: se copian tal cual.
-Copy-Item "<raiz-repo>-restore-drill\$stamp\backup\*.db" "$drill\data\"
+Copy-Item "E:\tylluan-restore-drill\$stamp\backup\*.db" "$drill\data\"
 
 # Tu configuración, con otro puerto y sin stdio:
 Copy-Item .\tylluan.toml "$drill\tylluan.toml"
