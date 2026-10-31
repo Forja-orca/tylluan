@@ -293,7 +293,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" aria-hidden="true" />
           <input
             type="text"
-            aria-label="Filter conflicted nodes by ID, excerpt, or node type"
+            aria-label="Filtrar nodos en conflicto por identificador, extracto o tipo"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);

@@ -166,9 +166,9 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
         {dispatches.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-900/30 border border-slate-800/60 rounded">
             <ShieldCheck className="w-10 h-10 text-slate-600 mb-3" />
-            <p className="text-sm font-semibold text-slate-300">No Pending Dispatches</p>
+            <p className="text-sm font-semibold text-slate-300">Sin despachos pendientes</p>
             <p className="text-xs text-slate-500 max-w-sm mt-1">
-              When a Coloquio mention triggers a wake policy from a trusted author, it will appear here for 1-click verification.
+              Cuando una mención en Coloquio active una política de activación de un autor de confianza, aparecerá aquí para verificación en un clic.
             </p>
           </div>
         ) : (

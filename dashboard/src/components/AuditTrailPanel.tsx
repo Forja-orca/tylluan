@@ -403,7 +403,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
               aria-label="Cancel audit trail query"
               className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none"
             >
-              Cancel
+              Cancelar
             </button>
           )}
         </div>
@@ -650,7 +650,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-slate-400 font-mono">No raw kernel log lines returned.</p>
+            <p className="text-xs text-slate-400 font-mono">Sin líneas de registro del kernel devueltas.</p>
           )}
         </div>
       )}
@@ -661,7 +661,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
           <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
           <input
             type="text"
-            aria-label="Filter audit trail by Agent ID"
+            aria-label="Filtrar registro de auditoría por ID de agente"
             value={agentIdFilter}
             onChange={(e) => setAgentIdFilter(e.target.value)}
             placeholder="Filter by Agent ID..."
@@ -779,7 +779,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-2">
-                        <span>No audit records matching filters found.</span>
+                        <span>Sin registros de auditoría que coincidan con los filtros.<span className="sr-only"> (No audit records matching filters found)</span></span>
                         <button
                           type="button"
                           onClick={() => { void fetchAuditTrail(); }}
