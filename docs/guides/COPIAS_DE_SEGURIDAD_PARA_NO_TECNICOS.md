@@ -66,7 +66,14 @@ cp -r "<carpeta-de-destino>" "<punto-de-montaje-del-USB>/Tylluan-copia"
 ```
 
 Sustituye `<letra-del-USB>` o `<punto-de-montaje-del-USB>` por el del USB que
-veas en tu equipo. Expulsa el USB de forma segura antes de desconectarlo.
+veas en tu equipo (en Windows: abre "Este equipo" en el Explorador y mira la
+letra del USB). Expulsa el USB de forma segura antes de desconectarlo.
+
+> **Aviso de seguridad (versión actual):** para parar Tylluan usa siempre
+> `tylluan-cli stop --port <puerto>`. **No** uses `tylluan-cli stop --data-dir`:
+> en esta versión puede parar un Tylluan distinto del que quieres (hay un fallo
+> conocido en esa opción). Si tienes varios Tylluan abiertos y no estás seguro,
+> pide ayuda antes de parar nada.
 
 ## 5. Secretos: solo si de verdad los necesitas
 
@@ -77,7 +84,9 @@ llevarlos (por ejemplo, para mudar el hub a otro equipo), añade el flag:
 tylluan-cli backup <carpeta-de-destino> --with-secrets
 ```
 
-- El comando avisa de que la copia contiene secretos.
+- El comando avisa de que la copia contiene secretos. Verás que el resumen dice
+  `14 database source(s)` (12 bases + `identity.key` + `oauth_jwt_secret`) y que
+  las dos últimas líneas llevan la marca `(sensible, ...)`: es correcto.
 - **Guarda esa copia solo en un destino de confianza**: nunca en un
   repositorio, ni en un USB compartido, ni en la nube sin cifrar.
 - Sin `--with-secrets`, esos dos ficheros no se copian.
@@ -96,8 +105,15 @@ el programa guarda una "foto" del estado actual en una carpeta
    tylluan-cli stop --port <puerto>
    ```
 
-   (`<puerto>` es el puerto de tu kernel; si no lo cambiaste, es el que use tu
-   instalación. `tylluan-cli status` te lo recuerda.)
+   > **Importante:** usa solo `--port`; **no** añadas `--data-dir` (fallo
+   > conocido en esta versión: puede parar otro Tylluan).
+
+   (`<puerto>` es el puerto de tu kernel. Si no lo cambiaste, es el que use tu
+   instalación; puedes verlo en la línea `port = ...` de la sección `[nexus]`
+   de tu `tylluan.toml`, o en la salida de `tylluan-cli start`. **Ojo:**
+   `tylluan-cli status` solo comprueba el puerto por defecto; si usas otro,
+   puede decir "OFFLINE" aunque tu Tylluan esté encendido — no te fíes solo de
+   ese comando para saber el puerto.)
 
 2. Restaura:
 
@@ -105,21 +121,26 @@ el programa guarda una "foto" del estado actual en una carpeta
    tylluan-cli restore <carpeta-de-la-copia> --port <puerto>
    ```
 
-3. Vuelve a arrancar:
+3. Vuelve a arrancar, con el mismo puerto:
 
    ```
-   tylluan-cli start
+   tylluan-cli start --port <puerto>
    ```
+
+   (Si usas el puerto por defecto de la instalación, `tylluan-cli start` a
+   secas también vale; si no, sin `--port` arrancaría en otro puerto.)
 
 ### 6.2. Si solo quieres comprobar que la copia sirve (sin tocar tu Tylluan)
 
-Restaura en una carpeta aparte, con un puerto libre:
+Restaura en una carpeta aparte, con un puerto libre (un número que no esté
+usando nada; por ejemplo uno entre 47100 y 47199, y nunca el de tu Tylluan):
 
 ```
 tylluan-cli restore <carpeta-de-la-copia> --target-dir <carpeta-nueva> --port <puerto-libre>
 ```
 
-Esto no modifica tu hub actual. Es la forma recomendada de probar una copia.
+Si el comando se queja de que el puerto está ocupado, prueba otro número. Esto
+no modifica tu hub actual: es la forma recomendada de probar una copia.
 
 ## 7. Qué pasa si Tylluan está encendido
 
@@ -128,10 +149,20 @@ Esto no modifica tu hub actual. Es la forma recomendada de probar una copia.
   vivo. El mensaje es claro e incluye el **puerto** y el **PID** (el número del
   proceso) que tienes que parar, por ejemplo:
 
+  Dos variantes posibles del mensaje (lo importante es el puerto y el PID):
+
   ```
   rechazando restore in situ: el kernel de este DATA_DIR sigue vivo (PID 1234, puerto <puerto>).
   Paralo primero con: tylluan-cli stop --port <puerto>
   ```
+
+  ```
+  rechazando restore in situ: el kernel parece estar vivo (health endpoint ... is responding).
+  Puerto comprobado: <puerto>. PID 1234. ... paralo primero con: tylluan-cli stop --port <puerto>
+  ```
+
+  (La segunda mezcla una frase en inglés del sistema; es normal, el mensaje es
+  claro: puerto y PID.)
 
 - Un Tylluan distinto (otra instalación, otro directorio de datos) no impide
   restaurar: solo bloquea el kernel del destino que estás restaurando.
@@ -141,7 +172,10 @@ Esto no modifica tu hub actual. Es la forma recomendada de probar una copia.
 - Abre `backup-manifest.json` con un editor de texto: debe listar las bases y su
   tamaño.
 - Haz una restauración de prueba con `--target-dir` (punto 6.2) y comprueba que
-  arranca con `tylluan-cli start`.
+  aparecen todas las bases en la carpeta nueva. Para arrancar un Tylluan sobre
+  esa copia restaurada hace falta indicarle esa carpeta como DATA_DIR (ajuste
+  avanzado): si quieres hacer esa prueba completa, pide ayuda a alguien técnico
+  — no hace falta para saber que la copia se restauró bien.
 
 ## 9. Problemas frecuentes
 
