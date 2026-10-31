@@ -198,7 +198,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
       role="region"
       aria-label="Panel de cuarentena de memoria"
       className={cn(
-        "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs transition-colors space-y-4",
+        "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-5 transition-colors space-y-4",
         className
       )}
     >
@@ -210,7 +210,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               Cuarentena de Memoria (ASI06 Judge)
               {totalCount > 0 && (
-                <span className="px-2 py-0.5 text-xs font-mono font-bold rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60">
+                <span className="px-2 py-0.5 text-xs font-mono font-bold rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60">
                   {totalCount}
                 </span>
               )}
@@ -226,7 +226,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           onClick={() => fetchQuarantine(true)}
           disabled={status === 'loading' || refreshing}
           aria-label="Refrescar lista de cuarentena"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:outline-none self-start sm:self-auto"
         >
           <RefreshCw className={cn("w-3.5 h-3.5", (status === 'loading' || refreshing) && "animate-spin")} aria-hidden="true" />
           <span>{refreshing ? 'Actualizando...' : 'Refrescar'}</span>
@@ -239,7 +239,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           role="status"
           aria-live="polite"
           className={cn(
-            "p-3 rounded-lg border text-xs flex items-center justify-between gap-2",
+            "p-3 rounded border text-xs flex items-center justify-between gap-2",
             releaseFeedback.success
               ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-200"
               : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700/60 text-rose-800 dark:text-rose-200"
@@ -278,7 +278,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
       {status === 'forbidden' && (
         <div
           role="alert"
-          className="p-5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-xl space-y-3"
+          className="p-5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded space-y-3"
         >
           <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-semibold text-sm">
             <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -290,7 +290,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           <button
             type="button"
             onClick={() => fetchQuarantine(true)}
-            className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700/60 rounded-lg text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
+            className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700/60 rounded text-xs font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-rose-500 focus-visible:outline-none"
           >
             Reintentar verificación
           </button>
@@ -301,7 +301,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
       {status === 'pending_backend' && (
         <div
           role="status"
-          className="p-5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-xl space-y-3"
+          className="p-5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded space-y-3"
         >
           <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-semibold text-sm">
             <Info className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -313,7 +313,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           <button
             type="button"
             onClick={() => fetchQuarantine(true)}
-            className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 rounded-lg text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+            className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 rounded text-xs font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:outline-none"
           >
             Reintentar
           </button>
@@ -324,7 +324,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
       {status === 'error' && (
         <div
           role="alert"
-          className="p-5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-xl space-y-3"
+          className="p-5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded space-y-3"
         >
           <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-semibold text-sm">
             <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -336,7 +336,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           <button
             type="button"
             onClick={() => fetchQuarantine(true)}
-            className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700/60 rounded-lg text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
+            className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700/60 rounded text-xs font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-rose-500 focus-visible:outline-none"
           >
             Reintentar
           </button>
@@ -345,7 +345,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
 
       {/* ESTADO 5: Vacío (Sin nodos en cuarentena) */}
       {status === 'empty' && (
-        <div className="p-8 text-center bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+        <div className="p-8 text-center bg-slate-50 dark:bg-slate-950/40 rounded border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
           <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" aria-hidden="true" />
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
             sin nodos en cuarentena
@@ -362,7 +362,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           tabIndex={0}
           role="region"
           aria-label="Lista de nodos en cuarentena"
-          className="overflow-x-auto focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:outline-none rounded-lg border border-slate-200 dark:border-slate-800"
+          className="overflow-x-auto focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:outline-none rounded border border-slate-200 dark:border-slate-800"
         >
           <table className="w-full text-left text-xs border-collapse">
             <thead>
@@ -399,7 +399,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
 
                   {/* Quarantine Reason */}
                   <td className="py-3 px-3 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">
                       <AlertTriangle className="w-3 h-3 shrink-0" aria-hidden="true" />
                       <span>{node.quarantine_reason}</span>
                     </span>
@@ -433,7 +433,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
                       onClick={() => setConfirmNode(node)}
                       disabled={releasingId === node.id}
                       aria-label={`Liberar nodo ${node.id}`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none"
                     >
                       {releasingId === node.id ? (
                         <>
@@ -461,9 +461,9 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-release-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70"
         >
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 text-slate-900 dark:text-slate-100">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded max-w-md w-full p-6 shadow-none space-y-4 text-slate-900 dark:text-slate-100">
             <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
               <AlertTriangle className="w-6 h-6 shrink-0" aria-hidden="true" />
               <h3 id="confirm-release-title" className="text-base font-bold">
@@ -475,7 +475,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
               ¿Confirmas que este nodo fue aislado como un falso positivo y debe ser reincorporado al grafo SilvaDB activo?
             </p>
 
-            <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-1.5 text-xs">
+            <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded p-3 space-y-1.5 text-xs">
               <div>
                 <span className="text-slate-400">ID:</span>{' '}
                 <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{confirmNode.id}</span>
@@ -495,7 +495,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
                 type="button"
                 onClick={() => setConfirmNode(null)}
                 disabled={releasingId === confirmNode.id}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+                className="px-3.5 py-1.5 rounded text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-50 focus-visible:ring-1 focus-visible:ring-slate-400 focus-visible:outline-none"
               >
                 Cancelar
               </button>
@@ -503,7 +503,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
                 type="button"
                 onClick={() => handleReleaseNode(confirmNode)}
                 disabled={releasingId === confirmNode.id}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer disabled:opacity-50 focus-visible:ring-1 focus-visible:ring-emerald-400 focus-visible:outline-none"
               >
                 {releasingId === confirmNode.id && (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />

@@ -136,7 +136,7 @@ export function SparklineChart({
     <div ref={containerRef} className="relative w-full" style={{ height }}>
       {/* Label top-left */}
       <span
-        className="absolute top-0 left-0 text-[11px] font-bold uppercase tracking-widest pointer-events-none z-10"
+        className="absolute top-0 left-0 text-[11px] font-semibold pointer-events-none z-10"
         style={{ color, opacity: 0.85, lineHeight: 1 }}
       >
         {label}

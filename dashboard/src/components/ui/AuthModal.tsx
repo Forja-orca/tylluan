@@ -69,19 +69,19 @@ export function AuthModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden p-6 space-y-5">
+      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded shadow-none overflow-hidden p-6 space-y-5">
         <button
           onClick={onClose}
           aria-label="Cerrar modal de autenticación"
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-800"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 transition-colors p-1 rounded hover:bg-slate-800"
         >
           <X className="w-4 h-4" />
         </button>
 
         <div className="flex items-start gap-4">
-          <div className="p-3 rounded-xl border text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0">
+          <div className="p-3 rounded border text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0">
             <Key className="w-6 h-6" />
           </div>
           <div className="space-y-1">
@@ -121,7 +121,7 @@ export function AuthModal({
                   if (error) setError(null);
                 }}
                 placeholder="Pega aquí el contenido de .tylluan-token..."
-                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg px-3 py-2.5 pr-10 text-xs font-mono text-slate-200 placeholder-slate-600 outline-none transition-colors"
+                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded px-3 py-2.5 pr-10 text-xs font-mono text-slate-200 placeholder-slate-600 outline-none transition-colors"
                 autoFocus
                 autoComplete="off"
                 spellCheck={false}
@@ -144,7 +144,7 @@ export function AuthModal({
             )}
           </div>
 
-          <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 text-[11px] text-slate-400 space-y-1">
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded p-3 text-[11px] text-slate-400 space-y-1">
             <p className="flex items-center gap-1 text-slate-300 font-medium">
               <span>📍</span> Ubicación del token en el sistema
             </p>
@@ -160,13 +160,13 @@ export function AuthModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
+              className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-medium bg-amber-700 hover:bg-amber-600 text-white rounded-lg flex items-center gap-1.5 transition-colors shadow-lg shadow-amber-900/20"
+              className="px-4 py-2 text-xs font-medium bg-amber-700 hover:bg-amber-600 text-white rounded flex items-center gap-1.5 transition-colors"
             >
               <Check className="w-3.5 h-3.5" />
               Guardar y Conectar

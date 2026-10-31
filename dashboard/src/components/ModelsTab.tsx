@@ -75,7 +75,7 @@ export function ModelsTab({ bridge }: Props) {
   return (
     <div className="space-y-4">
       {/* Sub Navigation */}
-      <div className="flex items-center gap-2 p-1 bg-muted/60 border border-border rounded-xl w-max">
+      <div className="flex items-center gap-2 p-1 bg-muted/60 border border-border rounded w-max">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -84,9 +84,9 @@ export function ModelsTab({ bridge }: Props) {
               type="button"
               onClick={() => setSubTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer",
+                "flex items-center gap-2 px-4 py-2 rounded text-xs font-bold transition-colors cursor-pointer",
                 subTab === tab.id
-                  ? "bg-card text-foreground shadow-sm"
+                  ? "bg-card text-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
               )}
             >
@@ -132,8 +132,8 @@ export function ModelsTab({ bridge }: Props) {
 
       {/* Restart Kernel Modal (shared across all sub-tabs) */}
       {showRestartModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-50 p-4">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+          <div className="bg-card border border-border rounded p-6 max-w-md w-full shadow-none space-y-4">
             <div className="flex items-center gap-3 text-primary">
               <AlertTriangle className="w-6 h-6" />
               <h3 className="text-lg font-bold text-foreground font-mono">Reinicio Requerido</h3>
@@ -143,7 +143,7 @@ export function ModelsTab({ bridge }: Props) {
               La aceleración por hardware se ha configurado a <span className="font-mono text-primary font-semibold">{selectedDevice}</span>. Para cargar los proveedores de ejecución y aplicar los cambios, el Kernel de Tylluan debe reiniciarse.
             </p>
 
-            <div className="bg-background border border-border rounded-lg p-3 space-y-2 text-xs text-muted-foreground font-mono">
+            <div className="bg-background border border-border rounded p-3 space-y-2 text-xs text-muted-foreground font-mono">
               <p className="text-foreground font-semibold text-[11px] mb-1">Instrucciones de reinicio:</p>
               <p>1. Detén el kernel en tu terminal (<kbd className="bg-muted px-1.5 py-0.5 rounded text-foreground">Ctrl + C</kbd>).</p>
               <p>2. Vuelve a iniciarlo ejecutando:</p>
@@ -156,7 +156,7 @@ export function ModelsTab({ bridge }: Props) {
               <button
                 type="button"
                 onClick={() => setShowRestartModal(false)}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
               >
                 Entendido
               </button>

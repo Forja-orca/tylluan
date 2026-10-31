@@ -60,11 +60,11 @@ export default function DeviceStatusBadge({ bridge }: DeviceStatusBadgeProps) {
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-mono font-semibold tracking-wider transition-all duration-300 backdrop-blur-md cursor-help shadow-sm select-none',
+        'inline-flex items-center gap-2 px-3 py-1.5 rounded border text-[11px] font-mono font-semibold transition-colors cursor-help select-none',
         !hasRealData
           ? 'bg-slate-900/60 border-slate-800 text-slate-500 hover:border-slate-700'
           : isGpu
-          ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+          ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60'
           : 'bg-slate-900/80 border-amber-500/40 text-slate-200 hover:border-amber-500/60'
       )}
       title={tooltip}
@@ -87,7 +87,7 @@ export default function DeviceStatusBadge({ bridge }: DeviceStatusBadgeProps) {
         <Cpu className="w-3.5 h-3.5 text-amber-400" />
       )}
 
-      <span className="uppercase tracking-widest text-[11px] font-bold">
+      <span className="text-[11px] font-semibold">
         {!hasRealData ? '○ ' : isGpu ? '● ' : '▲ '}
         {label}
       </span>

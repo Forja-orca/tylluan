@@ -41,7 +41,7 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         role="region"
         aria-label="Salud del recall"
         className={cn(
-          "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs transition-colors",
+          "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-5 transition-colors",
           className
         )}
       >
@@ -53,7 +53,7 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
             </h2>
           </div>
           <span
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 self-start sm:self-auto"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 self-start sm:self-auto"
           >
             <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
             <span>kernel sin telemetría de recall (actualiza)</span>
@@ -77,7 +77,7 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         role="region"
         aria-label="Salud del recall"
         className={cn(
-          "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs transition-colors",
+          "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-5 transition-colors",
           className
         )}
       >
@@ -111,7 +111,7 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
       role="region"
       aria-label="Salud del recall"
       className={cn(
-        "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs transition-colors space-y-4",
+        "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-5 transition-colors space-y-4",
         className
       )}
     >
@@ -130,7 +130,7 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         </div>
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold rounded-full border self-start sm:self-auto",
+            "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold rounded border self-start sm:self-auto",
             hasCalls
               ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/60"
               : "bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700"
@@ -143,8 +143,8 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
       {/* Grid de Métricas Principales */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Total Calls */}
-        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-lg p-3">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded p-3">
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
             Total Calls
           </span>
           <div className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100 mt-1">
@@ -156,8 +156,8 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         </div>
 
         {/* Empty Calls */}
-        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-lg p-3">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded p-3">
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
             Empty Calls
           </span>
           <div className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100 mt-1">
@@ -169,9 +169,9 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         </div>
 
         {/* Empty Ratio */}
-        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-lg p-3">
+        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
               Empty Ratio
             </span>
             <span title="Proporción de llamadas que devolvieron vacío">
@@ -196,9 +196,9 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         </div>
 
         {/* Latencia Media */}
-        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-lg p-3">
+        <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
               Latencia Media
             </span>
             <Clock className="w-3 h-3 text-slate-400" aria-hidden="true" />
@@ -234,7 +234,7 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         </div>
 
         {!hasCalls ? (
-          <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-lg text-center text-xs text-slate-500 dark:text-slate-400">
+          <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded text-center text-xs text-slate-500 dark:text-slate-400">
             Sin datos de latencia acumulados hasta la primera llamada de recall.
           </div>
         ) : (
@@ -242,7 +242,7 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
             tabIndex={0}
             role="region"
             aria-label="Distribución de histograma de latencia"
-            className="grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-xs focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none rounded-lg p-1"
+            className="grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-xs focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:outline-none rounded p-1"
           >
             {LATENCY_BUCKETS.map((bucketKey) => {
               const count = histogram[bucketKey] ?? 0;
@@ -252,16 +252,16 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
               return (
                 <div
                   key={bucketKey}
-                  className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-md p-2 flex flex-col justify-between"
+                  className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded p-2 flex flex-col justify-between"
                 >
                   <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                     <span>{bucketKey}</span>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">{count}</span>
                   </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded mt-2 overflow-hidden">
                     <div
                       className={cn(
-                        "h-full rounded-full transition-all duration-300",
+                        "h-full rounded transition-all duration-300",
                         bucketKey === '>2500ms'
                           ? "bg-rose-500"
                           : bucketKey.includes('1000ms') || bucketKey.includes('2500ms')

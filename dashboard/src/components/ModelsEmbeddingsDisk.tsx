@@ -60,12 +60,12 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
   return (
     <div className="space-y-6">
       {/* Active Models Status */}
-      <div className="rounded-lg bg-slate-900/50 p-4">
+      <div className="rounded bg-slate-900/50 p-4">
         <h3 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
           <Database className="w-4 h-4 text-amber-400" /> Active Models
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-950 p-3 rounded-lg">
+          <div className="bg-slate-950 p-3 rounded">
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
               <Database className="w-3 h-3" /> Embedding
             </div>
@@ -76,7 +76,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
               (change requires restart + reindex)
             </div>
           </div>
-          <div className="bg-slate-950 p-3 rounded-lg">
+          <div className="bg-slate-950 p-3 rounded">
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
               <ImageIcon className="w-3 h-3" /> Vision
             </div>
@@ -84,7 +84,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
               {visionModel}
             </div>
           </div>
-          <div className="bg-slate-950 p-3 rounded-lg">
+          <div className="bg-slate-950 p-3 rounded">
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
               <Database className="w-3 h-3" /> Inference
             </div>
@@ -96,7 +96,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
       </div>
 
       {/* Real Local Detected Model Inventory on Disk */}
-      <div className="rounded-lg bg-slate-900/50 p-4">
+      <div className="rounded bg-slate-900/50 p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
             <Database className="w-4 h-4 text-emerald-400" /> Local Model Inventory on Disk
@@ -112,7 +112,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {models?.detected_local_models && models.detected_local_models.length > 0 ? (
             models.detected_local_models.map((m: DetectedLocalModel) => (
-              <div key={m.id} className="p-3 bg-slate-950 rounded-lg flex items-center justify-between">
+              <div key={m.id} className="p-3 bg-slate-950 rounded flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold font-mono text-slate-200">{m.name}</span>
@@ -132,7 +132,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
               </div>
             ))
           ) : (
-            <div className="col-span-2 p-6 bg-slate-950/40 border border-dashed border-slate-700 rounded-lg flex flex-col items-center justify-center gap-2 text-center">
+            <div className="col-span-2 p-6 bg-slate-950/40 border border-dashed border-slate-700 rounded flex flex-col items-center justify-center gap-2 text-center">
               <Database className="w-8 h-8 text-slate-600" />
               <p className="text-sm font-mono text-slate-400 font-semibold">No models detected on disk</p>
               <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
@@ -144,7 +144,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
       </div>
 
       {/* Embedding Model Edit */}
-      <div className="rounded-lg bg-amber-950/10 p-4">
+      <div className="rounded bg-amber-950/10 p-4">
         <h3 className="text-sm font-semibold text-slate-300 mb-4">Embedding Model Config</h3>
         <div className="space-y-4">
           <div>
@@ -158,7 +158,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
             />
           </div>
           
-          <div className="bg-amber-900/20 rounded-lg p-3 text-xs text-amber-300 flex items-start gap-2">
+          <div className="bg-amber-900/20 rounded p-3 text-xs text-amber-300 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold">⚠️ Changing the model requires restarting the kernel and reindexing SilvaDB.</p>
@@ -169,7 +169,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
           <button
             onClick={handleSave}
             disabled={saving || !embeddingModel}
-            className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 text-amber-400 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors"
+            className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 text-amber-400 rounded text-xs font-semibold flex items-center gap-2 transition-colors"
           >
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Configuration

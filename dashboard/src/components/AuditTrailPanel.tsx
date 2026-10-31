@@ -357,7 +357,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
     <section
       ref={containerRef}
       aria-labelledby="audit-telemetry-heading"
-      className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-6 font-sans min-w-0 max-w-full overflow-hidden"
+      className="bg-slate-900/70 border border-slate-800 rounded p-4 sm:p-6 space-y-6 font-sans min-w-0 max-w-full overflow-hidden"
     >
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4 min-w-0">
@@ -374,7 +374,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
           <button
             type="button"
             onClick={() => setShowRawLogs((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded-xl transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             <FileText className="w-3.5 h-3.5 text-amber-400" />
             {showRawLogs ? 'Hide Kernel Log Tail' : `Kernel Log Tail (${rawLogs.length})`}
@@ -384,7 +384,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             onClick={fetchAuditTrail}
             disabled={loading}
             aria-label="Refresh security and audit logs"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded-xl transition-all disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
             {loading ? 'Refreshing...' : 'Refresh Logs'}
@@ -401,7 +401,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
                 setError('Consulta de auditoría cancelada por el usuario.');
               }}
               aria-label="Cancel audit trail query"
-              className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
+              className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none"
             >
               Cancel
             </button>
@@ -410,13 +410,13 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="p-4 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <span className="font-mono">{error}</span>
           <button
             type="button"
             onClick={fetchAuditTrail}
             aria-label="Retry audit trail query"
-            className="self-start sm:self-auto px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="self-start sm:self-auto px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             Retry
           </button>
@@ -429,19 +429,19 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
         <div
           aria-label="HMAC Audit Chain Integrity"
           className={cn(
-            'p-4 rounded-xl border',
+            'p-4 rounded border',
             verifyReport?.status === 'tampered' || verifyError
               ? 'bg-rose-950/40 border-rose-500/50'
               : 'bg-slate-900/70 border-slate-800'
           )}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-300">
               Audit HMAC Integrity
             </span>
             <span
               className={cn(
-                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold uppercase border',
+                'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-semibold border',
                 verifyReport?.status === 'tampered' || verifyError
                   ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
                   : verifyReport?.status === 'clean'
@@ -480,14 +480,14 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
         </div>
 
         {/* Card 2: Dispatch Latency Percentiles (/api/v1/audit/latency) */}
-        <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+        <div className="p-4 rounded bg-slate-900/70 border border-slate-800">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-300">
               Dispatch Latency (60m)
             </span>
             <span
               className={cn(
-                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold uppercase border',
+                'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-semibold border',
                 latencyError || latencyReport?.available === false
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
                   : latencySampled > 0
@@ -540,14 +540,14 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
         </div>
 
         {/* Card 3: Security Events & System Diagnostics (/api/v1/security/events) */}
-        <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+        <div className="p-4 rounded bg-slate-900/70 border border-slate-800">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-300">
               Security &amp; Doctor Report
             </span>
             <span
               className={cn(
-                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold uppercase border',
+                'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-semibold border',
                 securityError || securityStatusRaw === 'critical'
                   ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
                   : securityStatusRaw === 'degraded'
@@ -581,11 +581,11 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       </div>
 
       {/* Security Diagnostics & Events Feed (/api/v1/security/events) */}
-      <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800/80 space-y-2.5">
+      <div className="p-4 rounded bg-slate-900/50 border border-slate-800/80 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+            <h3 className="text-xs font-mono font-bold text-slate-200">
               Recent Security &amp; Diagnostic Events (`/api/v1/security/events`)
             </h3>
           </div>
@@ -633,7 +633,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
 
       {/* Optional Raw Kernel Audit Logs Tail (/api/v1/audit/logs) */}
       {showRawLogs && (
-        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+        <div className="p-4 rounded bg-slate-950 border border-slate-800 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase text-amber-300 flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5" aria-hidden="true" />
@@ -656,7 +656,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       )}
 
       {/* Control Bar */}
-      <div className="flex flex-col sm:flex-row items-center gap-3 p-4 bg-slate-900/60 rounded-2xl">
+      <div className="flex flex-col sm:flex-row items-center gap-3 p-4 bg-slate-900/60 rounded">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
           <input
@@ -665,7 +665,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             value={agentIdFilter}
             onChange={(e) => setAgentIdFilter(e.target.value)}
             placeholder="Filter by Agent ID..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-950 focus:border-emerald-500 focus:outline-none rounded-xl text-xs text-slate-200 placeholder-slate-400 font-mono transition-colors"
+            className="w-full pl-9 pr-4 py-2 bg-slate-950 focus:border-emerald-500 focus:outline-none rounded text-xs text-slate-200 placeholder-slate-400 font-mono transition-colors"
           />
         </div>
 
@@ -679,7 +679,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             aria-label="Audit records limit"
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value))}
-            className="bg-slate-950 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
+            className="bg-slate-950 rounded px-3 py-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
           >
             <option value={10}>10 records</option>
             <option value={25}>25 records</option>
@@ -690,7 +690,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       </div>
 
       {/* Table Container */}
-      <div className="bg-slate-900/40 rounded-2xl overflow-hidden border border-slate-800/80">
+      <div className="bg-slate-900/40 rounded overflow-hidden border border-slate-800/80">
         <div
           tabIndex={0}
           role="region"
@@ -742,7 +742,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
                     <td className="px-4 py-3.5 text-center">
                       <span
                         className={cn(
-                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium font-mono leading-none whitespace-nowrap',
+                          'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium font-mono leading-none whitespace-nowrap',
                           entry.allowed
                             ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
                             : 'bg-red-500/10 text-red-300 border-red-500/20'

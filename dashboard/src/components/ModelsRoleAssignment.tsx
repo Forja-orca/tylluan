@@ -115,7 +115,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
   ];
 
   return (
-    <div className="rounded-lg bg-card border border-border p-4 space-y-4">
+    <div className="rounded bg-card border border-border p-4 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
         <div>
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -128,7 +128,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
         <button
           onClick={handleSaveRoles}
           disabled={savingRoles}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary text-xs font-semibold rounded-lg transition-all disabled:opacity-50 shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary text-xs font-semibold rounded transition-colors disabled:opacity-50 shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
         >
           <Save className={cn("w-3.5 h-3.5", savingRoles && "animate-spin")} />
           {savingRoles ? 'Guardando...' : 'Guardar Asignación'}
@@ -137,7 +137,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {roles.map((role) => (
-          <div key={role.id} className={cn("bg-background p-3.5 rounded-lg border flex flex-col justify-between space-y-2", role.color)}>
+          <div key={role.id} className={cn("bg-background p-3.5 rounded border flex flex-col justify-between space-y-2", role.color)}>
             <div>
               <label className="block text-xs font-semibold text-foreground tracking-wide mb-1">
                 {role.title}

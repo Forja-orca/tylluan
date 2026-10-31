@@ -226,12 +226,12 @@ function App() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
       {/* Top Navbar */}
-      <header className="h-16 border-b border-border bg-card/90 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
+      <header className="h-16 border-b border-border bg-card sticky top-0 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
             type="button"
             aria-label="Ir a Estado y Salud"
-            className="flex items-center gap-2 group cursor-pointer rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            className="flex items-center gap-2 group cursor-pointer rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
             onClick={() => handleTabChange('overview')}
           >
             <TylluanLogo size="md" showText={true} animated={false} />
@@ -241,19 +241,19 @@ function App() {
         <div className="flex min-w-0 items-center gap-2 md:gap-4 lg:gap-6">
           <div className="hidden lg:flex items-center gap-4 text-[11px] font-mono text-muted-foreground">
              <div className="flex flex-col items-end">
-               <span className="uppercase opacity-70 tracking-widest text-[11px]">Activo</span>
+               <span className="opacity-70 text-[11px]">Activo</span>
                <span className="text-foreground">{online ? formatUptime(kernelUptime) : '—'}</span>
              </div>
              <div className="h-6 w-px bg-border" />
              <div className="flex flex-col items-end">
-               <span className="uppercase opacity-70 tracking-widest text-[11px]">Última Actualización</span>
+               <span className="opacity-70 text-[11px]">Última Actualización</span>
                <span className="text-foreground">{lastRefresh.toLocaleTimeString()}</span>
              </div>
           </div>
           
           {activeAgents.length > 0 && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
-              <span className="text-foreground">{activeAgents.length} {activeAgents.length === 1 ? 'agente' : 'agentes'}</span>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-card border border-border text-[11px] font-mono text-muted-foreground">
+              <span className="text-foreground font-semibold">{activeAgents.length} {activeAgents.length === 1 ? 'agente' : 'agentes'}</span>
               <div className="flex gap-1">
                 {activeAgents.map(agent => (
                   <span
@@ -274,7 +274,7 @@ function App() {
             role="status"
             aria-live="polite"
             className={cn(
-              'hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
+              'hidden md:flex items-center gap-2 px-3 py-1.5 rounded border transition-colors',
               connectionStatus === 'connected'
                 ? 'bg-card border-border text-foreground'
                 : connectionStatus === 'reconnecting'
@@ -287,7 +287,7 @@ function App() {
               : connectionStatus === 'reconnecting'
               ? <Radio className="w-3 h-3 text-amber-400" aria-hidden="true" />
               : <WifiOff className="w-3 h-3 text-red-400" aria-hidden="true" />}
-            <span className="text-[11px] font-bold uppercase tracking-wider">
+            <span className="text-[11px] font-semibold">
               {connectionStatus === 'connected'
                 ? '● Conectado'
                 : connectionStatus === 'reconnecting'
@@ -297,15 +297,15 @@ function App() {
           </div>
           
           {/* Theme Selector Toggle */}
-          <div role="group" aria-label="Selector de Tema" className="flex items-center gap-1 bg-muted/60 border border-border rounded-full p-0.5">
+          <div role="group" aria-label="Selector de Tema" className="flex items-center gap-1 bg-muted/60 border border-border rounded p-0.5">
             <button
               type="button"
               aria-label="Tema Claro"
               aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
-                theme === 'light' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+                "p-1.5 rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
+                theme === 'light' ? "bg-card text-primary border border-border" : "text-muted-foreground hover:text-foreground"
               )}
               title="Tema Claro"
             >
@@ -317,8 +317,8 @@ function App() {
               aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
-                theme === 'dark' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+                "p-1.5 rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
+                theme === 'dark' ? "bg-card text-primary border border-border" : "text-muted-foreground hover:text-foreground"
               )}
               title="Tema Oscuro"
             >
@@ -330,8 +330,8 @@ function App() {
               aria-pressed={theme === 'system'}
               onClick={() => setTheme('system')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
-                theme === 'system' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+                "p-1.5 rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
+                theme === 'system' ? "bg-card text-primary border border-border" : "text-muted-foreground hover:text-foreground"
               )}
               title="Tema del Sistema"
             >
@@ -347,7 +347,7 @@ function App() {
               aria-expanded={showMentionsDropdown}
               onClick={() => setShowMentionsDropdown(!showMentionsDropdown)}
               className={cn(
-                "p-2 rounded-full border transition-all relative cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+                "p-2 rounded border transition-colors relative cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
                 activeMentions.length > 0 
                   ? "bg-primary/10 border-primary/30 text-primary" 
                   : "bg-card border-border text-muted-foreground hover:text-foreground"
@@ -361,9 +361,9 @@ function App() {
             </button>
 
             {showMentionsDropdown && (
-              <div className="absolute right-0 mt-2 w-80 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-80 bg-card border border-border rounded shadow-none z-50 overflow-hidden">
                 <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground uppercase">Menciones (@yo)</span>
+                  <span className="text-xs font-semibold text-foreground">Menciones (@yo)</span>
                   {activeMentions.length > 0 && (
                     <button 
                       type="button"
@@ -372,7 +372,7 @@ function App() {
                         useAppStore.getState().clearMentions();
                         setShowMentionsDropdown(false);
                       }}
-                      className="text-[11px] text-primary hover:underline font-bold uppercase cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
+                      className="text-[11px] text-primary hover:underline font-semibold cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none rounded"
                     >
                       Limpiar
                     </button>
@@ -387,7 +387,7 @@ function App() {
                     activeMentions.map((m) => (
                       <div key={m.id} className="p-3 hover:bg-muted/30 transition-colors">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-bold text-primary">@{m.sender}</span>
+                          <span className="text-xs font-semibold text-primary">@{m.sender}</span>
                           <span className="text-[11px] font-mono text-muted-foreground">#{m.channel}</span>
                         </div>
                         <p className="text-xs text-foreground line-clamp-2">{m.message}</p>
@@ -407,7 +407,7 @@ function App() {
             type="button"
             aria-label="Configurar Bearer Token"
             onClick={() => setAuthModalOpen(true)}
-            className="p-2 rounded-full border bg-card border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            className="p-2 rounded border bg-card border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
             title="Configurar Bearer Token"
           >
             <Key className="w-4 h-4" aria-hidden="true" />
@@ -417,7 +417,7 @@ function App() {
             <div 
               role="status"
               aria-live="polite"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border cursor-help group relative text-foreground"
+              className="flex items-center gap-2 px-3 py-1.5 rounded bg-card border border-border cursor-help group relative text-foreground"
               title={`Embeddings: ${healthDetailed.components?.embeddings?.ok ? '✓' : '✗'} | Reranker: ${healthDetailed.components?.reranker?.ok ? '✓' : '✗'} | Guilds: ${healthDetailed.components?.guilds?.active}/${healthDetailed.components?.guilds?.total} | Silva: ${healthDetailed.components?.silva?.nodes}n/${healthDetailed.components?.silva?.edges}e`}
             >
               <div className={cn(
@@ -425,7 +425,7 @@ function App() {
                 healthDetailed.score >= 80 ? "bg-emerald-500" :
                 healthDetailed.score >= 50 ? "bg-amber-500" : "bg-red-500"
               )} />
-              <span className="text-[11px] font-bold uppercase tracking-wider">
+              <span className="text-[11px] font-semibold">
                 {healthDetailed.score >= 80 ? '● ' : healthDetailed.score >= 50 ? '▲ ' : '■ '}
                 {healthDetailed.status}
               </span>
@@ -433,10 +433,10 @@ function App() {
           ) : !online ? (
             <div 
               role="status"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-destructive/10 border border-destructive/30 text-destructive"
+              className="flex items-center gap-2 px-3 py-1.5 rounded bg-destructive/10 border border-destructive/30 text-destructive"
             >
               <div className="w-2 h-2 rounded-full bg-destructive" />
-              <span className="text-[11px] font-bold uppercase tracking-wider">
+              <span className="text-[11px] font-semibold">
                 ■ DESCONECTADO
               </span>
             </div>
@@ -459,7 +459,7 @@ function App() {
                   aria-current={active ? 'page' : undefined}
                   onClick={() => handleTabChange(tab.id)}
                   className={cn(
-                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer",
+                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded text-sm font-medium transition-colors group focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none cursor-pointer",
                     active 
                       ? "bg-primary/10 text-primary font-semibold" 
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -470,7 +470,7 @@ function App() {
                     <span className="hidden md:inline">{tab.name}</span>
                   </div>
                   {tab.badge && (
-                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border-primary/30 text-[11px] font-bold min-w-[1.2rem] text-center border">
+                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded bg-primary/15 text-primary border-primary/30 text-[11px] font-semibold min-w-[1.2rem] text-center border">
                       {tab.badge}
                     </span>
                   )}
@@ -484,11 +484,11 @@ function App() {
              <div className="flex items-center gap-2 mb-2">
                <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-[10px] font-mono font-bold text-slate-400 border border-slate-700 shrink-0">TY</div>
                <div className="overflow-hidden hidden md:block">
-                 <p className="text-[11px] font-bold text-slate-300 uppercase truncate">Tylluan Sovereign</p>
+                 <p className="text-[11px] font-bold text-slate-300 truncate">Tylluan Sovereign</p>
                  <p className="text-[10px] text-slate-400 font-mono truncate">{sysStatus?.version ? `v${sysStatus.version}` : 'v0.17.2'}</p>
                </div>
              </div>
-             <div className="h-1 bg-slate-800 rounded-full overflow-hidden w-full hidden md:block">
+             <div className="h-1 bg-slate-800 rounded overflow-hidden w-full hidden md:block">
                 <div className={cn("h-full w-full", online ? "bg-emerald-500" : "bg-red-500")} />
              </div>
           </div>
@@ -500,7 +500,7 @@ function App() {
             error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('token') ? (
               <MissingTokenBanner onOpenAuthModal={() => setAuthModalOpen(true)} />
             ) : (
-              <div className="m-3 md:m-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
+              <div className="m-3 md:m-6 p-4 rounded bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                   <div>
@@ -512,7 +512,7 @@ function App() {
                   type="button"
                   disabled={retrying}
                   onClick={handleRetry}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-300 text-xs font-semibold shrink-0 cursor-pointer disabled:cursor-not-allowed transition-all focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-300 text-xs font-semibold shrink-0 cursor-pointer disabled:cursor-not-allowed transition-colors focus-visible:ring-1 focus-visible:ring-red-400 focus-visible:outline-none"
                 >
                   {retrying && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
                   <span>{retrying ? 'Reintentando...' : 'Reintentar'}</span>
@@ -619,18 +619,18 @@ function App() {
 
       {/* Immersive HITL Capability Grant Modal */}
       {pendingGrant && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.15)] animate-in zoom-in-95">
+        <div className="fixed inset-0 bg-slate-950/80 z-[200] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded max-w-md w-full overflow-hidden shadow-none animate-in zoom-in-95">
             <div className="px-6 py-4 border-b border-slate-800 bg-amber-500/5 flex items-center gap-3">
               <ShieldCheck className="w-6 h-6 text-amber-500 animate-pulse" />
               <div>
-                <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">Autorización Requerida</h3>
-                <p className="text-[11px] text-amber-500 font-mono font-bold uppercase tracking-tight">HITL Sandbox Gateway Clearance</p>
+                <h3 className="text-sm font-bold text-slate-100 font-mono">Autorización Requerida</h3>
+                <p className="text-[11px] text-amber-500 font-mono font-bold">HITL Sandbox Gateway Clearance</p>
               </div>
             </div>
 
             <div className="p-6 space-y-4 font-mono text-[11px]">
-              <div className="space-y-1.5 p-3 rounded-lg bg-slate-950 border border-slate-800">
+              <div className="space-y-1.5 p-3 rounded bg-slate-950 border border-slate-800">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Guild Solicitado:</span>
                   <span className="text-slate-200 font-bold">{pendingGrant.guild}</span>
@@ -646,32 +646,32 @@ function App() {
               </div>
 
               <div className="space-y-1">
-                <span className="text-slate-500 uppercase font-black text-[11px]">Motivo de Bloqueo:</span>
+                <span className="text-slate-500 font-semibold text-[11px]">Motivo de Bloqueo:</span>
                 <p className="p-3 bg-red-950/15 border border-red-500/20 text-red-400 rounded leading-normal">
                   {pendingGrant.blockedReason}
                 </p>
               </div>
 
               <div className="space-y-2 pt-2">
-                <span className="text-slate-500 uppercase font-black text-[11px] block">Alcance de Autorización:</span>
+                <span className="text-slate-500 font-semibold text-[11px] block">Alcance de Autorización:</span>
                 <div className="grid grid-cols-1 gap-2">
                   <button
                     onClick={() => handleApproveGrant('once')}
-                    className="w-full py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
+                    className="w-full py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/25 rounded text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
                   >
                     <span>Autorizar solo esta vez</span>
                     <span className="text-[11px] opacity-60">scope: once</span>
                   </button>
                   <button
                     onClick={() => handleApproveGrant('session')}
-                    className="w-full py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
+                    className="w-full py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/25 rounded text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
                   >
                     <span>Autorizar durante esta sesión</span>
                     <span className="text-[11px] opacity-60">scope: session</span>
                   </button>
                   <button
                     onClick={() => handleApproveGrant('always')}
-                    className="w-full py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
+                    className="w-full py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 rounded text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between cursor-pointer"
                   >
                     <span>Autorizar siempre este guild</span>
                     <span className="text-[11px] opacity-60">scope: always</span>
@@ -682,7 +682,7 @@ function App() {
             <div className="px-6 py-4 bg-slate-950/50 border-t border-slate-800 flex justify-end">
               <button
                 onClick={() => setPendingGrant(null)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold transition-colors font-mono cursor-pointer"
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs font-bold transition-colors font-mono cursor-pointer"
               >
                 Denegar Ejecución
               </button>
@@ -703,12 +703,12 @@ function App() {
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3">
         {toasts.map((t) => (
           <div key={t.id} className={cn(
-            "p-4 rounded-2xl border shadow-2xl flex items-center gap-3 animate-in slide-in-from-right min-w-[300px]",
+            "p-4 rounded border shadow-none flex items-center gap-3 animate-in slide-in-from-right min-w-[300px]",
             t.type === 'error' ? "bg-red-950 border-red-500/30 text-red-200" : "bg-slate-900 border-slate-800 text-slate-100"
           )}>
             {t.type === 'error' ? <AlertTriangle className="w-5 h-5 text-red-500" /> : <Zap className="w-5 h-5 text-emerald-400" />}
             <div>
-              {t.guild && <span className="block text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">{t.guild}</span>}
+              {t.guild && <span className="block text-[11px] font-bold text-slate-500 mb-0.5">{t.guild}</span>}
               <p className="text-sm">{t.msg}</p>
             </div>
           </div>
