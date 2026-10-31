@@ -120,7 +120,7 @@ Fuentes, ambas **no vinculantes** y contrastadas con el código antes de aceptar
 
 ### 🟢 CICLO 2026-10-21 — Confianza de la memoria, consentimiento OAuth y plan a v1.0
 
-> Resumen completo y trazable: `docs/internal/RESUMEN_investigaciones_y_auditorias_2026-10-21.md`. Plan de preguntas y criterios medibles: `docs/reference/research/2026-10-21_preguntas_correctas_camino_a_v1.md`. Leyenda: **[x]** verificado de forma independiente (git, tests o CI); **[ ]** abierto; **[~]** parcial. Nada de lo cerrado aquí está activo en el kernel de José hasta que él reinicie (producción en `5e49bf8`).
+> Resumen completo y trazable: informe interno (privado, fuera de este repositorio). Plan de preguntas y criterios medibles: `docs/reference/research/2026-10-21_preguntas_correctas_camino_a_v1.md`. Leyenda: **[x]** verificado de forma independiente (git, tests o CI); **[ ]** abierto; **[~]** parcial. Nada de lo cerrado aquí está activo en el kernel de José hasta que él reinicie (producción en `5e49bf8`).
 
 **Cerrado y verificado (en `main`, CI verde en `514058e`)**
 - [x] **Aprobación de planes:** D-13 (autoaprobación), D-16 (ruta por intención de `tylluan_do`), D-26 (el audit nombra `operator`); matriz de audit de 13 filas sin mentiras (T-DSH-21).

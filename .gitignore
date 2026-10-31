@@ -251,3 +251,7 @@ benchmarks/latency/results_*.json
 
 # Modelos locales: nunca al repo (decenas de GB; ver incidente de ficheros .gguf en la raiz, 22-oct)
 *.gguf
+
+# Internal fleet reports and queues stay private; only the protocol is tracked
+docs/internal/*
+!docs/internal/WORK_PROTOCOL.md

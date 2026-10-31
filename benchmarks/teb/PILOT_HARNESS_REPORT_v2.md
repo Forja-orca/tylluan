@@ -4,9 +4,9 @@
 **Commit:** `311e505` (origin/main)  
 **Runs:** 3 (Seeds: 42..44)  
 **Provider:** `auto` (fell back to heuristic — kernel offline during evaluation)  
-**Dataset:** [`tasks_pilot_50.json`](tasks_pilot_50.json) (50 tasks across 8 families)  
-**Results Data:** [`pilot_results_v2.json`](pilot_results_v2.json)  
-**Previous (invalidated) results:** [`pilot_results.json`](pilot_results.json) — ground_truth leakage in harness, closed by MD-1 (`877ad5e`)
+**Dataset:** `tasks_pilot_50.json` (50 tasks across 8 families)  
+**Results Data:** `pilot_results_v2.json`  
+**Previous (invalidated) results:** `pilot_results.json` — ground_truth leakage in harness, closed by MD-1 (`877ad5e`)
 
 ---
 
