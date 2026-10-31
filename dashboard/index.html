@@ -10,7 +10,7 @@
     <script>
       (function() {
         try {
-          var t = localStorage.getItem('tylluan_theme') || 'dark';
+          var t = localStorage.getItem('tylluan_theme') || 'light';
           var isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           if (isDark) {
             document.documentElement.classList.add('dark');
