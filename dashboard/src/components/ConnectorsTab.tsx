@@ -205,19 +205,18 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   return (
     <div className="space-y-6 p-6">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-700/30 via-slate-900/80 to-slate-950/80 p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden shadow-xl">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-card p-6 rounded border border-border flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/10 flex items-center justify-center">
-              <Link2 className="w-5 h-5 text-slate-950" />
+            <div className="p-2.5 bg-primary/10 border border-primary/20 rounded flex items-center justify-center">
+              <Link2 className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-black font-sans text-slate-50 tracking-tight">Connectors & Discovery</h1>
-              <p className="text-xs text-emerald-400/80 font-mono tracking-wider uppercase">Milestone M24 Sovereign Integrations</p>
+              <h1 className="text-2xl font-bold font-sans text-foreground tracking-tight">Connectors & Discovery</h1>
+              <p className="text-xs text-muted-foreground font-mono">Milestone M24 Sovereign Integrations</p>
             </div>
           </div>
-          <p className="text-sm text-slate-400 max-w-xl">
+          <p className="text-sm text-muted-foreground max-w-xl">
             TylluanNexus acts as a Sovereign MCP Hub. External client LLMs connect via standard MCP or REST APIs.
             The client LLM discovers capabilities dynamically via Prompts & Resources, keeping contexts light.
           </p>
@@ -227,7 +226,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           <button 
             onClick={handleRefresh}
             disabled={globalLoading || localLoading}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded hover:bg-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={cn("w-4 h-4 text-emerald-400", (globalLoading || localLoading) && "animate-spin")} />
             <span>Reload Status</span>
@@ -250,7 +249,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             <Users className="w-4 h-4" />
             <span>Active Client Sessions</span>
             {activeSessions.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-[11px] font-mono text-emerald-400 border border-emerald-500/20">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-[11px] font-mono text-emerald-400 border border-emerald-500/20">
                 {activeSessions.length}
               </span>
             )}
@@ -270,7 +269,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             <Cpu className="w-4 h-4" />
             <span>Capabilities Catalog</span>
             {capabilities && (
-              <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 text-[11px] font-mono text-blue-400 border border-blue-500/20">
+              <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-[11px] font-mono text-blue-400 border border-blue-500/20">
                 {capabilities.guilds.length} Guilds
               </span>
             )}
@@ -297,10 +296,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
       <div className="space-y-6">
         {activeSubTab === 'sessions' && (
           <div className="space-y-4">
-            <div className="bg-slate-900/40 rounded-2xl border border-slate-800/80 overflow-hidden shadow-lg backdrop-blur-sm">
+            <div className="bg-card rounded border border-border overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-800/30 border-b border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                  <tr className="bg-slate-800/30 border-b border-slate-800 text-[11px] font-semibold text-muted-foreground">
                     <th className="px-6 py-4">Client / Process</th>
                     <th className="px-6 py-4">Agent Identification</th>
                     <th className="px-6 py-4 text-center">Tools Called</th>
@@ -311,10 +310,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {activeSessions.map((session) => (
-                    <tr key={session.id} className="group hover:bg-slate-850/20 transition-all duration-150">
+                    <tr key={session.id} className="group hover:bg-slate-850/20 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-800/50 flex items-center justify-center border border-slate-700/50 text-slate-400 group-hover:text-emerald-400 transition-colors">
+                          <div className="w-9 h-9 rounded bg-slate-800/50 flex items-center justify-center border border-slate-700/50 text-slate-400 group-hover:text-emerald-400 transition-colors">
                             <User className="w-4.5 h-4.5" />
                           </div>
                           <div>
@@ -336,7 +335,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                         )}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300">
+                        <span className="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300">
                           {session.tool_count}
                         </span>
                       </td>
@@ -363,7 +362,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                           onClick={() => handleRevoke(session.id)}
                           disabled={revokingIds.has(session.id)}
                           className={cn(
-                            "p-2 rounded-xl transition-all border",
+                            "p-2 rounded transition-colors border",
                             revokingIds.has(session.id) 
                               ? "bg-slate-800 border-slate-700 cursor-not-allowed text-slate-500" 
                               : "bg-red-500/10 hover:bg-red-500/25 text-red-400 border-red-500/20 hover:border-red-500/40"
@@ -399,10 +398,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Col: Sovereign Contract */}
             <div className="space-y-4">
-              <div className="p-5 bg-gradient-to-br from-emerald-700/25 to-slate-900/50 border border-emerald-500/20 rounded-2xl shadow-md">
+              <div className="p-5 bg-card border border-border rounded">
                 <div className="flex items-center gap-2 mb-3">
                   <Shield className="w-4.5 h-4.5 text-emerald-400" />
-                  <h3 className="text-sm font-black font-sans text-slate-50 tracking-wide uppercase">Sovereign Contract (6 Tools)</h3>
+                  <h3 className="text-sm font-bold font-sans text-slate-50">Sovereign Contract (6 Tools)</h3>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
                   CONTRACT-01 guarantees that clients always see exactly these 6 tools. Any guild work is requested through them, preventing context overload.
@@ -410,7 +409,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
                 <div className="space-y-2.5">
                   {capabilities?.sovereign_contract.tools.map((t) => (
-                    <div key={t.name} className="p-3 bg-slate-950/60 border border-slate-850 rounded-xl space-y-1">
+                    <div key={t.name} className="p-3 bg-slate-950/60 border border-slate-850 rounded space-y-1">
                       <div className="text-xs font-mono font-bold text-emerald-400">{t.name}</div>
                       <div className="text-[11px] text-slate-400 leading-normal">{t.description}</div>
                     </div>
@@ -421,25 +420,25 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               </div>
 
               {/* MCP Handshake Catalog */}
-              <div className="p-5 bg-slate-900/30 border border-slate-800 rounded-2xl space-y-4">
+              <div className="p-5 bg-slate-900/30 border border-slate-800 rounded space-y-4">
                 <div className="flex items-center gap-2">
                   <Info className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-xs font-black font-sans text-slate-50 uppercase tracking-wider">MCP Discovery Registry</h3>
+                  <h3 className="text-xs font-bold font-sans text-slate-50">MCP Discovery Registry</h3>
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Prompts Catalog</div>
+                    <div className="text-[11px] font-bold text-slate-400 mb-1">Prompts Catalog</div>
                     {capabilities?.mcp.prompts.map((p) => (
-                      <div key={p.name} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg space-y-1">
+                      <div key={p.name} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded space-y-1">
                         <div className="text-xs font-mono text-blue-400">{p.name}</div>
                         <div className="text-[11px] text-slate-400">{p.description}</div>
                       </div>
                     ))}
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Resources Catalog</div>
+                    <div className="text-[11px] font-bold text-slate-400 mb-1">Resources Catalog</div>
                     {capabilities?.mcp.resources.map((r) => (
-                      <div key={r.uri} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg space-y-1">
+                      <div key={r.uri} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded space-y-1">
                         <div className="text-xs font-mono text-violet-400 truncate">{r.uri}</div>
                         <div className="text-[11px] text-slate-300 font-medium">{r.name}</div>
                         <div className="text-[11px] text-slate-500">{r.description}</div>
@@ -452,11 +451,11 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
             {/* Right Col: Active Guilds and schemas */}
             <div className="lg:col-span-2 space-y-4">
-              <div className="p-5 bg-slate-900/30 border border-slate-800 rounded-2xl">
+              <div className="p-5 bg-slate-900/30 border border-slate-800 rounded">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Cpu className="w-4.5 h-4.5 text-blue-400" />
-                    <h3 className="text-sm font-black font-sans text-slate-50 tracking-wide uppercase">Active Guild Modules</h3>
+                    <h3 className="text-sm font-bold font-sans text-slate-50">Active Guild Modules</h3>
                   </div>
                   <span className="text-xs text-slate-500 font-mono">Total Underlying Tools: {capabilities?.all_guild_tools.length ?? 0}</span>
                 </div>
@@ -466,9 +465,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div 
                       key={g.name} 
                       className={cn(
-                        "p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 bg-slate-950/40",
+                        "p-4 rounded border transition-colors flex flex-col justify-between gap-3 bg-slate-950/40",
                         g.running 
-                          ? "border-emerald-500/20 shadow-emerald-700/10" 
+                          ? "border-emerald-500/20" 
                           : "border-slate-800"
                       )}
                     >
@@ -507,10 +506,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
                 {/* Guild tools index */}
                 <div className="mt-6 space-y-3">
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-850 pb-2">Exposed Skill Schemas</div>
+                  <div className="text-xs font-bold text-slate-400 border-b border-slate-850 pb-2">Exposed Skill Schemas</div>
                   <div className="max-h-[350px] overflow-y-auto space-y-2.5 pr-2 custom-scrollbar">
                     {capabilities?.all_guild_tools.map((t) => (
-                      <div key={t.name} className="p-3 bg-slate-950/60 border border-slate-850 rounded-xl hover:border-slate-800 transition-colors">
+                      <div key={t.name} className="p-3 bg-slate-950/60 border border-slate-850 rounded hover:border-slate-800 transition-colors">
                         <div className="flex justify-between items-start mb-1">
                           <span className="text-xs font-mono font-bold text-slate-200">{t.name}</span>
                         </div>
@@ -532,9 +531,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <button 
                 onClick={() => setGuideTab('cursor')}
                 className={cn(
-                  "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
                   guideTab === 'cursor' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
+                    ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -545,9 +544,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <button 
                 onClick={() => setGuideTab('vscode')}
                 className={cn(
-                  "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
                   guideTab === 'vscode' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
+                    ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -558,9 +557,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <button 
                 onClick={() => setGuideTab('claude')}
                 className={cn(
-                  "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
                   guideTab === 'claude' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
+                    ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -571,9 +570,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <button 
                 onClick={() => setGuideTab('custom')}
                 className={cn(
-                  "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
                   guideTab === 'custom' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
+                    ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -583,7 +582,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             </div>
 
             {/* Guide Content */}
-            <div className="lg:col-span-3 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 space-y-6">
+            <div className="lg:col-span-3 bg-slate-900/30 border border-slate-800 rounded p-6 space-y-6">
               {guideTab === 'cursor' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
@@ -591,7 +590,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <p className="text-xs text-slate-400">Configure Cursor to connect to Tylluan's sovereign hub using standard MCP Stdio Client.</p>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3 text-xs text-slate-400 leading-normal">
+                  <div className="p-4 rounded bg-amber-500/5 border border-amber-500/10 flex gap-3 text-xs text-slate-400 leading-normal">
                     <Info className="w-4 h-4 text-amber-500/80 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-amber-400">Security Key:</span> Bearer authentication is managed by setting the <code>TYLLUAN_TOKEN</code> environment variable. The default token is <code>TU_TOKEN_AQUI</code>.
@@ -609,7 +608,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                         <span>Copy Code</span>
                       </button>
                     </div>
-                    <pre className="p-4 rounded-xl bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
+                    <pre className="p-4 rounded bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
                       {cursorConfig}
                     </pre>
                   </div>
@@ -638,7 +637,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                         <span>Copy Code</span>
                       </button>
                     </div>
-                    <pre className="p-4 rounded-xl bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
+                    <pre className="p-4 rounded bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
                       {clineConfig}
                     </pre>
                   </div>
@@ -672,7 +671,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                         <span>Copy Code</span>
                       </button>
                     </div>
-                    <pre className="p-4 rounded-xl bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
+                    <pre className="p-4 rounded bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
                       {claudeConfig}
                     </pre>
                   </div>
@@ -697,13 +696,13 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                         <span>Copy Code</span>
                       </button>
                     </div>
-                    <pre className="p-4 rounded-xl bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
+                    <pre className="p-4 rounded bg-slate-950 border border-slate-850 text-xs font-mono text-slate-300 overflow-x-auto">
                       {restCurl}
                     </pre>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-850 space-y-2.5">
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">HTTP Headers Required:</div>
+                  <div className="p-4 rounded bg-slate-950 border border-slate-850 space-y-2.5">
+                    <div className="text-xs font-bold text-slate-400">HTTP Headers Required:</div>
                     <div className="grid grid-cols-3 gap-2 text-xs font-mono">
                       <div className="text-slate-500 font-bold">Authorization</div>
                       <div className="col-span-2 text-emerald-400">Bearer TU_TOKEN_AQUI</div>

@@ -212,15 +212,15 @@ export function MaintenanceTab({ bridge, notify }: Props) {
         <button
           type="button"
           onClick={loadStatus}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-900 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
         >
           <RefreshCw className="w-3 h-3" /> Refresh
         </button>
       </div>
 
       {/* Connection Diagnostic */}
-      <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-900/50">
-        <div className={cn("p-2 rounded-lg", probe ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
+      <div className="flex items-center gap-4 p-4 rounded bg-slate-900/50">
+        <div className={cn("p-2 rounded", probe ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
           {probe ? <Network className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
         </div>
         <div>
@@ -234,7 +234,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(({ icon: Icon, label, value, sub, color }) => (
-          <div key={label} className="p-4 rounded-2xl bg-slate-900/40">
+          <div key={label} className="p-4 rounded bg-slate-900/40">
             <div className="flex items-center gap-2 text-slate-500 mb-2">
               <Icon className="w-3.5 h-3.5" />
               <span className="text-[11px] font-medium">{label}</span>
@@ -246,14 +246,14 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       </div>
 
       {/* Operations */}
-      <div className="rounded-2xl bg-slate-900/40 overflow-hidden">
+      <div className="rounded bg-slate-900/40 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-800/50 flex items-center gap-2">
           <Network className="w-4 h-4 text-slate-500" />
           <span className="text-xs font-medium text-slate-400">Operations</span>
         </div>
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {operations.map(({ id, label, icon: Icon, iconColor, desc, btnClass }) => (
-            <div key={id} className="flex flex-col gap-3 p-4 rounded-xl bg-slate-950/40">
+            <div key={id} className="flex flex-col gap-3 p-4 rounded bg-slate-950/40">
               <h3 className="text-xs font-medium flex items-center gap-2 text-slate-200">
                 <Icon className={cn("w-4 h-4", iconColor)} />
                 {label}
@@ -264,7 +264,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 onClick={() => runAction(id, label)}
                 disabled={!!loading}
                 className={cn(
-                  "w-full py-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none",
+                  "w-full py-2 rounded text-[11px] font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none",
                   btnClass
                 )}
               >
@@ -280,7 +280,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
 
       {/* Host Resources Viewer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-6 rounded-2xl bg-slate-950/40">
+        <div className="p-6 rounded bg-slate-950/40">
           <div className="flex items-center gap-2 mb-4">
             <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
               <Cpu className="w-4 h-4 text-blue-400" /> Host CPU Usage
@@ -306,7 +306,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
           )}
           <p className="text-[11px] text-slate-600 mt-2 font-mono text-center italic">Kernel process monitor active</p>
         </div>
-        <div className="p-6 rounded-2xl bg-slate-950/40">
+        <div className="p-6 rounded bg-slate-950/40">
           <div className="flex items-center gap-2 mb-4">
             <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
               <Database className="w-4 h-4 text-emerald-400" /> Host RAM Pressure
@@ -323,7 +323,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
             />
           ) : (
             <>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-2 bg-slate-800 rounded overflow-hidden">
                 <div className="h-full bg-emerald-500/50 transition-all duration-1000" style={{ width: `${sysStatus?.system?.memory_percent ?? 0}%` }} />
               </div>
               <p className="text-[11px] text-slate-600 mt-2 font-mono text-center italic">
@@ -335,7 +335,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       </div>
 
       {/* Info footer */}
-      <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-900/30">
+      <div className="flex items-start gap-3 p-4 rounded bg-slate-900/30">
         <Database className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
         <p className="text-[11px] text-slate-600 leading-relaxed">
           Maintenance operations target <span className="text-slate-400">SilvaDB</span> (knowledge graph)
@@ -346,7 +346,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       </div>
 
       {/* Token + Config Section */}
-      <div className="rounded-2xl bg-slate-900/50 p-6">
+      <div className="rounded bg-slate-900/50 p-6">
         <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2 mb-4">
           <ShieldCheck className="w-4 h-4 text-violet-400" /> Admin Access
         </h3>
@@ -363,9 +363,9 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: input.value }));
               }
             }}
-            className="flex-1 px-3 py-2 bg-slate-950 rounded-xl text-xs font-mono text-slate-300"
+            className="flex-1 px-3 py-2 bg-slate-950 rounded text-xs font-mono text-slate-300"
           />
-          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token updated', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-medium focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
+          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token updated', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded text-xs font-medium focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
             Save Token
           </button>
         </div>

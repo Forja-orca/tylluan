@@ -247,19 +247,19 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
     <section
       ref={containerRef}
       aria-labelledby="decision-service-heading"
-      className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-6 font-sans"
+      className="bg-slate-900/70 border border-slate-800 rounded p-6 space-y-6 font-sans"
     >
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-md">
+            <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded">
               ADR-021 · tylluan_decide
             </span>
-            <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-md">
+            <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded">
               Mode: {activeProviderSummary.mode}
             </span>
-            <span className="px-2 py-0.5 text-xs font-mono text-slate-300 bg-slate-800 border border-slate-700 rounded-md flex items-center gap-1.5">
+            <span className="px-2 py-0.5 text-xs font-mono text-slate-300 bg-slate-800 border border-slate-700 rounded flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-amber-400" />
               {activeProviderSummary.model}
             </span>
@@ -277,7 +277,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
         </div>
 
         <div className="flex items-center gap-2 self-end md:self-auto">
-          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5">
+          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5">
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
             <label htmlFor="shadow-limit-select" className="sr-only">
               Shadow log row limit
@@ -300,7 +300,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
             onClick={fetchShadowLog}
             disabled={loading}
             aria-label="Refresh Decision Service shadow log"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none text-xs text-slate-200 font-medium rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none text-xs text-slate-200 font-medium rounded transition-colors disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} />
             <span>{loading ? 'Syncing...' : 'Refresh'}</span>
@@ -318,7 +318,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                 setEndpointStatus('error');
               }}
               aria-label="Cancel shadow log query"
-              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
+              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none"
             >
               Cancel
             </button>
@@ -330,7 +330,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       <div
         role="note"
         aria-label="Advertencia epistemológica sobre acuerdo reglas y modelo"
-        className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
+        className="p-4 rounded bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
       >
         <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
         <div className="text-xs text-slate-200 leading-relaxed">
@@ -345,7 +345,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       {error && (
         <div
           className={cn(
-            'p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs',
+            'p-4 rounded border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs',
             endpointStatus === 'forbidden'
               ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
               : endpointStatus === 'pending_backend'
@@ -370,7 +370,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
             type="button"
             onClick={fetchShadowLog}
             aria-label="Reintentar consulta de log en sombra"
-            className="self-start sm:self-auto px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="self-start sm:self-auto px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             Reintentar
           </button>
@@ -380,7 +380,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       {/* Per-Contract Agreement Summary Grid */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
+          <h3 className="text-xs font-mono font-bold text-slate-300">
             Agreement &amp; Disagreement by Contract
           </h3>
           {contractFilter !== 'all' && (
@@ -408,7 +408,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                 onClick={() => setContractFilter(isSelected ? 'all' : c.contract)}
                 aria-pressed={isSelected}
                 className={cn(
-                  'text-left p-4 rounded-xl border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none',
+                  'text-left p-4 rounded border transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none',
                   isSelected
                     ? 'bg-amber-500/15 border-amber-500/50'
                     : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
@@ -454,10 +454,10 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       </div>
 
       {/* Shadow Log Table */}
-      <div className="bg-slate-950/60 border border-slate-800 rounded-xl overflow-hidden">
+      <div className="bg-slate-950/60 border border-slate-800 rounded overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+            <span className="text-xs font-mono font-bold text-slate-200">
               Recent Shadow Evaluations (`decision_shadow_log`)
             </span>
             {contractFilter !== 'all' && (
@@ -511,19 +511,19 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         {cmp === 'agreed' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                             <CheckCircle2 className="w-3 h-3" aria-hidden="true" />
                             AGREED
                           </span>
                         )}
                         {cmp === 'disagreed' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
                             <XCircle className="w-3 h-3" aria-hidden="true" />
                             DISAGREED
                           </span>
                         )}
                         {cmp === 'null' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                             <MinusCircle className="w-3 h-3" aria-hidden="true" />
                             NULL / ABSTAIN
                           </span>
@@ -567,7 +567,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                           type="button"
                           onClick={fetchShadowLog}
                           aria-label="Reintentar consulta de evaluaciones en sombra"
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
                         >
                           <RefreshCw className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
                           Reintentar
@@ -587,7 +587,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                           type="button"
                           onClick={() => setContractFilter('all')}
                           aria-label="Mostrar todas las evaluaciones"
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
                         >
                           Mostrar todas las evaluaciones
                         </button>
@@ -601,7 +601,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                           type="button"
                           onClick={fetchShadowLog}
                           aria-label="Reintentar consulta de evaluaciones en sombra"
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
                         >
                           <RefreshCw className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
                           Reintentar
@@ -616,7 +616,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                           type="button"
                           onClick={fetchShadowLog}
                           aria-label="Reintentar consulta de evaluaciones en sombra"
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
                         >
                           <RefreshCw className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
                           Reintentar

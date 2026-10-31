@@ -100,7 +100,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-slate-900/50 p-4">
+      <div className="rounded bg-slate-900/50 p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
@@ -112,7 +112,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
           </div>
           <button
             onClick={fetchProviders}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-mono flex items-center gap-2 transition-colors"
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-mono flex items-center gap-2 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -120,7 +120,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
         </div>
 
         {providers.length === 0 ? (
-          <div className="p-8 bg-slate-950/40 border border-dashed border-slate-800 rounded-lg flex flex-col items-center justify-center gap-2 text-center">
+          <div className="p-8 bg-slate-950/40 border border-dashed border-slate-800 rounded flex flex-col items-center justify-center gap-2 text-center">
             <Globe className="w-8 h-8 text-slate-600" />
             <p className="text-sm font-mono text-slate-400 font-semibold">No external providers configured</p>
             <p className="text-xs text-slate-500 max-w-md leading-relaxed">
@@ -135,7 +135,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
               return (
                 <div
                   key={provider.name}
-                  className="bg-slate-950/50 rounded-lg p-4 space-y-3"
+                  className="bg-slate-950/50 rounded p-4 space-y-3"
                 >
                   {/* Header */}
                   <div className="flex items-center justify-between">
@@ -160,7 +160,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                     <div className="flex items-center gap-2">
                       {/* API Key status */}
                       <span className={cn(
-                        "text-[11px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1",
+                        "text-[11px] font-mono px-2 py-0.5 rounded flex items-center gap-1",
                         provider.api_key_set
                           ? "bg-emerald-500/10 text-emerald-400"
                           : "bg-slate-800 text-slate-500"
@@ -216,7 +216,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                     <button
                       onClick={() => handleTest(provider)}
                       disabled={isTesting}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-lg text-xs font-mono flex items-center gap-2 transition-colors"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded text-xs font-mono flex items-center gap-2 transition-colors"
                     >
                       {isTesting ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />

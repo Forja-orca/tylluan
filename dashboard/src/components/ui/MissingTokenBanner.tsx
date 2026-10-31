@@ -11,16 +11,16 @@ export function MissingTokenBanner({ onOpenAuthModal }: MissingTokenBannerProps)
     <div
       role="region"
       aria-label="Aviso de autenticación requerida"
-      className="m-3 md:m-6 rounded-2xl border border-salvia-500/30 bg-salvia-950/20 p-6 md:p-8 backdrop-blur-sm space-y-6 animate-in fade-in slide-in-from-top-2"
+      className="m-3 md:m-6 rounded border border-salvia-500/30 bg-salvia-950/20 p-6 md:p-8 space-y-6 animate-in fade-in slide-in-from-top-2"
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-salvia-500/20 pb-5">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-salvia-500/10 border border-salvia-500/30 flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded bg-salvia-500/10 border border-salvia-500/30 flex items-center justify-center shrink-0">
             <TylluanLogo size="md" showText={false} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-salvia-500/20 text-salvia-300 border border-salvia-500/30">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-salvia-500/20 text-salvia-300 border border-salvia-500/30">
                 <ShieldAlert className="w-3 h-3 text-salvia-400" />
                 Seguridad Activa (dev_mode=false)
               </span>
@@ -34,7 +34,7 @@ export function MissingTokenBanner({ onOpenAuthModal }: MissingTokenBannerProps)
         <button
           type="button"
           onClick={onOpenAuthModal}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-salvia-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-salvia-500/10 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded bg-primary hover:bg-salvia-400 text-slate-950 text-xs font-bold transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
         >
           <KeyRound className="w-4 h-4" />
           <span>Introducir Token de Acceso</span>
@@ -42,7 +42,7 @@ export function MissingTokenBanner({ onOpenAuthModal }: MissingTokenBannerProps)
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-300 leading-relaxed">
-        <div className="space-y-2 bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+        <div className="space-y-2 bg-slate-900/60 border border-slate-800 rounded p-4">
           <h4 className="font-semibold text-slate-200 flex items-center gap-1.5">
             ¿Por qué veo este aviso?
           </h4>
@@ -51,7 +51,7 @@ export function MissingTokenBanner({ onOpenAuthModal }: MissingTokenBannerProps)
           </p>
         </div>
 
-        <div className="space-y-2 bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+        <div className="space-y-2 bg-slate-900/60 border border-slate-800 rounded p-4">
           <h4 className="font-semibold text-slate-200 flex items-center gap-1.5">
             ¿Dónde encuentro mi token?
           </h4>

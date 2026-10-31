@@ -80,7 +80,7 @@ export const TrustConsoleTab: React.FC = () => {
   //  emerald-400 on emerald-700/40: 6.31:1 (RUNNING cell/card) · amber-400 on amber-600/40: 5.42:1
   //  rose-400 on rose-700/40: 4.97:1 (contradicted card) · emerald-400 on slate-900 9.59:1
   return (
-    <div className="p-6 space-y-6 bg-slate-950 text-slate-100 rounded-2xl border border-slate-800/80">
+    <div className="p-6 space-y-6 bg-slate-950 text-slate-100 rounded border border-slate-800/80">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
         <div>
@@ -106,9 +106,9 @@ export const TrustConsoleTab: React.FC = () => {
       {/* Overview Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Kernel Health */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="bg-slate-900 border border-slate-800 rounded p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Kernel Status</span>
+            <span className="text-xs font-semibold text-slate-300">Kernel Status</span>
             <CheckCircle className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-xl font-mono text-emerald-400 font-bold">{health?.status?.toUpperCase() || '—'}</div>
@@ -116,9 +116,9 @@ export const TrustConsoleTab: React.FC = () => {
         </div>
 
         {/* Commit Hash */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="bg-slate-900 border border-slate-800 rounded p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Loaded Commit (Runtime)</span>
+            <span className="text-xs font-semibold text-slate-300">Loaded Commit (Runtime)</span>
             <Terminal className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-xl font-mono text-amber-400 font-bold">{health?.commit?.slice(0, 12) || '—'}</div>
@@ -128,14 +128,14 @@ export const TrustConsoleTab: React.FC = () => {
         {/* Sovereign Tools Invariant (CONTRACT-01 / ADR-021 / D5) */}
         <div
           aria-label="Sovereign tools CONTRACT-01 status"
-          className={`rounded-lg p-4 border ${
+          className={`rounded p-4 border ${
             sovereignOk === false
               ? 'bg-rose-950/50 border-rose-500/60'
               : 'bg-slate-900 border-slate-800'
           }`}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Sovereign Tools (CONTRACT-01)</span>
+            <span className="text-xs font-semibold text-slate-300">Sovereign Tools (CONTRACT-01)</span>
             {sovereignOk === false ? (
               <AlertTriangle className="w-4 h-4 text-rose-400" aria-hidden="true" />
             ) : (
@@ -150,7 +150,7 @@ export const TrustConsoleTab: React.FC = () => {
             {sovereignCount !== null ? `${sovereignCount} / 6` : '— / 6'}
             <span
               className={cn(
-                'ml-2 px-2 py-0.5 text-xs font-semibold uppercase rounded-full border',
+                'ml-2 px-2 py-0.5 text-xs font-semibold rounded border',
                 sovereignOk === false
                   ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
                   : sovereignOk === true
@@ -169,9 +169,9 @@ export const TrustConsoleTab: React.FC = () => {
         </div>
 
         {/* MCP Spec & Extensiones */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="bg-slate-900 border border-slate-800 rounded p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">MCP Spec &amp; Extensions</span>
+            <span className="text-xs font-semibold text-slate-300">MCP Spec &amp; Extensions</span>
             <Layers className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-xl font-mono text-emerald-400 font-bold">SSE</div>
@@ -189,7 +189,7 @@ export const TrustConsoleTab: React.FC = () => {
       <QuarantinePanel bridge={bridge} />
 
       {/* Guild Self-Documented Contracts (M40-P1) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
+      <div className="bg-slate-900 border border-slate-800 rounded p-5">
         <h2 className="text-lg font-semibold font-sans text-slate-200 flex items-center gap-2 mb-4">
           <FileCode className="w-5 h-5 text-amber-400" /> Guild Self-Documented Contracts (M40-P1)
         </h2>
@@ -246,7 +246,7 @@ export const TrustConsoleTab: React.FC = () => {
       </div>
 
       {/* Memory Status & Evidence Matrix (M40-P4) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
+      <div className="bg-slate-900 border border-slate-800 rounded p-5">
         <h2 className="text-lg font-semibold font-sans text-slate-200 flex items-center gap-2 mb-3">
           <Activity className="w-5 h-5 text-emerald-400" /> Memory Status & Evidence Matrix (M40-P4)
         </h2>
@@ -254,7 +254,7 @@ export const TrustConsoleTab: React.FC = () => {
           Explicit status dynamically derived on SilvaDB on each call to <span className="font-mono text-amber-400">tylluan_recall</span>:
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-          <div className="p-3 bg-emerald-700/40 border border-emerald-700/60 rounded-lg">
+          <div className="p-3 bg-emerald-700/40 border border-emerald-700/60 rounded">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-emerald-400">status="confirmed"</span>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -262,7 +262,7 @@ export const TrustConsoleTab: React.FC = () => {
             <p className="text-[11px] text-slate-400 font-sans">Verified fact, high confidence, no active conflict.</p>
           </div>
 
-          <div className="p-3 bg-amber-600/40 border border-amber-700/60 rounded-lg">
+          <div className="p-3 bg-amber-600/40 border border-amber-700/60 rounded">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-amber-400">status="provisional"</span>
               <span className="w-2 h-2 rounded-full bg-amber-400"></span>
@@ -270,7 +270,7 @@ export const TrustConsoleTab: React.FC = () => {
             <p className="text-[11px] text-slate-400 font-sans">Recent entry or initial low confidence level.</p>
           </div>
 
-          <div className="p-3 bg-rose-700/40 border border-rose-700/60 rounded-lg">
+          <div className="p-3 bg-rose-700/40 border border-rose-700/60 rounded">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-rose-400">status="contradicted"</span>
               <span className="w-2 h-2 rounded-full bg-rose-400"></span>
@@ -278,7 +278,7 @@ export const TrustConsoleTab: React.FC = () => {
             <p className="text-[11px] text-slate-400 font-sans">Under explicit conflict registered in SilvaDB.</p>
           </div>
 
-          <div className="p-3 bg-slate-800/40 border border-slate-700/60 rounded-lg">
+          <div className="p-3 bg-slate-800/40 border border-slate-700/60 rounded">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-slate-400">status="superseded"</span>
               <span className="w-2 h-2 rounded-full bg-slate-500"></span>

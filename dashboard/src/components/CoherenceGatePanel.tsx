@@ -35,7 +35,7 @@ function TacticalStatCard({
   subtitle?: string;
 }) {
   return (
-    <div className="flex-1 min-w-[160px] p-4 bg-slate-900/60 rounded-xl relative overflow-hidden group hover:bg-slate-900/80 transition-all">
+    <div className="flex-1 min-w-[160px] p-4 bg-slate-900/60 rounded relative overflow-hidden group hover:bg-slate-900/80 transition-all">
       <div className="flex items-center justify-between text-slate-400 text-[11px] font-medium mb-2">
         <span className="flex items-center gap-1.5">
           <Icon className={cn('w-3.5 h-3.5', accentColor)} />
@@ -86,7 +86,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
   return (
     <div className="space-y-6 font-sans">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-slate-900/60 rounded-2xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-slate-900/60 rounded">
         <div>
           <div className="flex items-center gap-2">
             <span role="status" className="px-2 py-0.5 text-[11px] font-semibold bg-amber-500/10 text-amber-400 rounded-md">
@@ -109,7 +109,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
           aria-label="Sync Coherence Gate Stats"
           onClick={fetchStats}
           disabled={loading}
-          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-medium rounded-xl transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-medium rounded transition-colors disabled:opacity-50 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
         >
           <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} aria-hidden="true" />
           <span>{loading ? 'Polling...' : 'Sync Stats'}</span>
@@ -117,7 +117,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
       </div>
 
       {error && (
-        <div role="alert" className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs">
+        <div role="alert" className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded text-xs">
           ⚠️ {error}
         </div>
       )}
@@ -158,7 +158,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
 
         {/* 3-Layer Architecture Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-          <div className="p-3.5 bg-slate-900/40 rounded-xl">
+          <div className="p-3.5 bg-slate-900/40 rounded">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 mb-1">
               <span className="w-2 h-2 rounded-full bg-rose-400" />
               Layer 1: Pattern Interception
@@ -167,7 +167,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
               Eliminates known prompt injection signatures before memory is passed to LLM context.
             </p>
           </div>
-          <div className="p-3.5 bg-slate-900/40 rounded-xl">
+          <div className="p-3.5 bg-slate-900/40 rounded">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 mb-1">
               <span className="w-2 h-2 rounded-full bg-amber-400" />
               Layer 2: Trust Provenance
@@ -176,7 +176,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
               Applies rank penalty to unverified federation peers and untrusted external sources.
             </p>
           </div>
-          <div className="p-3.5 bg-slate-900/40 rounded-xl">
+          <div className="p-3.5 bg-slate-900/40 rounded">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 mb-1">
               <span className="w-2 h-2 rounded-full bg-indigo-400" />
               Layer 3: Semantic Drift
@@ -198,7 +198,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
           <span className="text-[11px] text-slate-500">Threshold: 5,000 Resolved Rows</span>
         </div>
 
-        <div className="p-5 bg-slate-900/60 rounded-2xl space-y-4">
+        <div className="p-5 bg-slate-900/60 rounded space-y-4">
           <div className="flex justify-between items-baseline">
             <div className="space-y-1">
               <div className="text-xs text-slate-400">
@@ -217,9 +217,9 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+          <div className="w-full h-2.5 bg-slate-800 rounded overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-500"
+              className="h-full bg-primary transition-all duration-500"
               style={{ width: `${Math.max(2, progressPct)}%` }}
             />
           </div>
