@@ -238,10 +238,17 @@ pub async fn coloquio_post_message(
     if req.content.trim().is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "content cannot be empty" }))).into_response();
     }
-    // D-80: Coloquio is another write surface. Apply the same layer-1
-    // normalizer used by remember/memory-write so tag characters, zero-width
-    // splits, bidi and ANSI cannot smuggle an instruction into the transcript.
-    if crate::security::poison_patterns::matches_injection_pattern(&req.content) {
+    // D-80: Coloquio is another write surface. Reject ONLY hidden payloads:
+    // content carrying invisible/control characters (Unicode tags, zero-width,
+    // bidi, ANSI) that, once normalized, matches an injection pattern. Plain
+    // visible text is accepted even if it quotes an injection phrase: Coloquio
+    // is the team chat and security reports quote such phrases daily (TL
+    // decision 2026-10-31; the display layer still strips hidden characters).
+    let has_hidden_chars =
+        crate::security::poison_patterns::sanitize_display_text(&req.content) != req.content;
+    if has_hidden_chars
+        && crate::security::poison_patterns::matches_injection_pattern(&req.content)
+    {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
             "error": "injection_pattern_rejected",
             "reason": "content matches a known prompt-injection pattern and was not stored"
