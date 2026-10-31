@@ -65,16 +65,28 @@ pub enum StopAction {
 
 /// Resolve the stop target from the PID file contents and the process table.
 /// `pid_alive` / `pid_is_kernel` abstract the process table for testing.
+///
+/// T-DSH-162 (incidente: `stop --data-dir` mato el kernel de produccion): si el
+/// usuario paso `--port` o `--data-dir` (`explicit = true`), el UNICO kernel que
+/// se puede parar es el que indique el PID file de ESA instancia. Si el PID file
+/// falta o apunta a un PID muerto, se devuelve `Nothing` y NUNCA se cae al
+/// fallback de "candidatos" (que podia matar otro kernel, p.ej. produccion).
+/// Sin flags explicitos se conserva el comportamiento anterior.
 pub fn resolve_stop_target(
     pid_from_file: Option<u32>,
+    explicit: bool,
     pid_alive: impl Fn(u32) -> bool,
     pid_is_kernel: impl Fn(u32) -> bool,
     candidates: &[u32],
 ) -> Result<StopAction> {
     if let Some(pid) = pid_from_file {
         if !pid_alive(pid) {
+            if explicit {
+                // Instancia explicita con PID file muerto: no tocar NADA mas.
+                return Ok(StopAction::Nothing);
+            }
             // Stale PID file (previous crash): fall back to candidate resolution.
-            return resolve_stop_target(None, pid_alive, pid_is_kernel, candidates);
+            return resolve_stop_target(None, false, pid_alive, pid_is_kernel, candidates);
         }
         if !pid_is_kernel(pid) {
             // The PID file points at a LIVE process that is not a kernel —
@@ -84,6 +96,11 @@ pub fn resolve_stop_target(
             ));
         }
         return Ok(StopAction::Target(pid));
+    }
+    if explicit {
+        // Flags explicitos pero sin PID file: no hay prueba de que el kernel sea
+        // el de esa instancia; no se tocan los demas kernels de la maquina.
+        return Ok(StopAction::Nothing);
     }
     match candidates {
         [] => Ok(StopAction::Nothing),
@@ -186,45 +203,76 @@ mod tests {
 
     #[test]
     fn pid_file_resolves_exact_target_even_with_siblings() {
-        let action = resolve_stop_target(Some(100), alive, kernel, &[100, 200]).unwrap();
+        let action = resolve_stop_target(Some(100), false, alive, kernel, &[100, 200]).unwrap();
         assert_eq!(action, StopAction::Target(100));
     }
 
     #[test]
     fn pid_file_pointing_at_live_non_kernel_is_refused() {
         let alive_foreign = |p: u32| p == 300;
-        let r = resolve_stop_target(Some(300), alive_foreign, kernel, &[]);
+        let r = resolve_stop_target(Some(300), false, alive_foreign, kernel, &[]);
         assert!(r.is_err(), "must never kill a live non-kernel PID");
     }
 
     #[test]
     fn stale_pid_file_falls_back_to_candidates() {
-        let r = resolve_stop_target(Some(999), alive, kernel, &[100]).unwrap();
+        let r = resolve_stop_target(Some(999), false, alive, kernel, &[100]).unwrap();
         assert_eq!(r, StopAction::Target(100));
     }
 
     #[test]
     fn stale_pid_file_with_multiple_candidates_is_ambiguous() {
-        let r = resolve_stop_target(Some(999), alive, kernel, &[100, 200]).unwrap();
+        let r = resolve_stop_target(Some(999), false, alive, kernel, &[100, 200]).unwrap();
         assert_eq!(r, StopAction::Ambiguous(vec![100, 200]));
     }
 
     #[test]
     fn no_pid_no_candidates_is_nothing() {
-        let r = resolve_stop_target(None, alive, kernel, &[]).unwrap();
+        let r = resolve_stop_target(None, false, alive, kernel, &[]).unwrap();
         assert_eq!(r, StopAction::Nothing);
     }
 
     #[test]
     fn single_candidate_without_pid_file_is_target() {
-        let r = resolve_stop_target(None, alive, kernel, &[200]).unwrap();
+        let r = resolve_stop_target(None, false, alive, kernel, &[200]).unwrap();
         assert_eq!(r, StopAction::Target(200));
     }
 
     #[test]
     fn multiple_candidates_without_pid_file_never_kill() {
-        let r = resolve_stop_target(None, alive, kernel, &[100, 200]).unwrap();
+        let r = resolve_stop_target(None, false, alive, kernel, &[100, 200]).unwrap();
         assert_eq!(r, StopAction::Ambiguous(vec![100, 200]));
+    }
+
+    // ---- T-DSH-162: con --port/--data-dir explicitos NUNCA se cae a candidatos ----
+
+    #[test]
+    fn explicit_with_dead_pid_file_and_one_candidate_is_nothing() {
+        // (a) instancia explicita cuyo PID file apunta a un PID muerto: no se
+        // debe matar el unico kernel que haya (podria ser produccion).
+        let r = resolve_stop_target(Some(999), true, alive, kernel, &[200]).unwrap();
+        assert_eq!(r, StopAction::Nothing);
+    }
+
+    #[test]
+    fn explicit_with_live_kernel_pid_is_target() {
+        // (b) la instancia explicita tiene PID vivo y es kernel: se para ESA.
+        let r = resolve_stop_target(Some(100), true, alive, kernel, &[100, 200]).unwrap();
+        assert_eq!(r, StopAction::Target(100));
+    }
+
+    #[test]
+    fn non_explicit_single_candidate_is_target_compat() {
+        // (c) compatibilidad: sin flags explicitos y un solo candidato, se para.
+        let r = resolve_stop_target(None, false, alive, kernel, &[200]).unwrap();
+        assert_eq!(r, StopAction::Target(200));
+    }
+
+    #[test]
+    fn explicit_without_pid_file_and_two_candidates_is_nothing() {
+        // (d) flags explicitos sin PID file y varios kernels: no se toca ninguno.
+        let r = resolve_stop_target(None, true, alive, kernel, &[100, 200]).unwrap();
+        assert_eq!(r, StopAction::Nothing);
     }
 
     // ---- real process-table glue (Windows) ----
@@ -274,7 +322,7 @@ mod tests {
                 .map(|pr| is_kernel_process_name(&pr.name().to_string_lossy()))
                 .unwrap_or(false)
         };
-        let action = resolve_stop_target(Some(pid), pid_alive, pid_is_kernel, &[pid]).unwrap();
+        let action = resolve_stop_target(Some(pid), false, pid_alive, pid_is_kernel, &[pid]).unwrap();
         assert_eq!(action, StopAction::Target(pid));
 
         child.kill().expect("cleanup kill");

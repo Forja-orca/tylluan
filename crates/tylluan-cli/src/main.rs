@@ -1370,6 +1370,9 @@ async fn run_stop(
         }
     }
 
+    // T-DSH-162: --port o --data-dir explicitos => SOLO se puede parar el kernel
+    // que indique el PID file de ESA instancia; jamas el fallback a candidatos.
+    let explicit = port.is_some() || data_dir.is_some();
     let pid_alive = |pid: u32| sys.process(sysinfo::Pid::from_u32(pid)).is_some();
     let pid_is_kernel = |pid: u32| {
         sys.process(sysinfo::Pid::from_u32(pid))
@@ -1377,12 +1380,17 @@ async fn run_stop(
             .unwrap_or(false)
     };
 
-    match stop::resolve_stop_target(pid_from_file, pid_alive, pid_is_kernel, &candidates)? {
+    match stop::resolve_stop_target(pid_from_file, explicit, pid_alive, pid_is_kernel, &candidates)? {
         StopAction::Nothing => {
-            println!("⚠️ No running TylluanNexus kernel found.");
+            if explicit {
+                // T-DSH-162: mensaje claro y sin tocar otros kernels.
+                println!("No hay kernel de esa instancia (puerto/carpeta); no toco otros kernels.");
+            } else {
+                println!("No running TylluanNexus kernel found.");
+            }
             if pid_from_file.is_some() {
                 println!(
-                    "   (PID file {} is stale — the kernel it described is already gone)",
+                    "   (el PID file {} esta obsoleto: el kernel que describia ya no existe)",
                     pid_file.display()
                 );
             }
@@ -1402,7 +1410,7 @@ async fn run_stop(
             } else {
                 None
             };
-            stop_instance(pid, graceful_port, token, &pid_file, &mut sys).await?;
+            stop_instance(pid, graceful_port, token, &pid_file, pid_from_file, &mut sys).await?;
         }
     }
     Ok(())
@@ -1413,6 +1421,7 @@ async fn stop_instance(
     graceful_port: Option<u16>,
     token: Option<String>,
     pid_file: &std::path::Path,
+    pid_from_file: Option<u32>,
     sys: &mut System,
 ) -> Result<()> {
     println!("🛑 Stopping TylluanNexus kernel (PID {pid})...");
@@ -1459,7 +1468,16 @@ async fn stop_instance(
                 );
             }
             _ => {
-                println!("   (no kernel answered on port {p} — stopping PID directly)");
+                // T-DSH-162: si nada contesta en el puerto, solo se hace hard kill
+                // del PID si procede del PID file de ESTA instancia; nunca de un
+                // PID ajeno (el incidente de produccion).
+                if pid_from_file != Some(pid) {
+                    println!(
+                        "   (nada contesta en el puerto {p} y el PID {pid} no sale del PID file de esta instancia: no hago hard kill)"
+                    );
+                    return Ok(());
+                }
+                println!("   (no kernel answered on port {p} - stopping PID directly)");
             }
         }
     }
