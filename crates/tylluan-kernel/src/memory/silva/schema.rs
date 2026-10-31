@@ -93,7 +93,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 29;
+            const SCHEMA_VERSION: i32 = 30;
 
             if schema_version < 1 {
                 migration_execute!(conn, "ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0");
@@ -429,6 +429,25 @@ impl super::SilvaDB {
                 migration_execute!(conn, "ALTER TABLE decision_shadow_log ADD COLUMN model_identity TEXT");
                 migration_execute!(conn, "ALTER TABLE decision_shadow_log ADD COLUMN model_latency_ms INTEGER");
                 tracing::info!("SilvaDB: added decision_shadow_log model_identity/model_latency_ms (v29, ADR-020 Fase 2)");
+            }
+            if schema_version < 30 {
+                // T-DSH-152: sesiones de agente (watchers) persistentes para que
+                // sobrevivan al reinicio del kernel. Migración ADITIVA: solo crea
+                // una tabla nueva, no toca ninguna existente. Reversible con
+                // `DROP TABLE agent_sessions; PRAGMA user_version = 29;`.
+                migration_execute!(
+                    conn,
+                    "CREATE TABLE IF NOT EXISTS agent_sessions (
+                        agent_id TEXT PRIMARY KEY,
+                        started_at_unix INTEGER NOT NULL,
+                        last_heartbeat_unix INTEGER NOT NULL,
+                        responses_sent INTEGER NOT NULL DEFAULT 0,
+                        max_responses INTEGER NOT NULL DEFAULT 50,
+                        status TEXT NOT NULL DEFAULT 'active',
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )"
+                );
+                tracing::info!("SilvaDB: added agent_sessions (v30, T-DSH-152)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

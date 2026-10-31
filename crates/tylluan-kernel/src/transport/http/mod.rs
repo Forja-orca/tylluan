@@ -704,6 +704,15 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         agents_contract,
     });
 
+    // T-DSH-152: enlazar el registro de sesiones de agente con SilvaDB y
+    // recargar las sesiones persistidas (sobreviven al reinicio del kernel).
+    state.agent_registry.set_silva(silva.clone());
+    match state.agent_registry.rehydrate().await {
+        Ok(n) if n > 0 => info!("T-DSH-152: {n} sesiones de agente recuperadas de silva.db"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!("T-DSH-152: no se pudieron recuperar sesiones de agente: {e}"),
+    }
+
     info!("🗺️  Repo map: building in background (the HTTP port opens first)");
 
     // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.
