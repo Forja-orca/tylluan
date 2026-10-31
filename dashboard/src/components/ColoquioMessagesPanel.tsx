@@ -112,14 +112,14 @@ function VirtualMessageList({
       tabIndex={0}
       role="region"
       aria-label="Historial de mensajes de Coloquio"
-      className="flex-1 overflow-y-auto px-4 py-3 select-text focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:outline-none"
+      className="flex-1 overflow-y-auto px-4 py-3 select-text focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
     >
       {hasMoreOlder && (
         <div className="flex justify-center mb-4">
           <button
             onClick={onLoadOlder}
             disabled={loadingOlder}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-indigo-300 hover:text-indigo-200 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-800/40 rounded-lg transition-all disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded transition-all disabled:opacity-50 cursor-pointer"
           >
             {loadingOlder ? (
               <>
@@ -337,7 +337,7 @@ export function ColoquioMessagesPanel({
     return (
       <div className="flex items-center justify-center my-5">
         <div className="h-px bg-slate-800 flex-1" />
-        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-3 bg-slate-950">{label}</span>
+        <span className="text-xs font-semibold text-muted-foreground px-3 bg-background">{label}</span>
         <div className="h-px bg-slate-800 flex-1" />
       </div>
     );
@@ -373,14 +373,14 @@ export function ColoquioMessagesPanel({
       <>
         {renderDateDiv(msg, prev)}
         <div className={cn(
-          'flex group/msg rounded-lg transition-colors hover:bg-foreground/[0.02]',
+          'flex group/msg rounded transition-colors hover:bg-foreground/[0.02]',
           compactMode ? 'gap-1.5 py-0.5 px-1' : 'gap-2.5 py-1 px-2.5',
           isHuman ? 'flex-row-reverse' : ''
         )}>
           <div className={cn('shrink-0 mt-0.5', compactMode ? 'w-6' : 'w-8')}>
             {!cont && (
               <div className={cn(
-                'rounded-full flex items-center justify-center font-bold border',
+                'rounded flex items-center justify-center font-bold border',
                 compactMode ? 'w-6 h-6 text-[11px]' : 'w-8 h-8 text-xs',
                 m.bg, m.color, m.border
               )}>
@@ -410,7 +410,7 @@ export function ColoquioMessagesPanel({
             )}
             <div className="relative w-full min-w-0">
               <div className={cn(
-                'rounded-2xl shadow-sm leading-relaxed relative',
+                'rounded border leading-relaxed relative',
                 compactMode ? 'px-2 py-1 text-[11px]' : 'px-3.5 py-2 text-[12px]',
                 isHuman ? 'bg-amber-950/60 dark:bg-amber-950/30 border border-amber-400/40 dark:border-amber-700/40 text-amber-100 rounded-tr-sm'
                         : `${m.bg} border ${m.border} text-slate-100 rounded-tl-sm`,
@@ -428,12 +428,12 @@ export function ColoquioMessagesPanel({
                 )}
 
                 {thoughtContent && (
-                  <details className="group/details bg-slate-950/40 border border-indigo-950/30 rounded-xl p-2.5 my-2 text-[11px] text-slate-400 cursor-pointer" open>
-                    <summary className="font-semibold text-indigo-400/80 hover:text-indigo-300 transition-colors list-none flex items-center gap-1.5 focus:outline-none">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                  <details className="group/details bg-slate-950/40 border border-border rounded p-2.5 my-2 text-[11px] text-slate-400 cursor-pointer" open>
+                    <summary className="font-semibold text-primary hover:text-primary/80 transition-colors list-none flex items-center gap-1.5 focus:outline-none">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                       🧠 Reasoning
                     </summary>
-                    <div className="mt-2 pl-3 border-l border-indigo-500/20 whitespace-pre-wrap leading-relaxed text-slate-400/90 font-mono text-[11px] select-text cursor-text" dangerouslySetInnerHTML={{
+                    <div className="mt-2 pl-3 border-l border-primary/20 whitespace-pre-wrap leading-relaxed text-slate-400/90 font-mono text-[11px] select-text cursor-text" dangerouslySetInnerHTML={{
                       __html: parseMarkdown(thoughtContent)
                     }} />
                   </details>
@@ -455,7 +455,7 @@ export function ColoquioMessagesPanel({
                             }));
                           }
                         }}
-                        className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-slate-50 font-bold text-[11px] rounded-lg shadow-lg hover:shadow-violet-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-[11px] rounded border border-primary transition-all flex items-center gap-1 cursor-pointer"
                       >
                         <Network className="w-3 h-3" /> Visualize on Whiteboard
                       </button>
@@ -471,7 +471,7 @@ export function ColoquioMessagesPanel({
                             fetchThread();
                           }
                         }}
-                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] rounded-lg shadow-lg hover:shadow-amber-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[11px] rounded border border-amber-600 transition-all flex items-center gap-1 cursor-pointer"
                       >
                         <Check className="w-3 h-3 stroke-[3]" /> Approve & Start
                       </button>
@@ -495,7 +495,7 @@ export function ColoquioMessagesPanel({
                           }));
                         }
                       }}
-                      className="px-3 py-1 bg-violet-600/40 hover:bg-violet-500/60 text-slate-200 font-bold text-[11px] rounded-lg shadow-lg transition-all flex items-center gap-1 border border-violet-500/30 cursor-pointer focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:outline-none"
+                      className="px-3 py-1 bg-primary/20 hover:bg-primary/30 text-primary font-semibold text-[11px] rounded transition-all flex items-center gap-1 border border-primary/30 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
                     >
                       <Network className="w-3 h-3" /> Visualize on Whiteboard
                     </button>
@@ -517,14 +517,14 @@ export function ColoquioMessagesPanel({
                   } catch {} return null;
                 })()}
               </div>
-              <div className={cn('absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-slate-900 border border-slate-700 rounded-lg p-1 shadow-xl opacity-0 group-hover/msg:opacity-100 transition-opacity z-20',
+              <div className={cn('absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-card border border-border rounded p-1 opacity-0 group-hover/msg:opacity-100 transition-opacity z-20',
                 isHuman ? 'right-full mr-2' : 'left-full ml-2')}>
                 <button
                   type="button"
                   onClick={() => handleCopy(msg.msg_id, msg.content)}
                   aria-label="Copy message"
                   title="Copy message"
-                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   {copiedId === msg.msg_id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 </button>
@@ -533,7 +533,7 @@ export function ColoquioMessagesPanel({
                   onClick={() => handleQuote(msg.author_id, msg.content)}
                   aria-label="Quote message"
                   title="Quote message"
-                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   <Quote className="w-3 h-3" />
                 </button>
@@ -566,9 +566,9 @@ export function ColoquioMessagesPanel({
           type="button"
           onClick={() => setCompactMode(v => !v)}
           className={cn(
-            "ml-auto text-[11px] px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer mr-1.5 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
+            "ml-auto text-[11px] px-2 py-1 rounded border font-semibold transition-all cursor-pointer mr-1.5 focus-visible:ring-1 focus-visible:ring-emerald-400 focus-visible:outline-none",
             compactMode 
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.15)]" 
+              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" 
               : "border-slate-700 text-slate-300 hover:text-slate-100 hover:bg-slate-800/50"
           )}
           title="Toggle compact view density"
@@ -576,7 +576,7 @@ export function ColoquioMessagesPanel({
         >
           Compact
         </button>
-        <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded-lg px-2.5 py-1">
+        <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded px-2.5 py-1">
           <Search className="w-3 h-3 text-slate-400 shrink-0" />
           <input
             className="w-32 bg-transparent text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none"
@@ -592,7 +592,7 @@ export function ColoquioMessagesPanel({
                 type="button"
                 onClick={() => setMsgSearch('')}
                 aria-label="Clear message search"
-                className="text-slate-400 hover:text-slate-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none rounded"
+                className="text-slate-400 hover:text-slate-200 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none rounded"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -620,7 +620,7 @@ export function ColoquioMessagesPanel({
       )}
       {Object.keys(typingStatuses).length > 0 && (
         <div className="px-5 py-1.5 text-[11px] text-slate-400 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
-          <span className="flex gap-1">{[0, 180, 360].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-typing-wave" style={{ animationDelay: `${d}ms` }} />)}</span>
+          <span className="flex gap-1">{[0, 180, 360].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-typing-wave" style={{ animationDelay: `${d}ms` }} />)}</span>
           <div className="flex flex-col gap-0.5">
             {Object.entries(typingStatuses).map(([agent, val]) => (
               <span key={agent} className="font-mono text-[11px]"><strong className="text-slate-300">@{agent}</strong>: <span className="italic text-slate-400">{val.status}</span></span>
@@ -630,13 +630,13 @@ export function ColoquioMessagesPanel({
       )}
       <div ref={composerRef} className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
         <div className="flex items-center gap-3 mb-2">
-          <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider shrink-0">As:</span>
-          <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-600 transition-colors"
+          <span className="text-[11px] text-slate-400 font-semibold shrink-0">As:</span>
+          <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-primary transition-colors"
             value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="jose" />
           <button
             type="button"
             onClick={() => setShowTemplates(v => !v)}
-            className="ml-auto text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none rounded px-1.5 py-0.5"
+            className="ml-auto text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none rounded px-1.5 py-0.5"
           >
             <Sparkles className="w-3 h-3" />{showTemplates ? 'Hide' : 'Templates'}
           </button>
@@ -648,7 +648,7 @@ export function ColoquioMessagesPanel({
                 type="button"
                 key={t.label}
                 onClick={() => { setDraft(t.text); setShowTemplates(false); }}
-                className="text-[11px] font-bold bg-slate-800/60 hover:bg-indigo-950/30 text-slate-300 hover:text-indigo-200 px-2 py-1 rounded border border-slate-700/60 hover:border-indigo-500/40 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+                className="text-[11px] font-semibold bg-slate-800/60 hover:bg-primary/20 text-slate-300 hover:text-slate-100 px-2 py-1 rounded border border-slate-700/60 hover:border-primary/40 transition-all cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
               >
                 {t.label}
               </button>
@@ -665,7 +665,7 @@ export function ColoquioMessagesPanel({
                   type="button"
                   onClick={() => setAttachments(p => p.filter((_, j) => j !== i))}
                   aria-label={`Remove attachment ${att.name}`}
-                  className="text-slate-400 hover:text-rose-400 ml-1 p-0.5 rounded cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
+                  className="text-slate-400 hover:text-rose-400 ml-1 p-0.5 rounded cursor-pointer focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none"
                 >
                   <X className="w-2.5 h-2.5" />
                 </button>
@@ -680,14 +680,14 @@ export function ColoquioMessagesPanel({
             disabled={uploading}
             aria-label="Attach files"
             title="Attach files"
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-xl text-slate-300 hover:text-slate-100 transition-all shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded text-slate-300 hover:text-slate-100 transition-all shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
           >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
           </button>
           <input type="file" ref={fileInputRef} className="hidden" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <textarea
-            className={cn('flex-1 bg-slate-800/60 border rounded-xl px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-600/60 resize-none font-sans transition-colors',
-              isDragging ? 'border-amber-500 bg-amber-950/20 ring-2 ring-amber-500/30' : 'border-slate-700/60')}
+            className={cn('flex-1 bg-slate-800/60 border rounded px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary resize-none font-sans transition-colors',
+              isDragging ? 'border-amber-500 bg-amber-950/20 ring-1 ring-amber-500/30' : 'border-slate-700/60')}
             rows={3} placeholder="Write a message... Shift+Enter for new line" value={draft}
             onChange={e => {
               setDraft(e.target.value);
@@ -707,7 +707,7 @@ export function ColoquioMessagesPanel({
             onClick={postMessage}
             disabled={posting || (!draft.trim() && !attachments.length)}
             aria-label="Send message"
-            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-slate-50 transition-all shrink-0 shadow-lg shadow-indigo-900/30 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+            className="p-2.5 bg-primary hover:bg-primary/90 disabled:opacity-40 rounded text-primary-foreground border border-primary transition-all shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
           >
             <Send className="w-4 h-4" />
           </button>

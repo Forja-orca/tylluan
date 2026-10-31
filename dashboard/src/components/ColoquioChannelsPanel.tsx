@@ -101,17 +101,17 @@ export function ColoquioChannelsPanel({
     const active = selectedId === ch.channel_id;
     return (
       <div key={ch.channel_id} onClick={() => selectChannel(ch.channel_id)}
-        className={cn('group/ch relative flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded-md mx-1 transition-all',
-          active ? 'bg-amber-950/80 dark:bg-amber-950/30 text-amber-700 dark:text-amber-200 border-l-2 border-amber-500 font-medium' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50')}>
+        className={cn('group/ch relative flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded mx-1 transition-colors',
+          active ? 'bg-primary/15 text-primary border-l-2 border-primary font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-muted font-medium')}>
         <Hash className="w-3.5 h-3.5 shrink-0 opacity-60" />
         <span className="flex-1 text-[12px] truncate font-medium">{ch.name}</span>
-        {u > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[11px] font-extrabold leading-none shadow-sm">{u}</span>}
+        {u > 0 && <span className="px-1.5 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-600 text-[11px] font-bold leading-none">{u}</span>}
         <button
           type="button"
           onClick={e => { e.stopPropagation(); setDeleteTarget(ch); }}
           aria-label={`Delete channel ${ch.name}`}
           title="Delete channel"
-          className="opacity-0 group-hover/ch:opacity-100 p-0.5 text-slate-400 hover:text-rose-400 transition-all rounded cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none focus:opacity-100"
+          className="opacity-0 group-hover/ch:opacity-100 p-0.5 text-muted-foreground hover:text-rose-500 transition-all rounded cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none focus:opacity-100"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -120,11 +120,11 @@ export function ColoquioChannelsPanel({
   };
 
   return (
-    <div ref={containerRef} className="w-full md:w-52 shrink-0 border-r border-slate-700/60 flex flex-col bg-slate-900/50 overflow-hidden h-full">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/80">
-        <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+    <div ref={containerRef} className="w-full md:w-52 shrink-0 border-r border-border flex flex-col bg-card overflow-hidden h-full font-sans">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         <input
-          className="flex-1 bg-transparent text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none"
+          className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
           placeholder="Search channels..."
           aria-label="Search channels"
           value={searchQuery}
@@ -138,26 +138,26 @@ export function ColoquioChannelsPanel({
               type="button"
               onClick={() => setCollapsedGroups(p => ({ ...p, [group]: !p[group] }))}
               aria-label={`Toggle channel group ${group}`}
-              className="w-full flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none rounded"
+              className="w-full flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
             >
               {collapsedGroups[group] ? <ChevronRight className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-              {group}<span className="ml-auto text-slate-400 font-mono">{chs.length}</span>
+              {group}<span className="ml-auto text-muted-foreground font-mono">{chs.length}</span>
             </button>
             {!collapsedGroups[group] && chs.map(renderChannelItem)}
           </div>
         ))}
-        {filteredChannels.length === 0 && <div className="px-4 py-6 text-center text-[11px] text-slate-400 italic">No channels</div>}
+        {filteredChannels.length === 0 && <div className="px-4 py-6 text-center text-xs text-muted-foreground italic">No channels</div>}
       </div>
-      <div className="border-t border-slate-800/80 p-2">
+      <div className="border-t border-border p-2">
         {showNewChannel ? (
           <div className="flex flex-col gap-1.5">
-            <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-600 w-full"
+            <input className="bg-card border border-border rounded px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary w-full"
               placeholder="Channel ID" value={newChannelId} autoFocus
               onChange={e => setNewChannelId(e.target.value)} onKeyDown={e => {
                 if (e.key === 'Enter') createChannel();
                 if (e.key === 'Escape') setShowNewChannel(false);
               }} />
-            <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-600 w-full"
+            <input className="bg-card border border-border rounded px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary w-full"
               placeholder="Name (optional)" value={newChannelName}
               onChange={e => setNewChannelName(e.target.value)} onKeyDown={e => {
                 if (e.key === 'Enter') createChannel();
@@ -167,7 +167,7 @@ export function ColoquioChannelsPanel({
               <button
                 type="button"
                 onClick={() => setShowNewChannel(false)}
-                className="flex-1 py-1 text-[11px] text-slate-300 hover:text-slate-100 border border-slate-700 rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+                className="flex-1 py-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 Cancel
               </button>
@@ -175,7 +175,7 @@ export function ColoquioChannelsPanel({
                 type="button"
                 onClick={createChannel}
                 disabled={creating || !newChannelId.trim()}
-                className="flex-1 py-1 text-[11px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-50 rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+                className="flex-1 py-1 text-xs bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 {creating ? '...' : 'Create'}
               </button>
@@ -185,7 +185,7 @@ export function ColoquioChannelsPanel({
           <button
             type="button"
             onClick={() => setShowNewChannel(true)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <Plus className="w-3.5 h-3.5" /> New channel
           </button>
@@ -194,24 +194,24 @@ export function ColoquioChannelsPanel({
 
       {/* Delete modal overlay */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-rose-500/30 rounded-2xl shadow-2xl p-6 w-96 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-rose-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
+          <div className="bg-card border border-border rounded p-5 w-96 flex flex-col gap-4 font-sans">
+            <div className="flex items-center gap-2 text-rose-500">
               <AlertTriangle className="w-5 h-5" />
               <span className="font-bold text-sm">Delete channel</span>
             </div>
-            <p className="text-xs text-slate-300">
-              Delete <span className="font-mono text-amber-400">#{deleteTarget.name}</span> ({deleteTarget.message_count} messages)? Irreversible.
+            <p className="text-xs text-foreground">
+              Delete <span className="font-mono text-primary font-bold">#{deleteTarget.name}</span> ({deleteTarget.message_count} messages)? Irreversible.
             </p>
-            <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 hover:text-slate-200 transition-colors">
-              <input type="checkbox" checked={archiveOnDelete} onChange={e => setArchiveOnDelete(e.target.checked)} className="rounded accent-indigo-500" />
-              Archive to memory before deleting<span className="text-[11px] text-indigo-400 font-mono">(SilvaDB)</span>
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <input type="checkbox" checked={archiveOnDelete} onChange={e => setArchiveOnDelete(e.target.checked)} className="rounded accent-primary" />
+              Archive to memory before deleting<span className="text-[11px] text-primary font-mono">(SilvaDB)</span>
             </label>
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-xs text-slate-300 hover:text-slate-100 border border-slate-700 rounded-lg transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+                className="px-4 py-2 text-xs text-muted-foreground hover:text-foreground border border-border rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 Cancel
               </button>
@@ -219,7 +219,7 @@ export function ColoquioChannelsPanel({
                 type="button"
                 onClick={handleDeleteConfirm}
                 disabled={deleting}
-                className="px-4 py-2 text-xs text-slate-50 bg-rose-700 hover:bg-rose-600 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
+                className="px-4 py-2 text-xs text-white bg-rose-700 hover:bg-rose-600 disabled:opacity-50 rounded transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
               >
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
