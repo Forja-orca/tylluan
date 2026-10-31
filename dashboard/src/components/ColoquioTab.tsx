@@ -396,15 +396,15 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
   };
 
   return (
-    <div className="rounded border border-border bg-card overflow-hidden flex flex-col font-sans" style={{ height: 'calc(100vh - 140px)' }}>
+    <div className="rounded-sm border border-[#ACA899] dark:border-border bg-white dark:bg-card overflow-hidden flex flex-col font-sans" style={{ height: 'calc(100vh - 140px)' }}>
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/40 shrink-0">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-muted/40 shrink-0">
         <div className="flex items-center gap-2.5">
-          <span className="text-sm font-bold text-foreground">Coloquio</span>
-          <span className="text-xs text-muted-foreground hidden sm:block">frontier research group chat</span>
+          <span className="text-xs font-bold text-[#0A246A] dark:text-primary">Coloquio</span>
+          <span className="text-[11px] text-[#444444] dark:text-muted-foreground hidden sm:block">Canal de deliberación y coordinación agéntica</span>
           {totalUnread > 0 && (
-            <span className="px-2 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary text-xs font-mono font-semibold">
-              {totalUnread} unread
+            <span className="px-1.5 py-0.5 rounded-none border border-[#7F9DB9] bg-white dark:bg-primary/10 text-[#0A246A] dark:text-primary text-[10px] font-mono font-semibold">
+              {totalUnread} no leídos
             </span>
           )}
         </div>
@@ -413,22 +413,23 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
             <button
               type="button"
               onClick={markAllRead}
-              className="flex items-center gap-1 text-xs text-foreground hover:text-primary px-2.5 py-1 rounded border border-border bg-muted hover:bg-muted/80 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              className="flex items-center gap-1 text-[11px] font-bold text-[#000000] dark:text-foreground px-2 py-0.5 rounded-sm border border-[#ACA899] dark:border-border bg-[#ECE9D8] hover:bg-[#F5F4EA] transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
             >
-              Mark all read
+              Marcar todo leído
             </button>
           )}
           <button
             type="button"
             onClick={() => setShowAgentPanel(v => !v)}
-            aria-label={showAgentPanel ? "Hide Agent Presence Panel" : "Show Agent Presence Panel"}
-            title="Agent Panel"
+            aria-label={showAgentPanel ? "Ocultar panel de presencia" : "Mostrar panel de presencia"}
+            title="Panel de presencia de agentes"
             className={cn(
-              'p-1.5 rounded border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
-              showAgentPanel ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-muted border-border text-muted-foreground hover:text-foreground'
+              'px-2 py-0.5 rounded-sm border text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] flex items-center gap-1',
+              showAgentPanel ? 'bg-white dark:bg-primary/15 border-[#0A246A] text-[#0A246A] dark:text-primary' : 'bg-[#ECE9D8] dark:bg-muted border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]'
             )}
           >
             <Users className="w-3.5 h-3.5" />
+            <span>Agentes</span>
           </button>
         </div>
       </div>
@@ -436,7 +437,7 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
       {/* 3-panel body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Channels */}
-        <div className={cn("shrink-0 h-full", selectedId ? "hidden md:flex md:w-52" : "w-full md:w-52")}>
+        <div className={cn("shrink-0 h-full border-r border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-card", selectedId ? "hidden md:flex md:w-52" : "w-full md:w-52")}>
           <ColoquioChannelsPanel
             channels={channels}
             selectedId={selectedId}
@@ -462,12 +463,13 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
         <div ref={splitContainerRef} className={cn("flex-1 flex overflow-hidden", !selectedId ? "hidden md:flex" : "flex")}>
           {/* Thread (Chat) */}
           <div
-            className="flex-1 flex flex-col overflow-hidden bg-slate-900/40 border-r border-slate-800 w-full"
+            className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-card border-r border-[#ACA899] dark:border-border w-full"
           >
             {!selectedId ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
-                <MessageSquare className="w-10 h-10 opacity-20" />
-                <p className="text-[13px] font-medium text-slate-300">Select a channel</p>
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 p-6 text-center">
+                <MessageSquare className="w-8 h-8 text-[#0A246A]/30 dark:text-slate-600 mb-1" />
+                <p className="text-xs font-bold text-[#0A246A] dark:text-foreground">Seleccione un canal</p>
+                <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-xs">Elija un canal del panel izquierdo para consultar el historial o participar en la deliberación.</p>
               </div>
             ) : (
               <ColoquioMessagesPanel

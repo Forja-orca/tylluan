@@ -166,42 +166,42 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
     <section
       ref={containerRef}
       aria-labelledby="contradictions-panel-heading"
-      className="bg-slate-900/70 border border-slate-800 rounded p-4 sm:p-6 space-y-5 font-sans min-w-0 max-w-full overflow-hidden"
+      className="bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border rounded-sm p-3 space-y-3 font-sans min-w-0 max-w-full overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4 min-w-0">
+      {/* Header - Windows 2000/XP Style */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-[#ACA899] dark:border-border pb-3 min-w-0">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded">
-              SilvaDB Epistemic Audit
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-rose-700 dark:text-rose-400 border border-[#7F9DB9] dark:border-border">
+              Auditoría Epistémica SilvaDB
             </span>
-            <span className="px-2 py-0.5 text-xs font-mono text-slate-300 bg-slate-800 border border-slate-700 rounded">
-              Total conflicted: {totalConflicted}
+            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#000000] dark:text-foreground border border-[#7F9DB9] dark:border-border">
+              Total en conflicto: {totalConflicted}<span className="sr-only"> (Total conflicted: {totalConflicted})</span>
             </span>
           </div>
           <h2
             id="contradictions-panel-heading"
-            className="text-lg sm:text-xl font-bold text-slate-100 flex items-center gap-2 flex-wrap"
+            className="text-xs font-bold text-[#0A246A] dark:text-primary flex items-center gap-1.5 flex-wrap"
           >
-            <GitCompare className="w-5 h-5 text-rose-400 shrink-0" aria-hidden="true" />
-            <span>Conflicted Nodes <span className="text-xs sm:text-sm font-mono text-slate-300 font-normal">(`/api/v1/silva/conflicted`)</span></span>
+            <GitCompare className="w-4 h-4 text-rose-700 shrink-0" aria-hidden="true" />
+            <span>Nodos en Conflicto Cognitivo <span className="text-[11px] font-mono font-normal text-[#555555] dark:text-muted-foreground">(/api/v1/silva/conflicted)</span></span>
           </h2>
-          <p className="text-xs text-slate-300 mt-1">
-            Read-only operator view of SilvaDB nodes with `conflicted = 1` (`get_all_conflicted`, excerpt &le; 300 chars).
+          <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
+            Vista de operador de nodos SilvaDB con conflicted = 1 (extracto &le; 300 caracteres).
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <label htmlFor="conflicted-limit-select" className="text-xs font-mono text-slate-300 flex items-center gap-1">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            Limit:
+          <label htmlFor="conflicted-limit-select" className="text-[11px] font-bold text-[#01285F] dark:text-foreground flex items-center gap-1">
+            <SlidersHorizontal className="w-3 h-3 text-[#555555]" aria-hidden="true" />
+            Límite:
           </label>
           <select
             id="conflicted-limit-select"
-            aria-label="Number of conflicted nodes to fetch (max 200)"
+            aria-label="Número de nodos en conflicto a consultar"
             value={limit}
             onChange={(e) => setLimit(Math.min(200, Number(e.target.value)))}
-            className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-amber-400 focus:outline-none"
+            className="bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none px-2 py-0.5 text-[11px] font-mono text-[#000000] dark:text-foreground focus:outline-none"
           >
             <option value={25}>25</option>
             <option value={50}>50</option>
@@ -213,11 +213,11 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             type="button"
             onClick={fetchConflicted}
             disabled={loading}
-            aria-label="Refresh conflicted nodes list"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none text-xs text-slate-200 font-medium rounded transition-colors disabled:opacity-50 cursor-pointer"
+            aria-label="Actualizar lista de nodos en conflicto"
+            className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#000000] dark:text-foreground rounded-sm border border-[#ACA899] dark:border-border transition-colors disabled:opacity-50 cursor-pointer"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-rose-400', loading && 'animate-spin')} aria-hidden="true" />
-            <span>{loading ? 'Loading...' : 'Refresh'}</span>
+            <RefreshCw className={cn('w-3 h-3 text-[#0A246A]', loading && 'animate-spin')} aria-hidden="true" />
+            <span>{loading ? 'Cargando...' : 'Actualizar'}</span>
           </button>
           {loading && (
             <button
@@ -232,30 +232,30 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 setEndpointStatus('error');
               }}
               aria-label="Cancel conflicted nodes query"
-              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none"
+              className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 text-[11px] font-bold rounded-sm transition-colors cursor-pointer"
             >
-              Cancel
+              Cancelar
             </button>
           )}
         </div>
       </div>
 
-      {/* Mandatory High-FP Warning Banner (D2) */}
+      {/* Mandatory Calibration Warning Banner */}
       <div
         role="note"
         aria-label="Advertencia sobre falsos positivos en detección estructural de contradicciones"
-        className="p-4 rounded bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
+        className="p-2.5 rounded-sm bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border flex items-start gap-2 text-[11px]"
       >
-        <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
-        <div className="min-w-0 text-xs text-slate-200 leading-relaxed space-y-1 break-words">
+        <AlertTriangle className="w-4 h-4 text-[#B8860B] shrink-0 mt-0.5" aria-hidden="true" />
+        <div className="min-w-0 text-[#000000] dark:text-foreground leading-normal space-y-0.5 break-words">
           <p>
-            <span className="font-bold text-amber-300 mr-1.5">
+            <span className="font-bold text-[#0A246A] dark:text-primary mr-1">
               Nota de calibración:
             </span>
-            La detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy (<code className="break-all font-mono">benchmarks/human_truth_conflict_pairs_v1.json</code>: 100 pares = 91 consistentes, 9 no relacionados, 0 que se contradigan).
+            La detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy (<code className="font-mono">benchmarks/human_truth_conflict_pairs_v1.json</code>: 100 pares = 91 consistentes, 9 no relacionados, 0 que se contradigan).
           </p>
-          <p className="text-slate-300">
-            Este panel consulta exclusivamente <code className="break-all font-mono">GET /api/v1/silva/conflicted?limit=N</code> (nodos con <code className="font-mono">conflicted = 1</code>). Los nodos obsoletos con marcador <code className="font-mono">[DEPRECATED by …]</code> de <code className="break-all font-mono">/api/v1/silva/contradictions</code> no son contradicciones y se excluyen deliberadamente.
+          <p className="text-[#444444] dark:text-muted-foreground text-[10px]">
+            Este panel consulta exclusivamente <code className="font-mono">GET /api/v1/silva/conflicted?limit=N</code> (nodos con <code className="font-mono">conflicted = 1</code>). Los nodos obsoletos con marcador <code className="font-mono">[DEPRECATED by …]</code> se excluyen deliberadamente.
           </p>
         </div>
       </div>
@@ -299,52 +299,52 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
               setSearchQuery(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by node ID, content excerpt, or node_type..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 placeholder-slate-400 font-mono focus:border-amber-400 focus:outline-none"
+            placeholder="Buscar por identificador, texto o tipo de nodo (Search by node ID, content excerpt, or node_type)..."
+            className="w-full pl-8 pr-2.5 py-1 bg-white dark:bg-card border border-[#7F9DB9] dark:border-border rounded-none text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] font-mono focus:outline-none"
           />
         </div>
-        <span className="text-xs font-mono text-slate-400">
-          Showing {filteredNodes.length} of {nodes.length} loaded (total_conflicted: {totalConflicted})
+        <span className="text-[11px] font-mono text-[#555555] dark:text-muted-foreground">
+          Mostrando {filteredNodes.length} de {nodes.length} cargados (total en conflicto: {totalConflicted})
         </span>
       </div>
 
       {/* Node List */}
-      <div className="space-y-2.5">
+      <div className="space-y-2">
         {paginatedNodes.length > 0 ? (
           paginatedNodes.map((node) => (
             <div
               key={node.id}
-              className="p-4 rounded bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-colors space-y-2"
+              className="p-2.5 rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border hover:bg-[#F5F4EA] dark:hover:bg-muted/30 transition-colors space-y-1.5"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-                  <span className="font-bold text-amber-300 break-all">{node.id}</span>
-                  <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
+                  <span className="font-bold text-[#0A246A] dark:text-primary break-all">{node.id}</span>
+                  <span className="px-1.5 py-0.2 rounded-none bg-[#ECE9D8] dark:bg-muted text-[#000000] dark:text-foreground border border-[#ACA899]">
                     {node.node_type}
                   </span>
-                  <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold">
+                  <span className="px-1.5 py-0.2 rounded-none bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-bold">
                     conflicted=1
                   </span>
                 </div>
                 {node.conflicted_since && (
-                  <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="text-[10px] font-mono text-[#555555] dark:text-muted-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" aria-hidden="true" />
                     {String(node.conflicted_since)}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-200 font-mono leading-relaxed break-words bg-slate-900/60 p-3 rounded border border-slate-800/80">
-                {node.content_excerpt || '(Empty excerpt)'}
+              <p className="text-[11px] text-[#222222] dark:text-slate-200 font-mono leading-relaxed break-words bg-[#ECE9D8] dark:bg-muted/40 p-2 rounded-none border border-[#ACA899]">
+                {node.content_excerpt || '(Extracto vacío)'}
               </p>
             </div>
           ))
         ) : (
-          <div className="py-10 px-4 text-center rounded bg-slate-950/40 border border-slate-800/70 space-y-3 max-w-lg mx-auto">
-            <GitCompare className="w-8 h-8 text-slate-400 mx-auto" aria-hidden="true" />
-            <p className="text-sm font-semibold text-slate-200">
+          <div className="py-8 px-4 text-center rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border space-y-2 max-w-lg mx-auto">
+            <GitCompare className="w-6 h-6 text-[#7F9DB9] mx-auto" aria-hidden="true" />
+            <p className="text-xs font-bold text-[#0A246A] dark:text-foreground">
               {loading ? (
                 <span className="inline-flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 text-rose-400 animate-spin" aria-hidden="true" />
+                  <RefreshCw className="w-3.5 h-3.5 text-[#0A246A] animate-spin" aria-hidden="true" />
                   Consultando nodos en conflicto en SilvaDB...
                 </span>
               ) : endpointStatus === 'pending_backend' ? (
@@ -352,20 +352,20 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
               ) : endpointStatus === 'forbidden' ? (
                 'Requiere credencial de operador (HTTP 403)'
               ) : (
-                'No se encontraron nodos en conflicto'
+                'No se encontraron nodos en conflicto en SilvaDB'
               )}
             </p>
-            <p className="text-xs text-slate-400 max-w-lg mx-auto">
-              Solo se muestran nodos con `conflicted = 1` de `GET /api/v1/silva/conflicted`. Los registros obsoletos con `[DEPRECATED by …]` se excluyen deliberadamente.
+            <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-md mx-auto">
+              Solo se muestran nodos con conflicted = 1. Los registros obsoletos con [DEPRECATED by …] se excluyen deliberadamente.
             </p>
             {!loading && (
               <button
                 type="button"
                 onClick={fetchConflicted}
                 aria-label="Reintentar consulta de nodos en conflicto"
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-sm bg-[#ECE9D8] hover:bg-[#F5F4EA] text-[#000000] dark:text-foreground font-bold text-[11px] border border-[#ACA899] transition-colors cursor-pointer"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-rose-400" aria-hidden="true" />
+                <RefreshCw className="w-3 h-3 text-[#0A246A]" aria-hidden="true" />
                 Reintentar
               </button>
             )}
@@ -375,9 +375,9 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-mono text-slate-300">
+        <div className="flex items-center justify-between pt-2 border-t border-[#ACA899] dark:border-border text-[11px] font-mono text-[#444444] dark:text-muted-foreground">
           <span>
-            Page {page} of {totalPages} ({filteredNodes.length} items)
+            Página {page} de {totalPages} ({filteredNodes.length} elementos)
           </span>
           <div className="flex items-center gap-2">
             <button

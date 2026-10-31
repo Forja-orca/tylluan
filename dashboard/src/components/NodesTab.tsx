@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Send, Radio, Users, Cpu, Inbox, MessageSquare } from 'lucide-react';
+import { RefreshCw, Send, Radio, Users, Cpu, Inbox } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
 import { useNexus } from '../hooks/useNexus';
@@ -27,7 +27,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
       const data = await effectiveBridge.fetchRaw('/api/v1/nodes');
       setNodes(data.nodes || []);
     } catch (e) {
-      notify(`Error fetching nodes: ${e}`, 'error');
+      notify(`Error al consultar nodos: ${e}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -37,7 +37,6 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
     fetchNodes(); 
   }, [fetchNodes]);
 
-  // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('nodes-fetch', fetchNodes, { interval: 'standard', enabled: true });
 
   const sendMessage = async () => {
@@ -49,13 +48,13 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
         body: JSON.stringify({ from: 'dashboard', payload: message, msg_type: 'direct' }),
       });
       if (data.delivered) {
-        notify(`Message delivered to ${targetId}`, 'info');
+        notify(`Mensaje entregado al nodo ${targetId}`, 'info');
         setMessage('');
       } else {
-        notify(`Error delivering message: ${JSON.stringify(data)}`, 'error');
+        notify(`Error al entregar mensaje: ${JSON.stringify(data)}`, 'error');
       }
     } catch (e) {
-      notify(`Error sending message: ${e}`, 'error');
+      notify(`Error al enviar mensaje: ${e}`, 'error');
     }
   };
 
@@ -63,139 +62,139 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
     if (!effectiveBridge) return;
     try {
       const data = await effectiveBridge.fetchRaw('/api/v1/nodes/dashboard/register', { method: 'POST' });
-      notify(`Node registered: ${data.status || 'ok'}`, 'info');
+      notify(`Nodo registrado: ${data.status || 'correcto'}`, 'info');
       fetchNodes();
     } catch (e) {
-      notify(`Error registering node: ${e}`, 'error');
+      notify(`Error al registrar nodo: ${e}`, 'error');
     }
   };
 
-  const quickAgents = ['claude-code', 'deep', 'antigravity', 'qwen'];
+  const quickAgents = ['claude-code', 'deep', 'antigravity', 'buffy'];
 
   return (
-    <div className="flex-1 min-h-0 p-6 flex flex-col space-y-6 font-sans">
-      {/* Header */}
-      <div className="p-5 bg-slate-900/60 border border-slate-800 rounded flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="flex-1 min-h-0 p-3 flex flex-col space-y-3 font-sans">
+      {/* Header - Windows 2000/XP Wizard Style */}
+      <div className="p-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border rounded-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded">
-              P2P Topology
+            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#0A246A] dark:text-primary border border-[#7F9DB9] dark:border-border">
+              Topología P2P
             </span>
-            <span className="px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
-              Blackboard Active
+            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#008000] dark:text-emerald-400 border border-[#7F9DB9] dark:border-border">
+              Pizarra Activa
             </span>
           </div>
-          <h2 className="text-xl font-semibold text-slate-100 mt-2 flex items-center gap-2">
-            <Radio className="w-5 h-5 text-amber-400" />
-            Agent Substrate Nodes &amp; Direct Messaging
+          <h2 className="text-xs font-bold text-[#0A246A] dark:text-primary mt-1 flex items-center gap-1.5">
+            <Radio className="w-4 h-4 text-[#0A246A] dark:text-primary" />
+            Nodos del Sustrato y Mensajería Directa
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Registered fleet agents, inbox queues, and inter-agent communication channels.
+          <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
+            Agentes registrados en la flota, colas de buzón y canales de comunicación directa punto a punto.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button 
             type="button"
-            aria-label="Sync Agent Nodes"
+            aria-label="Sincronizar nodos de agentes"
             onClick={fetchNodes} 
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium rounded transition-all focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#000000] dark:text-foreground rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} aria-hidden="true" /> 
-            Sync Nodes
+            <RefreshCw className={cn('w-3 h-3 text-[#0A246A]', loading && 'animate-spin')} aria-hidden="true" /> 
+            Sincronizar
           </button>
           <button 
             type="button"
-            aria-label="Register Dashboard Node"
+            aria-label="Registrar nodo del panel"
             onClick={registerNode} 
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded border border-amber-500/30 transition-all focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
+            className="flex items-center gap-1 px-2.5 py-1 bg-[#0A246A] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#0A246A] transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
           >
-            <Radio className="w-3.5 h-3.5" aria-hidden="true" /> 
-            Register Dashboard Node
+            <Radio className="w-3 h-3" aria-hidden="true" /> 
+            Registrar nodo del panel
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Active Nodes List */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" aria-hidden="true" /> 
-              Connected Fleet Nodes ({nodes.length})
-            </h3>
-            <span className="text-[11px] text-slate-400">Live Agent Registry</span>
-          </div>
+        <fieldset className="border border-[#ACA899] dark:border-border p-3 bg-[#ECE9D8] dark:bg-card rounded-sm space-y-2">
+          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+            Nodos Conectados a la Flota ({nodes.length})
+          </legend>
 
           {loading ? (
-            <div role="status" aria-live="polite" className="text-center py-8 text-xs text-slate-400 animate-pulse">Scanning agent substrate nodes...</div>
+            <div role="status" aria-live="polite" className="text-center py-6 text-[11px] text-[#555555]">
+              Consultando registro de nodos...
+            </div>
           ) : nodes.length === 0 ? (
-            <div className="text-center py-10 text-slate-500 space-y-2 rounded">
-              <Radio className="w-8 h-8 mx-auto text-slate-700" aria-hidden="true" />
-              <p className="text-xs font-semibold text-slate-300">No active nodes registered</p>
-              <p className="text-[11px] text-slate-400">Register a node via tylluan_do or click 'Register Dashboard Node' above.</p>
+            <div className="text-center py-6 text-[11px] text-[#555555] bg-white dark:bg-card border border-[#ACA899] p-3 rounded-none">
+              <p className="font-bold text-[#0A246A] dark:text-foreground">No hay nodos activos registrados</p>
+              <p className="mt-0.5">Registre un nodo mediante la herramienta tylluan_do o haga clic en 'Registrar nodo del panel'.</p>
             </div>
           ) : (
-            <div className="space-y-2.5">
-              {nodes.map((n) => (
-                <div key={n.agent_id} className="flex items-center justify-between bg-slate-800/40 border border-slate-700/50 rounded p-3.5 hover:bg-slate-800/60 transition-all">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Cpu className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-                      <span className="text-sm font-semibold text-slate-100">{n.agent_id}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                      <span>Rules: <strong className="text-slate-300">{n.rules}</strong></span>
-                      <span>Registered: <strong className="text-slate-300">{new Date(n.registered_at * 1000).toLocaleTimeString()}</strong></span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div role="status" className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs">
-                      <Inbox className="w-3 h-3 text-amber-400" aria-hidden="true" />
-                      <span className="text-slate-300 font-bold">{n.inbox_pending}</span>
-                      <span className="text-[11px] text-slate-400">pending</span>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label={`Select ${n.agent_id} as target`}
-                      onClick={() => setTargetId(n.agent_id)}
-                      className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded border border-amber-500/30 transition-all focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
-                    >
-                      Target
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse bg-white dark:bg-card border border-[#7F9DB9] dark:border-border text-[11px]">
+                <thead>
+                  <tr className="bg-[#ECE9D8] dark:bg-muted text-left border-b border-[#ACA899]">
+                    <th className="p-1.5 font-bold border-r border-[#ACA899]">Agente</th>
+                    <th className="p-1.5 font-bold border-r border-[#ACA899] text-center">Reglas</th>
+                    <th className="p-1.5 font-bold border-r border-[#ACA899] text-center">Buzón</th>
+                    <th className="p-1.5 font-bold text-center">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nodes.map((n) => (
+                    <tr key={n.agent_id} className="border-b border-[#E0E0E0] dark:border-border hover:bg-[#F5F4EA] dark:hover:bg-muted/40">
+                      <td className="p-1.5 font-mono font-bold text-[#0A246A] dark:text-primary border-r border-[#E0E0E0]">
+                        @{n.agent_id}
+                      </td>
+                      <td className="p-1.5 font-mono text-center border-r border-[#E0E0E0]">
+                        {n.rules}
+                      </td>
+                      <td className="p-1.5 font-mono text-center border-r border-[#E0E0E0]">
+                        <span className={n.inbox_pending > 0 ? "font-bold text-[#B8860B]" : "text-[#555555]"}>
+                          {n.inbox_pending}
+                        </span>
+                      </td>
+                      <td className="p-1.5 text-center">
+                        <button
+                          type="button"
+                          aria-label={`Seleccionar ${n.agent_id} como destino`}
+                          onClick={() => setTargetId(n.agent_id)}
+                          className="px-2 py-0.5 bg-[#ECE9D8] hover:bg-[#F5F4EA] text-[#000000] dark:text-foreground text-[10px] font-bold rounded-sm border border-[#ACA899] cursor-pointer"
+                        >
+                          Seleccionar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-        </div>
+        </fieldset>
 
         {/* Direct Messaging Dispatcher */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-amber-400" aria-hidden="true" /> 
-              Direct Node Dispatcher
-            </h3>
-            <span className="text-[11px] text-slate-400">Substrate Message Bus</span>
-          </div>
+        <fieldset className="border border-[#ACA899] dark:border-border p-3 bg-[#ECE9D8] dark:bg-card rounded-sm space-y-2">
+          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+            Despacho de Mensaje Directo
+          </legend>
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="target-agent-id" className="text-xs text-slate-400 font-medium">Target Agent ID:</label>
-              <div className="flex gap-2">
-                <input
-                  id="target-agent-id"
-                  type="text"
-                  value={targetId}
-                  onChange={(e) => setTargetId(e.target.value)}
-                  placeholder="e.g. claude-code, deep, antigravity"
-                  className="flex-1 px-3.5 py-2 bg-slate-800/50 border border-slate-700/60 focus:ring-1 focus:ring-amber-500/50 text-slate-100 text-xs rounded outline-none"
-                />
-              </div>
+          <div className="space-y-2">
+            <div>
+              <label htmlFor="target-agent-id" className="text-[11px] font-bold text-[#01285F] dark:text-foreground block mb-0.5">
+                Agente destinatario:
+              </label>
+              <input
+                id="target-agent-id"
+                type="text"
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                placeholder="ej. claude-code, deep, antigravity"
+                className="w-full px-2 py-1 bg-white dark:bg-card border border-[#7F9DB9] dark:border-border text-[#000000] dark:text-foreground text-[11px] font-mono rounded-none outline-none"
+              />
               {/* Quick Select Badges */}
-              <div role="group" aria-label="Quick Select Agent" className="flex flex-wrap gap-1.5 pt-1">
+              <div role="group" aria-label="Selección rápida de agente" className="flex flex-wrap gap-1 mt-1">
                 {quickAgents.map((ag) => (
                   <button
                     key={ag}
@@ -203,10 +202,10 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                     aria-pressed={targetId === ag}
                     onClick={() => setTargetId(ag)}
                     className={cn(
-                      "px-2 py-0.5 text-[11px] font-semibold rounded border transition-all focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none",
+                      "px-1.5 py-0.5 text-[10px] font-mono font-bold rounded-none border transition-all cursor-pointer",
                       targetId === ag
-                        ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
-                        : "bg-slate-800/50 text-slate-400 hover:text-slate-200 border-slate-700/60"
+                        ? "bg-[#0A246A] text-white border-[#0A246A]"
+                        : "bg-white dark:bg-muted text-[#444444] dark:text-muted-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
                     )}
                   >
                     @{ag}
@@ -215,15 +214,17 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="substrate-payload-msg" className="text-xs text-slate-400 font-medium">Payload Message:</label>
+            <div>
+              <label htmlFor="substrate-payload-msg" className="text-[11px] font-bold text-[#01285F] dark:text-foreground block mb-0.5">
+                Carga útil / Mensaje directo:
+              </label>
               <textarea
                 id="substrate-payload-msg"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Enter direct substrate payload for targeted agent node..."
+                placeholder="Escriba el mensaje directo para el nodo seleccionado..."
                 rows={4}
-                className="w-full px-3.5 py-2.5 bg-slate-800/50 border border-slate-700/60 focus:ring-1 focus:ring-amber-500/50 text-slate-100 text-xs rounded outline-none placeholder:text-slate-500 resize-none"
+                className="w-full p-2 bg-white dark:bg-card border-t border-l border-[#808080] border-b border-r border-white dark:border-border text-[#000000] dark:text-foreground text-[11px] font-sans rounded-none outline-none resize-none"
               />
             </div>
 
@@ -231,13 +232,13 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
               type="button"
               onClick={sendMessage}
               disabled={!targetId || !message}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded border border-amber-500/30 transition-all disabled:opacity-40 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#0A246A] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#0A246A] transition-all disabled:opacity-40 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
             >
               <Send className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Dispatch Substrate Message</span>
+              <span>Despachar Mensaje al Nodo</span>
             </button>
           </div>
-        </div>
+        </fieldset>
       </div>
     </div>
   );

@@ -388,29 +388,32 @@ export function OverviewTab({
 
   let tylluanStatus: { text: string; subtext: string; color: string; pulse: boolean };
   if (isNightMode) {
-    tylluanStatus = { text: 'Consolidating night memory', subtext: 'Tylluan is reorganizing and consolidating accumulated knowledge.', color: 'bg-violet-500/10 border-violet-500/30 text-violet-300', pulse: true };
+    tylluanStatus = { text: 'Consolidando memoria nocturna', subtext: 'El sustrato está reorganizando y consolidando el conocimiento acumulado.', color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#0A246A] dark:text-primary', pulse: false };
   } else if (activeAgentCount > 0 && recentToolCalls.length > 0) {
-    tylluanStatus = { text: `Working with ${activeAgentCount} agent${activeAgentCount > 1 ? 's' : ''}`, subtext: `${recentToolCalls.length} tool calls in the last 5 minutes.`, color: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300', pulse: true };
+    tylluanStatus = { text: `Operando con ${activeAgentCount} agente${activeAgentCount > 1 ? 's' : ''}`, subtext: `${recentToolCalls.length} llamadas a herramientas en los últimos 5 minutos.`, color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#008000] dark:text-emerald-400', pulse: false };
   } else if (recentMemoryOps.length > 0) {
-    tylluanStatus = { text: 'Processing memory', subtext: `${recentMemoryOps.length} recent memory operations.`, color: 'bg-blue-500/10 border-blue-500/30 text-blue-300', pulse: true };
+    tylluanStatus = { text: 'Procesando memoria', subtext: `${recentMemoryOps.length} operaciones de memoria recientes en SilvaDB.`, color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#0A246A] dark:text-primary', pulse: false };
   } else if (activeAgentCount > 0) {
-    tylluanStatus = { text: `${activeAgentCount} agent${activeAgentCount > 1 ? 's' : ''} connected`, subtext: 'Waiting for instructions.', color: 'bg-amber-500/10 border-amber-500/30 text-amber-300', pulse: false };
+    tylluanStatus = { text: `${activeAgentCount} agente${activeAgentCount > 1 ? 's' : ''} en línea`, subtext: 'En espera de instrucciones de la flota.', color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#B8860B] dark:text-amber-400', pulse: false };
   } else {
-    tylluanStatus = { text: 'Idle', subtext: 'No agents connected. Tylluan is in standby.', color: 'bg-slate-500/10 border-slate-500/30 text-slate-400', pulse: false };
+    tylluanStatus = { text: 'En espera', subtext: 'Sin agentes conectados en este momento. El sustrato permanece en reposo.', color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground', pulse: false };
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-3 font-sans">
       {/* What is Tylluan doing now — human-readable status */}
-      <div className={`rounded border p-3.5 bg-card ${tylluanStatus.color} transition-all duration-300 font-sans`}>
-        <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full ${tylluanStatus.pulse ? 'bg-emerald-600 animate-pulse' : 'bg-muted-foreground'}`} aria-hidden="true" />
+      <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm">
+        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Estado de Actividad del Sustrato</legend>
+        <div className="flex items-center gap-2.5">
+          <span className={`w-2.5 h-2.5 rounded-none border border-[#7F9DB9] ${tylluanStatus.pulse ? 'bg-emerald-600' : 'bg-[#0A246A]'}`} aria-hidden="true" />
           <div>
-            <h3 className="text-sm font-semibold">Tylluan is {tylluanStatus.text.toLowerCase()}</h3>
-            <p className="text-[11px] opacity-80 mt-0.5">{tylluanStatus.subtext}</p>
+            <h3 className="text-xs font-bold text-[#000000] dark:text-foreground" aria-label={`Tylluan is ${tylluanStatus.text.toLowerCase()}`}>
+              {tylluanStatus.text}
+            </h3>
+            <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">{tylluanStatus.subtext}</p>
           </div>
         </div>
-      </div>
+      </fieldset>
 
       {/* Homeostasis Hero Widget */}
       <HomeostasisWidget bridge={bridge} />
@@ -435,90 +438,99 @@ export function OverviewTab({
       )}
 
       {/* Hub Status Badges */}
-      <div aria-label="Resumen de Telemetría del Sistema" className="flex flex-wrap gap-2 font-mono text-xs">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
-          <div className={cn("w-2 h-2 rounded-full", kernelHealth.dotClass)} aria-hidden="true"></div>
-          <span className="text-[11px] text-muted-foreground">Kernel: <span className={cn("font-bold text-foreground", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
+      <fieldset aria-label="Resumen de Telemetría del Sistema" className="border border-[#ACA899] dark:border-border p-2 bg-[#ECE9D8] dark:bg-card rounded-sm">
+        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Señales del Sistema</legend>
+        <div className="flex flex-wrap gap-2 font-mono text-xs">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+            <div className={cn("w-2 h-2 rounded-none", kernelHealth.dotClass)} aria-hidden="true"></div>
+            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Kernel: <span className={cn("font-bold text-[#000000] dark:text-foreground", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+            <div className={cn("w-2 h-2 rounded-none", embeddingsState.dotClass)} aria-hidden="true"></div>
+            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Embeddings: <span className={cn("font-bold text-[#000000] dark:text-foreground", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+            <div className={cn("w-2 h-2 rounded-none", sovereignToolsState.dotClass)} aria-hidden="true"></div>
+            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Herramientas Soberanas: <span className={cn("font-bold text-[#000000] dark:text-foreground", sovereignToolsState.colorClass)}>{sovereignToolsState.label}</span></span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+            <span className="text-[11px] font-bold text-[#008000] dark:text-emerald-400">{liveMetrics?.activeAgents || 0}</span>
+            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Agentes activos</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+            <span className="text-[11px] font-bold text-[#0A246A] dark:text-primary">{memoryStats?.node_count || 0}</span>
+            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Nodos Silva</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+            <MiniSparkline data={cpuHistory} color="hsl(var(--primary))" />
+            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">CPU</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+            <MiniSparkline data={memHistory} color="hsl(var(--primary))" />
+            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">RAM</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
-          <div className={cn("w-2 h-2 rounded-full", embeddingsState.dotClass)} aria-hidden="true"></div>
-          <span className="text-[11px] text-muted-foreground">Embeddings: <span className={cn("font-bold text-foreground", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
-          <div className={cn("w-2 h-2 rounded-full", sovereignToolsState.dotClass)} aria-hidden="true"></div>
-          <span className="text-[11px] text-muted-foreground">Herramientas Soberanas: <span className={cn("font-bold text-foreground", sovereignToolsState.colorClass)}>{sovereignToolsState.label}</span></span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
-          <span className="text-[11px] font-bold text-emerald-600">{liveMetrics?.activeAgents || 0}</span>
-          <span className="text-[11px] text-muted-foreground">Agentes activos</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
-          <span className="text-[11px] font-bold text-primary">{memoryStats?.node_count || 0}</span>
-          <span className="text-[11px] text-muted-foreground">Nodos Silva</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
-          <MiniSparkline data={cpuHistory} color="hsl(var(--primary))" />
-          <span className="text-[11px] text-muted-foreground">CPU</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/40 border border-border">
-          <MiniSparkline data={memHistory} color="hsl(var(--primary))" />
-          <span className="text-[11px] text-muted-foreground">RAM</span>
-        </div>
-      </div>
+      </fieldset>
 
       {/* T-DSH-114: centinela de write_gate L2 (opt-in, default off) */}
-      <div className="mt-4 p-3.5 rounded bg-card border border-border font-sans">
+      <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
+        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Centinela de Escritura (write_gate L2)</legend>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h4 className="text-xs font-bold text-foreground">Centinela (write_gate L2)</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-[11px] text-[#444444] dark:text-muted-foreground">
               {sentinel
-                ? `modo ${sentinel.mode ?? 'off'} · cargado ${sentinel.loaded ? 'sí' : 'no'} · fallbacks ${sentinel.fallbacks ?? 0} · saltos CPU ${sentinel.cpu_skips ?? 0} (umbral ${sentinel.max_cpu_pct ?? 85}%)`
-                : 'estado no disponible'}
+                ? `Modo: ${sentinel.mode ?? 'inactivo'} · Cargado: ${sentinel.loaded ? 'sí' : 'no'} · Fallbacks: ${sentinel.fallbacks ?? 0} · Saltos CPU: ${sentinel.cpu_skips ?? 0} (umbral ${sentinel.max_cpu_pct ?? 85}%)`
+                : 'Estado no disponible'}
             </p>
             {sentinel?.verdicts && (
-              <p className="text-[11px] font-mono text-muted-foreground mt-1">
-                safe {sentinel.verdicts.safe ?? 0} · controversial {sentinel.verdicts.controversial ?? 0} · unsafe {sentinel.verdicts.unsafe ?? 0} · unavailable {sentinel.verdicts.unavailable ?? 0}
+              <p className="text-[11px] font-mono text-[#555555] dark:text-muted-foreground mt-0.5">
+                Seguro: {sentinel.verdicts.safe ?? 0} · Polémico: {sentinel.verdicts.controversial ?? 0} · Inseguro: {sentinel.verdicts.unsafe ?? 0} · No disponible: {sentinel.verdicts.unavailable ?? 0}
               </p>
             )}
           </div>
           <div className="flex items-center gap-1" role="group" aria-label="Modo del centinela">
-            {['off', 'observe', 'enforce'].map((m) => (
+            {[
+              { id: 'off', label: 'DESACTIVADO' },
+              { id: 'observe', label: 'OBSERVACIÓN' },
+              { id: 'enforce', label: 'BLOQUEO' }
+            ].map((m) => (
               <button
-                key={m}
+                key={m.id}
                 type="button"
                 disabled={sentinelBusy || !bridge}
-                onClick={() => setSentinelMode(m)}
-                className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none disabled:opacity-50 ${
-                  sentinel?.mode === m
-                    ? 'bg-primary/20 border-primary/40 text-primary'
-                    : 'bg-muted border-border text-foreground hover:bg-muted/80'
+                onClick={() => setSentinelMode(m.id)}
+                className={`px-2 py-0.5 rounded-none text-[10px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] disabled:opacity-50 ${
+                  sentinel?.mode === m.id
+                    ? 'bg-[#0A246A] text-white border-[#0A246A]'
+                    : 'bg-white dark:bg-muted border-[#ACA899] dark:border-border text-[#000000] dark:text-foreground hover:bg-[#F5F4EA]'
                 }`}
               >
-                {m.toUpperCase()}
+                {m.label}
               </button>
             ))}
           </div>
         </div>
-      </div>
+      </fieldset>
 
       {liveMetrics && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {[ 
-            { label: 'Llamadas Totales', value: liveMetrics.totalCalls, icon: Wifi },
-            { label: 'Tasa de Éxito', value: `${(liveMetrics.successRate * 100).toFixed(0)}%`, icon: CheckCircle },
-            { label: 'Latencia Media', value: `${liveMetrics.avgLatency}ms`, icon: Activity },
-            { label: 'Agentes Activos', value: liveMetrics.activeAgents, icon: Cpu },
-            { label: 'Difusiones/h', value: liveMetrics.broadcastsLastHour, icon: Wifi },
-            { label: 'Nodos en Memoria', value: liveMetrics.graphNodes, icon: Database },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="bg-card border border-border rounded p-2.5 text-center">
-              <Icon className="w-3.5 h-3.5 text-muted-foreground mx-auto mb-1" aria-hidden="true" />
-              <div className="text-base font-bold font-mono text-foreground">{value}</div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
-            </div>
-          ))}
-        </div>
+        <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
+          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Métricas de Operación en Tiempo Real</legend>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {[ 
+              { label: 'Llamadas Totales', value: liveMetrics.totalCalls },
+              { label: 'Tasa de Éxito', value: `${(liveMetrics.successRate * 100).toFixed(0)}%` },
+              { label: 'Latencia Media', value: `${liveMetrics.avgLatency}ms` },
+              { label: 'Agentes Activos', value: liveMetrics.activeAgents },
+              { label: 'Difusiones/h', value: liveMetrics.broadcastsLastHour },
+              { label: 'Nodos SilvaDB', value: liveMetrics.graphNodes },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none p-2 text-center">
+                <div className="text-sm font-bold font-mono text-[#000000] dark:text-foreground">{value}</div>
+                <div className="text-[10px] text-[#555555] dark:text-muted-foreground mt-0.5">{label}</div>
+              </div>
+            ))}
+          </div>
+        </fieldset>
       )}
       {sysStatus && (
         <div className="mt-4 flex gap-2 flex-wrap font-mono text-xs">
@@ -565,56 +577,62 @@ export function OverviewTab({
       </div>
 
       {/* Golden Signals Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard
-          icon={Wifi} label="Tráfico"
-          value={goldenSignals?.traffic?.active_tools || 0} unit=" ops"
-          sub={`${activeGuilds} gremios activos`}
-          valueClass="text-primary"
-        />
-        <MetricCard
-          icon={AlertTriangle} label="Tasa de Error"
-          value={errRate} unit="%"
-          sub={`${goldenSignals?.errors?.total_errors || 0} eventos no críticos`}
-          valueClass={getPercentColor(errRate)}
-        />
-        <MetricCard
-          icon={Database} label="Saturación"
-          value={memSat} unit="%"
-          sub={`${memoryStats?.node_count || 0} nodos indexados`}
-          valueClass={getPercentColor(memSat)}
-        />
-        <MetricCard
-          icon={TrendingUp} label="SLO"
-          value={sloSummary?.slo_target ?? 99.9} unit="%"
-          sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% presupuesto restante` : 'Objetivo 99.9%'}
-          valueClass="text-primary"
-        />
-      </div>
+      <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
+        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Señales Doradas de Rendimiento (Golden Signals)</legend>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <MetricCard
+            label="Tráfico"
+            value={goldenSignals?.traffic?.active_tools || 0} unit=" ops"
+            sub={`${activeGuilds} gremios activos`}
+            valueClass="text-[#0A246A] dark:text-primary"
+          />
+          <MetricCard
+            label="Tasa de Error"
+            value={errRate} unit="%"
+            sub={`${goldenSignals?.errors?.total_errors || 0} eventos no críticos`}
+            valueClass={getPercentColor(errRate)}
+          />
+          <MetricCard
+            label="Saturación"
+            value={memSat} unit="%"
+            sub={`${memoryStats?.node_count || 0} nodos indexados`}
+            valueClass={getPercentColor(memSat)}
+          />
+          <MetricCard
+            label="Disponibilidad SLO"
+            value={sloSummary?.slo_target ?? 99.9} unit="%"
+            sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% presupuesto restante` : 'Objetivo 99.9%'}
+            valueClass="text-[#0A246A] dark:text-primary"
+          />
+        </div>
+      </fieldset>
 
       {/* Cognitive Health */}
       {interoceptionData && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Homeostasis', value: interoceptionData.homeostasis, good: (v: number) => v > 0.7, warn: (v: number) => v > 0.4 },
-            { label: 'Estrés', value: interoceptionData.stress_level, good: (v: number) => v < 0.3, warn: (v: number) => v < 0.6, invert: true },
-            { label: 'Densidad Silva', value: interoceptionData.graph_density, good: (v: number) => v > 0.001, warn: (v: number) => v > 0.0001 },
-            { label: 'Feromonas Activas', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
-          ].map(({ label, value, good, warn, invert }) => {
-            const pct = Math.min(100, value * 100);
-            const colorClass = good(value) ? 'text-emerald-600 dark:text-emerald-400' : warn(value) ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
-            const bgClass = good(value) ? 'bg-emerald-600' : warn(value) ? 'bg-amber-600' : 'bg-red-600';
-            return (
-              <div key={label} className="p-3 rounded bg-card border border-border">
-                <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
-                <div className={cn("text-lg font-bold font-mono", colorClass)}>{pct.toFixed(0)}%</div>
-                <div className="mt-1.5 h-1.5 bg-muted rounded overflow-hidden border border-border">
-                  <div className={cn("h-full rounded transition-all duration-500", bgClass)} style={{ width: `${invert ? 100 - pct : pct}%` }} />
+        <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
+          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Salud Cognitiva e Interocepción</legend>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { label: 'Homeostasis', value: interoceptionData.homeostasis, good: (v: number) => v > 0.7, warn: (v: number) => v > 0.4 },
+              { label: 'Estrés', value: interoceptionData.stress_level, good: (v: number) => v < 0.3, warn: (v: number) => v < 0.6, invert: true },
+              { label: 'Densidad Silva', value: interoceptionData.graph_density, good: (v: number) => v > 0.001, warn: (v: number) => v > 0.0001 },
+              { label: 'Feromonas Activas', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
+            ].map(({ label, value, good, warn, invert }) => {
+              const pct = Math.min(100, value * 100);
+              const colorClass = good(value) ? 'text-emerald-600 dark:text-emerald-400' : warn(value) ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+              const bgClass = good(value) ? 'bg-emerald-600' : warn(value) ? 'bg-amber-600' : 'bg-red-600';
+              return (
+                <div key={label} className="p-2 rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border">
+                  <div className="text-[10px] font-bold text-[#01285F] dark:text-muted-foreground mb-0.5">{label}</div>
+                  <div className={cn("text-sm font-bold font-mono", colorClass)}>{pct.toFixed(0)}%</div>
+                  <div className="w-full bg-[#E0E0E0] dark:bg-muted h-1.5 mt-1 rounded-none border border-[#ACA899]">
+                    <div className={cn("h-full", bgClass)} style={{ width: `${pct}%` }} />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </fieldset>
       )}
 
       {/* Multi-Agent Activity */}

@@ -172,9 +172,9 @@ function VirtualMessageList({
 }
 
 const QUICK_TEMPLATES = [
-  { label: '🧹 Graph', text: 'Consolidate SilvaDB knowledge graph' },
-  { label: '📊 Status', text: 'Provide fleet status report' },
-  { label: '🧬 Reindex', text: 'Reindex SilvaDB and regenerate embeddings' },
+  { label: 'Consolidar grafo', text: 'Consolidar el grafo de conocimiento SilvaDB' },
+  { label: 'Informe de estado', text: 'Proporcionar informe del estado de la flota' },
+  { label: 'Reindexar memoria', text: 'Reindexar SilvaDB y regenerar vectores de búsqueda' },
 ];
 
 
@@ -559,40 +559,40 @@ export function ColoquioMessagesPanel({
             <ChevronLeft className="w-4 h-4" />
           </button>
         )}
-        <Hash className="w-4 h-4 text-slate-500 shrink-0" />
-        <span className="text-sm font-semibold text-slate-200 truncate">{selectedChannel?.name ?? selectedId}</span>
-        <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">{allMessages.length} messages</span>
+        <Hash className="w-3.5 h-3.5 text-[#555555] dark:text-slate-400 shrink-0" />
+        <span className="text-xs font-bold text-[#000000] dark:text-foreground truncate">{selectedChannel?.name ?? selectedId}</span>
+        <span className="text-[10px] text-[#555555] dark:text-muted-foreground font-mono hidden sm:inline">{allMessages.length} mensajes</span>
         <button
           type="button"
           onClick={() => setCompactMode(v => !v)}
           className={cn(
-            "ml-auto text-[11px] px-2 py-1 rounded border font-semibold transition-all cursor-pointer mr-1.5 focus-visible:ring-1 focus-visible:ring-emerald-400 focus-visible:outline-none",
+            "ml-auto text-[11px] px-2 py-0.5 rounded-sm border font-bold transition-all cursor-pointer mr-1.5 focus-visible:outline-1 focus-visible:outline-[#0A246A]",
             compactMode 
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" 
-              : "border-slate-700 text-slate-300 hover:text-slate-100 hover:bg-slate-800/50"
+              ? "border-[#0A246A] bg-white dark:bg-card text-[#0A246A] dark:text-primary" 
+              : "border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]"
           )}
-          title="Toggle compact view density"
-          aria-label="Toggle compact view density"
+          title="Alternar densidad compacta"
+          aria-label="Alternar densidad compacta"
         >
-          Compact
+          Compacto
         </button>
-        <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded px-2.5 py-1">
-          <Search className="w-3 h-3 text-slate-400 shrink-0" />
+        <div className="flex items-center gap-1.5 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none px-2 py-0.5">
+          <Search className="w-3 h-3 text-[#555555] dark:text-muted-foreground shrink-0" />
           <input
-            className="w-32 bg-transparent text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none"
-            placeholder="Search thread..."
-            aria-label="Search thread messages"
+            className="w-32 bg-transparent text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none"
+            placeholder="Buscar en el canal..."
+            aria-label="Buscar mensajes en el canal"
             value={msgSearch}
             onChange={e => setMsgSearch(e.target.value)}
           />
           {msgSearch && (
             <>
-              <span className="text-[11px] text-amber-400 font-mono">{filteredMessages.length}/{allMessages.length}</span>
+              <span className="text-[10px] text-[#0A246A] font-mono">{filteredMessages.length}/{allMessages.length}</span>
               <button
                 type="button"
                 onClick={() => setMsgSearch('')}
-                aria-label="Clear message search"
-                className="text-slate-400 hover:text-slate-200 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none rounded"
+                aria-label="Borrar búsqueda"
+                className="text-slate-400 hover:text-slate-200 cursor-pointer focus-visible:outline-none"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -601,8 +601,9 @@ export function ColoquioMessagesPanel({
         </div>
       </div>
       {allMessages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-600">
-          <Sparkles className="w-6 h-6 opacity-20 animate-pulse" /><p className="text-[12px]">Empty channel</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-2 p-6 text-center">
+          <p className="text-xs font-bold text-[#0A246A] dark:text-foreground">Canal sin mensajes</p>
+          <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-sm">Escriba el primer mensaje en el campo inferior para iniciar la deliberación en este canal.</p>
         </div>
       ) : (
         <VirtualMessageList
@@ -619,36 +620,35 @@ export function ColoquioMessagesPanel({
         />
       )}
       {Object.keys(typingStatuses).length > 0 && (
-        <div className="px-5 py-1.5 text-[11px] text-slate-400 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
-          <span className="flex gap-1">{[0, 180, 360].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-typing-wave" style={{ animationDelay: `${d}ms` }} />)}</span>
+        <div className="px-3 py-1 text-[10px] text-[#444444] dark:text-muted-foreground flex items-center gap-2 shrink-0 bg-[#ECE9D8] dark:bg-muted/40 border-t border-[#ACA899]">
           <div className="flex flex-col gap-0.5">
             {Object.entries(typingStatuses).map(([agent, val]) => (
-              <span key={agent} className="font-mono text-[11px]"><strong className="text-slate-300">@{agent}</strong>: <span className="italic text-slate-400">{val.status}</span></span>
+              <span key={agent} className="font-mono text-[10px]"><strong className="text-[#0A246A] dark:text-primary">@{agent}</strong>: <span className="italic">{val.status}</span></span>
             ))}
           </div>
         </div>
       )}
-      <div ref={composerRef} className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
-        <div className="flex items-center gap-3 mb-2">
-          <span className="text-[11px] text-slate-400 font-semibold shrink-0">As:</span>
-          <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-primary transition-colors"
+      <div ref={composerRef} className="border-t border-[#ACA899] dark:border-border px-3 py-2 bg-[#ECE9D8] dark:bg-card shrink-0 font-sans">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[11px] font-bold text-[#01285F] dark:text-foreground shrink-0">Autor:</span>
+          <input className="w-24 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none px-2 py-0.5 text-[11px] font-mono text-[#000000] dark:text-foreground focus:outline-none"
             value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="jose" />
           <button
             type="button"
             onClick={() => setShowTemplates(v => !v)}
-            className="ml-auto text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none rounded px-1.5 py-0.5"
+            className="ml-auto text-[11px] font-bold text-[#0A246A] dark:text-primary hover:underline flex items-center gap-1 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] px-1 py-0.5"
           >
-            <Sparkles className="w-3 h-3" />{showTemplates ? 'Hide' : 'Templates'}
+            {showTemplates ? 'Ocultar plantillas' : 'Plantillas rápidas'}
           </button>
         </div>
         {showTemplates && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-1 mb-1.5">
             {QUICK_TEMPLATES.map(t => (
               <button
                 type="button"
                 key={t.label}
                 onClick={() => { setDraft(t.text); setShowTemplates(false); }}
-                className="text-[11px] font-semibold bg-slate-800/60 hover:bg-primary/20 text-slate-300 hover:text-slate-100 px-2 py-1 rounded border border-slate-700/60 hover:border-primary/40 transition-all cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+                className="text-[10px] font-bold bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[#0A246A] dark:text-primary px-2 py-0.5 rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer"
               >
                 {t.label}
               </button>
@@ -656,16 +656,16 @@ export function ColoquioMessagesPanel({
           </div>
         )}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-1.5 mb-1.5">
             {attachments.map((att, i) => (
-              <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-300">
+              <div key={i} className="flex items-center gap-1.5 px-2 py-0.5 bg-white dark:bg-muted border border-[#ACA899] rounded-sm text-[11px] text-foreground">
                 <Paperclip className="w-2.5 h-2.5" />
                 <span className="truncate max-w-[120px]">{att.name}</span>
                 <button
                   type="button"
                   onClick={() => setAttachments(p => p.filter((_, j) => j !== i))}
-                  aria-label={`Remove attachment ${att.name}`}
-                  className="text-slate-400 hover:text-rose-400 ml-1 p-0.5 rounded cursor-pointer focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none"
+                  aria-label={`Quitar adjunto ${att.name}`}
+                  className="text-slate-400 hover:text-rose-500 ml-1 p-0.5 rounded cursor-pointer"
                 >
                   <X className="w-2.5 h-2.5" />
                 </button>
@@ -673,28 +673,28 @@ export function ColoquioMessagesPanel({
             ))}
           </div>
         )}
-        <div className="flex gap-2 items-end">
+        <div className="flex gap-1.5 items-end">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            aria-label="Attach files"
-            title="Attach files"
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded text-slate-300 hover:text-slate-100 transition-all shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+            aria-label="Adjuntar archivo"
+            title="Adjuntar archivo"
+            className="px-2 py-1.5 bg-white dark:bg-muted hover:bg-[#F5F4EA] disabled:opacity-40 rounded-sm border border-[#ACA899] text-[#000000] dark:text-foreground text-[11px] font-bold shrink-0 cursor-pointer"
           >
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+            <Paperclip className="w-3.5 h-3.5" />
           </button>
           <input type="file" ref={fileInputRef} className="hidden" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <textarea
-            className={cn('flex-1 bg-slate-800/60 border rounded px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary resize-none font-sans transition-colors',
-              isDragging ? 'border-amber-500 bg-amber-950/20 ring-1 ring-amber-500/30' : 'border-slate-700/60')}
-            rows={3} placeholder="Write a message... Shift+Enter for new line" value={draft}
+            className={cn('flex-1 bg-white dark:bg-background border rounded-none px-2.5 py-1.5 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none resize-none font-sans',
+              isDragging ? 'border-amber-500 bg-amber-50' : 'border-t border-l border-[#808080] border-b border-r border-white dark:border-border')}
+            rows={2} placeholder="Escriba un mensaje... Mayús+Intro para nueva línea" value={draft}
             onChange={e => {
               setDraft(e.target.value);
               const now = Date.now();
               if (now - lastTypingTimeRef.current > 2000 && selectedId && bridge) {
                 lastTypingTimeRef.current = now;
-                bridge.postColoquioTyping(selectedId, authorId || 'jose', 'typing...');
+                bridge.postColoquioTyping(selectedId, authorId || 'jose', 'escribiendo...');
               }
             }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postMessage(); } }}
@@ -706,15 +706,15 @@ export function ColoquioMessagesPanel({
             type="button"
             onClick={postMessage}
             disabled={posting || (!draft.trim() && !attachments.length)}
-            aria-label="Send message"
-            className="p-2.5 bg-primary hover:bg-primary/90 disabled:opacity-40 rounded text-primary-foreground border border-primary transition-all shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+            aria-label="Enviar mensaje"
+            className="px-4 py-2 bg-[#0A246A] hover:bg-[#081C52] disabled:opacity-40 rounded-sm text-white font-bold border border-[#0A246A] text-[11px] shrink-0 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
           >
-            <Send className="w-4 h-4" />
+            Enviar
           </button>
         </div>
-        <div className="flex justify-between items-center mt-1.5 text-[11px] text-slate-400">
-          <span>Press Enter to send, Shift+Enter for new line</span>
-          <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Auto-refresh 5s</span>
+        <div className="flex justify-between items-center mt-1 text-[10px] text-[#555555] dark:text-muted-foreground">
+          <span>Intro para enviar, Mayús+Intro para salto de línea</span>
+          <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Actualización cada 5 s</span>
         </div>
       </div>
     </>

@@ -183,17 +183,17 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
   }, [bridge, canSubmit, mode, text, bulkChunks, tags, urlText, selectedFile, notify, onIngestComplete, fetchRecentNodes]);
 
   return (
-    <div className="rounded border border-slate-800 bg-slate-900/40 overflow-hidden">
+    <div className="rounded-sm border border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-card overflow-hidden font-sans">
       {/* Header — toggle */}
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-bold text-[#0A246A] dark:text-primary hover:bg-[#F5F4EA] transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <Upload className="w-3.5 h-3.5 text-primary" />
-          <span>Ingest Knowledge</span>
+          <Upload className="w-3.5 h-3.5" />
+          <span>Ingesta de Conocimiento en SilvaDB</span>
           {recent.length > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-semibold border border-primary/30">
+            <span className="px-1.5 py-0.2 rounded-none bg-white dark:bg-muted text-[#0A246A] text-[10px] font-bold border border-[#7F9DB9]">
               {recent.length}
             </span>
           )}
@@ -202,41 +202,41 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-3 border-t border-slate-800">
-          {/* Mode Selector Tabs (R12-3) */}
-          <div className="flex items-center gap-1.5 border-b border-slate-800/60 pb-1.5 mt-3">
+        <div className="px-3 pb-3 space-y-2.5 border-t border-[#ACA899] dark:border-border bg-white dark:bg-card">
+          {/* Mode Selector Tabs */}
+          <div className="flex items-center gap-1 border-b border-[#ACA899] pb-1 mt-2">
             <button
               onClick={() => setMode('text')}
               className={cn(
-                "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
                 mode === 'text'
-                  ? "bg-slate-800 text-primary border border-slate-700"
-                  : "text-slate-500 hover:text-slate-300"
+                  ? "bg-[#0A246A] text-white"
+                  : "text-[#444444] hover:bg-[#ECE9D8]"
               )}
             >
-              Text
+              Texto
             </button>
             <button
               onClick={() => setMode('url')}
               className={cn(
-                "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
                 mode === 'url'
-                  ? "bg-slate-800 text-primary border border-slate-700"
-                  : "text-slate-500 hover:text-slate-300"
+                  ? "bg-[#0A246A] text-white"
+                  : "text-[#444444] hover:bg-[#ECE9D8]"
               )}
             >
-              URL
+              Enlace URL
             </button>
             <button
               onClick={() => setMode('file')}
               className={cn(
-                "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
                 mode === 'file'
-                  ? "bg-slate-800 text-primary border border-slate-700"
-                  : "text-slate-500 hover:text-slate-300"
+                  ? "bg-[#0A246A] text-white"
+                  : "text-[#444444] hover:bg-[#ECE9D8]"
               )}
             >
-              File Drag & Drop
+              Archivo
             </button>
           </div>
 
@@ -248,45 +248,45 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 value={text}
                 onChange={e => setText(e.target.value)}
                 placeholder={bulk
-                  ? 'Paste multiple chunks separated by lines of ---\nChunk 1 text\n---\nChunk 2 text'
-                  : 'Paste text, facts, or knowledge to store in SilvaDB…'}
-                rows={6}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2.5 text-xs text-slate-200 placeholder-slate-600 font-mono resize-y focus:outline-none focus:border-primary transition-colors"
+                  ? 'Pegue varios bloques separados por líneas de ---\nTexto del bloque 1\n---\nTexto del bloque 2'
+                  : 'Pegue texto, hechos o conocimiento para almacenar en SilvaDB...'}
+                rows={5}
+                className="w-full bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none p-2 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] font-mono resize-y focus:outline-none"
               />
 
               {/* Controls row */}
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 {/* Tags */}
                 <input
                   type="text"
                   value={tags}
                   onChange={e => setTags(e.target.value)}
-                  placeholder="tags (comma-sep)"
-                  className="flex-1 min-w-[120px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-primary"
+                  placeholder="etiquetas (separadas por coma)"
+                  className="flex-1 min-w-[120px] bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none px-2 py-1 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none"
                 />
 
                 {/* Bulk toggle */}
                 <button
                   onClick={() => setBulk(v => !v)}
                   className={cn(
-                    'flex items-center gap-1 px-2.5 py-1 rounded border text-xs font-medium transition-colors',
+                    'flex items-center gap-1 px-2.5 py-1 rounded-sm border text-[11px] font-bold transition-colors cursor-pointer',
                     bulk
-                      ? 'bg-primary/15 border-primary/40 text-primary'
-                      : 'bg-slate-950 border-slate-700 text-slate-500 hover:border-slate-600 hover:text-slate-300'
+                      ? 'bg-[#0A246A] text-white border-[#0A246A]'
+                      : 'bg-[#ECE9D8] border-[#ACA899] text-[#444444] hover:bg-[#F5F4EA]'
                   )}
                 >
                   <Layers className="w-3 h-3" />
-                  Bulk
+                  Por bloques
                 </button>
               </div>
 
               {/* Bulk preview */}
               {bulk && bulkChunks && bulkChunks.length > 0 && (
-                <div className="text-[11px] text-slate-500 font-mono">
-                  {bulkChunks.length} chunk{bulkChunks.length !== 1 ? 's' : ''} detected
+                <div className="text-[10px] text-[#555555] font-mono">
+                  {bulkChunks.length} bloque{bulkChunks.length !== 1 ? 's' : ''} detectado{bulkChunks.length !== 1 ? 's' : ''}
                   {bulkChunks.map((c, i) => (
-                    <span key={i} className="ml-2 px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                      {c.slice(0, 30)}{c.length > 30 ? '…' : ''}
+                    <span key={i} className="ml-1 px-1 py-0.2 rounded-none bg-[#ECE9D8] text-[#000000]">
+                      {c.slice(0, 25)}{c.length > 25 ? '…' : ''}
                     </span>
                   ))}
                 </div>
@@ -295,22 +295,22 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
           )}
 
           {mode === 'url' && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <input
                 type="text"
                 value={urlText}
                 onChange={e => setUrlText(e.target.value)}
-                placeholder="https://example.com/article"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-primary transition-colors"
+                placeholder="https://ejemplo.com/articulo"
+                className="w-full bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none p-2 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none"
               />
-              <p className="text-[11px] text-slate-500">
-                Provide a URL to crawl and ingest its content automatically into SilvaDB.
+              <p className="text-[10px] text-[#555555]">
+                Introduzca una URL para rastrear e indexar su contenido automáticamente en SilvaDB.
               </p>
             </div>
           )}
 
           {mode === 'file' && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div
                 onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
                 onDragLeave={() => setIsDragOver(false)}
@@ -333,22 +333,22 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   input.click();
                 }}
                 className={cn(
-                  "border-2 border-dashed rounded p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2",
+                  "border-2 border-dashed rounded-none p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1",
                   isDragOver
-                    ? "border-primary bg-primary/10 scale-[1.01]"
-                    : "border-slate-800 bg-slate-950 hover:border-slate-700"
+                    ? "border-[#0A246A] bg-[#ECE9D8]"
+                    : "border-[#ACA899] bg-[#ECE9D8] hover:bg-[#F5F4EA]"
                 )}
               >
-                <Upload className={cn("w-6 h-6 transition-colors", selectedFile ? "text-primary" : "text-slate-500")} />
+                <Upload className="w-5 h-5 text-[#0A246A]" />
                 {selectedFile ? (
-                  <div className="text-xs text-slate-200">
-                    <p className="font-bold text-primary">{selectedFile.name}</p>
-                    <p className="text-[11px] text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                  <div className="text-[11px] text-[#000000]">
+                    <p className="font-bold text-[#0A246A]">{selectedFile.name}</p>
+                    <p className="text-[10px] text-[#555555]">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-400">
-                    <p className="font-bold">Drag and drop a file here</p>
-                    <p className="text-[11px] text-slate-600">or click to browse</p>
+                  <div className="text-[11px] text-[#444444]">
+                    <p className="font-bold">Arrastre un archivo aquí</p>
+                    <p className="text-[10px] text-[#666666]">o haga clic para examinar</p>
                   </div>
                 )}
               </div>
@@ -356,31 +356,28 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
           )}
 
           {/* Submit */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-slate-600 font-mono">
-              {mode === 'text' && `${charCount} chars`}
-              {mode === 'url' && 'URL Mode'}
-              {mode === 'file' && (selectedFile ? `${selectedFile.name}` : 'File Mode')}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[10px] text-[#555555] font-mono">
+              {mode === 'text' && `${charCount} caracteres`}
+              {mode === 'url' && 'Modo URL'}
+              {mode === 'file' && (selectedFile ? `${selectedFile.name}` : 'Modo Archivo')}
             </span>
             <button
               onClick={handleSubmit}
               disabled={!canSubmit}
               className={cn(
-                'flex items-center gap-2 px-4 py-1.5 rounded text-xs font-semibold transition-all',
+                'flex items-center gap-1.5 px-3 py-1 rounded-sm text-[11px] font-bold transition-all cursor-pointer',
                 canSubmit
-                  ? 'bg-primary hover:bg-primary/90 text-primary-foreground border border-primary'
-                  : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                  ? 'bg-[#0A246A] hover:bg-[#081C52] text-white border border-[#0A246A]'
+                  : 'bg-[#ECE9D8] text-[#888888] border border-[#ACA899] cursor-not-allowed'
               )}
             >
               {loading ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Ingesting…
-                </>
+                <span>Ingestando...</span>
               ) : (
                 <>
                   <Upload className="w-3 h-3" />
-                  {mode === 'text' && bulk && bulkChunks && bulkChunks.length > 1 ? `Ingest ${bulkChunks.length} chunks` : 'Ingest'}
+                  {mode === 'text' && bulk && bulkChunks && bulkChunks.length > 1 ? `Ingestar ${bulkChunks.length} bloques` : 'Ingestar'}
                 </>
               )}
             </button>
@@ -388,17 +385,16 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
           {/* Recent nodes */}
           {recent.length > 0 && (
-            <div className="border-t border-slate-800 pt-3 space-y-1.5">
-              <p className="text-xs text-muted-foreground font-semibold">Recent</p>
+            <div className="border-t border-[#ACA899] pt-2 space-y-1">
+              <p className="text-[10px] text-[#01285F] font-bold uppercase">Recientes</p>
               {recent.map(n => (
-                <div key={n.node_id + n.ts} className="flex items-start gap-2 text-[11px] font-mono">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-px" />
+                <div key={n.node_id + n.ts} className="flex items-start gap-1.5 text-[10px] font-mono">
+                  <CheckCircle2 className="w-3 h-3 text-[#008000] shrink-0 mt-px" />
                   <div className="flex-1 min-w-0">
-                    <span className="text-slate-300 truncate block">{n.preview}</span>
-                    <span className="text-slate-600">{n.triples} triples · {n.node_id.slice(0, 12)}…</span>
+                    <span className="text-[#000000] dark:text-foreground truncate block">{n.preview}</span>
+                    <span className="text-[#555555]">{n.triples} relaciones · {n.node_id.slice(0, 12)}…</span>
                   </div>
-                  <span className="text-slate-700 shrink-0">
-                    <Clock className="w-2.5 h-2.5 inline mr-0.5" />
+                  <span className="text-[#666666] shrink-0">
                     {new Date(n.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </span>
                 </div>
