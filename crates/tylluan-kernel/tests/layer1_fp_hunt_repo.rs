@@ -28,7 +28,21 @@ use tylluan_kernel::security::poison_patterns::{matches_injection_pattern, norma
 /// «régimen de»); el informe T-DSH-36 propone quitarlos de SQUASHED_PATTERNS,
 /// lo que bajaría el tope a 54. Subirlo solo con motivo escrito; bajarlo al
 /// recortar un patrón.
-const MAX_HITS: usize = 54;
+///
+/// T-DSH-151 (2026-10-31, base `b9f1331`): 92 aciertos sobre 1.098 ficheros /
+/// 46.410 párrafos. Motivo del nuevo tope: el repo creció con documentación e
+/// informes de seguridad (D-31, T-DSH-36/37, ASI06/redteam, D-80) y tests que
+/// contienen los literales de inyección a propósito. Revisada la lista impresa:
+/// los 92 son literales de patrón en código/tests/docs (veredictos
+/// "literal del propio patrón", "datos/literal de test" o "código/docs"), no
+/// prosa benigna nueva. El test sigue cazando un FP real de prosa si aparece.
+///
+/// T-DSH-151 (2026-10-31, tras push218 `1e021f5`): 98 aciertos sobre 1.107
+/// ficheros / 46.673 párrafos. Mismo motivo: push218 integró más informes de
+/// seguridad (T-DSH-153/154, D-80, AG-20) y tests que citan los patrones. La
+/// lista sigue sin prosa benigna nueva; se fija 98 para que un salto vuelva a
+/// pedir revisión.
+const MAX_HITS: usize = 98;
 
 /// Mínimo de párrafos analizados para detectar que el escaneo realmente recorrió
 /// el repo (si esto baja, el test avisa en vez de pasar en vacío).
