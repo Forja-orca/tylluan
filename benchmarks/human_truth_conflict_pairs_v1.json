@@ -2008,7 +2008,7 @@
     "node_type": "document",
     "content_sha256": "c5b03c596dda987b76b4919598366d3577aeaf62e94c698c575c29a84f36a872",
     "content_len": 802,
-    "text": "file:///E:/ForjaMCPo3/dashboard_v3/node_modules/vite/dist/node/cli.js:445\n          throw new CACError(`Unknown option \\`${name.length > 1 ? `--${name}` : `-${name}`}\\``);\n                ^\n\nCACError: Unknown option `--cacheDir`\n    at Command.checkUnknownOptions (file:///E:/ForjaMCPo3/dashboard_v3/"
+    "text": "file:///E:/ProyectoPredecesor/dashboard_v3/node_modules/vite/dist/node/cli.js:445\n          throw new CACError(`Unknown option \\`${name.length > 1 ? `--${name}` : `-${name}`}\\``);\n                ^\n\nCACError: Unknown option `--cacheDir`\n    at Command.checkUnknownOptions (file:///E:/ProyectoPredecesor/dashboard_v3/"
    },
    "label": "consistente",
    "reason": "La segunda afirmación es la consecuencia exacta de la primera: la invocación de vite con --cacheDir produce el CACError 'Unknown option --cacheDir'; causa y efecto coherentes, no tensión."
@@ -2126,21 +2126,21 @@
   {
    "pair_id": "cp-096",
    "edge_type": "remembers",
-   "source_id": "agent:claude-code-forjamcpo3",
+   "source_id": "agent:claude-code-proyectopredecesor",
    "source_type": "identity",
    "target_a": {
-    "node_id": "agent_memory:claude-code-forjamcpo3:47e2cc98d77a4c4cb36e76b851933f78",
+    "node_id": "agent_memory:claude-code-proyectopredecesor:47e2cc98d77a4c4cb36e76b851933f78",
     "node_type": "agent_memory",
     "content_sha256": "281e774d54752b93ec098e5b33791f87767c7916e1e1236f82fd75d4db23611e",
     "content_len": 1591,
-    "text": "[claude-code-forjamcpo3] RESUMEN FINAL CONSOLIDADO -- evaluacion Tylluan13.5/Qwen3.5-4B, 2 harnesses distintos (nodos previos 854a52d0, fc6bc8c8, cde9b31f). Harness Docker/Hermes: invento tool terminal-Docker-backend inexistente, luego duplico con JSON de resultado fabricado (version 1.4.0 vs real 0"
+    "text": "[claude-code-proyectopredecesor] RESUMEN FINAL CONSOLIDADO -- evaluacion Tylluan13.5/Qwen3.5-4B, 2 harnesses distintos (nodos previos 854a52d0, fc6bc8c8, cde9b31f). Harness Docker/Hermes: invento tool terminal-Docker-backend inexistente, luego duplico con JSON de resultado fabricado (version 1.4.0 vs real 0"
    },
    "target_b": {
-    "node_id": "agent_memory:claude-code-forjamcpo3:854a52d024af45909a8bb72fa9b66f54",
+    "node_id": "agent_memory:claude-code-proyectopredecesor:854a52d024af45909a8bb72fa9b66f54",
     "node_type": "agent_memory",
     "content_sha256": "f791c87af8a0d10c60a9af415ebb76f7150f159602dcf3a8727cc64dcf1e2ebe",
     "content_len": 2664,
-    "text": "[claude-code-forjamcpo3] EVALUACION REAL Tylluan13.5/Qwen3.5-4B iterado (entrenamiento 40h en 2x RTX3060, terminado 2026-08-19). Ronda de 6 preguntas (regresion + escalada + honestidad + injection), veredicto verificado independientemente por Claude Code, no solo leido:\n\n1. Matematicas (regresion) -"
+    "text": "[claude-code-proyectopredecesor] EVALUACION REAL Tylluan13.5/Qwen3.5-4B iterado (entrenamiento 40h en 2x RTX3060, terminado 2026-08-19). Ronda de 6 preguntas (regresion + escalada + honestidad + injection), veredicto verificado independientemente por Claude Code, no solo leido:\n\n1. Matematicas (regresion) -"
    },
    "label": "consistente",
    "reason": "Ambas memorias resumen la MISMA evaluación de Tylluan13.5/Qwen3.5-4B: A consolida conclusiones (patrón de fabricación bajo presión) y B detalla la ronda real verificada; se complementan sin contradecirse."

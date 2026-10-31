@@ -5,7 +5,7 @@ Decisión de José: está cansado del estilo web de IA y prefiere cualquier esti
 
 ## Qué analicé
 - Skills de Claude Code instaladas: `frontend-design` (oficial), `frontend-design-direction`, `design-system`, `accessibility` y `frontend-a11y` (ECC), `design-critique`, `accessibility-review`, `ux-copy`, `design-system` del plugin de diseño, `theme-factory`, `canvas-design`, `brand-guidelines`.
-- Skill propia de Antigravity (`E:\ForjaMCPo3\skills\frontend-sovereign-ui-skill.md`): prescribe shadcn/ui, Inter, violeta (#7c3aed), esquinas de 10 y 14 px e iconos Lucide. **Es exactamente el estilo que José rechaza: queda retirada para Tylluan.**
+- Skill propia de Antigravity (`frontend-sovereign-ui-skill.md`, fuera de este repositorio): prescribe shadcn/ui, Inter, violeta (#7c3aed), esquinas de 10 y 14 px e iconos Lucide. **Es exactamente el estilo que José rechaza: queda retirada para Tylluan.**
 - Lo aprovechable de las demás: la lista de "señales de página generada" que debe evitarse (`frontend-design`: resaltar una sola palabra del titular, etiquetas en mayúsculas, rótulos innecesarios sobre el contenido, marcadores numerados decorativos, animaciones de entrada dispersas); el método de contraste y teclado de `accessibility` (WCAG 2.2 AA); y los principios de `ux-copy`.
 - No verificado: que Antigravity pueda cargar las skills de Claude Code; por eso las reglas esenciales van escritas aquí.
 

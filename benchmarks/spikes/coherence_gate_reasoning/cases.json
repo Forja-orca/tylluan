@@ -3,7 +3,7 @@
     {
       "id": "clear_relevant_1",
       "query": "como arranco el kernel de tylluan en windows",
-      "content": "El kernel se arranca con .\\tylluan-mcp.bat desde la raiz del repo E:\\tylluan\\, nunca con el patron de ForjaMCPo3.",
+      "content": "El kernel se arranca con .\\tylluan-mcp.bat desde la raiz del repo E:\\tylluan\\, nunca con el patron de ProyectoPredecesor.",
       "human_label": "keep",
       "human_reasoning": "Respuesta directa y correcta a la pregunta, mismo dominio exacto."
     },
@@ -24,7 +24,7 @@
     {
       "id": "borderline_same_keywords_wrong_scope_1",
       "query": "como arranco el kernel de tylluan en windows",
-      "content": "El kernel de ForjaMCPo3 se arranca con forja-mcp.bat desde crates/forja-kernel/, arquitectura de proxy+kernel en :3030.",
+      "content": "El kernel de ProyectoPredecesor se arranca con forja-mcp.bat desde crates/forja-kernel/, arquitectura de proxy+kernel en :3030.",
       "human_label": "reject",
       "human_reasoning": "Muchisimas palabras clave compartidas (kernel, arranca, bat) -- cosine probablemente alto -- pero es el proyecto EQUIVOCADO (Forja no Tylluan), justo el error que Claude cometio una vez con Jose. Contenido tecnicamente peligroso de colar sin filtrar."
     },

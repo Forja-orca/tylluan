@@ -7,7 +7,7 @@ during the v1-port migration and never touched again. It missed two real
 fixes applied to the canonical copy on 2026-07-29/30: routing add_node()
 through kernel IPC instead of a raw sqlite3.connect() INSERT (so nodes get
 a real BGE-M3 embedding), and resolving KERNEL_URL dynamically instead of
-a hardcoded "http://127.0.0.1:3030" (ForjaMCPo3's port, not Tylluan's).
+a hardcoded "http://127.0.0.1:3030" (the predecessor project's port, not Tylluan's).
 Two copies of the same logic drifting apart is exactly how that second bug
 went unnoticed -- re-exporting instead of duplicating means there is only
 ever one copy to fix.

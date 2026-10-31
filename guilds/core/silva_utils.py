@@ -29,7 +29,7 @@ DRIFT_SENSITIVE_TYPES = frozenset(["summary", "synthesis", "agent_summary"])
 def _resolve_kernel_base() -> str:
     """Same pattern as guilds/core/coloquio.py's _resolve_kernel_base().
     KERNEL_URL used to be hardcoded to "http://127.0.0.1:3030" -- that's
-    ForjaMCPo3's port, not Tylluan's (:47004 by default, dynamic otherwise).
+    the predecessor project's port, not Tylluan's (:47004 by default, dynamic otherwise).
     Every write_edge()/add_node() IPC call silently failed with a connection
     error until this was found (2026-07-30), confirmed live: a real
     vision_analyze call produced a correct description but node_id stayed

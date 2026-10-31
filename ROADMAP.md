@@ -250,7 +250,7 @@ Delivered (275 commits since v0.13.0, including a week of production dogfooding 
 **Goal:** Verify what earlier milestones claimed was "wired" against a live running kernel, not just code review — several real bugs only surfaced this way.
 
 Delivered (157 commits since v0.14.0):
-- [x] Full connection audit — 5 guilds found defaulting IPC to ForjaMCPo3's port `3030` instead of Tylluan's `4000`, dead code (`memory_bridge.py`) removed, Python guild writes bypassing kernel embedding generation fixed, 3 dashboard panels showing fabricated/stuck data replaced with honest empty states.
+- [x] Full connection audit — 5 guilds found defaulting IPC to the predecessor project's port `3030` instead of Tylluan's `4000`, dead code (`memory_bridge.py`) removed, Python guild writes bypassing kernel embedding generation fixed, 3 dashboard panels showing fabricated/stuck data replaced with honest empty states.
 - [x] Mandatory Noise NK encryption for mesh gossip — previously sent `GossipEntry` payloads over plain HTTP; `GossipEntry`/`KBucketEntry` now carry an optional Ed25519 pubkey, upgrading to real Noise NK once known; plaintext remains last-resort fallback for peers without the fix yet.
 - [x] CoherenceGate Layer 4 live in production — hybrid deterministic+LLM classifier wired into both real recall call sites in observation mode. A 3-model SLM debate alternative was tried and NO-GO'd (sub-2B models converge to a constant answer regardless of prompt).
 - [x] 13 additional "v1-port" guilds activated via `[guilds.v2]`; new structural test prevents catalog/registration drift.

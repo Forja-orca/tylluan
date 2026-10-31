@@ -190,7 +190,7 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
 # I3 (2026-08-18 review fix): each dynamic script boots a real kernel
 # (Rust binary + Python guild subprocesses), not a mock -- cold boot with
 # guild startup is real minutes-scale work on CPU-only hardware elsewhere
-# in this project's own stack (see ForjaMCPo3's CLAUDE.md: knowledge guild
+# in this project's own stack (see the predecessor project's CLAUDE.md: knowledge guild
 # alone can take 60-120s under CPU inference). We now run the
 # script through the `timeout` coreutil (SIGTERM, not SIGKILL) so bash gets
 # a chance to run its EXIT trap and clean up the process group itself,

@@ -39,7 +39,7 @@ el propósito final es ayuda proporcionada, no expansión por sí misma.
 
 Verificado contra memoria real, no reconstruido de memoria:
 
-- **ForjaMCPo3, el predecesor** (documento fundacional, `project_philosophy.md`):
+- **El proyecto predecesor** (documento fundacional, `project_philosophy.md`):
   la analogía correcta siempre fue el **hipocampo** — "no decide, no tiene
   agenda. Consolida memorias, conecta experiencias separadas, da a quien
   lo use la riqueza de contexto que se perdería al cerrar cada sesión."

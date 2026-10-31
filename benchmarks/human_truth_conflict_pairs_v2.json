@@ -1399,7 +1399,7 @@
    "pair_id": "cp2-056",
    "origin": "real_pair",
    "label": "no relacionado",
-   "reason": "Buscar la ruta absoluta de ForjaMCPo3 (crates/forja-kernel y guilds) frente a la opinion detallada sobre el documento TEB-1.0: localizacion de proyecto vs evaluacion de un documento, temas distintos.",
+   "reason": "Buscar la ruta absoluta de ProyectoPredecesor (crates/forja-kernel y guilds) frente a la opinion detallada sobre el documento TEB-1.0: localizacion de proyecto vs evaluacion de un documento, temas distintos.",
    "edge_type": null,
    "source_id": null,
    "target_a": {
@@ -1407,7 +1407,7 @@
     "node_type": "routing_anchor",
     "content_sha256": "fa67f5d192eceef2e6f741e1b8e1622595dd47160de2b08ea13a0d04bd03ba4a",
     "content_len": 189,
-    "text": "Find the exact absolute path to the ForjaMCPo3 project directory, specifically looking for the crates/forja-kernel folder and the Python guilds folder (where coloquio_digest.py is located)."
+    "text": "Find the exact absolute path to the ProyectoPredecesor project directory, specifically looking for the crates/forja-kernel folder and the Python guilds folder (where coloquio_digest.py is located)."
    },
    "target_b": {
     "node_id": "coloquio_general_289",
@@ -1436,7 +1436,7 @@
     "node_type": "coloquio_memory",
     "content_sha256": "9a1e187afe749ea344862016af07670483b0dcdebaeed8e9eca2ca5d439aae9f",
     "content_len": 187,
-    "text": "memory | agent: claude-forja-e2e-probe | E2E-PROBE-2026-08-19: prueba de punta a punta del protocolo MCP tras el fix de resultType+ttlMs/cacheScope, ejecutada por Claude desde ForjaMCPo3."
+    "text": "memory | agent: claude-forja-e2e-probe | E2E-PROBE-2026-08-19: prueba de punta a punta del protocolo MCP tras el fix de resultType+ttlMs/cacheScope, ejecutada por Claude desde ProyectoPredecesor."
    }
   },
   {

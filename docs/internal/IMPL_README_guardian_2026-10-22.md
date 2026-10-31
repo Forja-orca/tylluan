@@ -120,7 +120,7 @@ docs/assets/architecture.svg:
 
 ## Pendientes / hallazgos para el TL (fuera del alcance de README.md)
 
-1. **Privacidad (no grave, a confirmar):** la URL `github.com/forja-orca/tylluan` (badge CI, install.sh/ps1 e Discussions) contiene "forja-orca". Lo he dejado porque es el repo público y romper los enlaces de instalación es peor. Confirmar que el nombre del repo público es ese. No hay "ForjaMCPo3", rutas de máquina, tokens ni nombres de agentes de la flota en README.md ni en el SVG tras los cambios.
+1. **Privacidad (no grave, a confirmar):** la URL `github.com/forja-orca/tylluan` (badge CI, install.sh/ps1 e Discussions) contiene "forja-orca". Lo he dejado porque es el repo público y romper los enlaces de instalación es peor. Confirmar que el nombre del repo público es ese. No hay nombres de proyectos privados, rutas de máquina, tokens ni nombres de agentes de la flota en README.md ni en el SVG tras los cambios.
 2. **README.es.md y README.zh.md** replican las cifras antiguas (p. ej. tabla de perfiles, "1272" bien, pero ahí están también las cifras de arranque y "45 tools"). No los he tocado (fuera de mi permiso). Deben sincronizarse.
 3. **docs/getting-started/QUICKSTART.md:75** repite "~34 MB resident idle" sin fuente primaria: el README ya no lo publica; QUICKSTART quedaría sin respaldo.
 4. **STATUS.md:13 (pendientes abiertos):** el listener P2P (`p2p.enabled`, apagado por defecto) ejecuta cualquier guild para un par aprobado sin lista de permitidos. Contradice en parte el "deny-by-default" de ADR-019 paso 2 si el listener está activo. No lo cito en el README; conviene que el TL lo revise antes de publicar la sección de federación.

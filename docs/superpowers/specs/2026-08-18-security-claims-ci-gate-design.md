@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-18
 **Status:** Draft, pending José's review
-**Author:** Claude (ForjaMCPo3), directed by José
+**Author:** Claude, directed by José
 
 ## Problem
 

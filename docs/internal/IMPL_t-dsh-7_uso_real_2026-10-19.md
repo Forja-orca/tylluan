@@ -55,7 +55,7 @@ Ayunos: el guild coloquio concentra **1462 de 2375 llamadas reales (61,6 %)**; m
 | antigravity | 17 | 5 |
 | tylluan-cli | 6 | 0 |
 | claude-planificacion | 0 | 10 |
-| claude-code-forjamcpo3 | 0 | 6 |
+| claude-code-predecesor | 0 | 6 |
 | buffy / mimo / opencode | 1 / 1 / 2 | 2 / 2 / 1 |
 
 Por semana ISO (todos los agentes reales): pico en **W30 (36 recalls)**; W33 19; W35 9+25mem; **descolgada en octubre: W40 1, W41 4, W42 3 recalls en total** mientras la flota sigue publicando ~100 mensajes/semana. El único agente con más remember que recall es claude-code (21/10) — el TL escribe; casi nadie lee.

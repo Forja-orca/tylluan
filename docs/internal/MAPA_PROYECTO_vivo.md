@@ -48,7 +48,7 @@ Regla de atención: ningún bloque recibe la mayor parte del esfuerzo del TL má
 | I-03 | Guardián recurrente del README (gate determinista + pasada de un subagente barato) | José, 22-oct | **sin hacer** (hubo una pasada única, commit `329f3e3`) | recap, paso 16 |
 | I-04 | README nuevo: «stack de IA local, portable, universal vía MCP y federado», no agente | José, 23-oct | borrador en la rama local `readme-draft`; espera el visto bueno de José | `git log readme-draft` |
 | I-05 | Cliente de inferencia único y configurable (ADR-020), juez en nube opcional, tope de gasto | José, 22-oct | investigación H-13 a H-20 hecha; enmienda del ADR por redactar | `docs/reference/research/2026-10-24_H1*` y `H2*` |
-| I-06 | Hermes con los permisos de un agente de código sin miedo a configurarlo mal | José, 22-oct | propuesta `hermes_propuesta/` sin aplicar | `C:\Users\FoRJa\.claude\projects\E--ForjaMCPo3\` (informe y propuesta) |
+| I-06 | Hermes con los permisos de un agente de código sin miedo a configurarlo mal | José, 22-oct | propuesta `hermes_propuesta/` sin aplicar | espacio privado del TL (informe y propuesta) |
 | I-07 | LM Studio como servidor de decisión: falta el adaptador de `/v1/decisions` | TL, 22-oct | sin tarea | H-13, H-14 |
 | I-08 | Transcripción de audio nativa en Tylluan, sin ComfyUI | José, 23-oct | alcance sin decidir | recap, paso 10 |
 | I-09 | Semana de vulnerabilidades: Python 3.12.15/3.14.8 (urgente en los guilds), Node, Java 21.0.14, Bun 1.4.4, Windows 25H2 | José, 23-oct | informe hecho; faltan las actualizaciones en ventana | `docs/internal/SEGURIDAD_semana_vulnerabilidades_2026-10-24.md` |
