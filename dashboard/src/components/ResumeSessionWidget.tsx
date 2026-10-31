@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  History, 
   Search, 
   RefreshCw, 
   Clock, 
@@ -72,8 +71,8 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
         <p 
           key={idx} 
           className={cn(
-            "text-[11px] font-mono leading-relaxed text-slate-300",
-            isListItem ? "pl-4 -indent-4 mb-2 text-slate-200" : "mb-3 font-semibold text-slate-400"
+            "text-[11px] font-mono leading-relaxed text-muted-foreground",
+            isListItem ? "pl-4 -indent-4 mb-2 text-foreground" : "mb-3 font-semibold text-foreground"
           )}
         >
           {line}
@@ -83,40 +82,39 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
   };
 
   return (
-    <div className="bg-slate-900/60 border border-slate-850 rounded-2xl p-4 space-y-4">
+    <div className="bg-card border border-border rounded p-4 space-y-4 font-sans">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <History className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold uppercase tracking-wider font-mono text-slate-200">Resume Session Context</span>
+          <span className="text-xs font-bold text-foreground">Reanudar Contexto de Sesión</span>
         </div>
-        <span className="text-[11px] font-mono text-slate-500">Security Layer</span>
+        <span className="text-[11px] font-mono text-muted-foreground">Capa de Seguridad</span>
       </div>
 
       {/* Control Input */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-500" />
+          <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           <input
             type="text"
             value={agentId}
             onChange={(e) => setAgentId(e.target.value)}
-            placeholder="Search Agent ID..."
-            className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-850 focus:border-emerald-500 focus:outline-none rounded-xl text-[11px] font-mono text-slate-300 placeholder-slate-600"
+            placeholder="Buscar ID de agente..."
+            className="w-full pl-8 pr-3 py-1.5 bg-card border border-border focus:border-primary focus:outline-none rounded text-xs font-mono text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <button
           onClick={handleCheckSession}
           disabled={loading || !agentId.trim()}
-          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-[11px] font-bold font-mono text-slate-300 rounded-xl flex items-center gap-1.5 transition-all border border-slate-700"
+          className="px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-xs font-bold font-mono text-primary-foreground rounded flex items-center gap-1.5 transition-colors border border-primary"
         >
-          <RefreshCw className={cn("w-3 h-3 text-emerald-400", loading && "animate-spin")} />
-          Check
+          <RefreshCw className={cn("w-3 h-3 text-primary-foreground", loading && "animate-spin")} aria-hidden="true" />
+          Consultar
         </button>
       </div>
 
       {error && (
-        <div className="p-3 bg-red-950/20 border border-red-500/30 rounded-xl text-[11px] font-mono text-red-400">
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-xs font-mono text-red-600">
           {error}
         </div>
       )}
@@ -125,32 +123,32 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
       {result ? (
         result.summary ? (
           <div className="space-y-3">
-            <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl space-y-2.5">
-              <div className="flex justify-between items-center text-[11px] font-mono text-slate-500">
-                <span>Agent: @{agentId}</span>
+            <div className="p-3 bg-muted/30 border border-border rounded space-y-2.5">
+              <div className="flex justify-between items-center text-[11px] font-mono text-muted-foreground">
+                <span>Agente: @{agentId}</span>
                 {result.created_at && (
                   <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
+                    <Clock className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
                     {formatRelativeTime(result.created_at)}
                   </span>
                 )}
               </div>
-              <div className="border-t border-slate-900 pt-2.5">
+              <div className="border-t border-border/60 pt-2.5">
                 {renderSummaryLines(result.summary)}
               </div>
             </div>
           </div>
         ) : (
-          <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl flex flex-col items-center justify-center text-center font-mono py-6">
-            <AlertTriangle className="w-8 h-8 text-slate-600 mb-2" />
-            <p className="text-[11px] text-slate-400">No previous sessions found</p>
-            <p className="text-[11px] text-slate-600 mt-1">There are no memory consolidation logs registered for @{agentId}.</p>
+          <div className="p-4 bg-muted/20 border border-border rounded flex flex-col items-center justify-center text-center font-mono py-6">
+            <AlertTriangle className="w-6 h-6 text-muted-foreground mb-2" aria-hidden="true" />
+            <p className="text-xs text-foreground font-semibold">Sin sesiones previas</p>
+            <p className="text-[11px] text-muted-foreground mt-1">No hay registros de consolidación de memoria para @{agentId}.</p>
           </div>
         )
       ) : (
-        <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl flex flex-col items-center justify-center text-center font-mono py-8">
-          <HelpCircle className="w-8 h-8 text-slate-700 animate-pulse mb-2" />
-          <p className="text-[11px] text-slate-500">Enter agent ID to pull summary</p>
+        <div className="p-4 bg-muted/20 border border-border rounded flex flex-col items-center justify-center text-center font-mono py-8">
+          <HelpCircle className="w-6 h-6 text-muted-foreground mb-2" aria-hidden="true" />
+          <p className="text-xs text-muted-foreground">Introduce el ID de un agente para consultar el resumen</p>
         </div>
       )}
     </div>

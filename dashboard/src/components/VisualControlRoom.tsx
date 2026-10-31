@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Activity, Radio, Clock, RefreshCw, AlertCircle, Sparkles } from 'lucide-react';
 import type { NexusBridge } from '@tylluan/ui-core';
 
 interface VisualControlRoomProps {
@@ -226,8 +225,7 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
-              <Sparkles className="w-3 h-3 text-primary" />
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/30">
               Soberanía Visual · AG-17
             </span>
             <span className="text-xs text-muted-foreground font-mono">ADR-025</span>
@@ -241,13 +239,13 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border">
+        <div className="flex items-center gap-1 bg-muted p-1 rounded border border-border">
           <button
             type="button"
             onClick={() => setActiveView('rings')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
               activeView === 'rings'
-                ? 'bg-card text-foreground shadow-sm border border-border'
+                ? 'bg-card text-foreground border border-border'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -256,9 +254,9 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
           <button
             type="button"
             onClick={() => setActiveView('flow')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
               activeView === 'flow'
-                ? 'bg-card text-foreground shadow-sm border border-border'
+                ? 'bg-card text-foreground border border-border'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -267,9 +265,9 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
           <button
             type="button"
             onClick={() => setActiveView('heatmap')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
               activeView === 'heatmap'
-                ? 'bg-card text-foreground shadow-sm border border-border'
+                ? 'bg-card text-foreground border border-border'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -279,7 +277,7 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
       </div>
 
       {/* Main Visual Display */}
-      <div className="flex-1 min-h-[460px] rounded-2xl border border-border bg-card/40 p-4 md:p-6 flex flex-col relative overflow-hidden backdrop-blur-sm">
+      <div className="flex-1 min-h-[460px] rounded border border-border bg-card p-4 md:p-6 flex flex-col relative overflow-hidden">
         {activeView === 'rings' && <SubruntimeRingsView subruntimes={subruntimes} />}
         {activeView === 'flow' && <FlowMapCanvasView subruntimes={subruntimes} />}
         {activeView === 'heatmap' && <AgentHeatmapView messages={messagesData} />}
@@ -288,7 +286,6 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
       {/* Footer Info & Telemetry Endpoints Attribution */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-2 text-[11px] font-mono text-muted-foreground border-t border-border/40 pt-3">
         <div className="flex items-center gap-2">
-          <Activity className="w-3.5 h-3.5 text-primary" />
           <span>Endpoints vivos: <code className="text-foreground">/api/v1/runtime/tasks</code> · <code className="text-foreground">/health/detailed</code> · <code className="text-foreground">/guilds</code> · <code className="text-foreground">/coloquio/messages</code></span>
         </div>
         <div className="flex items-center gap-3">
@@ -318,18 +315,18 @@ export function SubruntimeRingsView({ subruntimes }: RingsViewProps) {
         // Stroke dashoffset: circumference * (1 - percent / 100)
         const strokeDashoffset = circumference - (Math.max(0, Math.min(100, sub.percent)) / 100) * circumference;
 
-        // Color del arco según estado
-        let strokeColor = 'hsl(var(--primary))'; // Token CSS canónico salvia
-        if (sub.state === 'nodata') strokeColor = '#475569'; // Slate 600
-        else if (sub.state === 'error') strokeColor = '#ef4444'; // Red 500
-        else if (sub.state === 'warning') strokeColor = '#f59e0b'; // Amber 500
+        // Color del arco según estado (azul logo para normal, semáforo para estados)
+        let strokeColor = '#0A246A'; // Azul logo oficial
+        if (sub.state === 'nodata') strokeColor = '#64748b'; // Slate 500
+        else if (sub.state === 'error') strokeColor = '#C22222'; // Red estado
+        else if (sub.state === 'warning') strokeColor = '#B8860B'; // Amber estado
         else if (sub.state === 'idle') strokeColor = '#64748b'; // Slate 500
 
         return (
           <div
             key={sub.id}
             data-testid={`ring-${sub.id}`}
-            className="flex flex-col items-center justify-center p-4 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-all group"
+            className="flex flex-col items-center justify-center p-4 rounded border border-border bg-card hover:bg-muted/30 transition-all group"
           >
             <div className="relative w-36 h-36 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
@@ -360,7 +357,7 @@ export function SubruntimeRingsView({ subruntimes }: RingsViewProps) {
               {/* Center Metrics (Hueso / Grafito) */}
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                 {sub.state === 'nodata' ? (
-                  <span className="text-[11px] font-mono font-bold text-muted-foreground uppercase">
+                  <span className="text-[11px] font-mono font-bold text-muted-foreground">
                     Sin Dato
                   </span>
                 ) : (
@@ -368,7 +365,7 @@ export function SubruntimeRingsView({ subruntimes }: RingsViewProps) {
                     <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
                       {sub.percent}%
                     </span>
-                    <span className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground">
+                    <span className="text-[10px] font-mono text-muted-foreground">
                       {sub.state}
                     </span>
                   </>
@@ -557,7 +554,7 @@ export function FlowMapCanvasView({ subruntimes }: FlowViewProps) {
   return (
     <div ref={containerRef} className="flex-1 w-full h-full min-h-[380px] relative">
       <canvas ref={canvasRef} className="w-full h-full block" />
-      <div className="absolute top-2 left-2 bg-slate-900/80 border border-slate-800 rounded-lg p-2 text-[10px] font-mono text-slate-300">
+      <div className="absolute top-2 left-2 bg-card border border-border rounded p-2 text-[10px] font-mono text-foreground">
         <span>Aristas con grosor y velocidad proporcionales al volumen de datos activo</span>
       </div>
     </div>
@@ -645,17 +642,17 @@ export function AgentHeatmapView({ messages }: HeatmapViewProps) {
               return (
                 <div
                   key={h}
-                  className="h-7 rounded transition-all flex items-center justify-center cursor-help group relative border border-border/30"
+                  className="h-7 rounded flex items-center justify-center cursor-help group relative border border-border"
                   style={{
                     backgroundColor:
                       count === 0
-                        ? 'rgba(30, 41, 59, 0.4)' // Grafito apagado
-                        : `rgba(138, 180, 166, ${0.25 + intensity * 0.75})`, // Salvia graduado #8AB4A6
+                        ? '#ECECEC' // Gris neutro inactivo
+                        : `rgba(10, 36, 106, ${0.15 + intensity * 0.85})`, // Azul logo #0A246A graduado
                   }}
                   title={`@${agent} a las ${h}:00: ${count} mensajes`}
                 >
                   {count > 0 && (
-                    <span className="text-[9px] font-mono font-bold text-slate-950">
+                    <span className="text-[9px] font-mono font-bold text-white">
                       {count}
                     </span>
                   )}
@@ -670,15 +667,15 @@ export function AgentHeatmapView({ messages }: HeatmapViewProps) {
           <div className="flex items-center gap-3">
             <span>Intensidad:</span>
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded border border-border/40" style={{ backgroundColor: 'rgba(30, 41, 59, 0.6)' }} title="0 mensajes" />
+              <span className="w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: '#ECECEC' }} title="0 mensajes" />
               <span className="text-[10px]">Inactivo (0)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded border border-border/40" style={{ backgroundColor: 'rgba(138, 180, 166, 0.4)' }} title="Baja actividad" />
+              <span className="w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: 'rgba(10, 36, 106, 0.35)' }} title="Baja actividad" />
               <span className="text-[10px]">Baja</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded border border-border/40" style={{ backgroundColor: 'rgba(138, 180, 166, 0.95)' }} title="Alta actividad" />
+              <span className="w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: 'rgba(10, 36, 106, 0.95)' }} title="Alta actividad" />
               <span className="text-[10px]">Alta</span>
             </div>
           </div>

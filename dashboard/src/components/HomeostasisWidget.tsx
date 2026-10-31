@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Cpu, Database, Heart } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -48,25 +47,22 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
   
   const score = Math.round((guildsOk * 40) + (memoryOk * 30) + (noRecentErrors * 30));
 
-  // Determine color theme
-  let statusColor = "text-emerald-400";
+  // Determine color theme (logo blue / standard status semaphores)
+  let statusColor = "text-emerald-600";
   let statusBg = "bg-emerald-500/10";
-  let statusBorder = "border-emerald-500/20";
-  let strokeColor = "hsl(var(--emerald-400))";
-  let glowColor = "hsl(var(--emerald-400) / 0.4)";
+  let statusBorder = "border-emerald-500/30";
+  let strokeColor = "#16a34a";
 
   if (score < 50) {
-    statusColor = "text-red-400 animate-pulse";
+    statusColor = "text-red-600";
     statusBg = "bg-red-500/10";
-    statusBorder = "border-red-500/20";
-    strokeColor = "hsl(var(--red-400))";
-    glowColor = "hsl(var(--red-400) / 0.4)";
+    statusBorder = "border-red-500/30";
+    strokeColor = "#dc2626";
   } else if (score < 80) {
-    statusColor = "text-amber-400";
+    statusColor = "text-amber-600";
     statusBg = "bg-amber-500/10";
-    statusBorder = "border-amber-500/20";
-    strokeColor = "hsl(var(--amber-400))";
-    glowColor = "hsl(var(--amber-400) / 0.4)";
+    statusBorder = "border-amber-500/30";
+    strokeColor = "#d97706";
   }
 
   // SVG circle calculations
@@ -75,31 +71,24 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-xl relative overflow-hidden group">
-      {/* Background radial gradient glow */}
-      <div 
-        className="absolute -top-12 -right-12 w-36 h-36 rounded-full filter blur-2xl opacity-10 pointer-events-none transition-all duration-1000"
-        style={{ background: strokeColor }}
-      />
-      
-      <div className="flex flex-col sm:flex-row items-center gap-6 justify-between relative z-10">
+    <div className="rounded border border-border bg-card p-4 relative font-sans">
+      <div className="flex flex-col sm:flex-row items-center gap-6 justify-between">
         {/* Left Side: Text and status description */}
-        <div className="space-y-3 text-center sm:text-left flex-1">
+        <div className="space-y-2 text-center sm:text-left flex-1">
           <div className="flex items-center gap-2 justify-center sm:justify-start">
-            <Heart className={cn("w-4 h-4", statusColor)} />
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">System Homeostasis</span>
+            <span className="text-xs font-bold text-foreground">Homeostasis del Sistema</span>
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-100 tracking-tight">TylluanNexus o3 Cortex</h3>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-sm mt-1">
-              Unified local hub integrity indicator. Monitors guilds, databases, and errors in real-time.
+            <h3 className="text-base font-bold text-foreground">Córtex TylluanNexus</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mt-0.5">
+              Indicador de integridad unificado: gremios, base SilvaDB y estabilidad en tiempo real.
             </p>
           </div>
           
           {/* Status badge */}
-          <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold uppercase tracking-widest", statusBg, statusBorder, statusColor)}>
-            <div className={cn("w-1.5 h-1.5 rounded-full", score >= 80 ? "bg-emerald-400" : score >= 50 ? "bg-amber-400 animate-pulse-soft" : "bg-red-500 animate-beacon")} />
-            {loading ? "Calculating..." : health?.status === "healthy" ? "Cortex Stable" : "System Strain"}
+          <div className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-bold", statusBg, statusBorder, statusColor)}>
+            <div className={cn("w-1.5 h-1.5 rounded-full", score >= 80 ? "bg-emerald-600" : score >= 50 ? "bg-amber-600" : "bg-red-600")} />
+            {loading ? "Calculando..." : health?.status === "healthy" ? "Córtex Estable" : "Tensión en el Sistema"}
           </div>
         </div>
 
@@ -112,7 +101,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
                 cx="48"
                 cy="48"
                 r={radius}
-                className="stroke-slate-800"
+                className="stroke-muted"
                 strokeWidth="6"
                 fill="transparent"
               />
@@ -125,45 +114,40 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
                 fill="transparent"
                 strokeDasharray={circumference}
                 strokeDashoffset={loading ? circumference : strokeDashoffset}
-                strokeLinecap="round"
-                className="transition-all duration-1000 ease-out"
-                style={{ filter: `drop-shadow(0 0 4px ${glowColor})` }}
+                className="transition-all duration-500 ease-out"
               />
             </svg>
             {/* Score inside circular gauge */}
             <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-xl font-black font-mono text-slate-100">{loading ? "—" : score}</span>
-              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Score</span>
+              <span className="text-xl font-bold font-mono text-foreground">{loading ? "—" : score}</span>
+              <span className="text-[11px] text-muted-foreground font-mono">Puntos</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Metrics Row below */}
-      <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-slate-800/60 relative z-10">
+      <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-border">
         {/* Metric 1: Guilds */}
-        <div className="bg-slate-950/40 border border-slate-800/40 rounded-xl p-2.5 text-center">
-          <Cpu className="w-3.5 h-3.5 text-blue-400 mx-auto mb-1 opacity-70" />
-          <div className="text-xs font-bold font-mono text-slate-200">
+        <div className="bg-muted/40 border border-border rounded p-2 text-center">
+          <div className="text-xs font-bold font-mono text-foreground">
             {loading ? "—" : `${health?.components?.guilds?.active ?? 0} / ${health?.components?.guilds?.total ?? 0}`}
           </div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">Active Guilds</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">Gremios activos</div>
         </div>
         {/* Metric 2: Memory (SilvaDB) */}
-        <div className="bg-slate-950/40 border border-slate-800/40 rounded-xl p-2.5 text-center">
-          <Database className="w-3.5 h-3.5 text-violet-400 mx-auto mb-1 opacity-70" />
-          <div className="text-xs font-bold font-mono text-slate-200 truncate">
-            {loading ? "—" : `${health?.components?.silva?.nodes ?? 0} Nodes`}
+        <div className="bg-muted/40 border border-border rounded p-2 text-center">
+          <div className="text-xs font-bold font-mono text-foreground truncate">
+            {loading ? "—" : `${health?.components?.silva?.nodes ?? 0} Nodos`}
           </div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">SilvaDB Nodes</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">Nodos SilvaDB</div>
         </div>
         {/* Metric 3: System Status */}
-        <div className="bg-slate-950/40 border border-slate-800/40 rounded-xl p-2.5 text-center">
-          <Activity className="w-3.5 h-3.5 text-emerald-400 mx-auto mb-1 opacity-70" />
+        <div className="bg-muted/40 border border-border rounded p-2 text-center">
           <div className={cn("text-xs font-bold font-mono truncate", statusColor)}>
-            {loading ? "—" : health?.status?.toUpperCase() ?? "UNKNOWN"}
+            {loading ? "—" : health?.status?.toUpperCase() ?? "DESCONOCIDO"}
           </div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">Cortex Status</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">Estado Córtex</div>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 export function MetricCard({ icon: Icon, label, value, unit, sub, valueClass }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
   label: string;
   value: React.ReactNode;
   unit?: string;
@@ -9,21 +9,15 @@ export function MetricCard({ icon: Icon, label, value, unit, sub, valueClass }: 
   valueClass?: string;
 }) {
   return (
-    // bg-slate-900/40 = Nocturne Deep Container tint; border-slate-800 = Owl Slate border
-    // WCAG pre-flight 2026-08-12:
-    //   label (slate-400 on slate-900)   → 7.18:1 PASS
-    //   value (slate-100 on slate-900)   → 16.80:1 PASS
-    //   unit/sub (slate-400 on slate-900) → 7.18:1 PASS (was slate-600: 1.78 FAIL — fixed)
-    //   icon hover (emerald-400)         → 9.58:1 PASS
-    <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md hover:border-emerald-500/30 transition-all group overflow-hidden relative">
-      <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-3xl -mr-12 -mt-12 rounded-full group-hover:bg-emerald-500/10 transition-colors" />
-      <div className="flex items-center gap-2 text-slate-400 text-[11px] uppercase tracking-widest font-sans font-bold mb-1">
-        <Icon className="w-3 h-3 group-hover:text-emerald-400 transition-colors" /> {label}
+    <div className="p-3.5 rounded border border-border bg-card relative">
+      <div className="flex items-center gap-1.5 text-muted-foreground text-xs font-sans font-semibold mb-1">
+        {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />}
+        <span>{label}</span>
       </div>
-      <p className={`text-2xl font-black tracking-tighter font-sans ${valueClass || 'text-slate-100'}`}>
-        {value}{unit && <span className="text-xs text-slate-400 ml-1 font-normal uppercase font-mono">{unit}</span>}
+      <p className={`text-2xl font-bold font-sans ${valueClass || 'text-foreground'}`}>
+        {value}{unit && <span className="text-xs text-muted-foreground ml-1 font-normal font-mono">{unit}</span>}
       </p>
-      {sub && <p className="text-[11px] text-slate-400 mt-1 font-mono">{sub}</p>}
+      {sub && <p className="text-[11px] text-muted-foreground mt-1 font-mono">{sub}</p>}
     </div>
   );
 }
