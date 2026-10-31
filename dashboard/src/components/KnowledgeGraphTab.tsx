@@ -27,7 +27,7 @@ import { IngestPanel } from './IngestPanel';
 // same semantics, a fraction of the cost).
 function LightGraphPlaceholder({ bridge: _bridge }: { bridge: NexusBridge; events: NexusEvent[] }) {
   return (
-    <div className="flex-1 min-h-[300px] rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+    <div className="flex-1 min-h-[300px] rounded bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
       <Network className="w-10 h-10 text-emerald-400/40 mb-3" />
       <h4 className="text-sm font-semibold text-slate-200">Explorador Estructural SilvaDB</h4>
       <p className="text-xs text-slate-400 max-w-md mt-1">
@@ -261,8 +261,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
       {/* Top Selector Bar */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-            <Network className="w-5 h-5 text-emerald-400" />
+          <div className="w-8 h-8 rounded bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Network className="w-5 h-5 text-primary" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-slate-50">Cortex Knowledge</h2>
@@ -270,14 +270,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
         </div>
 
-        <div role="group" aria-label="Knowledge View Modes" className="flex bg-slate-900 rounded-lg p-1 gap-1 items-center shrink-0">
+        <div role="group" aria-label="Knowledge View Modes" className="flex bg-slate-900 border border-border rounded p-1 gap-1 items-center shrink-0">
           <button 
             type="button" 
             aria-pressed={activeSubView === 'graph'}
             onClick={() => setActiveSubView('graph')} 
             className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
-              activeSubView === 'graph' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
+              "px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
+              activeSubView === 'graph' ? "bg-primary/10 text-primary border border-primary/30" : "text-slate-400 hover:text-slate-200"
             )}
           >
             <Network className="w-3.5 h-3.5" aria-hidden="true" /> Graph Canvas
@@ -287,8 +287,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             aria-pressed={activeSubView === 'list'}
             onClick={() => setActiveSubView('list')} 
             className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
-              activeSubView === 'list' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
+              "px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
+              activeSubView === 'list' ? "bg-primary/10 text-primary border border-primary/30" : "text-slate-400 hover:text-slate-200"
             )}
           >
             <List className="w-3.5 h-3.5" aria-hidden="true" /> List Explorer
@@ -303,7 +303,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             <>
               <div className="flex-1 min-h-0 flex flex-col">
                 <Suspense fallback={
-                  <div className="flex-1 min-h-0 rounded-xl bg-slate-900/60 flex items-center justify-center gap-2 text-xs text-slate-400">
+                  <div className="flex-1 min-h-0 rounded bg-slate-900/60 border border-border flex items-center justify-center gap-2 text-xs text-slate-400">
                     <RefreshCw className="w-4 h-4 animate-spin" /> Loading graph canvas...
                   </div>
                 }>
@@ -313,7 +313,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <IngestPanel bridge={bridge} notify={notify} onIngestComplete={handleIngestComplete} />
             </>
           ) : (
-            <div className="h-full rounded-xl bg-slate-900/60 flex items-center justify-center">
+            <div className="h-full rounded bg-slate-900/60 border border-border flex items-center justify-center">
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 Waiting for SilvaDB connection
@@ -337,14 +337,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowSearchPanel(true)}
                   placeholder="Search in memory..."
-                  className="w-full pl-10 pr-10 py-2 bg-slate-900/80 rounded-lg text-sm focus:ring-1 ring-emerald-500 transition-all"
+                  className="w-full pl-10 pr-10 py-2 bg-slate-900/80 rounded text-sm focus:ring-1 ring-primary transition-all"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     aria-label="Clear search query"
                     onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none rounded"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-50 focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none rounded"
                   >
                     <X className="w-4 h-4" aria-hidden="true" />
                   </button>
@@ -356,8 +356,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 aria-pressed={showRecentSidebar}
                 onClick={() => setShowRecentSidebar(!showRecentSidebar)}
                 className={cn(
-                  "p-2 rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
-                  showRecentSidebar ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-900 text-slate-400 hover:text-slate-50"
+                  "p-2 rounded transition-all focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
+                  showRecentSidebar ? "bg-primary/20 text-primary" : "bg-slate-900 text-slate-400 hover:text-slate-50"
                 )}
                 title="Past 24h"
               >
@@ -367,7 +367,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={runClustering}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 text-xs font-medium text-blue-400 hover:bg-blue-500/20 transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+                className="flex items-center gap-2 px-3 py-1.5 rounded bg-primary/10 text-xs font-medium text-primary hover:bg-primary/20 transition-all focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
               >
                 <Zap className="w-3.5 h-3.5" aria-hidden="true" /> Detect Communities
               </button>
@@ -375,7 +375,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={() => void loadRecent(false)}
                 disabled={loading || isBackgroundRefreshing}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer"
+                className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-900 text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none cursor-pointer"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Refresh
               </button>
@@ -383,22 +383,22 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm font-medium flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer"
+                className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded text-sm font-medium flex items-center gap-2 focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none cursor-pointer"
               >
                 {searching ? <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Database className="w-4 h-4" aria-hidden="true" />} Explore
               </button>
             </div>
-            <div className="flex bg-slate-900 rounded-lg p-1 shrink-0 gap-1 items-center">
-              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none", view === 'grid' ? "bg-slate-800 text-emerald-400" : "text-slate-400 hover:text-slate-200")}>Grid</button>
-              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none", view === 'table' ? "bg-slate-800 text-emerald-400" : "text-slate-400 hover:text-slate-200")}>Table</button>
+            <div className="flex bg-slate-900 border border-border rounded p-1 shrink-0 gap-1 items-center">
+              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none", view === 'grid' ? "bg-slate-800 text-primary" : "text-slate-400 hover:text-slate-200")}>Grid</button>
+              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none", view === 'table' ? "bg-slate-800 text-primary" : "text-slate-400 hover:text-slate-200")}>Table</button>
               <div className="w-px bg-slate-800 self-stretch my-0.5 mx-1"></div>
               <button 
                 type="button" 
                 aria-pressed={compactMode}
                 onClick={() => setCompactMode(!compactMode)} 
                 className={cn(
-                  "px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
-                  compactMode ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
+                  "px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
+                  compactMode ? "bg-primary/10 text-primary" : "text-slate-400 hover:text-slate-200"
                 )}
               >
                 {compactMode ? "Compact" : "Full View"}
@@ -407,7 +407,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
 
           {showSearchPanel && searchResults.length > 0 && (
-            <div className="absolute z-20 mt-12 w-80 max-h-96 overflow-y-auto bg-slate-900 rounded-xl shadow-2xl">
+            <div className="absolute z-20 mt-12 w-80 max-h-96 overflow-y-auto bg-slate-900 border border-border rounded shadow-none">
               <div className="sticky top-0 bg-slate-800 px-3 py-2 flex items-center justify-between">
                 <span className="text-[11px] font-medium text-slate-400">Results</span>
                 <button type="button" aria-label="Close search results" onClick={() => setShowSearchPanel(false)}><X className="w-3 h-3 text-slate-400" aria-hidden="true" /></button>
@@ -436,12 +436,12 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
             className={cn(
-              "border-2 border-dashed rounded-xl px-6 py-4 flex items-center gap-4 transition-all cursor-default",
-              isDragging ? "border-emerald-500 bg-emerald-500/10 scale-[1.01]" : "border-slate-800 hover:border-slate-600"
+              "border-2 border-dashed rounded px-6 py-4 flex items-center gap-4 transition-all cursor-default",
+              isDragging ? "border-primary bg-primary/10 scale-[1.01]" : "border-slate-800 hover:border-slate-600"
             )}
           >
             {uploading
-              ? <RefreshCw className="w-5 h-5 text-emerald-400 animate-spin flex-shrink-0" aria-hidden="true" />
+              ? <RefreshCw className="w-5 h-5 text-primary animate-spin flex-shrink-0" aria-hidden="true" />
               : <Save className="w-5 h-5 text-slate-400 flex-shrink-0" aria-hidden="true" />}
             <div>
               <p className="text-xs font-bold text-slate-300">{isDragging ? 'Drop to ingest' : 'Drag files here to ingest into SilvaDB'}</p>
@@ -450,7 +450,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
 
           {/* IVF Index Status Widget */}
-          <div role="status" aria-live="polite" className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-slate-900/80">
+          <div role="status" aria-live="polite" className="flex items-center gap-3 px-4 py-2.5 rounded border border-border bg-slate-900/80">
             <Layers className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
             <span className="text-[11px] font-medium text-slate-400">IVF Index</span>
             <div className="flex items-center gap-1.5 ml-1">
@@ -491,10 +491,10 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
 
           {/* Lifecycle Filter & Summary Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded bg-slate-900/60 border border-slate-800/80">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Lifecycle:</span>
-              <div role="group" aria-label="Lifecycle Filter" className="flex items-center gap-1 bg-slate-950/60 p-0.5 rounded-md border border-slate-800">
+              <span className="text-xs font-semibold text-muted-foreground">Lifecycle:</span>
+              <div role="group" aria-label="Lifecycle Filter" className="flex items-center gap-1 bg-slate-950/60 p-0.5 rounded border border-slate-800">
                 {(['all', 'active', 'quiet', 'consolidated', 'archived'] as const).map((filterKey) => {
                   const count = lifecycleCounts[filterKey];
                   const isActive = lifecycleFilter === filterKey;
@@ -505,7 +505,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                       aria-pressed={isActive}
                       onClick={() => setLifecycleFilter(filterKey)}
                       className={cn(
-                        "px-2 py-0.5 rounded text-[11px] font-medium font-mono uppercase transition-all flex items-center gap-1 cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
+                        "px-2 py-0.5 rounded text-[11px] font-medium font-mono uppercase transition-all flex items-center gap-1 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
                         isActive 
                           ? filterKey === 'active' ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                           : filterKey === 'quiet' ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
@@ -517,7 +517,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                     >
                       <span>{filterKey}</span>
                       <span className={cn(
-                        "px-1 text-[11px] rounded-full",
+                        "px-1 text-[11px] rounded",
                         isActive ? "bg-slate-950/80 text-white font-bold" : "text-slate-400"
                       )}>{count}</span>
                     </button>
@@ -535,12 +535,12 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           <div className="flex-1 min-h-0 overflow-y-auto">
             {fetchState === 'loading' && results.length === 0 ? (
               <div className="h-64 flex flex-col items-center justify-center gap-3 text-slate-400">
-                <RefreshCw className="w-6 h-6 animate-spin text-emerald-400" />
+                <RefreshCw className="w-6 h-6 animate-spin text-primary" />
                 <span className="text-xs">Loading SilvaDB memories...</span>
               </div>
             ) : fetchState === 'error' && results.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-rose-900/60 bg-rose-950/20 p-8 text-center flex flex-col items-center justify-center my-6">
-                <div className="w-10 h-10 rounded-full bg-rose-900/40 flex items-center justify-center mb-3">
+              <div className="rounded border border-dashed border-rose-900/60 bg-rose-950/20 p-8 text-center flex flex-col items-center justify-center my-6">
+                <div className="w-10 h-10 rounded bg-rose-900/40 border border-rose-800 flex items-center justify-center mb-3">
                   <AlertCircle className="w-5 h-5 text-rose-400" />
                 </div>
                 <h3 className="text-xs font-semibold text-rose-300">
@@ -552,14 +552,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 <button
                   type="button"
                   onClick={() => void loadRecent(false)}
-                  className="mt-4 px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-medium hover:bg-rose-500/30 transition-all border border-rose-500/40 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none cursor-pointer"
+                  className="mt-4 px-3 py-1.5 rounded bg-rose-500/20 text-rose-300 text-xs font-medium hover:bg-rose-500/30 transition-all border border-rose-500/40 flex items-center gap-1.5 focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" /> Retry
                 </button>
               </div>
             ) : filteredResults.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center flex flex-col items-center justify-center my-6">
-                <div className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center mb-3">
+              <div className="rounded border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center flex flex-col items-center justify-center my-6">
+                <div className="w-10 h-10 rounded bg-slate-800/80 border border-slate-700 flex items-center justify-center mb-3">
                   <Database className="w-5 h-5 text-slate-400" />
                 </div>
                 <h3 className="text-xs font-semibold text-slate-300">
@@ -574,7 +574,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   <button
                     type="button"
                     onClick={() => void loadRecent(false)}
-                    className="mt-4 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20 transition-all border border-emerald-500/30 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer"
+                    className="mt-4 px-3 py-1.5 rounded bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-all border border-primary/30 flex items-center gap-1.5 focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" /> Retry
                   </button>
@@ -582,7 +582,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   <button
                     type="button"
                     onClick={() => setLifecycleFilter('all')}
-                    className="mt-4 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs font-medium hover:bg-slate-700 transition-all border border-slate-700 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none cursor-pointer"
+                    className="mt-4 px-3 py-1.5 rounded bg-slate-800 text-slate-200 text-xs font-medium hover:bg-slate-700 transition-all border border-slate-700 focus-visible:ring-1 focus-visible:ring-slate-400 focus-visible:outline-none cursor-pointer"
                   >
                     Show all ({results.length})
                   </button>
@@ -594,7 +594,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   const nodeType = node.node_type || node.type || 'entity';
                   const nodeContent = fixDoubleEncoding(node.content || node.label || '—');
                   return (
-                    <div key={i} className={cn("group p-4 rounded-lg transition-all relative overflow-hidden", 
+                    <div key={i} className={cn("group p-4 rounded border border-border transition-all relative overflow-hidden", 
                       (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "bg-slate-900/50 hover:bg-slate-800/50" :
                       nodeType === 'consolidated_summary' ? "bg-indigo-950/10 hover:bg-indigo-900/20" : "bg-slate-900/50 hover:bg-slate-800/50"
                     )}>
@@ -636,7 +636,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                               <div className="flex flex-col gap-2">
                                 <span className="whitespace-pre-wrap">{nodeContent}</span>
                                 {nodeType === 'consolidated_summary' && (
-                                  <div className="mt-2 p-2 rounded-md bg-indigo-500/5 border border-indigo-500/20">
+                                  <div className="mt-2 p-2 rounded bg-indigo-500/5 border border-indigo-500/20">
                                     <span className="text-[11px] font-bold text-indigo-400 uppercase block mb-1">Original Sources:</span>
                                     <ul className="space-y-1">
                                       {edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).length > 0 ? (
@@ -669,7 +669,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                               <div className="flex flex-col gap-2">
                                 <span className={cn(compactMode && "block")}>{nodeContent}</span>
                                 {nodeType === 'consolidated_summary' && (
-                                  <div className="mt-2 p-2 rounded-md bg-indigo-500/5 border border-indigo-500/20">
+                                  <div className="mt-2 p-2 rounded bg-indigo-500/5 border border-indigo-500/20">
                                     <span className="text-[11px] font-bold text-indigo-400 uppercase block mb-1">Original Sources:</span>
                                     <ul className="space-y-1">
                                       {edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).length > 0 ? (
@@ -729,7 +729,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 })}
               </div>
             ) : (
-              <div className="rounded-lg bg-slate-900/50 overflow-hidden overflow-x-auto">
+              <div className="rounded border border-border bg-slate-900/50 overflow-hidden overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-800/50 text-[11px] text-slate-500">
@@ -813,10 +813,10 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
 
             {/* Recent Nodes Sidebar */}
             {showRecentSidebar && (
-              <div className="absolute left-4 top-32 w-72 max-h-[60vh] bg-slate-900/95 backdrop-blur-md rounded-xl shadow-2xl z-10 overflow-hidden flex flex-col">
+              <div className="absolute left-4 top-32 w-72 max-h-[60vh] bg-slate-900 border border-slate-700 rounded z-10 overflow-hidden flex flex-col">
                 <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-emerald-400" />
+                    <Clock className="w-4 h-4 text-primary" />
                     <span className="text-[11px] font-medium text-slate-300">Past 24h</span>
                   </div>
                   <button onClick={() => setShowRecentSidebar(false)} className="text-slate-500 hover:text-slate-50">
@@ -843,7 +843,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                       return (
                         <div
                           key={i}
-                          className="px-3 py-2 mb-1 rounded-lg hover:bg-slate-800/50 cursor-pointer transition-colors"
+                          className="px-3 py-2 mb-1 rounded hover:bg-slate-800/50 cursor-pointer transition-colors"
                           onClick={() => {
                             setQuery(node.content || node.id);
                             handleSearch();

@@ -19,15 +19,15 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-4 h-full">
       {/* Sub Navigation */}
-      <div className="flex max-w-full overflow-x-auto border-b border-slate-800 pb-2 gap-2 flex-shrink-0 scrollbar-thin" role="group" aria-label="SilvaDB Memory Views">
+      <div className="flex max-w-full overflow-x-auto border-b border-border pb-2 gap-2 flex-shrink-0 scrollbar-thin" role="group" aria-label="SilvaDB Memory Views">
         <button
           type="button"
           aria-pressed={subTab === 'graph'}
           onClick={() => setSubTab('graph')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all cursor-pointer ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded border transition-colors cursor-pointer ${
             subTab === 'graph'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-              : 'bg-slate-900/40 border-slate-800/80 text-slate-300 hover:text-slate-100'
+              ? 'bg-primary/10 border-primary/30 text-primary'
+              : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
           }`}
         >
           <Network className="w-3.5 h-3.5" aria-hidden="true" />
@@ -37,10 +37,10 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           type="button"
           aria-pressed={subTab === 'nodes'}
           onClick={() => setSubTab('nodes')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all cursor-pointer ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded border transition-colors cursor-pointer ${
             subTab === 'nodes'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-              : 'bg-slate-900/40 border-slate-800/80 text-slate-300 hover:text-slate-100'
+              ? 'bg-primary/10 border-primary/30 text-primary'
+              : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
           }`}
         >
           <Radio className="w-3.5 h-3.5" aria-hidden="true" />
@@ -50,16 +50,16 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           type="button"
           aria-pressed={subTab === 'contradictions'}
           onClick={() => setSubTab('contradictions')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all cursor-pointer ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded border transition-colors cursor-pointer ${
             subTab === 'contradictions'
               ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
-              : 'bg-slate-900/40 border-slate-800/80 text-slate-300 hover:text-slate-100'
+              : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
           }`}
         >
           <GitCompare className="w-3.5 h-3.5" aria-hidden="true" />
           Contradictions
           {contradictedCount !== null && contradictedCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs">
+            <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs">
               {contradictedCount}
             </span>
           )}

@@ -166,16 +166,16 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
     <section
       ref={containerRef}
       aria-labelledby="contradictions-panel-heading"
-      className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5 font-sans min-w-0 max-w-full overflow-hidden"
+      className="bg-slate-900/70 border border-slate-800 rounded p-4 sm:p-6 space-y-5 font-sans min-w-0 max-w-full overflow-hidden"
     >
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4 min-w-0">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md">
+            <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded">
               SilvaDB Epistemic Audit
             </span>
-            <span className="px-2 py-0.5 text-xs font-mono text-slate-300 bg-slate-800 border border-slate-700 rounded-md">
+            <span className="px-2 py-0.5 text-xs font-mono text-slate-300 bg-slate-800 border border-slate-700 rounded">
               Total conflicted: {totalConflicted}
             </span>
           </div>
@@ -201,7 +201,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             aria-label="Number of conflicted nodes to fetch (max 200)"
             value={limit}
             onChange={(e) => setLimit(Math.min(200, Number(e.target.value)))}
-            className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-amber-400 focus:outline-none"
+            className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-amber-400 focus:outline-none"
           >
             <option value={25}>25</option>
             <option value={50}>50</option>
@@ -214,7 +214,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             onClick={fetchConflicted}
             disabled={loading}
             aria-label="Refresh conflicted nodes list"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none text-xs text-slate-200 font-medium rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none text-xs text-slate-200 font-medium rounded transition-colors disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw className={cn('w-3.5 h-3.5 text-rose-400', loading && 'animate-spin')} aria-hidden="true" />
             <span>{loading ? 'Loading...' : 'Refresh'}</span>
@@ -232,7 +232,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 setEndpointStatus('error');
               }}
               aria-label="Cancel conflicted nodes query"
-              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
+              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-rose-400 focus-visible:outline-none"
             >
               Cancel
             </button>
@@ -244,12 +244,12 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
       <div
         role="note"
         aria-label="Advertencia sobre falsos positivos en detección estructural de contradicciones"
-        className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
+        className="p-4 rounded bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
       >
         <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
         <div className="min-w-0 text-xs text-slate-200 leading-relaxed space-y-1 break-words">
           <p>
-            <span className="font-bold text-amber-300 uppercase tracking-wide mr-1.5">
+            <span className="font-bold text-amber-300 mr-1.5">
               Nota de calibración:
             </span>
             La detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy (<code className="break-all font-mono">benchmarks/human_truth_conflict_pairs_v1.json</code>: 100 pares = 91 consistentes, 9 no relacionados, 0 que se contradigan).
@@ -264,7 +264,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
       {error && (
         <div
           className={cn(
-            'p-4 rounded-xl border text-xs flex items-center justify-between gap-3',
+            'p-4 rounded border text-xs flex items-center justify-between gap-3',
             endpointStatus === 'forbidden'
               ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
               : endpointStatus === 'pending_backend'
@@ -280,7 +280,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             type="button"
             onClick={fetchConflicted}
             aria-label="Reintentar consulta de nodos en conflicto"
-            className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none shrink-0"
+            className="px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none shrink-0"
           >
             Reintentar
           </button>
@@ -288,7 +288,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
       )}
 
       {/* Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-950/60 p-3.5 rounded border border-slate-800">
         <div className="relative flex-1 max-w-md">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" aria-hidden="true" />
           <input
@@ -300,7 +300,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
               setPage(1);
             }}
             placeholder="Search by node ID, content excerpt, or node_type..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-400 font-mono focus:border-amber-400 focus:outline-none"
+            className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 placeholder-slate-400 font-mono focus:border-amber-400 focus:outline-none"
           />
         </div>
         <span className="text-xs font-mono text-slate-400">
@@ -314,7 +314,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
           paginatedNodes.map((node) => (
             <div
               key={node.id}
-              className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-colors space-y-2"
+              className="p-4 rounded bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-colors space-y-2"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
@@ -328,18 +328,18 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 </div>
                 {node.conflicted_since && (
                   <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                    <Clock className="w-3 h-3" aria-hidden="true" />
+                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                     {String(node.conflicted_since)}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-200 font-mono leading-relaxed break-words bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">
+              <p className="text-xs text-slate-200 font-mono leading-relaxed break-words bg-slate-900/60 p-3 rounded border border-slate-800/80">
                 {node.content_excerpt || '(Empty excerpt)'}
               </p>
             </div>
           ))
         ) : (
-          <div className="py-10 px-4 text-center rounded-xl bg-slate-950/40 border border-slate-800/70 space-y-3 max-w-lg mx-auto">
+          <div className="py-10 px-4 text-center rounded bg-slate-950/40 border border-slate-800/70 space-y-3 max-w-lg mx-auto">
             <GitCompare className="w-8 h-8 text-slate-400 mx-auto" aria-hidden="true" />
             <p className="text-sm font-semibold text-slate-200">
               {loading ? (
@@ -363,7 +363,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 type="button"
                 onClick={fetchConflicted}
                 aria-label="Reintentar consulta de nodos en conflicto"
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-rose-400" aria-hidden="true" />
                 Reintentar
@@ -384,7 +384,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 cursor-pointer"
+              className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 cursor-pointer"
             >
               Prev
             </button>
@@ -392,7 +392,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 cursor-pointer"
+              className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 cursor-pointer"
             >
               Next
             </button>
