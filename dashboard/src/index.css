@@ -1,237 +1,195 @@
-@font-face {
-  font-family: 'Plus Jakarta Sans';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./assets/fonts/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Plus Jakarta Sans';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('./assets/fonts/plus-jakarta-sans-latin-700-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./assets/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('./assets/fonts/jetbrains-mono-latin-700-normal.woff2') format('woff2');
-}
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
  
 @layer base {
   :root {
-    /* Neutral Light Theme (DISENO_UI_2026-10-28) */
-    --background: 60 8% 95%;           /* #F3F3F1 fondo hueso */
-    --foreground: 220 5% 12%;          /* #1C1D1F texto principal */
-    --card: 0 0% 100%;                 /* #FFFFFF superficie */
-    --card-foreground: 220 5% 12%;      /* #1C1D1F */
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 5% 12%;
-    --primary: 167 40% 30%;            /* #2E6B5E acento salvia oscuro */
-    --primary-foreground: 0 0% 100%;   /* #FFFFFF sobre acento (6.21:1 PASS AA) */
-    --secondary: 80 5% 88%;            /* #E2E3E0 elevada 2 */
-    --secondary-foreground: 220 5% 12%;
-    --muted: 60 7% 92%;                /* #ECECE9 elevada 1 */
-    --muted-foreground: 213 5% 33%;    /* #4F5358 texto 2 (6.97:1 PASS AA) */
-    --accent: 167 40% 30%;             /* #2E6B5E acento */
+    /* Tylluan Neutral Light Theme (GUIA_UI_vieja_escuela.md) - Windows 2000/XP sober aesthetic */
+    --background: 0 0% 94%;            /* #F0F0F0 paneles/fondo base */
+    --foreground: 0 0% 10%;            /* #1A1A1A texto principal (#000 a #222) */
+    --card: 0 0% 100%;                 /* #FFFFFF superficie/contenido blanco */
+    --card-foreground: 0 0% 10%;       /* #1A1A1A */
+    --popover: 0 0% 100%;              /* #FFFFFF */
+    --popover-foreground: 0 0% 10%;
+    --primary: 223 83% 23%;            /* #0A246A azul del logo Tylluan */
+    --primary-foreground: 0 0% 100%;   /* #FFFFFF blanco sobre azul */
+    --secondary: 0 0% 88%;             /* #E0E0E0 paneles secundarios */
+    --secondary-foreground: 0 0% 10%;
+    --muted: 0 0% 92%;                 /* #ECECEC paneles neutros */
+    --muted-foreground: 0 0% 30%;      /* #4D4D4D texto secundario */
+    --accent: 223 83% 23%;             /* #0A246A único acento azul logo */
     --accent-foreground: 0 0% 100%;
-    --destructive: 5 50% 46%;          /* #B0443A crítico (5.06:1 PASS AA) */
+    --destructive: 0 70% 45%;          /* #C22222 rojo estado crítico */
     --destructive-foreground: 0 0% 100%;
-    --border: 75 5% 85%;               /* #D9DAD6 borde 1 */
-    --input: 75 5% 85%;
-    --ring: 167 40% 30%;
-    --radius: 0.5rem;
+    --border: 0 0% 60%;                /* #999999 borde 1px visible */
+    --input: 0 0% 60%;                 /* #999999 borde campos */
+    --ring: 223 83% 23%;               /* #0A246A */
+    --radius: 2px;
 
-    /* Inverted Slate Scale for Neutral Light Theme */
-    --slate-950: 60 8% 95%;      /* #F3F3F1 fondo hueso base */
-    --slate-900: 0 0% 100%;       /* #FFFFFF superficie tarjeta */
-    --slate-850: 60 7% 92%;       /* #ECECE9 superficie elevada 1 */
-    --slate-800: 80 5% 88%;       /* #E2E3E0 superficie elevada 2 */
-    --slate-700: 75 5% 85%;       /* #D9DAD6 borde 1 */
-
-    /* Intermediate Muted & Border classes */
-    --slate-600: 90 3% 77%;       /* #C4C6C2 borde 2 */
-    --slate-500: 213 5% 43%;      /* #686D73 texto 3 (4.70:1 PASS AA) */
-    --slate-400: 213 5% 33%;      /* #4F5358 texto 2 (6.97:1 PASS AA) */
-
-    /* Typography & Contrast classes */
-    --slate-300: 220 5% 20%;      /* #2B2D30 */
-    --slate-200: 220 5% 15%;      /* #202224 */
-    --slate-100: 220 5% 12%;      /* #1C1D1F texto principal (15.18:1 PASS AAA) */
-    --slate-50: 220 5% 8%;        /* #121314 */
+    /* Slate Scale — Neutral Gray Palette (#ECECEC/#F0F0F0 paneles, blanco contenido, texto #000-#222) */
+    --slate-950: 0 0% 94%;             /* #F0F0F0 fondo base */
+    --slate-900: 0 0% 100%;            /* #FFFFFF contenido blanco */
+    --slate-850: 0 0% 92%;             /* #ECECEC paneles neutros */
+    --slate-800: 0 0% 88%;             /* #E0E0E0 paneles elevados */
+    --slate-700: 0 0% 60%;             /* #999999 bordes 1px */
+    --slate-600: 0 0% 50%;             /* #808080 bordes clásicos */
+    --slate-500: 0 0% 40%;             /* #666666 texto secundario */
+    --slate-400: 0 0% 30%;             /* #4D4D4D texto terciario */
+    --slate-300: 0 0% 20%;             /* #333333 */
+    --slate-200: 0 0% 13%;             /* #222222 texto */
+    --slate-100: 0 0% 0%;              /* #000000 texto principal */
+    --slate-50: 0 0% 0%;               /* #000000 */
     
-    /* Correct / Emerald — #2B7A42 (4.77:1 PASS AA) */
-    --emerald-300: 137 48% 32%;
-    --emerald-400: 137 48% 32%;
-    --emerald-500: 137 48% 32%;
-    --emerald-600: 137 48% 26%;
-    --emerald-700: 137 48% 22%;
-    --emerald-950: 137 30% 95%;
+    /* Estados: Verde sobrio para Correcto/Online */
+    --emerald-300: 140 70% 30%;
+    --emerald-400: 140 70% 30%;
+    --emerald-500: 140 70% 30%;
+    --emerald-600: 140 70% 25%;
+    --emerald-700: 140 70% 20%;
+    --emerald-950: 140 20% 95%;
 
-    /* Warning / Amber — #86600F (5.12:1 PASS AA) */
-    --amber-100: 41 80% 20%;
-    --amber-200: 41 80% 25%;
-    --amber-300: 41 80% 29%;
-    --amber-400: 41 80% 29%;
-    --amber-500: 41 80% 29%;
-    --amber-600: 41 80% 25%;
-    --amber-700: 41 80% 20%;
-    --amber-950: 41 60% 95%;
+    /* Estados: Ámbar sobrio para Advertencia/Warning */
+    --amber-100: 38 90% 20%;
+    --amber-200: 38 90% 25%;
+    --amber-300: 38 90% 30%;
+    --amber-400: 38 90% 35%;
+    --amber-500: 38 90% 35%;
+    --amber-600: 38 90% 30%;
+    --amber-700: 38 90% 25%;
+    --amber-950: 38 40% 95%;
     
-    /* Critical / Destructive — #B0443A (5.06:1 PASS AA) */
-    --red-300: 5 50% 46%;
-    --red-400: 5 50% 46%;
-    --red-500: 5 50% 46%;
+    /* Estados: Rojo sobrio para Error/Crítico */
+    --red-300: 0 70% 45%;
+    --red-400: 0 70% 45%;
+    --red-500: 0 70% 45%;
+    --rose-300: 0 70% 45%;
+    --rose-400: 0 70% 45%;
+    --rose-500: 0 70% 45%;
+    --rose-600: 0 70% 38%;
+    --rose-700: 0 70% 30%;
+    --rose-950: 0 40% 95%;
     
-    --rose-300: 5 50% 46%;
-    --rose-400: 5 50% 46%;
-    --rose-500: 5 50% 46%;
-    --rose-600: 5 50% 40%;
-    --rose-700: 5 50% 32%;
-    --rose-950: 5 40% 95%;
-    
-    /* Accent Salvia — #2E6B5E (5.59:1 PASS AA) */
-    --blue-300: 167 40% 30%;
-    --blue-400: 167 40% 30%;
-    --blue-500: 167 40% 30%;
-    --blue-600: 167 40% 24%;
-    --blue-700: 167 40% 18%;
-    --blue-950: 167 30% 95%;
+    /* UN solo acento: azul del logo (#0A246A) */
+    --blue-300: 223 83% 23%;
+    --blue-400: 223 83% 23%;
+    --blue-500: 223 83% 23%;
+    --blue-600: 223 83% 18%;
+    --blue-700: 223 83% 14%;
+    --blue-950: 223 40% 95%;
 
-    --indigo-300: 167 40% 30%;
-    --indigo-400: 167 40% 30%;
-    --indigo-500: 167 40% 30%;
-    --indigo-600: 167 40% 24%;
-    --indigo-950: 167 30% 95%;
+    --indigo-300: 223 83% 23%;
+    --indigo-400: 223 83% 23%;
+    --indigo-500: 223 83% 23%;
+    --indigo-600: 223 83% 18%;
+    --indigo-950: 223 40% 95%;
     
-    --violet-300: 167 40% 30%;
-    --violet-400: 167 40% 30%;
-    --violet-500: 167 40% 30%;
-    --violet-600: 167 40% 24%;
-    --violet-950: 167 30% 95%;
+    --violet-300: 223 83% 23%;
+    --violet-400: 223 83% 23%;
+    --violet-500: 223 83% 23%;
+    --violet-600: 223 83% 18%;
+    --violet-950: 223 40% 95%;
 
-    --cyan-300: 167 40% 30%;
-    --cyan-400: 167 40% 30%;
-    --cyan-500: 167 40% 30%;
-    --cyan-950: 167 30% 95%;
+    --cyan-300: 223 83% 23%;
+    --cyan-400: 223 83% 23%;
+    --cyan-500: 223 83% 23%;
+    --cyan-950: 223 40% 95%;
 
-    --teal-300: 167 40% 30%;
-    --teal-400: 167 40% 30%;
-    --teal-500: 167 40% 30%;
-    --teal-950: 167 30% 95%;
+    --teal-300: 223 83% 23%;
+    --teal-400: 223 83% 23%;
+    --teal-500: 223 83% 23%;
+    --teal-950: 223 40% 95%;
   }
 
   .dark {
-    /* Neutral Dark Theme (DISENO_UI_2026-10-28) - Default */
-    --background: 210 5% 9%;           /* #151617 fondo grafito oscuro */
-    --foreground: 90 4% 90%;           /* #E6E7E5 texto principal */
-    --card: 220 5% 12%;                /* #1D1E20 superficie */
-    --card-foreground: 90 4% 90%;      /* #E6E7E5 */
-    --popover: 220 5% 12%;
-    --popover-foreground: 90 4% 90%;
-    --primary: 160 22% 62%;            /* #8AB4A6 acento salvia */
-    --primary-foreground: 165 33% 9%;  /* #10201C sobre acento (7.35:1 PASS AA) */
-    --secondary: 210 6% 20%;           /* #2F3235 elevada 2 */
-    --secondary-foreground: 90 4% 90%;
-    --muted: 216 6% 16%;               /* #26282B elevada 1 */
-    --muted-foreground: 210 5% 71%;    /* #B0B4B8 texto 2 (8.69:1 PASS AA) */
-    --accent: 160 22% 62%;             /* #8AB4A6 acento salvia */
-    --accent-foreground: 165 33% 9%;
-    --destructive: 6 66% 70%;          /* #E58C82 crítico (7.25:1 PASS AA) */
-    --destructive-foreground: 210 5% 9%;
-    --border: 214 6% 22%;              /* #34373B borde 1 */
-    --input: 214 6% 22%;
-    --ring: 160 22% 62%;
+    /* Modo oscuro sobrio sin brillos, manteniendo radios <= 3px */
+    --background: 0 0% 12%;            /* #1F1F1F */
+    --foreground: 0 0% 90%;            /* #E6E6E6 */
+    --card: 0 0% 16%;                 /* #292929 */
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 16%;
+    --popover-foreground: 0 0% 90%;
+    --primary: 215 90% 60%;            /* Azul sobrio visible en fondo oscuro */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 22%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 215 90% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 30%;
+    --input: 0 0% 30%;
+    --ring: 215 90% 60%;
+    --radius: 2px;
 
-    /* Dark Mode Neutral Slate Tokens */
-    --slate-50: 90 4% 96%;
-    --slate-100: 90 4% 90%;            /* #E6E7E5 texto principal (14.60:1 PASS AAA) */
-    --slate-200: 90 4% 85%;
-    --slate-300: 90 4% 78%;
-    --slate-400: 210 5% 71%;           /* #B0B4B8 texto 2 (8.69:1 PASS AA) */
-    --slate-500: 210 5% 58%;           /* #8E9398 texto 3 (5.85:1 PASS AA) */
-    --slate-600: 213 6% 28%;           /* #44484D borde 2 */
-    --slate-700: 214 6% 22%;           /* #34373B borde 1 */
-    --slate-800: 210 6% 20%;           /* #2F3235 superficie elevada 2 */
-    --slate-850: 216 6% 16%;           /* #26282B superficie elevada 1 */
-    --slate-900: 220 5% 12%;           /* #1D1E20 superficie tarjeta */
-    --slate-950: 210 5% 9%;            /* #151617 fondo base */
+    --slate-50: 0 0% 95%;
+    --slate-100: 0 0% 90%;
+    --slate-200: 0 0% 85%;
+    --slate-300: 0 0% 75%;
+    --slate-400: 0 0% 65%;
+    --slate-500: 0 0% 55%;
+    --slate-600: 0 0% 35%;
+    --slate-700: 0 0% 30%;
+    --slate-800: 0 0% 22%;
+    --slate-850: 0 0% 18%;
+    --slate-900: 0 0% 16%;
+    --slate-950: 0 0% 12%;
 
-    /* Correct / Emerald — #86C494 (8.92:1 PASS AA) */
-    --emerald-300: 134 34% 75%;
-    --emerald-400: 134 34% 65%;        /* #86C494 */
-    --emerald-500: 134 34% 60%;
-    --emerald-600: 134 34% 50%;
-    --emerald-700: 134 34% 40%;
-    --emerald-950: 134 30% 12%;
+    --emerald-300: 140 60% 65%;
+    --emerald-400: 140 60% 55%;
+    --emerald-500: 140 60% 45%;
+    --emerald-600: 140 60% 35%;
+    --emerald-700: 140 60% 25%;
+    --emerald-950: 140 40% 12%;
 
-    /* Warning / Amber — #DDB962 (9.66:1 PASS AA) */
-    --amber-100: 42 64% 85%;
-    --amber-200: 42 64% 75%;
-    --amber-300: 42 64% 68%;
-    --amber-400: 42 64% 63%;        /* #DDB962 */
-    --amber-500: 42 64% 55%;
-    --amber-600: 42 64% 45%;
-    --amber-700: 42 64% 35%;
-    --amber-950: 42 40% 12%;
+    --amber-100: 38 80% 85%;
+    --amber-200: 38 80% 75%;
+    --amber-300: 38 80% 65%;
+    --amber-400: 38 80% 55%;
+    --amber-500: 38 80% 45%;
+    --amber-600: 38 80% 35%;
+    --amber-700: 38 80% 25%;
+    --amber-950: 38 40% 12%;
     
-    /* Critical / Destructive — #E58C82 (7.25:1 PASS AA) */
-    --red-300: 6 66% 75%;
-    --red-400: 6 66% 70%;           /* #E58C82 */
-    --red-500: 6 66% 65%;
-    
-    --rose-300: 6 66% 75%;
-    --rose-400: 6 66% 70%;          /* #E58C82 */
-    --rose-500: 6 66% 65%;
-    --rose-600: 6 66% 55%;
-    --rose-700: 6 66% 45%;
-    --rose-950: 6 40% 12%;
-    
-    /* Accent Salvia — #8AB4A6 (7.90:1 PASS AA) */
-    --indigo-300: 160 22% 70%;
-    --indigo-400: 160 22% 62%;
-    --indigo-500: 160 22% 55%;
-    --indigo-600: 160 22% 45%;
-    --indigo-950: 160 20% 12%;
-    
-    --violet-300: 160 22% 70%;
-    --violet-400: 160 22% 62%;
-    --violet-500: 160 22% 55%;
-    --violet-600: 160 22% 45%;
-    --violet-950: 160 20% 12%;
-    
-    --blue-300: 160 22% 70%;
-    --blue-400: 160 22% 62%;
-    --blue-500: 160 22% 55%;
-    --blue-600: 160 22% 45%;
-    --blue-700: 160 22% 35%;
-    --blue-950: 160 20% 12%;
+    --red-300: 0 70% 70%;
+    --red-400: 0 70% 60%;
+    --red-500: 0 70% 50%;
+    --rose-300: 0 70% 70%;
+    --rose-400: 0 70% 60%;
+    --rose-500: 0 70% 50%;
+    --rose-600: 0 70% 40%;
+    --rose-700: 0 70% 30%;
+    --rose-950: 0 40% 12%;
 
-    --cyan-300: 160 22% 70%;
-    --cyan-400: 160 22% 62%;
-    --cyan-500: 160 22% 55%;
-    --cyan-950: 160 20% 12%;
+    --indigo-300: 215 90% 65%;
+    --indigo-400: 215 90% 60%;
+    --indigo-500: 215 90% 50%;
+    --indigo-600: 215 90% 40%;
+    --indigo-950: 215 40% 12%;
+    
+    --violet-300: 215 90% 65%;
+    --violet-400: 215 90% 60%;
+    --violet-500: 215 90% 50%;
+    --violet-600: 215 90% 40%;
+    --violet-950: 215 40% 12%;
 
-    --teal-300: 160 22% 70%;
-    --teal-400: 160 22% 62%;
-    --teal-500: 160 22% 55%;
-    --teal-950: 160 20% 12%;
+    --blue-300: 215 90% 65%;
+    --blue-400: 215 90% 60%;
+    --blue-500: 215 90% 50%;
+    --blue-600: 215 90% 40%;
+    --blue-700: 215 90% 30%;
+    --blue-950: 215 40% 12%;
+
+    --cyan-300: 215 90% 65%;
+    --cyan-400: 215 90% 60%;
+    --cyan-500: 215 90% 50%;
+    --cyan-950: 215 40% 12%;
+
+    --teal-300: 215 90% 65%;
+    --teal-400: 215 90% 60%;
+    --teal-500: 215 90% 50%;
+    --teal-950: 215 40% 12%;
   }
 }
  
@@ -240,123 +198,51 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans;
   }
 
-  /* Reset default font overrides for consistent clean typography */
+  /* Tipografía estricta del sistema (GUIA_UI_vieja_escuela.md) */
   :root,
   body,
   .font-sans {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-family: Tahoma, 'Segoe UI', Verdana, Arial, sans-serif;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre,
+  .font-mono {
+    font-family: Consolas, 'Courier New', monospace;
   }
 }
 
-/* Premium Motion System (Linear / Vercel Standards) */
-@keyframes pulse-soft {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.02); }
-}
-
-.animate-pulse-soft {
-  animation: pulse-soft 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-4px); }
-  100% { transform: translateY(0px); }
-}
-
-.animate-float {
-  animation: float 4s ease-in-out infinite;
-}
-
-@keyframes beacon-pulse {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.8); opacity: 0; }
-  100% { transform: scale(1.8); opacity: 0; }
-}
-
-.animate-beacon {
-  position: relative;
-}
-.animate-beacon::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background-color: currentColor;
-  animation: beacon-pulse 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-
-@keyframes subtle-breathe {
-  0%, 100% { opacity: 0.75; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.015); }
-}
-
-.animate-subtle-breathe {
-  animation: subtle-breathe 4.5s ease-in-out infinite;
-}
-
-@keyframes typing-wave {
-  0%, 100% { transform: translateY(0px); opacity: 0.4; }
-  50% { transform: translateY(-3px); opacity: 1; }
-}
-
-.animate-typing-wave {
-  animation: typing-wave 1.4s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.animate-shimmer {
-  position: relative;
-  overflow: hidden;
-}
-.animate-shimmer::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
-  animation: shimmer 2s infinite;
-}
-
-/* Glassmorphism */
+/* Glassmorphism sustituido por bordes sobrios planos */
 .glass {
-  @apply bg-slate-900/40 backdrop-blur-md border border-slate-800/50;
+  @apply bg-card border border-border;
 }
 
 .glass-emerald {
-  @apply bg-emerald-500/5 backdrop-blur-xl border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.1)];
+  @apply bg-card border border-emerald-500;
 }
 
-/* Scrollbar Customization */
+/* Scrollbars sobrios del sistema */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: #ECECEC;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
+  background: #B0B0B0;
+  border-radius: 2px;
 }
 
-/* Typography Overrides */
-h1, h2, h3, h4 {
-  @apply tracking-tight;
-}
-
-.font-mono {
-  @apply tracking-tighter;
+::-webkit-scrollbar-thumb:hover {
+  background: #909090;
 }
 
 /* Force Graph Container */
@@ -375,5 +261,6 @@ h1, h2, h3, h4 {
 
 /* Terminal/Console text selection */
 ::selection {
-  @apply bg-amber-500/30 text-amber-100;
+  background-color: #0A246A;
+  color: #FFFFFF;
 }

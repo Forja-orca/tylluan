@@ -5,11 +5,32 @@ export default {
     './src/**/*.{ts,tsx}',
   ],
   theme: {
+    fontFamily: {
+      sans: ['Tahoma', '"Segoe UI"', 'Verdana', 'Arial', 'sans-serif'],
+      mono: ['Consolas', '"Courier New"', 'monospace'],
+    },
+    borderRadius: {
+      none: '0px',
+      sm: '1px',
+      DEFAULT: '2px',
+      md: '2px',
+      lg: '3px',
+      xl: '3px',
+      '2xl': '3px',
+      '3xl': '3px',
+      full: '9999px',
+    },
+    boxShadow: {
+      none: 'none',
+      sm: 'none',
+      DEFAULT: 'none',
+      md: 'none',
+      lg: 'none',
+      xl: 'none',
+      '2xl': 'none',
+      inner: 'none',
+    },
     extend: {
-      fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
-      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -123,11 +144,6 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-      },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
       },
     },
   },
