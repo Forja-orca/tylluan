@@ -62,11 +62,16 @@ pub struct NodeWriteOptions<'a> {
     /// upsert must NEVER change `protected` nor the weight of the existing
     /// node (a peer-approved node cannot unprotect or boost local rows).
     pub federation_ingest: bool,
+    /// T-DSH-166: un re-upsert (p. ej. relectura del flywheel de Coloquio) no
+    /// debe cambiar el peso de un nodo ya existente. A diferencia de
+    /// `federation_ingest`, es para escrituras locales internas que reescriben
+    /// el mismo id sin querer revivir su decaimiento.
+    pub preserve_weight: bool,
 }
 
 impl<'a> NodeWriteOptions<'a> {
     pub fn new(provenance: &'a str) -> Self {
-        Self { valid_from: None, valid_until: None, allow_drift: false, provenance, owner_scope: None, source: None, author: None, evidence_url: None, federation_ingest: false }
+        Self { valid_from: None, valid_until: None, allow_drift: false, provenance, owner_scope: None, source: None, author: None, evidence_url: None, federation_ingest: false, preserve_weight: false }
     }
     pub fn drift_allowed(mut self, yes: bool) -> Self {
         self.allow_drift = yes;
@@ -103,6 +108,11 @@ impl<'a> NodeWriteOptions<'a> {
     /// ADR-019 step 2: mark this write as federation peer ingestion.
     pub fn federation_ingest(mut self) -> Self {
         self.federation_ingest = true;
+        self
+    }
+    /// T-DSH-166: no tocar el peso de un nodo existente en el ON CONFLICT.
+    pub fn preserve_weight(mut self, yes: bool) -> Self {
+        self.preserve_weight = yes;
         self
     }
 }
@@ -168,7 +178,7 @@ impl super::SilvaDB {
         metadata: &str,
         opts: NodeWriteOptions<'_>,
     ) -> Result<()> {
-        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance, owner_scope, source, author, evidence_url, federation_ingest } = opts;
+        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance, owner_scope, source, author, evidence_url, federation_ingest, preserve_weight } = opts;
         if !allow_drift && DRIFT_SENSITIVE_TYPES.contains(&node_type) {
             anyhow::bail!(
                 "DRIFT GUARD: node type '{node_type}' is drift-sensitive and cannot be created through the public API. \
@@ -220,7 +230,7 @@ impl super::SilvaDB {
             // ADR-019 step 2 hardening: a peer-ingested write must never change
             // `protected` nor the weight of an EXISTING node. All other callers
             // keep the standard semantics (weight floor raise / excluded.protected).
-            let (weight_set, protected_set) = if federation_ingest {
+            let (weight_set, protected_set) = if federation_ingest || preserve_weight {
                 ("nodes.weight", "nodes.protected")
             } else {
                 (

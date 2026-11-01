@@ -29,6 +29,7 @@ pub mod agent_memory;
 pub mod agent_profile;
 pub mod triple_extractor;
 pub mod coloquio;
+pub mod coloquio_flywheel;
 pub mod task_context;
 pub mod jobs;
 pub mod dream_cycle;

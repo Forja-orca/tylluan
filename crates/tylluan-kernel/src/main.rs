@@ -1903,38 +1903,14 @@ async fn main() -> anyhow::Result<()> {
     let silva_fly = silva.clone();
     bg_spawn!(background_tasks, "flywheel", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut fly_interval = tokio::time::interval(Duration::from_secs(60));
-        let mut watermarks: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
         loop {
             fly_interval.tick().await;
-            let channels = match coloquio_fly.list_channels().await {
-                Ok(c) => c,
-                Err(e) => { tracing::warn!("⚠️ Coloquio flywheel: list_channels failed: {}", e); continue; }
-            };
-            for ch in &channels {
-                let last_turn = watermarks.get(&ch.channel_id).copied().unwrap_or(0);
-                let msgs = match coloquio_fly.get_thread(&ch.channel_id, 50, last_turn).await {
-                    Ok(m) => m,
-                    Err(e) => { tracing::warn!("⚠️ Coloquio flywheel: get_thread({}) failed: {}", ch.channel_id, e); continue; }
-                };
-                let mut max_turn = last_turn;
-                for msg in &msgs {
-                    if msg.turn <= last_turn { continue; }
-                    let node_id = format!("coloquio_{}_{}", ch.channel_id, msg.turn);
-                    let metadata = serde_json::json!({
-                        "channel_id": ch.channel_id,
-                        "turn": msg.turn,
-                        "author_id": msg.author_id,
-                        "source": "coloquio_flywheel",
-                    });
-                    let content = build_contextual_text(&metadata.to_string(), &msg.content);
-                    if let Err(e) = silva_fly.upsert_node(&node_id, "coloquio_memory", &content, &metadata.to_string()).await {
-                        tracing::warn!("⚠️ Coloquio flywheel: upsert_node({}) failed: {}", node_id, e);
-                    }
-                    if msg.turn > max_turn { max_turn = msg.turn; }
-                }
-                if max_turn > last_turn {
-                    watermarks.insert(ch.channel_id.clone(), max_turn);
-                }
+            // T-DSH-166: marca de agua persistente en silva_kv (por canal),
+            // consulta `turn >` y relectura que no resucita el peso decaido.
+            match tylluan_kernel::memory::coloquio_flywheel::ingest_all(&coloquio_fly, &silva_fly).await {
+                Ok(0) => {}
+                Ok(n) => tracing::debug!("Coloquio flywheel: {} turnos nuevos ingeridos", n),
+                Err(e) => tracing::warn!("Coloquio flywheel: {}", e),
             }
         }
     });

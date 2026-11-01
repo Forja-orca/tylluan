@@ -24,6 +24,7 @@ pub mod edges;
 pub(crate) mod fts;
 pub mod graph;
 pub mod nodes;
+pub mod kv;
 pub mod recall_contract;
 pub mod search;
 pub mod anchors;
