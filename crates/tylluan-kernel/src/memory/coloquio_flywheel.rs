@@ -1,4 +1,4 @@
-﻿//! T-DSH-166 (F1, segundo escalon): flywheel Coloquio -> SilvaDB.
+//! T-DSH-166 (F1, segundo escalon): flywheel Coloquio -> SilvaDB.
 //!
 //! Arregla tres defectos del bucle que vivia en `main.rs`:
 //!

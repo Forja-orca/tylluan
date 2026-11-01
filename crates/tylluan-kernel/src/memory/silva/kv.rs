@@ -1,4 +1,4 @@
-﻿//! T-DSH-166: acceso generico al buzon clave/valor `silva_kv`.
+//! T-DSH-166: acceso generico al buzon clave/valor `silva_kv`.
 //!
 //! El flywheel de Coloquio necesita una marca de agua PERSISTENTE por canal
 //! (no en memoria): se guarda aqui, en la misma SilvaDB, sin tabla nueva.
