@@ -15,6 +15,17 @@ TODAY = date(2026, 11, 1)
 REPORT_LINES = 15
 
 
+def _materialize_repo(dst: Path) -> Path:
+    """Copy the synthetic manifests into dst under their real names (they are stored with a
+    .fixture suffix so GitHub's dependency graph does not mistake them for real manifests)."""
+    src = FIXTURES / "repo"
+    for fixture in src.rglob("*.fixture"):
+        target = dst / fixture.relative_to(src).with_suffix("")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(fixture.read_bytes())
+    return dst
+
+
 def _load_kev_fixture() -> dict:
     return json.loads((FIXTURES / "kev.json").read_text(encoding="utf-8"))
 
@@ -35,15 +46,15 @@ def test_kev_window_is_inclusive_on_both_ends():
 
 
 def test_parse_cargo_lock_fixture_reads_name_and_version_only():
-    text = (FIXTURES / "repo" / "Cargo.lock").read_text(encoding="utf-8")
+    text = (FIXTURES / "repo" / "Cargo.lock.fixture").read_text(encoding="utf-8")
     assert tw.parse_cargo_lock(text) == [
         ("crates.io", "serde", "1.0.200"),
         ("crates.io", "tokio", "1.40.0"),
     ]
 
 
-def test_inventory_covers_three_ecosystems_and_reports_no_gaps():
-    repo = FIXTURES / "repo"
+def test_inventory_covers_three_ecosystems_and_reports_no_gaps(tmp_path):
+    repo = _materialize_repo(tmp_path)
     inv = tw.inventory(repo)
     assert {eco for eco, _, _ in inv} == {"crates.io", "npm", "PyPI"}
     assert ("npm", "@tanstack/react-virtual", "3.14.21") in inv
@@ -115,8 +126,8 @@ def test_report_has_exactly_15_lines_with_many_items():
     assert lines[14].startswith("Acción recomendada: revisar a mano")
 
 
-def test_offline_cli_path_renders_full_report_from_fixtures():
-    report = tw.build_report(FIXTURES / "repo", 7, TODAY, offline_dir=FIXTURES)
+def test_offline_cli_path_renders_full_report_from_fixtures(tmp_path):
+    report = tw.build_report(_materialize_repo(tmp_path), 7, TODAY, offline_dir=FIXTURES)
     lines = report.splitlines()
     assert len(lines) == REPORT_LINES
     assert lines[1] == "KEV nuevos: 2 (últimos 7 días)"
@@ -126,8 +137,10 @@ def test_offline_cli_path_renders_full_report_from_fixtures():
 
 
 def test_offline_report_states_osv_not_read_when_fixture_missing(tmp_path):
-    (tmp_path / "kev.json").write_text(json.dumps(_load_kev_fixture()), encoding="utf-8")
-    report = tw.build_report(FIXTURES / "repo", 7, TODAY, offline_dir=tmp_path)
+    offline = tmp_path / "offline"
+    offline.mkdir()
+    (offline / "kev.json").write_text(json.dumps(_load_kev_fixture()), encoding="utf-8")
+    report = tw.build_report(_materialize_repo(tmp_path / "repo"), 7, TODAY, offline_dir=offline)
     lines = report.splitlines()
     assert len(lines) == REPORT_LINES
     assert lines[5].endswith("fuente no leída")
