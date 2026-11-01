@@ -1,0 +1,18 @@
+# fixture sintetico
+version = 4
+
+[[package]]
+name = "serde"
+version = "1.0.200"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "tokio"
+version = "1.40.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[metadata]
+ignored = "x"

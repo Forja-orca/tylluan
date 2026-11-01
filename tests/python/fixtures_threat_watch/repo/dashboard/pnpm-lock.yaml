@@ -1,0 +1,21 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      react:
+        specifier: ^19.2.0
+        version: 19.2.0
+
+packages:
+
+  '@tanstack/react-virtual@3.14.21':
+    resolution: {integrity: sha512-fixture}
+
+  react@19.2.0:
+    resolution: {integrity: sha512-fixture}
+    engines: {node: '>=0.10.0'}
+
+snapshots:
+
+  react@19.2.0: {}

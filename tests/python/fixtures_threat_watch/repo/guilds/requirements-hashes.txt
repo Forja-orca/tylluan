@@ -1,0 +1,6 @@
+# fixture sintetico
+aiofile==3.12.3 \
+    --hash=sha256:0000
+requests==2.32.3 \
+    --hash=sha256:0000
+    # via fixture

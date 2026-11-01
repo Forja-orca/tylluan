@@ -1,0 +1,5 @@
+{
+  "crates.io:serde@1.0.200": ["GHSA-fixture-0001"],
+  "PyPI:requests@2.32.3": ["GHSA-fixture-0002", "PYSEC-fixture-0003"],
+  "npm:react@19.2.0": []
+}

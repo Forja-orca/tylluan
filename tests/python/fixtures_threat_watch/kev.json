@@ -1,0 +1,10 @@
+{
+  "title": "CISA KEV (fixture sintetico)",
+  "count": 4,
+  "vulnerabilities": [
+    {"cveID": "CVE-2099-0001", "vendorProject": "Acme", "product": "serde", "vulnerabilityName": "Fixture A", "dateAdded": "2026-10-30", "shortDescription": "Fixture: coincide con Cargo.lock"},
+    {"cveID": "CVE-2099-0002", "vendorProject": "Acme", "product": "requests", "vulnerabilityName": "Fixture B", "dateAdded": "2026-10-27", "shortDescription": "Fixture: coincide con requirements"},
+    {"cveID": "CVE-2099-0003", "vendorProject": "Other", "product": "Windows", "vulnerabilityName": "Fixture C", "dateAdded": "2026-09-01", "shortDescription": "Fixture: fuera de ventana"},
+    {"cveID": "CVE-2099-0004", "vendorProject": "Other", "product": "tokio", "vulnerabilityName": "Fixture D", "dateAdded": "no-es-fecha", "shortDescription": "Fixture: fecha inválida, se ignora"}
+  ]
+}
