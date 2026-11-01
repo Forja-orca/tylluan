@@ -588,16 +588,22 @@ impl GuildProcess {
 
     /// D-89: external MCP tools are exposed only if their fingerprint matches
     /// the approved baseline; Python guilds keep their existing behavior.
-    fn set_discovered_tools(&mut self, tools: Vec<Tool>) {
+    /// D-90: the baseline is loaded from / written to the persistence store.
+    async fn set_discovered_tools(&mut self, tools: Vec<Tool>) {
         let external = matches!(
             self.launcher,
             GuildLauncher::External { .. } | GuildLauncher::Http { .. } | GuildLauncher::Sse { .. }
         );
         if external {
-            self.tools = self.tool_integrity.evaluate(&tools).active;
+            self.tools = self.tool_integrity.evaluate(&tools).await.active;
         } else {
             self.tools = tools;
         }
+    }
+
+    /// D-90: give this guild's integrity state the shared SilvaDB handle.
+    pub fn attach_integrity_store(&mut self, store: Arc<tokio::sync::Mutex<rusqlite::Connection>>) {
+        self.tool_integrity.attach_store(store);
     }
 
     /// D-89: re-read tools after an operator approves a quarantined fingerprint.
@@ -606,7 +612,7 @@ impl GuildProcess {
             return Ok(());
         };
         let tools = proxy.list_tools().await?;
-        self.set_discovered_tools(tools);
+        self.set_discovered_tools(tools).await;
         Ok(())
     }
 
@@ -628,7 +634,7 @@ impl GuildProcess {
             let t = timeout_ms.unwrap_or(30_000);
             let name = self.name.clone();
             let (proxy, tools) = HttpMcpProxy::connect(&name, &url, &headers, t).await?;
-            self.set_discovered_tools(tools);
+            self.set_discovered_tools(tools).await;
             self.proxy = Some(Arc::new(ProxyKind::Http(proxy)));
             self.last_access = Instant::now();
             return Ok(());
@@ -645,7 +651,7 @@ impl GuildProcess {
             let t = timeout_ms.unwrap_or(30_000);
             let name = self.name.clone();
             let (proxy, tools) = SseMcpProxy::connect(&name, &sse_url, &post_url, &headers, t).await?;
-            self.set_discovered_tools(tools);
+            self.set_discovered_tools(tools).await;
             self.proxy = Some(Arc::new(ProxyKind::Sse(proxy)));
             self.last_access = Instant::now();
             return Ok(());
@@ -794,7 +800,7 @@ GuildLauncher::Python { module_path } => {
 
         // Discover tools from the guild
         let discovered = proxy.list_tools().await?;
-        self.set_discovered_tools(discovered);
+        self.set_discovered_tools(discovered).await;
         info!(
             "📦 Guild '{}' ready: {} tools registered",
             self.name, self.tools.len()
@@ -1350,7 +1356,11 @@ impl GuildRegistry {
                 last_updated INTEGER NOT NULL DEFAULT (unixepoch())
             )"
         )?;
-        self.db_conn = Some(Arc::new(tokio::sync::Mutex::new(conn)));
+        let arc = Arc::new(tokio::sync::Mutex::new(conn));
+        for guild in self.guilds.values_mut() {
+            guild.attach_integrity_store(arc.clone());
+        }
+        self.db_conn = Some(arc);
         Ok(())
     }
 
@@ -1470,6 +1480,7 @@ impl GuildRegistry {
                 self.max_concurrent,
             ),
         );
+        self.attach_integrity_to(name);
         let _ = self.save();
     }
 
@@ -1499,6 +1510,7 @@ impl GuildRegistry {
                 self.max_concurrent,
             ),
         );
+        self.attach_integrity_to(name);
         let _ = self.save();
     }
 
@@ -1607,7 +1619,17 @@ impl GuildRegistry {
                 self.max_concurrent,
             ),
         );
+        self.attach_integrity_to(name);
         let _ = self.save();
+    }
+
+    /// D-90: hand the shared SilvaDB handle to a freshly registered guild.
+    fn attach_integrity_to(&mut self, name: &str) {
+        if let Some(db) = self.db_conn.clone()
+            && let Some(guild) = self.guilds.get_mut(name)
+        {
+            guild.attach_integrity_store(db);
+        }
     }
 
     /// Rebuild the tool→guild routing table from all running guilds.

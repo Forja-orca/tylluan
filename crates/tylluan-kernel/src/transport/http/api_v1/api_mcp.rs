@@ -582,7 +582,7 @@ pub async fn approve_mcp_tool_handler(
         let Some(guild) = reg.guilds.get_mut(&name) else {
             return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "external MCP not found"}))).into_response();
         };
-        if !guild.tool_integrity.approve(&tool, &fingerprint) {
+        if !guild.tool_integrity.approve(&tool, &fingerprint).await {
             return (StatusCode::CONFLICT, Json(serde_json::json!({"error": "approval_fingerprint_mismatch"}))).into_response();
         }
     }
@@ -592,6 +592,105 @@ pub async fn approve_mcp_tool_handler(
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
     }
     (StatusCode::OK, Json(serde_json::json!({"status": "approved", "guild": name, "tool": tool}))).into_response()
+}
+
+/// DELETE /api/v1/mcp/external/{name}/tools/{tool}/approve
+/// D-90: drop a persisted approval. The server goes back to the seeding state
+/// on its next discovery; the running process keeps its current tools.
+pub async fn revoke_mcp_tool_handler(
+    State(state): State<Arc<HttpState>>,
+    Path((name, tool)): Path<(String, String)>,
+    Json(req): Json<ApproveMcpToolRequest>,
+) -> impl IntoResponse {
+    let fingerprint = {
+        let reg_arc = state.registry.arc();
+        let reg = reg_arc.read().await;
+        let Some(guild) = reg.guilds.get(&name) else {
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "external MCP not found"}))).into_response();
+        };
+        let Some(fp) = guild.tool_integrity.approved_fingerprint(&tool) else {
+            return (StatusCode::CONFLICT, Json(serde_json::json!({"error": "tool is not approved"}))).into_response();
+        };
+        fp.to_string()
+    };
+
+    let signature = format!("revoke_tool:{name}:{tool}:{fingerprint}");
+    if let Err(response) = authorize_mcp_change(
+        &signature,
+        req.approval_nonce.as_deref(),
+        req.approval_code.as_deref(),
+    ) {
+        return *response;
+    }
+
+    let reg_arc = state.registry.arc();
+    let mut reg = reg_arc.write().await;
+    let Some(guild) = reg.guilds.get_mut(&name) else {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "external MCP not found"}))).into_response();
+    };
+    if !guild.tool_integrity.revoke(&tool).await {
+        return (StatusCode::CONFLICT, Json(serde_json::json!({"error": "tool is not approved"}))).into_response();
+    }
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "revoked",
+        "guild": name,
+        "tool": tool,
+        "note": "the server re-seeds its baseline on the next discovery"
+    }))).into_response()
+}
+
+/// D-90: read-only view of one external server's tool integrity state.
+pub fn tool_integrity_view(guild: &crate::registry::guild_process::GuildProcess) -> serde_json::Value {
+    use crate::registry::tool_integrity::fingerprint;
+    let mut tools: Vec<serde_json::Value> = guild
+        .tools
+        .iter()
+        .map(|tool| {
+            let name = tool.name.to_string();
+            serde_json::json!({
+                "name": name,
+                "status": "active",
+                "fingerprint": fingerprint(tool),
+            })
+        })
+        .collect();
+    let quarantined: Vec<String> = guild
+        .tool_integrity
+        .quarantined_names()
+        .into_iter()
+        .collect();
+    for name in quarantined {
+        tools.push(serde_json::json!({
+            "name": name,
+            "status": "quarantined",
+            "fingerprint": guild.tool_integrity.quarantine_fingerprint(&name),
+            "reason": guild.tool_integrity.quarantine_reason(&name),
+        }));
+    }
+    tools.sort_by(|a, b| {
+        a["name"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(b["name"].as_str().unwrap_or_default())
+    });
+    serde_json::json!({
+        "guild": guild.name,
+        "persistence": if guild.tool_integrity.has_store() { "silva" } else { "memory" },
+        "tools": tools,
+    })
+}
+
+/// GET /api/v1/mcp/external/{name}/tools
+pub async fn list_mcp_tools_handler(
+    State(state): State<Arc<HttpState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let reg_arc = state.registry.arc();
+    let reg = reg_arc.read().await;
+    let Some(guild) = reg.guilds.get(&name) else {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "external MCP not found"}))).into_response();
+    };
+    (StatusCode::OK, Json(tool_integrity_view(guild))).into_response()
 }
 
 /// POST /api/v1/mcp/external/discover
@@ -822,5 +921,92 @@ mod tests {
         assert_eq!(proposals[0]["signature"], "npx a");
         assert_eq!(proposals[1]["signature"], "https://mcp.example/b");
         assert_eq!(proposals[0]["config"]["active"], false);
+    }
+
+    /// D-90: the read-only view reports both active and quarantined tools with
+    /// their fingerprint and reason, and whether the baseline is persisted.
+    #[tokio::test]
+    async fn d90_tool_integrity_view_lists_active_and_quarantined() {
+        use crate::registry::guild_process::{GuildLauncher, GuildProcess};
+        use std::sync::Arc;
+
+        let mut guild = GuildProcess::new(
+            "ext",
+            GuildLauncher::External {
+                command: "node".into(),
+                args: vec![],
+                cwd: None,
+                env: None,
+            },
+            false,
+            None,
+            3,
+        );
+        let mk = |name: &str, desc: &str| {
+            rmcp::model::Tool::new(
+                name.to_string(),
+                desc.to_string(),
+                Arc::new(serde_json::json!({"type": "object"}).as_object().unwrap().clone()),
+            )
+        };
+        let seeded = guild
+            .tool_integrity
+            .evaluate(&[mk("read", "reads a file")])
+            .await;
+        guild.tools = seeded.active;
+        let quarantined = guild
+            .tool_integrity
+            .evaluate(&[mk("read", "reads a file (v2)")])
+            .await;
+        assert_eq!(quarantined.quarantined, vec!["read"]);
+
+        let view = tool_integrity_view(&guild);
+        assert_eq!(view["guild"], "ext");
+        assert_eq!(view["persistence"], "memory");
+
+        // The stale active copy is replaced by the quarantined entry.
+        guild.tools.clear();
+        let view = tool_integrity_view(&guild);
+        let tools = view["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["name"], "read");
+        assert_eq!(tools[0]["status"], "quarantined");
+        assert_eq!(
+            tools[0]["reason"],
+            "fingerprint_changed: description or inputSchema changed"
+        );
+        assert!(tools[0]["fingerprint"].as_str().unwrap().len() == 64);
+    }
+
+    /// D-90: with a store attached the view says the baseline is persisted.
+    #[tokio::test]
+    async fn d90_tool_integrity_view_reports_persistence() {
+        use crate::registry::guild_process::{GuildLauncher, GuildProcess};
+        use std::sync::Arc;
+
+        let mut guild = GuildProcess::new(
+            "ext",
+            GuildLauncher::External {
+                command: "node".into(),
+                args: vec![],
+                cwd: None,
+                env: None,
+            },
+            false,
+            None,
+            3,
+        );
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        guild.attach_integrity_store(Arc::new(tokio::sync::Mutex::new(conn)));
+        let tool = rmcp::model::Tool::new(
+            "read".to_string(),
+            "reads a file".to_string(),
+            Arc::new(serde_json::json!({"type": "object"}).as_object().unwrap().clone()),
+        );
+        guild.tools = guild.tool_integrity.evaluate(&[tool]).await.active;
+
+        let view = tool_integrity_view(&guild);
+        assert_eq!(view["persistence"], "silva");
+        assert_eq!(view["tools"][0]["status"], "active");
     }
 }
