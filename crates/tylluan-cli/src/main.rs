@@ -6,6 +6,7 @@ use sysinfo::System;
 use sha2::{Digest, Sha256};
 
 mod backup;
+mod repair_fts;
 mod stop;
 
 use stop::StopAction;
@@ -175,6 +176,21 @@ enum Commands {
         /// Port of the kernel instance to check for restore (default 47004)
         #[arg(long)]
         port: Option<u16>,
+    },
+    /// Repair the SilvaDB FTS index, EXPLICITLY (T-DSH-171): backs up silva.db,
+    /// rebuilds nodes_fts, verifies orphan=0/missing=0 and aborts untouched if
+    /// the backup or the verification fail. Never runs automatically.
+    RepairFts {
+        /// Path to the silva.db to repair (explicit; there is no default)
+        #[arg(long)]
+        db: PathBuf,
+        /// Directory for the previous backup (default: next to the db,
+        /// fts_rebuild_backup_<timestamp>)
+        #[arg(long = "backup-dir")]
+        backup_dir: Option<PathBuf>,
+        /// Actually apply the repair (without this flag it is a dry-run)
+        #[arg(long)]
+        yes: bool,
     },
     /// Inference points registry (T-DSH-116): read or change a point (operator)
     Inference {
@@ -1154,6 +1170,9 @@ def test_{snake}_tool_registered():
         }
         Commands::Restore { dir, target_dir, port } => {
             backup::run_restore(&dir, port.unwrap_or(DEFAULT_PORT), target_dir.as_deref()).await?;
+        }
+        Commands::RepairFts { db, backup_dir, yes } => {
+            repair_fts::run_repair_fts(&db, backup_dir.as_deref(), yes)?;
         }
     }
 
