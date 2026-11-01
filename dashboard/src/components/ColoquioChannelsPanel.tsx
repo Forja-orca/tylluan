@@ -102,7 +102,7 @@ export function ColoquioChannelsPanel({
     return (
       <div key={ch.channel_id} onClick={() => selectChannel(ch.channel_id)}
         className={cn('group/ch relative flex items-center gap-2 px-2.5 py-1 cursor-pointer rounded-none mx-0.5 transition-colors',
-          active ? 'bg-white dark:bg-muted/80 text-[#0A246A] dark:text-primary border-l-2 border-[#0A246A] font-bold' : 'text-[#444444] dark:text-muted-foreground hover:text-foreground hover:bg-white/60 dark:hover:bg-muted/40 font-medium')}>
+          active ? 'bg-white dark:bg-muted/80 text-[#9E4024] dark:text-primary border-l-2 border-[#9E4024] font-bold' : 'text-[#444444] dark:text-muted-foreground hover:text-foreground hover:bg-white/60 dark:hover:bg-muted/40 font-medium')}>
         <Hash className="w-3.5 h-3.5 shrink-0 opacity-60" />
         <span className="flex-1 text-[11px] truncate">{ch.name}</span>
         {u > 0 && <span className="px-1.5 py-0.2 rounded-none border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold leading-none">{u}</span>}
@@ -111,7 +111,7 @@ export function ColoquioChannelsPanel({
           onClick={e => { e.stopPropagation(); setDeleteTarget(ch); }}
           aria-label={`Eliminar canal ${ch.name}`}
           title="Eliminar canal"
-          className="opacity-0 group-hover/ch:opacity-100 p-0.5 text-muted-foreground hover:text-rose-500 transition-all rounded-none cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] focus:opacity-100"
+          className="opacity-0 group-hover/ch:opacity-100 p-0.5 text-muted-foreground hover:text-rose-500 transition-all rounded-none cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] focus:opacity-100"
         >
           <Trash2 className="w-3 h-3" />
         </button>
@@ -138,7 +138,7 @@ export function ColoquioChannelsPanel({
               type="button"
               onClick={() => setCollapsedGroups(p => ({ ...p, [group]: !p[group] }))}
               aria-label={`Alternar grupo ${group}`}
-              className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold text-[#01285F] dark:text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] rounded-none"
+              className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold text-[#01285F] dark:text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] rounded-none"
             >
               {collapsedGroups[group] ? <ChevronRight className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
               {group}<span className="ml-auto text-[#666666] font-mono text-[10px]">{chs.length}</span>
@@ -175,7 +175,7 @@ export function ColoquioChannelsPanel({
                 type="button"
                 onClick={createChannel}
                 disabled={creating || !newChannelId.trim()}
-                className="flex-1 py-0.5 text-[11px] bg-[#0A246A] hover:bg-[#081C52] disabled:opacity-40 text-white font-bold rounded-sm transition-colors cursor-pointer"
+                className="flex-1 py-0.5 text-[11px] bg-[#9E4024] hover:bg-[#081C52] disabled:opacity-40 text-white font-bold rounded-sm transition-colors cursor-pointer"
               >
                 {creating ? '...' : 'Crear'}
               </button>
@@ -201,10 +201,10 @@ export function ColoquioChannelsPanel({
               <span className="font-bold text-xs">Confirmar eliminación de canal</span>
             </div>
             <p className="text-[11px] text-foreground">
-              ¿Desea eliminar el canal <span className="font-mono text-[#0A246A] font-bold">#{deleteTarget.name}</span> ({deleteTarget.message_count} mensajes)? Esta acción no se puede deshacer.
+              ¿Desea eliminar el canal <span className="font-mono text-[#9E4024] font-bold">#{deleteTarget.name}</span> ({deleteTarget.message_count} mensajes)? Esta acción no se puede deshacer.
             </p>
             <label className="flex items-center gap-2 cursor-pointer text-[11px] text-foreground">
-              <input type="checkbox" checked={archiveOnDelete} onChange={e => setArchiveOnDelete(e.target.checked)} className="rounded-none accent-[#0A246A]" />
+              <input type="checkbox" checked={archiveOnDelete} onChange={e => setArchiveOnDelete(e.target.checked)} className="rounded-none accent-[#9E4024]" />
               Archivar en memoria SilvaDB antes de borrar
             </label>
             <div className="flex gap-2 justify-end mt-1">

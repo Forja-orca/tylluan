@@ -181,7 +181,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
           </div>
           <h2
             id="contradictions-panel-heading"
-            className="text-xs font-bold text-[#0A246A] dark:text-primary flex items-center gap-1.5 flex-wrap"
+            className="text-xs font-bold text-[#9E4024] dark:text-primary flex items-center gap-1.5 flex-wrap"
           >
             <GitCompare className="w-4 h-4 text-rose-700 shrink-0" aria-hidden="true" />
             <span>Nodos en Conflicto Cognitivo <span className="text-[11px] font-mono font-normal text-[#555555] dark:text-muted-foreground">(/api/v1/silva/conflicted)</span></span>
@@ -216,7 +216,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             aria-label="Actualizar lista de nodos en conflicto"
             className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#000000] dark:text-foreground rounded-sm border border-[#ACA899] dark:border-border transition-colors disabled:opacity-50 cursor-pointer"
           >
-            <RefreshCw className={cn('w-3 h-3 text-[#0A246A]', loading && 'animate-spin')} aria-hidden="true" />
+            <RefreshCw className={cn('w-3 h-3 text-[#9E4024]', loading && 'animate-spin')} aria-hidden="true" />
             <span>{loading ? 'Cargando...' : 'Actualizar'}</span>
           </button>
           {loading && (
@@ -249,7 +249,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
         <AlertTriangle className="w-4 h-4 text-[#B8860B] shrink-0 mt-0.5" aria-hidden="true" />
         <div className="min-w-0 text-[#000000] dark:text-foreground leading-normal space-y-0.5 break-words">
           <p>
-            <span className="font-bold text-[#0A246A] dark:text-primary mr-1">
+            <span className="font-bold text-[#9E4024] dark:text-primary mr-1">
               Nota de calibración:
             </span>
             La detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy (<code className="font-mono">benchmarks/human_truth_conflict_pairs_v1.json</code>: 100 pares = 91 consistentes, 9 no relacionados, 0 que se contradigan).
@@ -318,7 +318,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
-                  <span className="font-bold text-[#0A246A] dark:text-primary break-all">{node.id}</span>
+                  <span className="font-bold text-[#9E4024] dark:text-primary break-all">{node.id}</span>
                   <span className="px-1.5 py-0.2 rounded-none bg-[#ECE9D8] dark:bg-muted text-[#000000] dark:text-foreground border border-[#ACA899]">
                     {node.node_type}
                   </span>
@@ -341,10 +341,10 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
         ) : (
           <div className="py-8 px-4 text-center rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border space-y-2 max-w-lg mx-auto">
             <GitCompare className="w-6 h-6 text-[#7F9DB9] mx-auto" aria-hidden="true" />
-            <p className="text-xs font-bold text-[#0A246A] dark:text-foreground">
+            <p className="text-xs font-bold text-[#9E4024] dark:text-foreground">
               {loading ? (
                 <span className="inline-flex items-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5 text-[#0A246A] animate-spin" aria-hidden="true" />
+                  <RefreshCw className="w-3.5 h-3.5 text-[#9E4024] animate-spin" aria-hidden="true" />
                   Consultando nodos en conflicto en SilvaDB...
                 </span>
               ) : endpointStatus === 'pending_backend' ? (
@@ -365,7 +365,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 aria-label="Reintentar consulta de nodos en conflicto"
                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-sm bg-[#ECE9D8] hover:bg-[#F5F4EA] text-[#000000] dark:text-foreground font-bold text-[11px] border border-[#ACA899] transition-colors cursor-pointer"
               >
-                <RefreshCw className="w-3 h-3 text-[#0A246A]" aria-hidden="true" />
+                <RefreshCw className="w-3 h-3 text-[#9E4024]" aria-hidden="true" />
                 Reintentar
               </button>
             )}

@@ -119,7 +119,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#ACA899] dark:border-border pb-2.5">
         <div>
           <h3 className="text-xs font-bold text-[#01285F] dark:text-foreground flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <ShieldCheck className="w-3.5 h-3.5 text-[#9E4024]" aria-hidden="true" />
             Asignación de Roles Cognitivos
           </h3>
           <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
@@ -131,7 +131,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
           disabled={savingRoles}
           className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] text-[#000000] dark:text-foreground text-[11px] font-bold rounded-sm transition-colors disabled:opacity-50 shrink-0 cursor-pointer self-start sm:self-auto"
         >
-          <Save className={cn("w-3 h-3 text-[#0A246A]", savingRoles && "animate-spin")} />
+          <Save className={cn("w-3 h-3 text-[#9E4024]", savingRoles && "animate-spin")} />
           {savingRoles ? 'Guardando...' : 'Guardar Asignación'}
         </button>
       </div>
@@ -139,7 +139,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
         {roles.map((role) => (
           <fieldset key={role.id} className="bg-white dark:bg-card border border-[#ACA899] dark:border-border p-2.5 rounded-none flex flex-col justify-between space-y-2">
-            <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+            <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
               {role.title}
             </legend>
             <div>

@@ -228,7 +228,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             disabled={globalLoading || localLoading}
             className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] rounded-sm text-[11px] font-bold text-[#000000] dark:text-foreground transition-colors disabled:opacity-50 cursor-pointer"
           >
-            <RefreshCw className={cn("w-3.5 h-3.5 text-[#0A246A]", (globalLoading || localLoading) && "animate-spin")} />
+            <RefreshCw className={cn("w-3.5 h-3.5 text-[#9E4024]", (globalLoading || localLoading) && "animate-spin")} />
             <span>Actualizar Estado</span>
           </button>
         </div>
@@ -246,7 +246,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           )}
         >
           <div className="flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <Users className="w-3.5 h-3.5 text-[#9E4024]" aria-hidden="true" />
             <span>Sesiones Activas</span>
             {activeSessions.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-none bg-emerald-500/15 text-[10px] font-mono text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
@@ -266,7 +266,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           )}
         >
           <div className="flex items-center gap-1.5">
-            <Cpu className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <Cpu className="w-3.5 h-3.5 text-[#9E4024]" aria-hidden="true" />
             <span>Catálogo de Capacidades</span>
             {capabilities && (
               <span className="px-1.5 py-0.2 rounded-none bg-blue-500/15 text-[10px] font-mono text-blue-700 dark:text-blue-400 border border-blue-500/30">
@@ -286,7 +286,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           )}
         >
           <div className="flex items-center gap-1.5">
-            <BookOpen className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <BookOpen className="w-3.5 h-3.5 text-[#9E4024]" aria-hidden="true" />
             <span>Guías de Configuración</span>
           </div>
         </button>
@@ -383,7 +383,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
               {activeSessions.length === 0 && (
                 <div className="py-12 flex flex-col items-center justify-center text-center p-4">
-                  <Plug className="w-8 h-8 mb-2 opacity-30 text-[#0A246A] dark:text-primary" />
+                  <Plug className="w-8 h-8 mb-2 opacity-30 text-[#9E4024] dark:text-primary" />
                   <p className="text-xs font-bold text-[#01285F] dark:text-foreground">Sin sesiones de clientes activas</p>
                   <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-sm mt-0.5">
                     Conecte un cliente externo compatible con MCP (Claude Desktop, Cursor, Code) para interactuar con las herramientas soberanas del microkernel.
@@ -399,7 +399,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             {/* Left Col: Sovereign Contract */}
             <div className="space-y-3">
               <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none">
-                <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+                <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
                   Contrato Soberano (6 Herramientas)
                 </legend>
                 <p className="text-[11px] text-[#444444] dark:text-muted-foreground leading-normal mb-2.5">
@@ -420,7 +420,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
               {/* MCP Handshake Catalog */}
               <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none space-y-2.5">
-                <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+                <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
                   Registro de Descubrimiento MCP
                 </legend>
                 <div className="space-y-2.5">
@@ -428,7 +428,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="text-[11px] font-bold text-[#01285F] dark:text-foreground mb-1">Catálogo de Plantillas (Prompts)</div>
                     {capabilities?.mcp.prompts.map((p) => (
                       <div key={p.name} className="p-2 bg-[#F5F4EA] dark:bg-muted/40 border border-[#ACA899] dark:border-border rounded-none space-y-0.5">
-                        <div className="text-[11px] font-mono font-bold text-[#0A246A] dark:text-primary">{p.name}</div>
+                        <div className="text-[11px] font-mono font-bold text-[#9E4024] dark:text-primary">{p.name}</div>
                         <div className="text-[10px] text-[#444444] dark:text-muted-foreground">{p.description}</div>
                       </div>
                     ))}
@@ -437,7 +437,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="text-[11px] font-bold text-[#01285F] dark:text-foreground mb-1">Catálogo de Recursos (Resources)</div>
                     {capabilities?.mcp.resources.map((r) => (
                       <div key={r.uri} className="p-2 bg-[#F5F4EA] dark:bg-muted/40 border border-[#ACA899] dark:border-border rounded-none space-y-0.5">
-                        <div className="text-[11px] font-mono font-bold text-[#0A246A] dark:text-primary truncate">{r.uri}</div>
+                        <div className="text-[11px] font-mono font-bold text-[#9E4024] dark:text-primary truncate">{r.uri}</div>
                         <div className="text-[10px] text-[#000000] dark:text-foreground font-bold">{r.name}</div>
                         <div className="text-[10px] text-[#444444] dark:text-muted-foreground">{r.description}</div>
                       </div>
@@ -450,7 +450,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             {/* Right Col: Active Guilds and schemas */}
             <div className="lg:col-span-2 space-y-3">
               <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none">
-                <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+                <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
                   Módulos de Guilds Activos
                 </legend>
                 <div className="flex items-center justify-between mb-2">

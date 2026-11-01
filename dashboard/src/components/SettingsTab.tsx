@@ -36,7 +36,7 @@ export function SettingsTab({ bridge, notify, onOpenAuthModal }: SettingsTabProp
             className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] text-[#000000] dark:text-foreground rounded-sm text-[11px] font-bold transition-colors cursor-pointer self-start sm:self-auto"
             title="Configurar Bearer Token"
           >
-            <Key className="w-3.5 h-3.5 text-[#0A246A]" aria-hidden="true" />
+            <Key className="w-3.5 h-3.5 text-[#9E4024]" aria-hidden="true" />
             <span>Configurar Token</span>
           </button>
         </div>

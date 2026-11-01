@@ -124,7 +124,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'Nodos en SilvaDB',
       value: status ? String(status.node_count) : '—',
       sub: `${status?.edge_count ?? 0} aristas · ${status?.orphan_node_count ?? 0} huérfanos`,
-      color: 'text-[#0A246A] dark:text-blue-400',
+      color: 'text-[#9E4024] dark:text-blue-400',
     },
     {
       icon: Clock,
@@ -205,7 +205,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
     <div className="space-y-3 font-sans">
       {/* Header */}
       <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Mantenimiento del Sustrato Soberano</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Mantenimiento del Sustrato Soberano</legend>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-xs font-bold text-[#01285F] dark:text-foreground">Operaciones de Integridad de Bases SQLite</h2>
@@ -216,7 +216,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
             onClick={loadStatus}
             className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] rounded-sm text-[11px] font-bold text-[#000000] dark:text-foreground transition-colors cursor-pointer self-start sm:self-auto"
           >
-            <RefreshCw className="w-3 h-3 text-[#0A246A]" /> Actualizar
+            <RefreshCw className="w-3 h-3 text-[#9E4024]" /> Actualizar
           </button>
         </div>
       </fieldset>
@@ -247,7 +247,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
 
       {/* Operations */}
       <fieldset className="p-2.5 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border rounded-sm">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Acciones de Mantenimiento Soberano</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Acciones de Mantenimiento Soberano</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
           {operations.map(({ id, label, icon: Icon, iconColor, desc, btnClass }) => (
             <div key={id} className="flex flex-col justify-between gap-2 p-2.5 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none">
@@ -284,7 +284,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       {/* Host Resources Viewer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
         <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none">
-          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
             Uso de CPU del Host
           </legend>
           {metricsHistory ? (
@@ -301,7 +301,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
               {[4, 7, 2, 8, 5, 9, 3, 6, 4, 8].map((v, i) => {
                 const cpu = sysStatus?.system?.cpu_usage ?? 0;
                 const barHeight = cpu > 0 ? Math.min(100, cpu * v / 9) : 0;
-                return <div key={i} className="flex-1 bg-[#0A246A]/20 dark:bg-blue-500/20 rounded-none transition-all duration-1000" style={{ height: `${barHeight}%` }} />;
+                return <div key={i} className="flex-1 bg-[#9E4024]/20 dark:bg-blue-500/20 rounded-none transition-all duration-1000" style={{ height: `${barHeight}%` }} />;
               })}
             </div>
           )}
@@ -309,7 +309,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
         </fieldset>
 
         <fieldset className="p-3 bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none">
-          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
             Presión de Memoria RAM del Host
           </legend>
           {metricsHistory ? (
@@ -336,13 +336,13 @@ export function MaintenanceTab({ bridge, notify }: Props) {
 
       {/* Info footer */}
       <div className="p-2.5 rounded-none bg-[#ECE9D8] dark:bg-muted/40 border border-[#ACA899] dark:border-border text-[11px] text-[#444444] dark:text-muted-foreground leading-normal">
-        Las operaciones de mantenimiento actúan sobre las bases SQLite de <span className="font-bold text-[#0A246A] dark:text-primary">SilvaDB</span> (grafo cognitivo) y <span className="font-bold text-[#0A246A] dark:text-primary">HybridMemory</span> (FTS5 + búsqueda vectorial).
+        Las operaciones de mantenimiento actúan sobre las bases SQLite de <span className="font-bold text-[#9E4024] dark:text-primary">SilvaDB</span> (grafo cognitivo) y <span className="font-bold text-[#9E4024] dark:text-primary">HybridMemory</span> (FTS5 + búsqueda vectorial).
         VACUUM y CHECKPOINT son seguras en producción. El DECAY biológico es irreversible y atenúa nodos desusados según la curva de retención. Se recomienda ejecutar CHECKPOINT antes de VACUUM para garantizar consistencia física.
       </div>
 
       {/* Token + Config Section */}
       <fieldset className="rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border p-3">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Credencial de Administración del Kernel</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Credencial de Administración del Kernel</legend>
         <div className="flex gap-2">
           <input
             type="password"

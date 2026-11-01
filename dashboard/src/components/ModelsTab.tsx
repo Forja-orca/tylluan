@@ -153,7 +153,7 @@ export function ModelsTab({ bridge }: Props) {
             </div>
             
             <p className="text-[11px] text-[#444444] dark:text-muted-foreground leading-normal">
-              La aceleración por hardware se ha configurado a <span className="font-mono text-[#0A246A] dark:text-primary font-bold">{selectedDevice}</span>. Para cargar los proveedores de ejecución y aplicar los cambios, el Kernel de Tylluan debe reiniciarse.
+              La aceleración por hardware se ha configurado a <span className="font-mono text-[#9E4024] dark:text-primary font-bold">{selectedDevice}</span>. Para cargar los proveedores de ejecución y aplicar los cambios, el Kernel de Tylluan debe reiniciarse.
             </p>
 
             <fieldset className="bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border p-2.5 rounded-none space-y-1.5 text-[11px] text-[#444444] dark:text-muted-foreground">

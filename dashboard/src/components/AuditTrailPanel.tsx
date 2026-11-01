@@ -461,7 +461,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             <span
               className={cn(
                 'text-lg font-bold uppercase',
-                verifyReport?.status === 'tampered' || verifyError ? 'text-rose-400' : 'text-emerald-400'
+                verifyReport?.status === 'tampered' || verifyError ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'
               )}
             >
               {verifyError ? 'error' : verifyReport?.status || (loading ? 'loading' : 'empty')}

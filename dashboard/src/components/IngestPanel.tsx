@@ -187,13 +187,13 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
       {/* Header — toggle */}
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-bold text-[#0A246A] dark:text-primary hover:bg-[#F5F4EA] transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-bold text-[#9E4024] dark:text-primary hover:bg-[#F5F4EA] transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <Upload className="w-3.5 h-3.5" />
           <span>Ingesta de Conocimiento en SilvaDB</span>
           {recent.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-none bg-white dark:bg-muted text-[#0A246A] text-[10px] font-bold border border-[#7F9DB9]">
+            <span className="px-1.5 py-0.2 rounded-none bg-white dark:bg-muted text-[#9E4024] text-[10px] font-bold border border-[#7F9DB9]">
               {recent.length}
             </span>
           )}
@@ -210,7 +210,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               className={cn(
                 "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
                 mode === 'text'
-                  ? "bg-[#0A246A] text-white"
+                  ? "bg-[#9E4024] text-white"
                   : "text-[#444444] hover:bg-[#ECE9D8]"
               )}
             >
@@ -221,7 +221,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               className={cn(
                 "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
                 mode === 'url'
-                  ? "bg-[#0A246A] text-white"
+                  ? "bg-[#9E4024] text-white"
                   : "text-[#444444] hover:bg-[#ECE9D8]"
               )}
             >
@@ -232,7 +232,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               className={cn(
                 "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
                 mode === 'file'
-                  ? "bg-[#0A246A] text-white"
+                  ? "bg-[#9E4024] text-white"
                   : "text-[#444444] hover:bg-[#ECE9D8]"
               )}
             >
@@ -271,7 +271,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   className={cn(
                     'flex items-center gap-1 px-2.5 py-1 rounded-sm border text-[11px] font-bold transition-colors cursor-pointer',
                     bulk
-                      ? 'bg-[#0A246A] text-white border-[#0A246A]'
+                      ? 'bg-[#9E4024] text-white border-[#9E4024]'
                       : 'bg-[#ECE9D8] border-[#ACA899] text-[#444444] hover:bg-[#F5F4EA]'
                   )}
                 >
@@ -335,14 +335,14 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 className={cn(
                   "border-2 border-dashed rounded-none p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1",
                   isDragOver
-                    ? "border-[#0A246A] bg-[#ECE9D8]"
+                    ? "border-[#9E4024] bg-[#ECE9D8]"
                     : "border-[#ACA899] bg-[#ECE9D8] hover:bg-[#F5F4EA]"
                 )}
               >
-                <Upload className="w-5 h-5 text-[#0A246A]" />
+                <Upload className="w-5 h-5 text-[#9E4024]" />
                 {selectedFile ? (
                   <div className="text-[11px] text-[#000000]">
-                    <p className="font-bold text-[#0A246A]">{selectedFile.name}</p>
+                    <p className="font-bold text-[#9E4024]">{selectedFile.name}</p>
                     <p className="text-[10px] text-[#555555]">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                   </div>
                 ) : (
@@ -368,7 +368,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1 rounded-sm text-[11px] font-bold transition-all cursor-pointer',
                 canSubmit
-                  ? 'bg-[#0A246A] hover:bg-[#081C52] text-white border border-[#0A246A]'
+                  ? 'bg-[#9E4024] hover:bg-[#081C52] text-white border border-[#9E4024]'
                   : 'bg-[#ECE9D8] text-[#888888] border border-[#ACA899] cursor-not-allowed'
               )}
             >

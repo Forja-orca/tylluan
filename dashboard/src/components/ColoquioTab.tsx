@@ -400,10 +400,10 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
       {/* Top bar */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-muted/40 shrink-0">
         <div className="flex items-center gap-2.5">
-          <span className="text-xs font-bold text-[#0A246A] dark:text-primary">Coloquio</span>
+          <span className="text-xs font-bold text-[#9E4024] dark:text-primary">Coloquio</span>
           <span className="text-[11px] text-[#444444] dark:text-muted-foreground hidden sm:block">Canal de deliberación y coordinación agéntica</span>
           {totalUnread > 0 && (
-            <span className="px-1.5 py-0.5 rounded-none border border-[#7F9DB9] bg-white dark:bg-primary/10 text-[#0A246A] dark:text-primary text-[10px] font-mono font-semibold">
+            <span className="px-1.5 py-0.5 rounded-none border border-[#7F9DB9] bg-white dark:bg-primary/10 text-[#9E4024] dark:text-primary text-[10px] font-mono font-semibold">
               {totalUnread} no leídos
             </span>
           )}
@@ -413,7 +413,7 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
             <button
               type="button"
               onClick={markAllRead}
-              className="flex items-center gap-1 text-[11px] font-bold text-[#000000] dark:text-foreground px-2 py-0.5 rounded-sm border border-[#ACA899] dark:border-border bg-[#ECE9D8] hover:bg-[#F5F4EA] transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
+              className="flex items-center gap-1 text-[11px] font-bold text-[#000000] dark:text-foreground px-2 py-0.5 rounded-sm border border-[#ACA899] dark:border-border bg-[#ECE9D8] hover:bg-[#F5F4EA] transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
             >
               Marcar todo leído
             </button>
@@ -424,8 +424,8 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
             aria-label={showAgentPanel ? "Ocultar panel de presencia" : "Mostrar panel de presencia"}
             title="Panel de presencia de agentes"
             className={cn(
-              'px-2 py-0.5 rounded-sm border text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] flex items-center gap-1',
-              showAgentPanel ? 'bg-white dark:bg-primary/15 border-[#0A246A] text-[#0A246A] dark:text-primary' : 'bg-[#ECE9D8] dark:bg-muted border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]'
+              'px-2 py-0.5 rounded-sm border text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] flex items-center gap-1',
+              showAgentPanel ? 'bg-white dark:bg-primary/15 border-[#9E4024] text-[#9E4024] dark:text-primary' : 'bg-[#ECE9D8] dark:bg-muted border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]'
             )}
           >
             <Users className="w-3.5 h-3.5" />
@@ -467,8 +467,8 @@ export function ColoquioTab({ bridge, initialChannels, initialMessages }: Coloqu
           >
             {!selectedId ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 p-6 text-center">
-                <MessageSquare className="w-8 h-8 text-[#0A246A]/30 dark:text-slate-600 mb-1" />
-                <p className="text-xs font-bold text-[#0A246A] dark:text-foreground">Seleccione un canal</p>
+                <MessageSquare className="w-8 h-8 text-[#9E4024]/30 dark:text-slate-600 mb-1" />
+                <p className="text-xs font-bold text-[#9E4024] dark:text-foreground">Seleccione un canal</p>
                 <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-xs">Elija un canal del panel izquierdo para consultar el historial o participar en la deliberación.</p>
               </div>
             ) : (

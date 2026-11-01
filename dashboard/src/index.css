@@ -5,48 +5,48 @@
 @layer base {
   :root {
     /* Tylluan Neutral Light Theme (GUIA_UI_vieja_escuela.md) - Windows 2000/XP sober aesthetic */
-    --background: 0 0% 94%;            /* #F0F0F0 paneles/fondo base */
-    --foreground: 0 0% 10%;            /* #1A1A1A texto principal (#000 a #222) */
-    --card: 0 0% 100%;                 /* #FFFFFF superficie/contenido blanco */
-    --card-foreground: 0 0% 10%;       /* #1A1A1A */
-    --popover: 0 0% 100%;              /* #FFFFFF */
-    --popover-foreground: 0 0% 10%;
-    --primary: 223 83% 23%;            /* #0A246A azul del logo Tylluan */
-    --primary-foreground: 0 0% 100%;   /* #FFFFFF blanco sobre azul */
-    --secondary: 0 0% 88%;             /* #E0E0E0 paneles secundarios */
-    --secondary-foreground: 0 0% 10%;
-    --muted: 0 0% 92%;                 /* #ECECEC paneles neutros */
-    --muted-foreground: 0 0% 30%;      /* #4D4D4D texto secundario */
-    --accent: 223 83% 23%;             /* #0A246A único acento azul logo */
-    --accent-foreground: 0 0% 100%;
+    --background: 48 22% 93%;  /* #FAF9F5 fondo Claude */
+    --foreground: 60 3% 8%;  /* #141413 texto Claude */
+    --card: 0 0% 100%;  /* #FFFFFF contenido */
+    --card-foreground: 60 3% 8%;  /* #141413 */
+    --popover: 0 0% 100%;  /* #FFFFFF */
+    --popover-foreground: 60 3% 8%;  /* #141413 */
+    --primary: 17 58% 37%;  /* #A6431F naranja Claude oscurecido para AA */
+    --primary-foreground: 0 0% 100%;  /* #FFFFFF */
+    --secondary: 50 18% 86%;  /* #E8E6DC gris claro Claude */
+    --secondary-foreground: 60 3% 8%;  /* #141413 */
+    --muted: 48 20% 90%;  /* #F0EEE6 panel neutro calido */
+    --muted-foreground: 50 3% 34%;  /* #58574F texto secundario */
+    --accent: 17 58% 37%;  /* #A6431F unico acento */
+    --accent-foreground: 0 0% 100%;  /* #FFFFFF */
     --destructive: 0 70% 45%;          /* #C22222 rojo estado crítico */
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 60%;                /* #999999 borde 1px visible */
-    --input: 0 0% 60%;                 /* #999999 borde campos */
-    --ring: 223 83% 23%;               /* #0A246A */
+    --border: 50 5% 50%;  /* #908E83 borde 1px visible */
+    --input: 50 5% 50%;  /* #908E83 borde campos */
+    --ring: 17 58% 37%;  /* #A6431F */
     --radius: 2px;
 
     /* Slate Scale — Neutral Gray Palette (#ECECEC/#F0F0F0 paneles, blanco contenido, texto #000-#222) */
-    --slate-950: 0 0% 94%;             /* #F0F0F0 fondo base */
-    --slate-900: 0 0% 100%;            /* #FFFFFF contenido blanco */
-    --slate-850: 0 0% 92%;             /* #ECECEC paneles neutros */
-    --slate-800: 0 0% 88%;             /* #E0E0E0 paneles elevados */
-    --slate-700: 0 0% 60%;             /* #999999 bordes 1px */
-    --slate-600: 0 0% 50%;             /* #808080 bordes clásicos */
-    --slate-500: 0 0% 40%;             /* #666666 texto secundario */
-    --slate-400: 0 0% 30%;             /* #4D4D4D texto terciario */
-    --slate-300: 0 0% 20%;             /* #333333 */
-    --slate-200: 0 0% 13%;             /* #222222 texto */
-    --slate-100: 0 0% 0%;              /* #000000 texto principal */
-    --slate-50: 0 0% 0%;               /* #000000 */
+    --slate-950: 48 22% 93%;  /* #FAF9F5 */
+    --slate-900: 0 0% 100%;  /* #FFFFFF */
+    --slate-850: 48 20% 90%;  /* #F0EEE6 */
+    --slate-800: 50 18% 86%;  /* #E8E6DC */
+    --slate-700: 50 5% 50%;  /* #908E83 bordes */
+    --slate-600: 50 5% 42%;  /* #79776E */
+    --slate-500: 50 3% 34%;  /* #58574F texto secundario */
+    --slate-400: 50 3% 27%;  /* #464540 */
+    --slate-300: 50 3% 20%;  /* #34332F */
+    --slate-200: 60 3% 13%;  /* #222221 */
+    --slate-100: 60 3% 8%;  /* #141413 */
+    --slate-50: 60 3% 8%;  /* #141413 */
     
     /* Estados: Verde sobrio para Correcto/Online */
-    --emerald-300: 140 70% 30%;
-    --emerald-400: 140 70% 30%;
-    --emerald-500: 140 70% 30%;
-    --emerald-600: 140 70% 25%;
-    --emerald-700: 140 70% 20%;
-    --emerald-950: 140 20% 95%;
+    --emerald-300: 85 20% 30%;  /* verde Claude AA */
+    --emerald-400: 85 20% 30%;  /* verde Claude AA */
+    --emerald-500: 85 20% 30%;  /* verde Claude AA */
+    --emerald-600: 85 20% 25%;  /* verde Claude AA */
+    --emerald-700: 85 20% 21%;  /* verde Claude AA */
+    --emerald-950: 85 15% 95%;  /* verde Claude AA */
 
     /* Estados: Ámbar sobrio para Advertencia/Warning */
     --amber-100: 38 90% 20%;
@@ -70,34 +70,34 @@
     --rose-950: 0 40% 95%;
     
     /* UN solo acento: azul del logo (#0A246A) */
-    --blue-300: 223 83% 23%;
-    --blue-400: 223 83% 23%;
-    --blue-500: 223 83% 23%;
-    --blue-600: 223 83% 18%;
-    --blue-700: 223 83% 14%;
-    --blue-950: 223 40% 95%;
+    --blue-300: 17 58% 37%;  /* acento naranja Claude */
+    --blue-400: 17 58% 37%;  /* acento naranja Claude */
+    --blue-500: 17 58% 37%;  /* acento naranja Claude */
+    --blue-600: 17 58% 32%;  /* acento naranja Claude */
+    --blue-700: 17 58% 27%;  /* acento naranja Claude */
+    --blue-950: 17 35% 93%;  /* acento naranja Claude */
 
-    --indigo-300: 223 83% 23%;
-    --indigo-400: 223 83% 23%;
-    --indigo-500: 223 83% 23%;
-    --indigo-600: 223 83% 18%;
-    --indigo-950: 223 40% 95%;
+    --indigo-300: 17 58% 37%;  /* acento naranja Claude */
+    --indigo-400: 17 58% 37%;  /* acento naranja Claude */
+    --indigo-500: 17 58% 37%;  /* acento naranja Claude */
+    --indigo-600: 17 58% 32%;  /* acento naranja Claude */
+    --indigo-950: 17 35% 93%;  /* acento naranja Claude */
     
-    --violet-300: 223 83% 23%;
-    --violet-400: 223 83% 23%;
-    --violet-500: 223 83% 23%;
-    --violet-600: 223 83% 18%;
-    --violet-950: 223 40% 95%;
+    --violet-300: 17 58% 37%;  /* acento naranja Claude */
+    --violet-400: 17 58% 37%;  /* acento naranja Claude */
+    --violet-500: 17 58% 37%;  /* acento naranja Claude */
+    --violet-600: 17 58% 32%;  /* acento naranja Claude */
+    --violet-950: 17 35% 93%;  /* acento naranja Claude */
 
-    --cyan-300: 223 83% 23%;
-    --cyan-400: 223 83% 23%;
-    --cyan-500: 223 83% 23%;
-    --cyan-950: 223 40% 95%;
+    --cyan-300: 17 58% 37%;  /* acento naranja Claude */
+    --cyan-400: 17 58% 37%;  /* acento naranja Claude */
+    --cyan-500: 17 58% 37%;  /* acento naranja Claude */
+    --cyan-950: 17 35% 93%;  /* acento naranja Claude */
 
-    --teal-300: 223 83% 23%;
-    --teal-400: 223 83% 23%;
-    --teal-500: 223 83% 23%;
-    --teal-950: 223 40% 95%;
+    --teal-300: 17 58% 37%;  /* acento naranja Claude */
+    --teal-400: 17 58% 37%;  /* acento naranja Claude */
+    --teal-500: 17 58% 37%;  /* acento naranja Claude */
+    --teal-950: 17 35% 93%;  /* acento naranja Claude */
   }
 
   .dark {
@@ -214,6 +214,16 @@
   pre,
   .font-mono {
     font-family: Consolas, 'Courier New', monospace;
+  }
+
+  /* Enfoque accesible visible clásica / vieja escuela (WCAG 2.2 AA / GUIA_UI_vieja_escuela.md punto 8) */
+  :focus-visible {
+    outline: 1px dotted #000000 !important;
+    outline-offset: -1px !important;
+  }
+  .dark :focus-visible {
+    outline: 1px dotted #FFFFFF !important;
+    outline-offset: -1px !important;
   }
 }
 

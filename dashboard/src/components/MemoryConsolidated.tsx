@@ -24,9 +24,9 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           type="button"
           aria-pressed={subTab === 'graph'}
           onClick={() => setSubTab('graph')}
-          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
             subTab === 'graph'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
               : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
@@ -37,9 +37,9 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           type="button"
           aria-pressed={subTab === 'nodes'}
           onClick={() => setSubTab('nodes')}
-          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
             subTab === 'nodes'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
               : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
@@ -50,9 +50,9 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           type="button"
           aria-pressed={subTab === 'contradictions'}
           onClick={() => setSubTab('contradictions')}
-          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
             subTab === 'contradictions'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
               : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >

@@ -24,7 +24,7 @@ export function ColoquioAgentsPanel({
   return (
     <div className="w-44 shrink-0 border-l border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-card flex flex-col overflow-hidden font-sans">
       <div className="px-2.5 py-1.5 border-b border-[#ACA899] dark:border-border bg-white dark:bg-muted">
-        <span className="text-[11px] font-bold text-[#0A246A] dark:text-primary">Agentes en Línea</span>
+        <span className="text-[11px] font-bold text-[#9E4024] dark:text-primary">Agentes en Línea</span>
       </div>
       <div className="flex-1 overflow-y-auto py-1">
         {agentPresence.length === 0 ? (
@@ -43,7 +43,7 @@ export function ColoquioAgentsPanel({
                   <div className={cn('text-[11px] font-bold truncate', m.color)}>{id}</div>
                   <div className="text-[10px] text-[#555555] dark:text-muted-foreground truncate">
                     {typingStatuses[id] ? (
-                      <span className="text-[#0A246A] dark:text-primary font-medium italic">{typingStatuses[id].status}</span>
+                      <span className="text-[#9E4024] dark:text-primary font-medium italic">{typingStatuses[id].status}</span>
                     ) : (
                       fmtRel(lastSeen)
                     )}

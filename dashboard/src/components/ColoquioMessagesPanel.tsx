@@ -395,11 +395,11 @@ export function ColoquioMessagesPanel({
                 <button
                   type="button"
                   onClick={() => scrollToTurn(msg.turn)}
-                  className="text-[11px] text-slate-400 dark:text-slate-400 font-mono hover:text-amber-400 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none rounded transition-colors"
+                  className="text-[11px] text-slate-600 dark:text-slate-400 font-mono hover:text-amber-800 dark:hover:text-amber-400 focus-visible:outline-dotted focus-visible:outline-1 rounded transition-colors"
                 >
                   #{msg.turn}
                 </button>
-                <span className="text-[11px] text-slate-400 dark:text-slate-400">{fmtTime(msg.created_at)}</span>
+                <span className="text-[11px] text-slate-600 dark:text-slate-400">{fmtTime(msg.created_at)}</span>
                 {isStreaming && (
                   <span className="text-[11px] text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-1.5 py-0.5 rounded flex items-center gap-1.5 font-medium">
                     <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
@@ -428,12 +428,12 @@ export function ColoquioMessagesPanel({
                 )}
 
                 {thoughtContent && (
-                  <details className="group/details bg-slate-950/40 border border-border rounded p-2.5 my-2 text-[11px] text-slate-400 cursor-pointer" open>
+                  <details className="group/details bg-slate-950/40 border border-border rounded p-2.5 my-2 text-[11px] text-slate-600 dark:text-slate-400 cursor-pointer" open>
                     <summary className="font-semibold text-primary hover:text-primary/80 transition-colors list-none flex items-center gap-1.5 focus:outline-none">
                       <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                       🧠 Reasoning
                     </summary>
-                    <div className="mt-2 pl-3 border-l border-primary/20 whitespace-pre-wrap leading-relaxed text-slate-400/90 font-mono text-[11px] select-text cursor-text" dangerouslySetInnerHTML={{
+                    <div className="mt-2 pl-3 border-l border-primary/20 whitespace-pre-wrap leading-relaxed text-slate-600 dark:text-slate-300 font-mono text-[11px] select-text cursor-text" dangerouslySetInnerHTML={{
                       __html: parseMarkdown(thoughtContent)
                     }} />
                   </details>
@@ -441,7 +441,7 @@ export function ColoquioMessagesPanel({
 
                 {isPlan && !isApproved && (
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-amber-400 font-semibold flex items-center gap-1">
+                    <span className="text-[11px] text-amber-800 dark:text-amber-400 font-semibold flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
                       Plan awaiting human approval
                     </span>
@@ -481,7 +481,7 @@ export function ColoquioMessagesPanel({
 
                 {isPlan && isApproved && (
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[11px] text-emerald-400 font-semibold">
+                    <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                       Plan approved by human
                     </div>
@@ -524,16 +524,16 @@ export function ColoquioMessagesPanel({
                   onClick={() => handleCopy(msg.msg_id, msg.content)}
                   aria-label="Copy message"
                   title="Copy message"
-                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+                  className="p-1.5 hover:bg-slate-800 rounded text-slate-600 dark:text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:outline-dotted focus-visible:outline-1"
                 >
-                  {copiedId === msg.msg_id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  {copiedId === msg.msg_id ? <Check className="w-3 h-3 text-emerald-700 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuote(msg.author_id, msg.content)}
                   aria-label="Quote message"
                   title="Quote message"
-                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+                  className="p-1.5 hover:bg-slate-800 rounded text-slate-600 dark:text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:outline-dotted focus-visible:outline-1"
                 >
                   <Quote className="w-3 h-3" />
                 </button>
@@ -566,9 +566,9 @@ export function ColoquioMessagesPanel({
           type="button"
           onClick={() => setCompactMode(v => !v)}
           className={cn(
-            "ml-auto text-[11px] px-2 py-0.5 rounded-sm border font-bold transition-all cursor-pointer mr-1.5 focus-visible:outline-1 focus-visible:outline-[#0A246A]",
+            "ml-auto text-[11px] px-2 py-0.5 rounded-sm border font-bold transition-all cursor-pointer mr-1.5 focus-visible:outline-1 focus-visible:outline-[#9E4024]",
             compactMode 
-              ? "border-[#0A246A] bg-white dark:bg-card text-[#0A246A] dark:text-primary" 
+              ? "border-[#9E4024] bg-white dark:bg-card text-[#9E4024] dark:text-primary" 
               : "border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]"
           )}
           title="Alternar densidad compacta"
@@ -587,7 +587,7 @@ export function ColoquioMessagesPanel({
           />
           {msgSearch && (
             <>
-              <span className="text-[10px] text-[#0A246A] font-mono">{filteredMessages.length}/{allMessages.length}</span>
+              <span className="text-[10px] text-[#9E4024] font-mono">{filteredMessages.length}/{allMessages.length}</span>
               <button
                 type="button"
                 onClick={() => setMsgSearch('')}
@@ -602,7 +602,7 @@ export function ColoquioMessagesPanel({
       </div>
       {allMessages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2 p-6 text-center">
-          <p className="text-xs font-bold text-[#0A246A] dark:text-foreground">Canal sin mensajes</p>
+          <p className="text-xs font-bold text-[#9E4024] dark:text-foreground">Canal sin mensajes</p>
           <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-sm">Escriba el primer mensaje en el campo inferior para iniciar la deliberación en este canal.</p>
         </div>
       ) : (
@@ -623,7 +623,7 @@ export function ColoquioMessagesPanel({
         <div className="px-3 py-1 text-[10px] text-[#444444] dark:text-muted-foreground flex items-center gap-2 shrink-0 bg-[#ECE9D8] dark:bg-muted/40 border-t border-[#ACA899]">
           <div className="flex flex-col gap-0.5">
             {Object.entries(typingStatuses).map(([agent, val]) => (
-              <span key={agent} className="font-mono text-[10px]"><strong className="text-[#0A246A] dark:text-primary">@{agent}</strong>: <span className="italic">{val.status}</span></span>
+              <span key={agent} className="font-mono text-[10px]"><strong className="text-[#9E4024] dark:text-primary">@{agent}</strong>: <span className="italic">{val.status}</span></span>
             ))}
           </div>
         </div>
@@ -636,7 +636,7 @@ export function ColoquioMessagesPanel({
           <button
             type="button"
             onClick={() => setShowTemplates(v => !v)}
-            className="ml-auto text-[11px] font-bold text-[#0A246A] dark:text-primary hover:underline flex items-center gap-1 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] px-1 py-0.5"
+            className="ml-auto text-[11px] font-bold text-[#9E4024] dark:text-primary hover:underline flex items-center gap-1 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] px-1 py-0.5"
           >
             {showTemplates ? 'Ocultar plantillas' : 'Plantillas rápidas'}
           </button>
@@ -648,7 +648,7 @@ export function ColoquioMessagesPanel({
                 type="button"
                 key={t.label}
                 onClick={() => { setDraft(t.text); setShowTemplates(false); }}
-                className="text-[10px] font-bold bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[#0A246A] dark:text-primary px-2 py-0.5 rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer"
+                className="text-[10px] font-bold bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[#9E4024] dark:text-primary px-2 py-0.5 rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer"
               >
                 {t.label}
               </button>
@@ -707,7 +707,7 @@ export function ColoquioMessagesPanel({
             onClick={postMessage}
             disabled={posting || (!draft.trim() && !attachments.length)}
             aria-label="Enviar mensaje"
-            className="px-4 py-2 bg-[#0A246A] hover:bg-[#081C52] disabled:opacity-40 rounded-sm text-white font-bold border border-[#0A246A] text-[11px] shrink-0 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
+            className="px-4 py-2 bg-[#9E4024] hover:bg-[#081C52] disabled:opacity-40 rounded-sm text-white font-bold border border-[#9E4024] text-[11px] shrink-0 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
           >
             Enviar
           </button>

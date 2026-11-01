@@ -97,7 +97,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
 
       {/* Real Local Detected Model Inventory on Disk */}
       <fieldset className="rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border p-3">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
           Inventario de Modelos Locales en Disco
         </legend>
         <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-[#ACA899] dark:border-border">
@@ -145,7 +145,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
 
       {/* Embedding Model Edit */}
       <fieldset className="rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border p-3">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Configuración del Modelo de Embeddings</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Configuración del Modelo de Embeddings</legend>
         <div className="space-y-3">
           <div>
             <label className="block text-[11px] font-bold text-[#01285F] dark:text-foreground mb-1">Nombre del Modelo</label>
@@ -171,7 +171,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
             disabled={saving || !embeddingModel}
             className="px-3 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] disabled:opacity-50 text-[#000000] dark:text-foreground rounded-sm text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#0A246A]" /> : <Save className="w-3.5 h-3.5 text-[#0A246A]" />}
+            {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#9E4024]" /> : <Save className="w-3.5 h-3.5 text-[#9E4024]" />}
             {saving ? 'Guardando...' : 'Guardar Configuración'}
           </button>
         </div>

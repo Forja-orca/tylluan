@@ -326,7 +326,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           <div className="flex items-center justify-between gap-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border p-2 rounded-sm">
             <div className="flex gap-2 flex-1 max-w-3xl items-center">
               {results.length > 0 && (
-                <span className="text-[11px] font-bold text-[#0A246A] dark:text-primary whitespace-nowrap">{results.length} recuerdos</span>
+                <span className="text-[11px] font-bold text-[#9E4024] dark:text-primary whitespace-nowrap">{results.length} recuerdos</span>
               )}
               <div className="flex-1 relative">
                 <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#555555]" aria-hidden="true" />
@@ -357,7 +357,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 onClick={() => setShowRecentSidebar(!showRecentSidebar)}
                 className={cn(
                   "p-1.5 rounded-sm border transition-all cursor-pointer",
-                  showRecentSidebar ? "bg-[#0A246A] text-white border-[#0A246A]" : "bg-white dark:bg-muted text-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
+                  showRecentSidebar ? "bg-[#9E4024] text-white border-[#9E4024]" : "bg-white dark:bg-muted text-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
                 )}
                 title="Últimas 24 h"
               >
@@ -367,7 +367,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={runClustering}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#0A246A] dark:text-primary border border-[#ACA899] transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#9E4024] dark:text-primary border border-[#ACA899] transition-all cursor-pointer"
               >
                 <Zap className="w-3.5 h-3.5" aria-hidden="true" /> Detectar comunidades
               </button>
@@ -377,20 +377,20 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 disabled={loading || isBackgroundRefreshing}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-foreground border border-[#ACA899] transition-colors cursor-pointer"
               >
-                <RefreshCw className={cn("w-3 h-3 text-[#0A246A]", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Actualizar
+                <RefreshCw className={cn("w-3 h-3 text-[#9E4024]", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Actualizar
               </button>
               <button
                 type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-3 py-1 bg-[#0A246A] hover:bg-[#081C52] text-white text-[11px] font-bold border border-[#0A246A] rounded-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1 bg-[#9E4024] hover:bg-[#081C52] text-white text-[11px] font-bold border border-[#9E4024] rounded-sm flex items-center gap-1.5 cursor-pointer"
               >
                 {searching ? <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" /> : <Database className="w-3 h-3" aria-hidden="true" />} Explorar
               </button>
             </div>
             <div className="flex bg-white dark:bg-muted border border-[#ACA899] rounded-sm p-0.5 shrink-0 gap-0.5 items-center">
-              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'grid' ? "bg-[#0A246A] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Cuadrícula</button>
-              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'table' ? "bg-[#0A246A] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Tabla</button>
+              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'grid' ? "bg-[#9E4024] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Cuadrícula</button>
+              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'table' ? "bg-[#9E4024] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Tabla</button>
               <div className="w-px bg-[#ACA899] self-stretch my-0.5 mx-0.5"></div>
               <button 
                 type="button" 
@@ -398,7 +398,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 onClick={() => setCompactMode(!compactMode)} 
                 className={cn(
                   "px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors",
-                  compactMode ? "bg-[#ECE9D8] text-[#0A246A]" : "text-[#444444] hover:bg-[#F5F4EA]"
+                  compactMode ? "bg-[#ECE9D8] text-[#9E4024]" : "text-[#444444] hover:bg-[#F5F4EA]"
                 )}
               >
                 {compactMode ? "Compacto" : "Completo"}
@@ -452,17 +452,17 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           {/* IVF Index Status Widget */}
           <div role="status" aria-live="polite" className="flex items-center gap-3 px-4 py-2.5 rounded border border-border bg-slate-900/80">
             <Layers className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
-            <span className="text-[11px] font-medium text-slate-400">IVF Index</span>
+            <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">IVF Index</span>
             <div className="flex items-center gap-1.5 ml-1">
               {memoryStats?.ivf_ready ? (
                 <>
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-                  <span className="text-[11px] font-semibold text-emerald-400">READY</span>
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
+                  <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">READY</span>
                 </>
               ) : (
                 <>
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-                  <span className="text-[11px] font-semibold text-amber-400">BUILDING…</span>
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-800 dark:text-amber-400" aria-hidden="true" />
+                  <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-400">BUILDING…</span>
                 </>
               )}
             </div>
@@ -625,7 +625,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                     e.stopPropagation();
                                     setExpandedNodeIds(prev => ({ ...prev, [node.id]: true }));
                                   }}
-                                  className="text-amber-400 hover:text-amber-300 mt-1 font-semibold text-[11px] underline cursor-pointer"
+                                  className="text-amber-800 dark:text-amber-400 hover:underline mt-1 font-semibold text-[11px] cursor-pointer"
                                 >
                                   [View full: {node.id.split(':').pop()?.slice(0, 8)}]
                                 </button>
@@ -692,7 +692,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                       e.stopPropagation();
                                       setExpandedNodeIds(prev => ({ ...prev, [node.id]: false }));
                                     }}
-                                    className="text-amber-400 hover:text-amber-300 mt-1 font-medium text-[11px] underline cursor-pointer"
+                                    className="text-amber-800 dark:text-amber-400 hover:underline mt-1 font-medium text-[11px] cursor-pointer"
                                   >
                                     [Mostrar menos]
                                   </button>
@@ -706,13 +706,13 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                         <div className="flex items-center gap-3">
                           <div className="flex flex-col">
                             <span className="text-[11px] text-slate-600 uppercase">Peso</span>
-                            <span className="text-[11px] font-mono font-semibold text-amber-400">{(node.weight || 0).toFixed(2)}</span>
+                            <span className="text-[11px] font-mono font-semibold text-amber-800 dark:text-amber-400">{(node.weight || 0).toFixed(2)}</span>
                           </div>
                           {node.provenance && (
                             <div className="flex flex-col border-l border-slate-700/50 pl-3">
                               <span className="text-[11px] text-slate-600 uppercase">Procedencia</span>
                                <span className={cn("text-[11px] font-medium flex items-center gap-1", 
-                                (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "text-amber-500" : "text-slate-400"
+                                (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "text-amber-800 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"
                               )}>
                                 {(node.provenance === 'federation_peer' || node.provenance === 'unverified') && <ShieldAlert className="w-3 h-3" />}
                                 {getProvenanceLabel(node.provenance)}
@@ -754,15 +754,15 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                             </span>
                             <LifecycleBadge state={node.lifecycle_state || 'active'} className="ml-1.5" />
                             {node.content?.startsWith('[DEPRECATED by') && (
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-[11px] font-medium text-red-400 border border-red-500/20">DEPRECATED</span>
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-[11px] font-medium text-rose-700 dark:text-rose-400 border border-red-500/20">DEPRECATED</span>
                             )}
                             {(node.provenance === 'federation_peer' || node.provenance === 'unverified') && (
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-[11px] font-medium text-amber-500 border border-amber-500/20 inline-flex items-center gap-1">
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-[11px] font-medium text-amber-800 dark:text-amber-400 border border-amber-500/20 inline-flex items-center gap-1">
                                 <ShieldAlert className="w-2.5 h-2.5" /> EXTERNAL
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-400 max-w-md">
+                          <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-md">
                             {(() => {
                               const isExpanded = expandedNodeIds[node.id];
                               if (compactMode && !isExpanded && nodeContent.length > 100) {
@@ -775,7 +775,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                           e.stopPropagation();
                                           setExpandedNodeIds(prev => ({ ...prev, [node.id]: true }));
                                         }}
-                                          className="text-amber-400 hover:text-amber-300 font-medium text-[11px] underline whitespace-nowrap cursor-pointer"
+                                          className="text-amber-800 dark:text-amber-400 hover:underline font-medium text-[11px] whitespace-nowrap cursor-pointer"
                                       >
                                         [View full]
                                       </button>
@@ -792,7 +792,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                             e.stopPropagation();
                                             setExpandedNodeIds(prev => ({ ...prev, [node.id]: false }));
                                           }}
-                                          className="text-amber-400 hover:text-amber-300 ml-1.5 font-semibold text-[11px] underline whitespace-nowrap cursor-pointer"
+                                          className="text-amber-800 dark:text-amber-400 hover:underline ml-1.5 font-semibold text-[11px] whitespace-nowrap cursor-pointer"
                                         >
                                           [Show less]
                                         </button>
@@ -802,7 +802,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                               }
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-right text-[11px] font-mono font-medium text-amber-400">{(node.weight || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-[11px] font-mono font-medium text-amber-800 dark:text-amber-400">{(node.weight || 0).toFixed(2)}</td>
                         </tr>
                       );
                     })}

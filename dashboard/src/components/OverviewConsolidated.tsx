@@ -49,7 +49,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
           <TylluanLogo size="md" animated={false} showText={false} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-[#0A246A] dark:text-primary">Sustrato Cognitivo Tylluan</span>
+              <span className="text-xs font-bold text-[#9E4024] dark:text-primary">Sustrato Cognitivo Tylluan</span>
               <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#000000] dark:text-foreground border border-[#7F9DB9] dark:border-border rounded-none">
                 {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.2'}
               </span>
@@ -76,9 +76,9 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'summary'}
           onClick={() => setSubTab('summary')}
-          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
+          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
             subTab === 'summary'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
               : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
@@ -87,9 +87,9 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'interoception'}
           onClick={() => setSubTab('interoception')}
-          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
+          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
             subTab === 'interoception'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
               : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >
@@ -98,9 +98,9 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'system'}
           onClick={() => setSubTab('system')}
-          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] ${
+          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
             subTab === 'system'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#0A246A] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#0A246A] dark:text-primary rounded-t-sm shadow-none'
+              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
               : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
           }`}
         >

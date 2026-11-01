@@ -77,15 +77,15 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
       <div className="p-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border rounded-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#0A246A] dark:text-primary border border-[#7F9DB9] dark:border-border">
+            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#9E4024] dark:text-primary border border-[#7F9DB9] dark:border-border">
               Topología P2P
             </span>
             <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#008000] dark:text-emerald-400 border border-[#7F9DB9] dark:border-border">
               Pizarra Activa
             </span>
           </div>
-          <h2 className="text-xs font-bold text-[#0A246A] dark:text-primary mt-1 flex items-center gap-1.5">
-            <Radio className="w-4 h-4 text-[#0A246A] dark:text-primary" />
+          <h2 className="text-xs font-bold text-[#9E4024] dark:text-primary mt-1 flex items-center gap-1.5">
+            <Radio className="w-4 h-4 text-[#9E4024] dark:text-primary" />
             Nodos del Sustrato y Mensajería Directa
           </h2>
           <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
@@ -98,16 +98,16 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
             type="button"
             aria-label="Sincronizar nodos de agentes"
             onClick={fetchNodes} 
-            className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#000000] dark:text-foreground rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
+            className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#000000] dark:text-foreground rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
           >
-            <RefreshCw className={cn('w-3 h-3 text-[#0A246A]', loading && 'animate-spin')} aria-hidden="true" /> 
+            <RefreshCw className={cn('w-3 h-3 text-[#9E4024]', loading && 'animate-spin')} aria-hidden="true" /> 
             Sincronizar
           </button>
           <button 
             type="button"
             aria-label="Registrar nodo del panel"
             onClick={registerNode} 
-            className="flex items-center gap-1 px-2.5 py-1 bg-[#0A246A] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#0A246A] transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
+            className="flex items-center gap-1 px-2.5 py-1 bg-[#9E4024] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#9E4024] transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
           >
             <Radio className="w-3 h-3" aria-hidden="true" /> 
             Registrar nodo del panel
@@ -118,7 +118,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Active Nodes List */}
         <fieldset className="border border-[#ACA899] dark:border-border p-3 bg-[#ECE9D8] dark:bg-card rounded-sm space-y-2">
-          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
             Nodos Conectados a la Flota ({nodes.length})
           </legend>
 
@@ -128,7 +128,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
             </div>
           ) : nodes.length === 0 ? (
             <div className="text-center py-6 text-[11px] text-[#555555] bg-white dark:bg-card border border-[#ACA899] p-3 rounded-none">
-              <p className="font-bold text-[#0A246A] dark:text-foreground">No hay nodos activos registrados</p>
+              <p className="font-bold text-[#9E4024] dark:text-foreground">No hay nodos activos registrados</p>
               <p className="mt-0.5">Registre un nodo mediante la herramienta tylluan_do o haga clic en 'Registrar nodo del panel'.</p>
             </div>
           ) : (
@@ -145,7 +145,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                 <tbody>
                   {nodes.map((n) => (
                     <tr key={n.agent_id} className="border-b border-[#E0E0E0] dark:border-border hover:bg-[#F5F4EA] dark:hover:bg-muted/40">
-                      <td className="p-1.5 font-mono font-bold text-[#0A246A] dark:text-primary border-r border-[#E0E0E0]">
+                      <td className="p-1.5 font-mono font-bold text-[#9E4024] dark:text-primary border-r border-[#E0E0E0]">
                         @{n.agent_id}
                       </td>
                       <td className="p-1.5 font-mono text-center border-r border-[#E0E0E0]">
@@ -176,7 +176,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
 
         {/* Direct Messaging Dispatcher */}
         <fieldset className="border border-[#ACA899] dark:border-border p-3 bg-[#ECE9D8] dark:bg-card rounded-sm space-y-2">
-          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
             Despacho de Mensaje Directo
           </legend>
 
@@ -204,7 +204,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                     className={cn(
                       "px-1.5 py-0.5 text-[10px] font-mono font-bold rounded-none border transition-all cursor-pointer",
                       targetId === ag
-                        ? "bg-[#0A246A] text-white border-[#0A246A]"
+                        ? "bg-[#9E4024] text-white border-[#9E4024]"
                         : "bg-white dark:bg-muted text-[#444444] dark:text-muted-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
                     )}
                   >
@@ -232,7 +232,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
               type="button"
               onClick={sendMessage}
               disabled={!targetId || !message}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#0A246A] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#0A246A] transition-all disabled:opacity-40 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A]"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#9E4024] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#9E4024] transition-all disabled:opacity-40 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
             >
               <Send className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Despachar Mensaje al Nodo</span>

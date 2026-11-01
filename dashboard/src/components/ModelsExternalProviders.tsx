@@ -101,7 +101,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
   return (
     <div className="space-y-3 font-sans">
       <fieldset className="rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border p-3">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
           Proveedores Externos de Inferencia
         </legend>
         <div className="flex items-center justify-between mb-3 border-b border-[#ACA899] dark:border-border pb-2">
@@ -117,7 +117,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
             onClick={fetchProviders}
             className="px-2.5 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] text-[#000000] dark:text-foreground rounded-sm text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <RefreshCw className="w-3 h-3 text-[#0A246A]" />
+            <RefreshCw className="w-3 h-3 text-[#9E4024]" />
             Actualizar
           </button>
         </div>
@@ -185,7 +185,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                         className={cn(
                           "text-[10px] font-mono px-1.5 py-0.5 rounded-none border cursor-pointer transition-colors",
                           (selectedModels[provider.name] || provider.models[0]) === model
-                            ? "bg-[#0A246A] text-white border-[#0A246A] font-bold"
+                            ? "bg-[#9E4024] text-white border-[#9E4024] font-bold"
                             : "bg-[#ECE9D8] dark:bg-muted text-[#000000] dark:text-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
                         )}
                         onClick={() => setSelectedModels(prev => ({ ...prev, [provider.name]: model }))}
@@ -222,9 +222,9 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       className="px-2.5 py-1 bg-white hover:bg-[#F5F4EA] disabled:opacity-50 border border-[#ACA899] text-[#000000] dark:text-foreground rounded-sm text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       {isTesting ? (
-                        <RefreshCw className="w-3 h-3 animate-spin text-[#0A246A]" />
+                        <RefreshCw className="w-3 h-3 animate-spin text-[#9E4024]" />
                       ) : (
-                        <Zap className="w-3 h-3 text-[#0A246A]" />
+                        <Zap className="w-3 h-3 text-[#9E4024]" />
                       )}
                       {isTesting ? 'Comprobando...' : 'Probar conexión'}
                     </button>

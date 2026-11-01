@@ -316,7 +316,7 @@ export function SubruntimeRingsView({ subruntimes }: RingsViewProps) {
         const strokeDashoffset = circumference - (Math.max(0, Math.min(100, sub.percent)) / 100) * circumference;
 
         // Color del arco según estado (azul logo para normal, semáforo para estados)
-        let strokeColor = '#0A246A'; // Azul logo oficial
+        let strokeColor = '#9E4024'; // Azul logo oficial
         if (sub.state === 'nodata') strokeColor = '#64748b'; // Slate 500
         else if (sub.state === 'error') strokeColor = '#C22222'; // Red estado
         else if (sub.state === 'warning') strokeColor = '#B8860B'; // Amber estado
@@ -647,7 +647,7 @@ export function AgentHeatmapView({ messages }: HeatmapViewProps) {
                     backgroundColor:
                       count === 0
                         ? '#ECECEC' // Gris neutro inactivo
-                        : `rgba(10, 36, 106, ${0.15 + intensity * 0.85})`, // Azul logo #0A246A graduado
+                        : `rgba(10, 36, 106, ${0.15 + intensity * 0.85})`, // Azul logo #9E4024 graduado
                   }}
                   title={`@${agent} a las ${h}:00: ${count} mensajes`}
                 >

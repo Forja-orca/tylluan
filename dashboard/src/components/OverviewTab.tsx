@@ -98,42 +98,42 @@ export function OverviewTab({
   const kernelHealth = useMemo(() => {
     // Offline wins over any cached data: healthDetailed/sysStatus are never cleared on disconnect.
     if (!online) {
-      return { label: 'OFFLINE', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+      return { label: 'OFFLINE', colorClass: 'text-rose-700 dark:text-rose-400', dotClass: 'bg-rose-500' };
     }
     if (healthDetailed) {
       const s = typeof healthDetailed.status === 'string' ? healthDetailed.status.toLowerCase() : null;
       if (s === 'healthy') {
-        return { label: 'HEALTHY', colorClass: 'text-emerald-400', dotClass: 'bg-emerald-500' };
+        return { label: 'HEALTHY', colorClass: 'text-emerald-700 dark:text-emerald-400', dotClass: 'bg-emerald-500' };
       }
       if (s === 'degraded') {
-        return { label: 'DEGRADED', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+        return { label: 'DEGRADED', colorClass: 'text-amber-800 dark:text-amber-400', dotClass: 'bg-amber-500' };
       }
       if (s === 'critical') {
-        return { label: 'CRITICAL', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+        return { label: 'CRITICAL', colorClass: 'text-rose-700 dark:text-rose-400', dotClass: 'bg-rose-500' };
       }
       if (s === 'warming_up') {
-        return { label: 'WARMING UP', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+        return { label: 'WARMING UP', colorClass: 'text-amber-800 dark:text-amber-400', dotClass: 'bg-amber-500' };
       }
       if (typeof healthDetailed.score === 'number') {
         // Fallback to kernel's canonical score thresholds from api_admin.rs:992-994
         if (healthDetailed.score >= 80) {
-          return { label: 'HEALTHY', colorClass: 'text-emerald-400', dotClass: 'bg-emerald-500' };
+          return { label: 'HEALTHY', colorClass: 'text-emerald-700 dark:text-emerald-400', dotClass: 'bg-emerald-500' };
         } else if (healthDetailed.score >= 50) {
-          return { label: 'DEGRADED', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+          return { label: 'DEGRADED', colorClass: 'text-amber-800 dark:text-amber-400', dotClass: 'bg-amber-500' };
         } else {
-          return { label: 'CRITICAL', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+          return { label: 'CRITICAL', colorClass: 'text-rose-700 dark:text-rose-400', dotClass: 'bg-rose-500' };
         }
       }
     }
     // Connected but no detailed telemetry received yet: honest UNKNOWN state.
-    return { label: 'UNKNOWN', colorClass: 'text-slate-400', dotClass: 'bg-slate-500' };
+    return { label: 'UNKNOWN', colorClass: 'text-slate-600 dark:text-slate-400', dotClass: 'bg-slate-500' };
   }, [online, healthDetailed]);
   const embeddingsKnown = online && typeof sysStatus?.embeddings_loaded === 'boolean';
   const embeddingsState = !embeddingsKnown
-    ? { label: 'UNKNOWN', colorClass: 'text-slate-400', dotClass: 'bg-slate-500' }
+    ? { label: 'UNKNOWN', colorClass: 'text-slate-600 dark:text-slate-400', dotClass: 'bg-slate-500' }
     : sysStatus?.embeddings_loaded
-      ? { label: 'LOADED', colorClass: 'text-emerald-400', dotClass: 'bg-emerald-500' }
-      : { label: 'FALLBACK', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+      ? { label: 'LOADED', colorClass: 'text-emerald-700 dark:text-emerald-400', dotClass: 'bg-emerald-500' }
+      : { label: 'FALLBACK', colorClass: 'text-amber-800 dark:text-amber-400', dotClass: 'bg-amber-500' };
 
   // D5: Sovereign tools invariant ({ok, count}) from /health?verbose=true
   const [sovereignToolsData, setSovereignToolsData] = useState<{ ok: boolean; count: number } | null>(null);
@@ -163,22 +163,22 @@ export function OverviewTab({
 
   const sovereignToolsState = useMemo(() => {
     if (!online) {
-      return { label: 'OFFLINE', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+      return { label: 'OFFLINE', colorClass: 'text-rose-700 dark:text-rose-400', dotClass: 'bg-rose-500' };
     }
     if (!sovereignToolsData) {
-      return { label: 'UNKNOWN', colorClass: 'text-slate-400', dotClass: 'bg-slate-500' };
+      return { label: 'UNKNOWN', colorClass: 'text-slate-600 dark:text-slate-400', dotClass: 'bg-slate-500' };
     }
     const isDrift = !sovereignToolsData.ok || sovereignToolsData.count !== 6;
     if (isDrift) {
       return {
         label: `${sovereignToolsData.count}/6 DRIFT`,
-        colorClass: 'text-rose-400',
+        colorClass: 'text-rose-700 dark:text-rose-400',
         dotClass: 'bg-rose-500',
       };
     }
     return {
       label: '6/6 VERIFIED',
-      colorClass: 'text-emerald-400',
+      colorClass: 'text-emerald-700 dark:text-emerald-400',
       dotClass: 'bg-emerald-500',
     };
   }, [online, sovereignToolsData]);
@@ -334,15 +334,15 @@ export function OverviewTab({
   const memSat = goldenSignals?.saturation?.memory_percent ?? 0;
 
   const getStatusColor = (status: string) => {
-    if (status === 'healthy' || status === 'stable') return 'text-emerald-400';
-    if (status === 'degraded') return 'text-amber-400';
-    return 'text-red-400';
+    if (status === 'healthy' || status === 'stable') return 'text-emerald-700 dark:text-emerald-400';
+    if (status === 'degraded') return 'text-amber-800 dark:text-amber-400';
+    return 'text-rose-700 dark:text-rose-400';
   };
 
   const getPercentColor = (pct: number) => {
-    if (pct < 10) return 'text-emerald-400';
-    if (pct < 30) return 'text-amber-400';
-    return 'text-red-400';
+    if (pct < 10) return 'text-emerald-700 dark:text-emerald-400';
+    if (pct < 30) return 'text-amber-800 dark:text-amber-400';
+    return 'text-rose-700 dark:text-rose-400';
   };
 
   const { agentProfiles } = useNexus();
@@ -383,11 +383,11 @@ export function OverviewTab({
 
   let tylluanStatus: { text: string; subtext: string; color: string; pulse: boolean };
   if (isNightMode) {
-    tylluanStatus = { text: 'Consolidando memoria nocturna', subtext: 'El sustrato está reorganizando y consolidando el conocimiento acumulado.', color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#0A246A] dark:text-primary', pulse: false };
+    tylluanStatus = { text: 'Consolidando memoria nocturna', subtext: 'El sustrato está reorganizando y consolidando el conocimiento acumulado.', color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#9E4024] dark:text-primary', pulse: false };
   } else if (activeAgentCount > 0 && recentToolCalls.length > 0) {
     tylluanStatus = { text: `Operando con ${activeAgentCount} agente${activeAgentCount > 1 ? 's' : ''}`, subtext: `${recentToolCalls.length} llamadas a herramientas en los últimos 5 minutos.`, color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#008000] dark:text-emerald-400', pulse: false };
   } else if (recentMemoryOps.length > 0) {
-    tylluanStatus = { text: 'Procesando memoria', subtext: `${recentMemoryOps.length} operaciones de memoria recientes en SilvaDB.`, color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#0A246A] dark:text-primary', pulse: false };
+    tylluanStatus = { text: 'Procesando memoria', subtext: `${recentMemoryOps.length} operaciones de memoria recientes en SilvaDB.`, color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#9E4024] dark:text-primary', pulse: false };
   } else if (activeAgentCount > 0) {
     tylluanStatus = { text: `${activeAgentCount} agente${activeAgentCount > 1 ? 's' : ''} en línea`, subtext: 'En espera de instrucciones de la flota.', color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#B8860B] dark:text-amber-400', pulse: false };
   } else {
@@ -398,9 +398,9 @@ export function OverviewTab({
     <div className="space-y-3 font-sans">
       {/* What is Tylluan doing now — human-readable status */}
       <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Estado de Actividad del Sustrato</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Estado de Actividad del Sustrato</legend>
         <div className="flex items-center gap-2.5">
-          <span className={`w-2.5 h-2.5 rounded-none border border-[#7F9DB9] ${tylluanStatus.pulse ? 'bg-emerald-600' : 'bg-[#0A246A]'}`} aria-hidden="true" />
+          <span className={`w-2.5 h-2.5 rounded-none border border-[#7F9DB9] ${tylluanStatus.pulse ? 'bg-emerald-600' : 'bg-[#9E4024]'}`} aria-hidden="true" />
           <div>
             <h3 className="text-xs font-bold text-[#000000] dark:text-foreground" aria-label={`Tylluan is ${tylluanStatus.text.toLowerCase()}`}>
               {tylluanStatus.text}
@@ -434,7 +434,7 @@ export function OverviewTab({
 
       {/* Hub Status Badges */}
       <fieldset aria-label="Resumen de Telemetría del Sistema" className="border border-[#ACA899] dark:border-border p-2 bg-[#ECE9D8] dark:bg-card rounded-sm">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Señales del Sistema</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Señales del Sistema</legend>
         <div className="flex flex-wrap gap-2 font-mono text-xs">
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
             <div className={cn("w-2 h-2 rounded-none", kernelHealth.dotClass)} aria-hidden="true"></div>
@@ -453,7 +453,7 @@ export function OverviewTab({
             <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Agentes activos</span>
           </div>
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
-            <span className="text-[11px] font-bold text-[#0A246A] dark:text-primary">{memoryStats?.node_count || 0}</span>
+            <span className="text-[11px] font-bold text-[#9E4024] dark:text-primary">{memoryStats?.node_count || 0}</span>
             <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Nodos Silva</span>
           </div>
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
@@ -469,7 +469,7 @@ export function OverviewTab({
 
       {/* T-DSH-114: centinela de write_gate L2 (opt-in, default off) */}
       <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Centinela de Escritura (write_gate L2)</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Centinela de Escritura (write_gate L2)</legend>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <p className="text-[11px] text-[#444444] dark:text-muted-foreground">
@@ -494,9 +494,9 @@ export function OverviewTab({
                 type="button"
                 disabled={sentinelBusy || !bridge}
                 onClick={() => setSentinelMode(m.id)}
-                className={`px-2 py-0.5 rounded-none text-[10px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#0A246A] disabled:opacity-50 ${
+                className={`px-2 py-0.5 rounded-none text-[10px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] disabled:opacity-50 ${
                   sentinel?.mode === m.id
-                    ? 'bg-[#0A246A] text-white border-[#0A246A]'
+                    ? 'bg-[#9E4024] text-white border-[#9E4024]'
                     : 'bg-white dark:bg-muted border-[#ACA899] dark:border-border text-[#000000] dark:text-foreground hover:bg-[#F5F4EA]'
                 }`}
               >
@@ -509,7 +509,7 @@ export function OverviewTab({
 
       {liveMetrics && (
         <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Métricas de Operación en Tiempo Real</legend>
+          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Métricas de Operación en Tiempo Real</legend>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             {[ 
               { label: 'Llamadas Totales', value: liveMetrics.totalCalls },
@@ -529,10 +529,10 @@ export function OverviewTab({
       )}
       {sysStatus && (
         <div className="mt-4 flex gap-2 flex-wrap font-mono text-xs">
-          <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.silva_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
+          <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.silva_healthy ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
             SilvaDB: {sysStatus.silva_healthy ? '● CORRECTO' : '■ ERROR'}
           </span>
-          <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.mailbox_healthy ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
+          <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.mailbox_healthy ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-destructive/15 text-destructive border border-destructive/30'}`}>
             Buzón: {sysStatus.mailbox_healthy ? '● CORRECTO' : '■ ERROR'}
           </span>
           <span className="text-[11px] px-2 py-0.5 rounded bg-muted border border-border text-foreground">
@@ -543,7 +543,7 @@ export function OverviewTab({
           </span>
           <span className={`text-[11px] px-2 py-0.5 rounded border ${sysStatus.embeddings_loaded
             ? 'bg-primary/15 text-primary border border-primary/30'
-            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'}`}>
+            : 'bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/30'}`}>
             Embeddings: {sysStatus.embeddings_loaded ? 'mxbai-embed-large' : '▲ FTS5 fallback'}
           </span>
         </div>
@@ -573,13 +573,13 @@ export function OverviewTab({
 
       {/* Golden Signals Row */}
       <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-        <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Señales Doradas de Rendimiento (Golden Signals)</legend>
+        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Señales Doradas de Rendimiento (Golden Signals)</legend>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <MetricCard
             label="Tráfico"
             value={goldenSignals?.traffic?.active_tools || 0} unit=" ops"
             sub={`${activeGuilds} gremios activos`}
-            valueClass="text-[#0A246A] dark:text-primary"
+            valueClass="text-[#9E4024] dark:text-primary"
           />
           <MetricCard
             label="Tasa de Error"
@@ -597,7 +597,7 @@ export function OverviewTab({
             label="Disponibilidad SLO"
             value={sloSummary?.slo_target ?? 99.9} unit="%"
             sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% presupuesto restante` : 'Objetivo 99.9%'}
-            valueClass="text-[#0A246A] dark:text-primary"
+            valueClass="text-[#9E4024] dark:text-primary"
           />
         </div>
       </fieldset>
@@ -605,7 +605,7 @@ export function OverviewTab({
       {/* Cognitive Health */}
       {interoceptionData && (
         <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-          <legend className="text-[11px] font-bold text-[#0A246A] dark:text-primary px-1">Salud Cognitiva e Interocepción</legend>
+          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Salud Cognitiva e Interocepción</legend>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               { label: 'Homeostasis', value: interoceptionData.homeostasis, good: (v: number) => v > 0.7, warn: (v: number) => v > 0.4 },
@@ -614,7 +614,7 @@ export function OverviewTab({
               { label: 'Feromonas Activas', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
             ].map(({ label, value, good, warn, invert: _invert }) => {
               const pct = Math.min(100, value * 100);
-              const colorClass = good(value) ? 'text-emerald-600 dark:text-emerald-400' : warn(value) ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+              const colorClass = good(value) ? 'text-emerald-700 dark:text-emerald-400' : warn(value) ? 'text-amber-800 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400';
               const bgClass = good(value) ? 'bg-emerald-600' : warn(value) ? 'bg-amber-600' : 'bg-red-600';
               return (
                 <div key={label} className="p-2 rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border">

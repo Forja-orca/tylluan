@@ -25,7 +25,7 @@ export function ApprovalsAndSecurityTab({ bridge }: ApprovalsAndSecurityTabProps
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#ACA899] dark:border-border">
           <div>
             <h2 className="text-xs font-bold text-[#01285F] dark:text-foreground flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-[#0A246A] dark:text-primary" aria-hidden="true" />
+              <ShieldCheck className="w-4 h-4 text-[#9E4024] dark:text-primary" aria-hidden="true" />
               Aprobaciones, Seguridad y Cuarentena
             </h2>
             <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
