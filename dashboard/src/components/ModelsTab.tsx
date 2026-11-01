@@ -73,20 +73,20 @@ export function ModelsTab({ bridge }: Props) {
   ];
 
   return (
-    <div className="space-y-3 font-sans">
-      {/* Titleband and Property Sheet Tabs */}
-      <div className="border border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-card p-2.5 rounded-sm">
-        <div className="pb-2 border-b border-[#ACA899] dark:border-border">
-          <h2 className="text-xs font-bold text-[#01285F] dark:text-foreground">
+    <div className="space-y-4 font-sans">
+      {/* Titleband and Sovereign Tabs */}
+      <div className="border border-border bg-card p-4 rounded-lg shadow-sm">
+        <div className="pb-3 border-b border-border">
+          <h2 className="text-base font-bold tracking-tight text-foreground">
             Modelos y Aceleración de Hardware
           </h2>
-          <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Configuración del motor de inferencia local, asignación de roles a agentes, embeddings vectoriales y proveedores externos.
           </p>
         </div>
 
-        {/* Property Sheet Tabs */}
-        <div role="tablist" aria-label="Secciones de modelos" className="flex flex-wrap items-center gap-1 mt-2 pt-1 border-t border-[#ACA899] dark:border-border">
+        {/* Section Tabs */}
+        <div role="tablist" aria-label="Secciones de modelos" className="flex flex-wrap items-center gap-1.5 mt-3">
           {tabs.map((tab) => {
             const isActive = subTab === tab.id;
             return (
@@ -97,10 +97,10 @@ export function ModelsTab({ bridge }: Props) {
                 type="button"
                 onClick={() => setSubTab(tab.id)}
                 className={cn(
-                  "px-3 py-1 text-[11px] font-bold border transition-all cursor-pointer rounded-t-sm -mb-px",
+                  "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   isActive
-                    ? "bg-white dark:bg-card border-[#ACA899] dark:border-border border-b-transparent text-[#01285F] dark:text-primary shadow-none"
-                    : "bg-[#D8D4C4] dark:bg-muted/40 border-transparent text-[#555555] dark:text-muted-foreground hover:bg-[#EAE7DC] hover:text-[#000000]"
+                    ? "bg-primary/10 border-primary/30 text-primary shadow-sm"
+                    : "bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
                 {tab.label}
@@ -146,30 +146,30 @@ export function ModelsTab({ bridge }: Props) {
       {/* Restart Kernel Modal (shared across all sub-tabs) */}
       {showRestartModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4 font-sans">
-          <div className="bg-[#ECE9D8] dark:bg-card border-2 border-[#ACA899] dark:border-border rounded-none p-4 max-w-md w-full shadow-none space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-[#ACA899] dark:border-border">
-              <AlertTriangle className="w-4 h-4 text-[#B8860B]" aria-hidden="true" />
-              <h3 className="text-xs font-bold text-[#01285F] dark:text-foreground">Reinicio Requerido</h3>
+          <div className="bg-card border border-border rounded-lg p-5 max-w-md w-full shadow-lg space-y-3">
+            <div className="flex items-center gap-2 pb-2.5 border-b border-border">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+              <h3 className="text-sm font-bold text-foreground">Reinicio Requerido</h3>
             </div>
             
-            <p className="text-[11px] text-[#444444] dark:text-muted-foreground leading-normal">
-              La aceleración por hardware se ha configurado a <span className="font-mono text-[#9E4024] dark:text-primary font-bold">{selectedDevice}</span>. Para cargar los proveedores de ejecución y aplicar los cambios, el Kernel de Tylluan debe reiniciarse.
+            <p className="text-xs text-muted-foreground leading-normal">
+              La aceleración por hardware se ha configurado a <span className="font-mono text-primary font-bold">{selectedDevice}</span>. Para cargar los proveedores de ejecución y aplicar los cambios, el Kernel de Tylluan debe reiniciarse.
             </p>
 
-            <fieldset className="bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border p-2.5 rounded-none space-y-1.5 text-[11px] text-[#444444] dark:text-muted-foreground">
-              <legend className="text-[11px] font-bold text-[#01285F] dark:text-foreground px-1">Instrucciones de reinicio</legend>
-              <p>1. Detenga el kernel en su terminal (<kbd className="bg-[#ECE9D8] px-1 py-0.5 border border-[#ACA899] text-[#000000] font-mono text-[10px]">Ctrl + C</kbd>).</p>
+            <fieldset className="bg-muted/40 border border-border p-3 rounded-md space-y-1.5 text-xs text-muted-foreground">
+              <legend className="text-xs font-bold text-foreground px-1">Instrucciones de reinicio</legend>
+              <p>1. Detenga el kernel en su terminal (<kbd className="bg-muted px-1.5 py-0.5 rounded border border-border text-foreground font-mono text-[10px]">Ctrl + C</kbd>).</p>
               <p>2. Vuelva a iniciarlo ejecutando:</p>
-              <div className="bg-[#F5F4EA] dark:bg-card p-1.5 border border-[#ACA899] dark:border-border text-[#000000] dark:text-foreground font-mono text-[11px]">
+              <div className="bg-card p-2 rounded-md border border-border text-foreground font-mono text-xs">
                 tylluan-cli start
               </div>
             </fieldset>
 
-            <div className="flex justify-end gap-2 pt-1 border-t border-[#ACA899] dark:border-border">
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
               <button
                 type="button"
                 onClick={() => setShowRestartModal(false)}
-                className="px-3 py-1 bg-white hover:bg-[#F5F4EA] text-[#000000] dark:text-foreground border border-[#ACA899] rounded-sm text-[11px] font-bold transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 bg-muted/60 hover:bg-muted text-foreground border border-border rounded-md text-xs font-semibold shadow-sm transition-colors cursor-pointer"
               >
                 Aceptar
               </button>

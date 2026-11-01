@@ -115,35 +115,35 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
   ];
 
   return (
-    <div className="rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border p-3 space-y-3 font-sans">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#ACA899] dark:border-border pb-2.5">
+    <div className="rounded-lg bg-card border border-border p-4 space-y-4 shadow-sm font-sans">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
         <div>
-          <h3 className="text-xs font-bold text-[#01285F] dark:text-foreground flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#9E4024]" aria-hidden="true" />
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-primary" aria-hidden="true" />
             Asignación de Roles Cognitivos
           </h3>
-          <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Cada módulo interno de Tylluan requiere diferentes compromisos entre tamaño de modelo, latencia y capacidad de razonamiento.
           </p>
         </div>
         <button
           onClick={handleSaveRoles}
           disabled={savingRoles}
-          className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] text-[#000000] dark:text-foreground text-[11px] font-bold rounded-sm transition-colors disabled:opacity-50 shrink-0 cursor-pointer self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground text-xs font-semibold rounded-md shadow-sm transition-colors disabled:opacity-50 shrink-0 cursor-pointer self-start sm:self-auto"
         >
-          <Save className={cn("w-3 h-3 text-[#9E4024]", savingRoles && "animate-spin")} />
+          <Save className={cn("w-3.5 h-3.5 text-primary", savingRoles && "animate-spin")} />
           {savingRoles ? 'Guardando...' : 'Guardar Asignación'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {roles.map((role) => (
-          <fieldset key={role.id} className="bg-white dark:bg-card border border-[#ACA899] dark:border-border p-2.5 rounded-none flex flex-col justify-between space-y-2">
-            <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
+          <fieldset key={role.id} className="bg-muted/30 border border-border p-3 rounded-lg flex flex-col justify-between space-y-2">
+            <legend className="text-xs font-bold text-primary px-1">
               {role.title}
             </legend>
             <div>
-              <p className="text-[10px] text-[#444444] dark:text-muted-foreground leading-normal mb-1.5">
+              <p className="text-[11px] text-muted-foreground leading-normal mb-1.5">
                 {role.desc}
               </p>
             </div>
@@ -157,7 +157,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
                 <select
                   value={role.value}
                   onChange={(e) => role.setter(e.target.value)}
-                  className="w-full px-2 py-1 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none text-[11px] font-mono text-[#000000] dark:text-foreground focus:outline-none"
+                  className="w-full px-2.5 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                 >
                   {filtered.map((m) => (
                     <option key={m.id || m.name} value={m.id || m.name}>
@@ -171,20 +171,20 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
                   type="text"
                   value={role.value}
                   onChange={(e) => role.setter(e.target.value)}
-                  className="w-full px-2 py-1 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none text-[11px] font-mono text-[#000000] dark:text-foreground focus:outline-none"
+                  className="w-full px-2.5 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                   placeholder="Sin modelos en disco — introduzca nombre"
                 />
               )}
               {(() => {
                 const match = isModelInstalled(role.value);
                 return (
-                  <div className="flex items-center justify-between gap-2 mt-1.5 pt-1 border-t border-[#ECE9D8] dark:border-border text-[10px]">
-                    <span className="text-[#555555] dark:text-muted-foreground font-mono">
+                  <div className="flex items-center justify-between gap-2 mt-2 pt-1.5 border-t border-border text-[10px]">
+                    <span className="text-muted-foreground font-mono">
                       {role.rec}
                     </span>
                     {(models?.detected_local_models?.length ?? 0) > 0 && (
                       <span className={cn(
-                        "px-1.5 py-0.2 rounded-none font-mono text-[10px] border whitespace-nowrap shrink-0",
+                        "px-1.5 py-0.5 rounded-md font-mono text-[10px] border whitespace-nowrap shrink-0",
                         match
                           ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
                           : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"

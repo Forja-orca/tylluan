@@ -225,7 +225,7 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/30">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/30">
               Soberanía Visual · AG-17
             </span>
             <span className="text-xs text-muted-foreground font-mono">ADR-025</span>
@@ -239,13 +239,13 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1 bg-muted p-1 rounded border border-border">
+        <div className="flex items-center gap-1 bg-muted/80 p-1 rounded-lg border border-border">
           <button
             type="button"
             onClick={() => setActiveView('rings')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               activeView === 'rings'
-                ? 'bg-card text-foreground border border-border'
+                ? 'bg-card text-foreground border border-border shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -254,9 +254,9 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
           <button
             type="button"
             onClick={() => setActiveView('flow')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               activeView === 'flow'
-                ? 'bg-card text-foreground border border-border'
+                ? 'bg-card text-foreground border border-border shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -265,9 +265,9 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
           <button
             type="button"
             onClick={() => setActiveView('heatmap')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               activeView === 'heatmap'
-                ? 'bg-card text-foreground border border-border'
+                ? 'bg-card text-foreground border border-border shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -277,7 +277,7 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
       </div>
 
       {/* Main Visual Display */}
-      <div className="flex-1 min-h-[460px] rounded border border-border bg-card p-4 md:p-6 flex flex-col relative overflow-hidden">
+      <div className="flex-1 min-h-[460px] rounded-lg border border-border bg-card shadow-sm p-4 md:p-6 flex flex-col relative overflow-hidden">
         {activeView === 'rings' && <SubruntimeRingsView subruntimes={subruntimes} />}
         {activeView === 'flow' && <FlowMapCanvasView subruntimes={subruntimes} />}
         {activeView === 'heatmap' && <AgentHeatmapView messages={messagesData} />}
@@ -315,18 +315,18 @@ export function SubruntimeRingsView({ subruntimes }: RingsViewProps) {
         // Stroke dashoffset: circumference * (1 - percent / 100)
         const strokeDashoffset = circumference - (Math.max(0, Math.min(100, sub.percent)) / 100) * circumference;
 
-        // Color del arco según estado (azul logo para normal, semáforo para estados)
-        let strokeColor = '#9E4024'; // Azul logo oficial
-        if (sub.state === 'nodata') strokeColor = '#64748b'; // Slate 500
-        else if (sub.state === 'error') strokeColor = '#C22222'; // Red estado
-        else if (sub.state === 'warning') strokeColor = '#B8860B'; // Amber estado
-        else if (sub.state === 'idle') strokeColor = '#64748b'; // Slate 500
+        // Color del arco según estado (acento primario para normal, semáforo para estados)
+        let strokeColor = 'hsl(var(--primary))';
+        if (sub.state === 'nodata') strokeColor = 'hsl(var(--muted-foreground))';
+        else if (sub.state === 'error') strokeColor = '#C22222';
+        else if (sub.state === 'warning') strokeColor = '#B8860B';
+        else if (sub.state === 'idle') strokeColor = 'hsl(var(--muted-foreground))';
 
         return (
           <div
             key={sub.id}
             data-testid={`ring-${sub.id}`}
-            className="flex flex-col items-center justify-center p-4 rounded border border-border bg-card hover:bg-muted/30 transition-all group"
+            className="flex flex-col items-center justify-center p-4 rounded-lg border border-border bg-card shadow-sm hover:bg-muted/30 hover:border-primary/20 transition-all group"
           >
             <div className="relative w-36 h-36 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
@@ -467,13 +467,14 @@ export function FlowMapCanvasView({ subruntimes }: FlowViewProps) {
       ];
 
       // 1. Draw Edges with volume-based width and particle density
+      const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
       edges.forEach(([fromIdx, toIdx, weight, label]) => {
         const from = nodes[fromIdx];
         const to = nodes[toIdx];
 
         ctx.beginPath();
         const edgeWidth = 1.5 + weight * 3;
-        ctx.strokeStyle = weight > 0.4 ? 'rgba(138, 180, 166, 0.4)' : 'rgba(100, 116, 139, 0.25)';
+        ctx.strokeStyle = weight > 0.4 ? (isDark ? 'rgba(200, 122, 81, 0.45)' : 'rgba(158, 64, 36, 0.35)') : 'rgba(100, 116, 139, 0.25)';
         ctx.lineWidth = edgeWidth;
         ctx.moveTo(from.x, from.y);
         ctx.lineTo(to.x, to.y);
@@ -482,7 +483,7 @@ export function FlowMapCanvasView({ subruntimes }: FlowViewProps) {
         // Edge Volume Label at midpoint
         const midX = (from.x + to.x) / 2;
         const midY = (from.y + to.y) / 2;
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = isDark ? '#9BA3B0' : '#57606A';
         ctx.font = '500 9px JetBrains Mono, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
@@ -498,7 +499,7 @@ export function FlowMapCanvasView({ subruntimes }: FlowViewProps) {
         const py = from.y + dy * progress;
 
         ctx.beginPath();
-        ctx.fillStyle = 'rgba(138, 180, 166, 0.9)'; // Salvia #8AB4A6
+        ctx.fillStyle = isDark ? 'rgba(200, 122, 81, 0.9)' : 'rgba(158, 64, 36, 0.85)';
         const particleRadius = 2 + weight * 2;
         ctx.arc(px, py, particleRadius, 0, 2 * Math.PI);
         ctx.fill();
@@ -512,28 +513,28 @@ export function FlowMapCanvasView({ subruntimes }: FlowViewProps) {
 
         // Outer Glow/Border
         ctx.beginPath();
-        ctx.fillStyle = '#0f172a'; // Slate 900
-        ctx.strokeStyle = isOk ? 'rgba(138, 180, 166, 0.8)' : hasData ? 'rgba(245, 158, 11, 0.5)' : 'rgba(71, 85, 105, 0.4)';
+        ctx.fillStyle = isDark ? '#141922' : '#FFFFFF';
+        ctx.strokeStyle = isOk ? (isDark ? 'rgba(200, 122, 81, 0.85)' : 'rgba(158, 64, 36, 0.8)') : hasData ? 'rgba(245, 158, 11, 0.5)' : 'rgba(100, 116, 139, 0.4)';
         ctx.lineWidth = 2.5;
         ctx.arc(node.x, node.y, 26, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
 
         // Node Label
-        ctx.fillStyle = '#f8fafc'; // Hueso / Slate 50
+        ctx.fillStyle = isDark ? '#ECEFF4' : '#181C22';
         ctx.font = '600 11px JetBrains Mono, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(node.name, node.x, node.y + 40);
 
         // Subtitle metric under node
-        ctx.fillStyle = isOk ? '#8AB4A6' : '#94a3b8';
+        ctx.fillStyle = isOk ? (isDark ? '#C87A51' : '#9E4024') : (isDark ? '#9BA3B0' : '#57606A');
         ctx.font = '500 10px JetBrains Mono, monospace';
         ctx.fillText(hasData ? `${status?.percent}%` : 'SIN DATO', node.x, node.y + 54);
 
         // Center Indicator
         ctx.beginPath();
-        ctx.fillStyle = isOk ? '#8AB4A6' : hasData ? '#f59e0b' : '#64748b';
+        ctx.fillStyle = isOk ? (isDark ? '#C87A51' : '#9E4024') : hasData ? '#f59e0b' : '#64748b';
         ctx.arc(node.x, node.y, 5, 0, 2 * Math.PI);
         ctx.fill();
       });
@@ -642,13 +643,14 @@ export function AgentHeatmapView({ messages }: HeatmapViewProps) {
               return (
                 <div
                   key={h}
-                  className="h-7 rounded flex items-center justify-center cursor-help group relative border border-border"
-                  style={{
-                    backgroundColor:
-                      count === 0
-                        ? '#ECECEC' // Gris neutro inactivo
-                        : `rgba(10, 36, 106, ${0.15 + intensity * 0.85})`, // Azul logo #9E4024 graduado
-                  }}
+                  className={`h-7 rounded-md flex items-center justify-center cursor-help group relative border border-border ${
+                    count === 0 ? 'bg-muted/50' : ''
+                  }`}
+                  style={
+                    count > 0
+                      ? { backgroundColor: `rgba(158, 64, 36, ${0.2 + intensity * 0.8})` }
+                      : undefined
+                  }
                   title={`@${agent} a las ${h}:00: ${count} mensajes`}
                 >
                   {count > 0 && (
@@ -667,15 +669,15 @@ export function AgentHeatmapView({ messages }: HeatmapViewProps) {
           <div className="flex items-center gap-3">
             <span>Intensidad:</span>
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: '#ECECEC' }} title="0 mensajes" />
+              <span className="w-3.5 h-3.5 rounded-sm border border-border bg-muted/50" title="0 mensajes" />
               <span className="text-[10px]">Inactivo (0)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: 'rgba(10, 36, 106, 0.35)' }} title="Baja actividad" />
+              <span className="w-3.5 h-3.5 rounded-sm border border-border" style={{ backgroundColor: 'rgba(158, 64, 36, 0.35)' }} title="Baja actividad" />
               <span className="text-[10px]">Baja</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: 'rgba(10, 36, 106, 0.95)' }} title="Alta actividad" />
+              <span className="w-3.5 h-3.5 rounded-sm border border-border" style={{ backgroundColor: 'rgba(158, 64, 36, 0.95)' }} title="Alta actividad" />
               <span className="text-[10px]">Alta</span>
             </div>
           </div>

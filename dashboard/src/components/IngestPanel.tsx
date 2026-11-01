@@ -183,17 +183,17 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
   }, [bridge, canSubmit, mode, text, bulkChunks, tags, urlText, selectedFile, notify, onIngestComplete, fetchRecentNodes]);
 
   return (
-    <div className="rounded-sm border border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-card overflow-hidden font-sans">
+    <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden font-sans">
       {/* Header — toggle */}
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-bold text-[#9E4024] dark:text-primary hover:bg-[#F5F4EA] transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-primary hover:bg-muted/50 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <Upload className="w-3.5 h-3.5" />
           <span>Ingesta de Conocimiento en SilvaDB</span>
           {recent.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-none bg-white dark:bg-muted text-[#9E4024] text-[10px] font-bold border border-[#7F9DB9]">
+            <span className="px-1.5 py-0.5 rounded-md bg-muted text-primary text-[10px] font-bold border border-border">
               {recent.length}
             </span>
           )}
@@ -202,16 +202,16 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
       </button>
 
       {open && (
-        <div className="px-3 pb-3 space-y-2.5 border-t border-[#ACA899] dark:border-border bg-white dark:bg-card">
+        <div className="px-4 pb-4 space-y-3 border-t border-border bg-card">
           {/* Mode Selector Tabs */}
-          <div className="flex items-center gap-1 border-b border-[#ACA899] pb-1 mt-2">
+          <div className="flex items-center gap-1.5 border-b border-border pb-2 mt-2.5">
             <button
               onClick={() => setMode('text')}
               className={cn(
-                "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
+                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
                 mode === 'text'
-                  ? "bg-[#9E4024] text-white"
-                  : "text-[#444444] hover:bg-[#ECE9D8]"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-transparent"
               )}
             >
               Texto
@@ -219,10 +219,10 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
             <button
               onClick={() => setMode('url')}
               className={cn(
-                "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
+                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
                 mode === 'url'
-                  ? "bg-[#9E4024] text-white"
-                  : "text-[#444444] hover:bg-[#ECE9D8]"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-transparent"
               )}
             >
               Enlace URL
@@ -230,10 +230,10 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
             <button
               onClick={() => setMode('file')}
               className={cn(
-                "px-2 py-0.5 rounded-sm text-[11px] font-bold transition-colors cursor-pointer",
+                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
                 mode === 'file'
-                  ? "bg-[#9E4024] text-white"
-                  : "text-[#444444] hover:bg-[#ECE9D8]"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-transparent"
               )}
             >
               Archivo
@@ -251,7 +251,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   ? 'Pegue varios bloques separados por líneas de ---\nTexto del bloque 1\n---\nTexto del bloque 2'
                   : 'Pegue texto, hechos o conocimiento para almacenar en SilvaDB...'}
                 rows={5}
-                className="w-full bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none p-2 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] font-mono resize-y focus:outline-none"
+                className="w-full bg-muted/40 border border-border rounded-md p-2.5 text-xs text-foreground placeholder-muted-foreground font-mono resize-y focus:ring-2 focus:ring-primary focus:outline-none"
               />
 
               {/* Controls row */}
@@ -262,17 +262,17 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   value={tags}
                   onChange={e => setTags(e.target.value)}
                   placeholder="etiquetas (separadas por coma)"
-                  className="flex-1 min-w-[120px] bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none px-2 py-1 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none"
+                  className="flex-1 min-w-[120px] bg-muted/40 border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                 />
 
                 {/* Bulk toggle */}
                 <button
                   onClick={() => setBulk(v => !v)}
                   className={cn(
-                    'flex items-center gap-1 px-2.5 py-1 rounded-sm border text-[11px] font-bold transition-colors cursor-pointer',
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors cursor-pointer',
                     bulk
-                      ? 'bg-[#9E4024] text-white border-[#9E4024]'
-                      : 'bg-[#ECE9D8] border-[#ACA899] text-[#444444] hover:bg-[#F5F4EA]'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   <Layers className="w-3 h-3" />
@@ -282,10 +282,10 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
               {/* Bulk preview */}
               {bulk && bulkChunks && bulkChunks.length > 0 && (
-                <div className="text-[10px] text-[#555555] font-mono">
+                <div className="text-[10px] text-muted-foreground font-mono">
                   {bulkChunks.length} bloque{bulkChunks.length !== 1 ? 's' : ''} detectado{bulkChunks.length !== 1 ? 's' : ''}
                   {bulkChunks.map((c, i) => (
-                    <span key={i} className="ml-1 px-1 py-0.2 rounded-none bg-[#ECE9D8] text-[#000000]">
+                    <span key={i} className="ml-1 px-1.5 py-0.5 rounded-md bg-muted text-foreground border border-border">
                       {c.slice(0, 25)}{c.length > 25 ? '…' : ''}
                     </span>
                   ))}
@@ -301,9 +301,9 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 value={urlText}
                 onChange={e => setUrlText(e.target.value)}
                 placeholder="https://ejemplo.com/articulo"
-                className="w-full bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none p-2 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none"
+                className="w-full bg-muted/40 border border-border rounded-md p-2.5 text-xs text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:outline-none"
               />
-              <p className="text-[10px] text-[#555555]">
+              <p className="text-[11px] text-muted-foreground">
                 Introduzca una URL para rastrear e indexar su contenido automáticamente en SilvaDB.
               </p>
             </div>
@@ -333,22 +333,22 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   input.click();
                 }}
                 className={cn(
-                  "border-2 border-dashed rounded-none p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1",
+                  "border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5",
                   isDragOver
-                    ? "border-[#9E4024] bg-[#ECE9D8]"
-                    : "border-[#ACA899] bg-[#ECE9D8] hover:bg-[#F5F4EA]"
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-muted/30 hover:bg-muted/60"
                 )}
               >
-                <Upload className="w-5 h-5 text-[#9E4024]" />
+                <Upload className="w-5 h-5 text-primary" />
                 {selectedFile ? (
-                  <div className="text-[11px] text-[#000000]">
-                    <p className="font-bold text-[#9E4024]">{selectedFile.name}</p>
-                    <p className="text-[10px] text-[#555555]">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                  <div className="text-xs text-foreground">
+                    <p className="font-bold text-primary">{selectedFile.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                   </div>
                 ) : (
-                  <div className="text-[11px] text-[#444444]">
+                  <div className="text-xs text-foreground">
                     <p className="font-bold">Arrastre un archivo aquí</p>
-                    <p className="text-[10px] text-[#666666]">o haga clic para examinar</p>
+                    <p className="text-[11px] text-muted-foreground">o haga clic para examinar</p>
                   </div>
                 )}
               </div>
@@ -357,7 +357,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
           {/* Submit */}
           <div className="flex items-center justify-between pt-1">
-            <span className="text-[10px] text-[#555555] font-mono">
+            <span className="text-[11px] text-muted-foreground font-mono">
               {mode === 'text' && `${charCount} caracteres`}
               {mode === 'url' && 'Modo URL'}
               {mode === 'file' && (selectedFile ? `${selectedFile.name}` : 'Modo Archivo')}
@@ -366,17 +366,17 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               onClick={handleSubmit}
               disabled={!canSubmit}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1 rounded-sm text-[11px] font-bold transition-all cursor-pointer',
+                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer shadow-sm',
                 canSubmit
-                  ? 'bg-[#9E4024] hover:bg-[#081C52] text-white border border-[#9E4024]'
-                  : 'bg-[#ECE9D8] text-[#888888] border border-[#ACA899] cursor-not-allowed'
+                  ? 'bg-primary hover:bg-primary/90 text-primary-foreground border border-primary'
+                  : 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'
               )}
             >
               {loading ? (
                 <span>Ingestando...</span>
               ) : (
                 <>
-                  <Upload className="w-3 h-3" />
+                  <Upload className="w-3.5 h-3.5" />
                   {mode === 'text' && bulk && bulkChunks && bulkChunks.length > 1 ? `Ingestar ${bulkChunks.length} bloques` : 'Ingestar'}
                 </>
               )}
@@ -385,16 +385,16 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
           {/* Recent nodes */}
           {recent.length > 0 && (
-            <div className="border-t border-[#ACA899] pt-2 space-y-1">
-              <p className="text-[10px] text-[#01285F] font-bold uppercase">Recientes</p>
+            <div className="border-t border-border pt-2.5 space-y-1.5">
+              <p className="text-[10px] text-primary font-bold uppercase tracking-wider">Recientes</p>
               {recent.map(n => (
                 <div key={n.node_id + n.ts} className="flex items-start gap-1.5 text-[10px] font-mono">
-                  <CheckCircle2 className="w-3 h-3 text-[#008000] shrink-0 mt-px" />
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0 mt-px" />
                   <div className="flex-1 min-w-0">
-                    <span className="text-[#000000] dark:text-foreground truncate block">{n.preview}</span>
-                    <span className="text-[#555555]">{n.triples} relaciones · {n.node_id.slice(0, 12)}…</span>
+                    <span className="text-foreground truncate block">{n.preview}</span>
+                    <span className="text-muted-foreground">{n.triples} relaciones · {n.node_id.slice(0, 12)}…</span>
                   </div>
-                  <span className="text-[#666666] shrink-0">
+                  <span className="text-muted-foreground shrink-0">
                     {new Date(n.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </span>
                 </div>

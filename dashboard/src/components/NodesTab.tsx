@@ -72,96 +72,96 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
   const quickAgents = ['claude-code', 'deep', 'antigravity', 'buffy'];
 
   return (
-    <div className="flex-1 min-h-0 p-3 flex flex-col space-y-3 font-sans">
-      {/* Header - Windows 2000/XP Wizard Style */}
-      <div className="p-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border rounded-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+    <div className="flex-1 min-h-0 p-1 flex flex-col space-y-4 font-sans">
+      {/* Header - Sovereign Card */}
+      <div className="p-4 bg-card border border-border rounded-lg shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#9E4024] dark:text-primary border border-[#7F9DB9] dark:border-border">
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/30">
               Topología P2P
             </span>
-            <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#008000] dark:text-emerald-400 border border-[#7F9DB9] dark:border-border">
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
               Pizarra Activa
             </span>
           </div>
-          <h2 className="text-xs font-bold text-[#9E4024] dark:text-primary mt-1 flex items-center gap-1.5">
-            <Radio className="w-4 h-4 text-[#9E4024] dark:text-primary" />
+          <h2 className="text-sm font-bold text-foreground mt-1.5 flex items-center gap-1.5">
+            <Radio className="w-4 h-4 text-primary" />
             Nodos del Sustrato y Mensajería Directa
           </h2>
-          <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Agentes registrados en la flota, colas de buzón y canales de comunicación directa punto a punto.
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <button 
             type="button"
             aria-label="Sincronizar nodos de agentes"
             onClick={fetchNodes} 
-            className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#000000] dark:text-foreground rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted text-xs font-semibold text-foreground rounded-md border border-border shadow-sm transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
-            <RefreshCw className={cn('w-3 h-3 text-[#9E4024]', loading && 'animate-spin')} aria-hidden="true" /> 
+            <RefreshCw className={cn('w-3.5 h-3.5 text-primary', loading && 'animate-spin')} aria-hidden="true" /> 
             Sincronizar
           </button>
           <button 
             type="button"
             aria-label="Registrar nodo del panel"
             onClick={registerNode} 
-            className="flex items-center gap-1 px-2.5 py-1 bg-[#9E4024] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#9E4024] transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-md border border-primary shadow-sm transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
-            <Radio className="w-3 h-3" aria-hidden="true" /> 
+            <Radio className="w-3.5 h-3.5" aria-hidden="true" /> 
             Registrar nodo del panel
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Active Nodes List */}
-        <fieldset className="border border-[#ACA899] dark:border-border p-3 bg-[#ECE9D8] dark:bg-card rounded-sm space-y-2">
-          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
+        <fieldset className="border border-border p-4 bg-card rounded-lg shadow-sm space-y-3">
+          <legend className="text-xs font-bold text-primary px-1">
             Nodos Conectados a la Flota ({nodes.length})
           </legend>
 
           {loading ? (
-            <div role="status" aria-live="polite" className="text-center py-6 text-[11px] text-[#555555]">
+            <div role="status" aria-live="polite" className="text-center py-6 text-xs text-muted-foreground">
               Consultando registro de nodos...
             </div>
           ) : nodes.length === 0 ? (
-            <div className="text-center py-6 text-[11px] text-[#555555] bg-white dark:bg-card border border-[#ACA899] p-3 rounded-none">
-              <p className="font-bold text-[#9E4024] dark:text-foreground">No hay nodos activos registrados</p>
-              <p className="mt-0.5">Registre un nodo mediante la herramienta tylluan_do o haga clic en 'Registrar nodo del panel'.</p>
+            <div className="text-center py-6 text-xs text-muted-foreground bg-muted/30 border border-border p-4 rounded-lg">
+              <p className="font-bold text-foreground">No hay nodos activos registrados</p>
+              <p className="mt-1">Registre un nodo mediante la herramienta tylluan_do o haga clic en 'Registrar nodo del panel'.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse bg-white dark:bg-card border border-[#7F9DB9] dark:border-border text-[11px]">
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full border-collapse bg-card text-xs">
                 <thead>
-                  <tr className="bg-[#ECE9D8] dark:bg-muted text-left border-b border-[#ACA899]">
-                    <th className="p-1.5 font-bold border-r border-[#ACA899]">Agente</th>
-                    <th className="p-1.5 font-bold border-r border-[#ACA899] text-center">Reglas</th>
-                    <th className="p-1.5 font-bold border-r border-[#ACA899] text-center">Buzón</th>
-                    <th className="p-1.5 font-bold text-center">Acción</th>
+                  <tr className="bg-muted/60 text-left border-b border-border text-foreground">
+                    <th className="p-2 font-semibold border-r border-border/60">Agente</th>
+                    <th className="p-2 font-semibold border-r border-border/60 text-center">Reglas</th>
+                    <th className="p-2 font-semibold border-r border-border/60 text-center">Buzón</th>
+                    <th className="p-2 font-semibold text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
                   {nodes.map((n) => (
-                    <tr key={n.agent_id} className="border-b border-[#E0E0E0] dark:border-border hover:bg-[#F5F4EA] dark:hover:bg-muted/40">
-                      <td className="p-1.5 font-mono font-bold text-[#9E4024] dark:text-primary border-r border-[#E0E0E0]">
+                    <tr key={n.agent_id} className="border-b border-border hover:bg-muted/40">
+                      <td className="p-2 font-mono font-bold text-primary border-r border-border/60">
                         @{n.agent_id}
                       </td>
-                      <td className="p-1.5 font-mono text-center border-r border-[#E0E0E0]">
+                      <td className="p-2 font-mono text-center border-r border-border/60">
                         {n.rules}
                       </td>
-                      <td className="p-1.5 font-mono text-center border-r border-[#E0E0E0]">
-                        <span className={n.inbox_pending > 0 ? "font-bold text-[#B8860B]" : "text-[#555555]"}>
+                      <td className="p-2 font-mono text-center border-r border-border/60">
+                        <span className={n.inbox_pending > 0 ? "font-bold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>
                           {n.inbox_pending}
                         </span>
                       </td>
-                      <td className="p-1.5 text-center">
+                      <td className="p-2 text-center">
                         <button
                           type="button"
                           aria-label={`Seleccionar ${n.agent_id} como destino`}
                           onClick={() => setTargetId(n.agent_id)}
-                          className="px-2 py-0.5 bg-[#ECE9D8] hover:bg-[#F5F4EA] text-[#000000] dark:text-foreground text-[10px] font-bold rounded-sm border border-[#ACA899] cursor-pointer"
+                          className="px-2.5 py-1 bg-muted/60 hover:bg-muted text-foreground text-[11px] font-semibold rounded-md border border-border cursor-pointer"
                         >
                           Seleccionar
                         </button>
@@ -175,14 +175,14 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
         </fieldset>
 
         {/* Direct Messaging Dispatcher */}
-        <fieldset className="border border-[#ACA899] dark:border-border p-3 bg-[#ECE9D8] dark:bg-card rounded-sm space-y-2">
-          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
+        <fieldset className="border border-border p-4 bg-card rounded-lg shadow-sm space-y-3">
+          <legend className="text-xs font-bold text-primary px-1">
             Despacho de Mensaje Directo
           </legend>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div>
-              <label htmlFor="target-agent-id" className="text-[11px] font-bold text-[#01285F] dark:text-foreground block mb-0.5">
+              <label htmlFor="target-agent-id" className="text-xs font-bold text-foreground block mb-1">
                 Agente destinatario:
               </label>
               <input
@@ -191,10 +191,10 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
                 placeholder="ej. claude-code, deep, antigravity"
-                className="w-full px-2 py-1 bg-white dark:bg-card border border-[#7F9DB9] dark:border-border text-[#000000] dark:text-foreground text-[11px] font-mono rounded-none outline-none"
+                className="w-full px-2.5 py-1.5 bg-muted/40 border border-border text-foreground text-xs font-mono rounded-md focus:ring-2 focus:ring-primary outline-none"
               />
               {/* Quick Select Badges */}
-              <div role="group" aria-label="Selección rápida de agente" className="flex flex-wrap gap-1 mt-1">
+              <div role="group" aria-label="Selección rápida de agente" className="flex flex-wrap gap-1.5 mt-1.5">
                 {quickAgents.map((ag) => (
                   <button
                     key={ag}
@@ -202,10 +202,10 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                     aria-pressed={targetId === ag}
                     onClick={() => setTargetId(ag)}
                     className={cn(
-                      "px-1.5 py-0.5 text-[10px] font-mono font-bold rounded-none border transition-all cursor-pointer",
+                      "px-2 py-0.5 text-[10px] font-mono font-bold rounded-md border transition-all cursor-pointer",
                       targetId === ag
-                        ? "bg-[#9E4024] text-white border-[#9E4024]"
-                        : "bg-white dark:bg-muted text-[#444444] dark:text-muted-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
                     )}
                   >
                     @{ag}
@@ -215,7 +215,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
             </div>
 
             <div>
-              <label htmlFor="substrate-payload-msg" className="text-[11px] font-bold text-[#01285F] dark:text-foreground block mb-0.5">
+              <label htmlFor="substrate-payload-msg" className="text-xs font-bold text-foreground block mb-1">
                 Carga útil / Mensaje directo:
               </label>
               <textarea
@@ -224,7 +224,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Escriba el mensaje directo para el nodo seleccionado..."
                 rows={4}
-                className="w-full p-2 bg-white dark:bg-card border-t border-l border-[#808080] border-b border-r border-white dark:border-border text-[#000000] dark:text-foreground text-[11px] font-sans rounded-none outline-none resize-none"
+                className="w-full p-2.5 bg-muted/40 border border-border text-foreground text-xs font-sans rounded-md focus:ring-2 focus:ring-primary outline-none resize-none"
               />
             </div>
 
@@ -232,7 +232,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
               type="button"
               onClick={sendMessage}
               disabled={!targetId || !message}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#9E4024] hover:bg-[#081C52] text-white text-[11px] font-bold rounded-sm border border-[#9E4024] transition-all disabled:opacity-40 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-md border border-primary shadow-sm transition-all disabled:opacity-40 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               <Send className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Despachar Mensaje al Nodo</span>

@@ -99,46 +99,46 @@ export function ModelsExternalProviders({ bridge }: Props) {
   }
 
   return (
-    <div className="space-y-3 font-sans">
-      <fieldset className="rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border p-3">
-        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">
+    <div className="space-y-4 font-sans">
+      <fieldset className="rounded-lg bg-card border border-border p-4 shadow-sm">
+        <legend className="text-xs font-bold text-primary px-1">
           Proveedores Externos de Inferencia
         </legend>
-        <div className="flex items-center justify-between mb-3 border-b border-[#ACA899] dark:border-border pb-2">
+        <div className="flex items-center justify-between mb-3 border-b border-border pb-3">
           <div>
-            <h3 className="text-xs font-bold text-[#01285F] dark:text-foreground">
+            <h3 className="text-sm font-bold text-foreground">
               Conexión a Endpoints de Inferencia
             </h3>
-            <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
-              Proveedores de inferencia configurados en <code className="font-mono text-[#000000] dark:text-foreground font-bold">tylluan.toml</code> bajo <code className="font-mono text-[#000000] dark:text-foreground font-bold">[[external_providers]]</code>.
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Proveedores de inferencia configurados en <code className="font-mono text-foreground font-semibold">tylluan.toml</code> bajo <code className="font-mono text-foreground font-semibold">[[external_providers]]</code>.
             </p>
           </div>
           <button
             onClick={fetchProviders}
-            className="px-2.5 py-1 bg-white hover:bg-[#F5F4EA] border border-[#ACA899] text-[#000000] dark:text-foreground rounded-sm text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <RefreshCw className="w-3 h-3 text-[#9E4024]" />
+            <RefreshCw className="w-3.5 h-3.5 text-primary" />
             Actualizar
           </button>
         </div>
 
         {providers.length === 0 ? (
-          <div className="p-6 bg-[#F5F4EA] dark:bg-muted/30 border border-[#ACA899] dark:border-border rounded-none flex flex-col items-center justify-center gap-1.5 text-center">
-            <Globe className="w-6 h-6 text-[#7F9DB9]" />
-            <p className="text-xs font-bold text-[#01285F] dark:text-foreground">Sin proveedores externos configurados</p>
-            <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-md leading-normal">
+          <div className="p-6 bg-muted/30 border border-border rounded-lg flex flex-col items-center justify-center gap-1.5 text-center">
+            <Globe className="w-6 h-6 text-muted-foreground" />
+            <p className="text-xs font-bold text-foreground">Sin proveedores externos configurados</p>
+            <p className="text-xs text-muted-foreground max-w-md leading-normal">
               Añada un bloque <code className="font-mono">[external_providers]</code> en su archivo <code className="font-mono">tylluan.toml</code> para integrar modelos remotos compatibles con OpenAI/Anthropic/Ollama.
             </p>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {providers.map((provider) => {
               const result = testResults[provider.name];
               const isTesting = testing === provider.name;
               return (
                 <div
                   key={provider.name}
-                  className="bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border rounded-none p-2.5 space-y-2"
+                  className="bg-muted/30 border border-border rounded-lg p-3 space-y-2.5"
                 >
                   {/* Header */}
                   <div className="flex items-center justify-between">
@@ -146,13 +146,13 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       <span className="text-base">{providerTypeIcon(provider.provider_type)}</span>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-[#01285F] dark:text-foreground">{provider.name}</span>
-                          <span className="text-[10px] font-mono px-1 py-0.2 border border-[#ACA899] bg-[#ECE9D8] dark:bg-muted text-[#000000] dark:text-foreground font-bold">
+                          <span className="text-xs font-bold text-foreground">{provider.name}</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md border border-border bg-muted text-foreground font-bold">
                             {providerTypeLabel(provider.provider_type)}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 mt-0.5">
-                          <span className="text-[10px] font-mono text-[#555555] dark:text-muted-foreground flex items-center gap-1">
+                          <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
                             <ExternalLink className="w-2.5 h-2.5" />
                             {provider.base_url}
                           </span>
@@ -163,10 +163,10 @@ export function ModelsExternalProviders({ bridge }: Props) {
                     <div className="flex items-center gap-2">
                       {/* API Key status */}
                       <span className={cn(
-                        "text-[10px] font-mono px-1.5 py-0.2 rounded-none border flex items-center gap-1 font-bold",
+                        "text-[10px] font-mono px-1.5 py-0.5 rounded-md border flex items-center gap-1 font-bold",
                         provider.api_key_set
                           ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                          : "bg-slate-100 text-[#555555] border-[#ACA899]"
+                          : "bg-muted text-muted-foreground border-border"
                       )}>
                         {provider.api_key_set ? (
                           <><CheckCircle2 className="w-3 h-3" /> Clave API configurada</>
@@ -183,10 +183,10 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       <span
                         key={model}
                         className={cn(
-                          "text-[10px] font-mono px-1.5 py-0.5 rounded-none border cursor-pointer transition-colors",
+                          "text-[10px] font-mono px-2 py-0.5 rounded-md border cursor-pointer transition-colors",
                           (selectedModels[provider.name] || provider.models[0]) === model
-                            ? "bg-[#9E4024] text-white border-[#9E4024] font-bold"
-                            : "bg-[#ECE9D8] dark:bg-muted text-[#000000] dark:text-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
+                            ? "bg-primary text-primary-foreground border-primary font-bold"
+                            : "bg-card text-foreground border-border hover:bg-muted"
                         )}
                         onClick={() => setSelectedModels(prev => ({ ...prev, [provider.name]: model }))}
                       >
@@ -194,22 +194,22 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       </span>
                     ))}
                     {(!provider.models || provider.models.length === 0) && (
-                      <span className="text-[10px] text-[#555555] dark:text-muted-foreground font-mono">Sin modelos listados</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">Sin modelos listados</span>
                     )}
                   </div>
 
                   {/* Test result */}
                   {result && (
                     <div className={cn(
-                      "p-1.5 rounded-none border text-[11px] flex items-center gap-1.5 font-sans",
+                      "p-2 rounded-md border text-xs flex items-center gap-1.5 font-sans",
                       result.ok
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-500/30"
-                        : "bg-rose-50 text-rose-800 border-rose-500/30"
+                        ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30"
+                        : "bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30"
                     )}>
                       {result.ok ? (
-                        <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Conexión establecida correctamente{result.latency_ms !== undefined ? ` — ${result.latency_ms} ms` : ''}</>
+                        <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Conexión establecida correctamente{result.latency_ms !== undefined ? ` — ${result.latency_ms} ms` : ''}</>
                       ) : (
-                        <><XCircle className="w-3.5 h-3.5 text-rose-600" /> {result.error || 'Fallo de conexión'}</>
+                        <><XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /> {result.error || 'Fallo de conexión'}</>
                       )}
                     </div>
                   )}
@@ -219,12 +219,12 @@ export function ModelsExternalProviders({ bridge }: Props) {
                     <button
                       onClick={() => handleTest(provider)}
                       disabled={isTesting}
-                      className="px-2.5 py-1 bg-white hover:bg-[#F5F4EA] disabled:opacity-50 border border-[#ACA899] text-[#000000] dark:text-foreground rounded-sm text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-50 border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       {isTesting ? (
-                        <RefreshCw className="w-3 h-3 animate-spin text-[#9E4024]" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
                       ) : (
-                        <Zap className="w-3 h-3 text-[#9E4024]" />
+                        <Zap className="w-3.5 h-3.5 text-primary" />
                       )}
                       {isTesting ? 'Comprobando...' : 'Probar conexión'}
                     </button>

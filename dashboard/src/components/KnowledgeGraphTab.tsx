@@ -27,10 +27,10 @@ import { IngestPanel } from './IngestPanel';
 // same semantics, a fraction of the cost).
 function LightGraphPlaceholder({ bridge: _bridge }: { bridge: NexusBridge; events: NexusEvent[] }) {
   return (
-    <div className="flex-1 min-h-[300px] rounded bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
-      <Network className="w-10 h-10 text-emerald-400/40 mb-3" />
-      <h4 className="text-sm font-semibold text-slate-200">Explorador Estructural SilvaDB</h4>
-      <p className="text-xs text-slate-400 max-w-md mt-1">
+    <div className="flex-1 min-h-[300px] rounded-lg bg-card border border-border shadow-sm flex flex-col items-center justify-center p-6 text-center">
+      <Network className="w-10 h-10 text-primary/60 mb-3" />
+      <h4 className="text-sm font-semibold text-foreground">Explorador Estructural SilvaDB</h4>
+      <p className="text-xs text-muted-foreground max-w-md mt-1">
         Consulta recuerdos estructurados y relaciones directamente desde la pestana de Nodos para maxima velocidad y cero consumo de GPU/WebGL.
       </p>
     </div>
@@ -259,25 +259,25 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-4 h-full">
       {/* Top Selector Bar */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
             <Network className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-50">Cortex Knowledge</h2>
-            <p className="text-[11px] text-slate-500">SilvaDB visualizer & search engine</p>
+            <h2 className="text-sm font-semibold text-foreground">Cortex Knowledge</h2>
+            <p className="text-[11px] text-muted-foreground">SilvaDB visualizer & search engine</p>
           </div>
         </div>
 
-        <div role="group" aria-label="Knowledge View Modes" className="flex bg-slate-900 border border-border rounded p-1 gap-1 items-center shrink-0">
+        <div role="group" aria-label="Knowledge View Modes" className="flex bg-muted/80 border border-border rounded-lg p-1 gap-1 items-center shrink-0">
           <button 
             type="button" 
             aria-pressed={activeSubView === 'graph'}
             onClick={() => setActiveSubView('graph')} 
             className={cn(
-              "px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
-              activeSubView === 'graph' ? "bg-primary/10 text-primary border border-primary/30" : "text-slate-400 hover:text-slate-200"
+              "px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+              activeSubView === 'graph' ? "bg-card text-primary border border-border shadow-sm" : "text-muted-foreground hover:text-foreground border border-transparent"
             )}
           >
             <Network className="w-3.5 h-3.5" aria-hidden="true" /> Graph Canvas
@@ -287,8 +287,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             aria-pressed={activeSubView === 'list'}
             onClick={() => setActiveSubView('list')} 
             className={cn(
-              "px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
-              activeSubView === 'list' ? "bg-primary/10 text-primary border border-primary/30" : "text-slate-400 hover:text-slate-200"
+              "px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+              activeSubView === 'list' ? "bg-card text-primary border border-border shadow-sm" : "text-muted-foreground hover:text-foreground border border-transparent"
             )}
           >
             <List className="w-3.5 h-3.5" aria-hidden="true" /> List Explorer
@@ -303,7 +303,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             <>
               <div className="flex-1 min-h-0 flex flex-col">
                 <Suspense fallback={
-                  <div className="flex-1 min-h-0 rounded bg-slate-900/60 border border-border flex items-center justify-center gap-2 text-xs text-slate-400">
+                  <div className="flex-1 min-h-0 rounded-lg bg-card border border-border shadow-sm flex items-center justify-center gap-2 text-xs text-muted-foreground">
                     <RefreshCw className="w-4 h-4 animate-spin" /> Cargando visor de grafo...
                   </div>
                 }>
@@ -313,8 +313,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <IngestPanel bridge={bridge} notify={notify} onIngestComplete={handleIngestComplete} />
             </>
           ) : (
-            <div className="h-full rounded bg-slate-900/60 border border-border flex items-center justify-center">
-              <div className="flex items-center gap-2 text-xs text-slate-400">
+            <div className="h-full rounded-lg bg-card border border-border shadow-sm flex items-center justify-center">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 Esperando conexión con SilvaDB
               </div>
@@ -323,13 +323,13 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col space-y-3 font-sans">
-          <div className="flex items-center justify-between gap-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border p-2 rounded-sm">
+          <div className="flex items-center justify-between gap-3 bg-card border border-border p-2.5 rounded-lg shadow-sm">
             <div className="flex gap-2 flex-1 max-w-3xl items-center">
               {results.length > 0 && (
-                <span className="text-[11px] font-bold text-[#9E4024] dark:text-primary whitespace-nowrap">{results.length} recuerdos</span>
+                <span className="text-xs font-bold text-primary whitespace-nowrap">{results.length} recuerdos</span>
               )}
               <div className="flex-1 relative">
-                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#555555]" aria-hidden="true" />
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
                 <input
                   type="text"
                   aria-label="Buscar nodos en memoria SilvaDB"
@@ -337,14 +337,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowSearchPanel(true)}
                   placeholder="Buscar en memoria SilvaDB..."
-                  className="w-full pl-8 pr-8 py-1 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none text-[11px] text-foreground focus:outline-none"
+                  className="w-full pl-8 pr-8 py-1.5 bg-muted/40 border border-border rounded-md text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     aria-label="Borrar búsqueda"
                     onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
                     <X className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
@@ -356,8 +356,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 aria-pressed={showRecentSidebar}
                 onClick={() => setShowRecentSidebar(!showRecentSidebar)}
                 className={cn(
-                  "p-1.5 rounded-sm border transition-all cursor-pointer",
-                  showRecentSidebar ? "bg-[#9E4024] text-white border-[#9E4024]" : "bg-white dark:bg-muted text-foreground border-[#ACA899] hover:bg-[#F5F4EA]"
+                  "p-1.5 rounded-md border transition-all cursor-pointer",
+                  showRecentSidebar ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 text-foreground border-border hover:bg-muted"
                 )}
                 title="Últimas 24 h"
               >
@@ -367,7 +367,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={runClustering}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-[#9E4024] dark:text-primary border border-[#ACA899] transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/50 hover:bg-muted text-xs font-semibold text-primary border border-border transition-all cursor-pointer"
               >
                 <Zap className="w-3.5 h-3.5" aria-hidden="true" /> Detectar comunidades
               </button>
@@ -375,30 +375,30 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={() => void loadRecent(false)}
                 disabled={loading || isBackgroundRefreshing}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[11px] font-bold text-foreground border border-[#ACA899] transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/50 hover:bg-muted text-xs font-semibold text-foreground border border-border transition-colors cursor-pointer"
               >
-                <RefreshCw className={cn("w-3 h-3 text-[#9E4024]", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Actualizar
+                <RefreshCw className={cn("w-3.5 h-3.5 text-primary", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Actualizar
               </button>
               <button
                 type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-3 py-1 bg-[#9E4024] hover:bg-[#081C52] text-white text-[11px] font-bold border border-[#9E4024] rounded-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold border border-primary rounded-md shadow-sm flex items-center gap-1.5 cursor-pointer"
               >
-                {searching ? <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" /> : <Database className="w-3 h-3" aria-hidden="true" />} Explorar
+                {searching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Database className="w-3.5 h-3.5" aria-hidden="true" />} Explorar
               </button>
             </div>
-            <div className="flex bg-white dark:bg-muted border border-[#ACA899] rounded-sm p-0.5 shrink-0 gap-0.5 items-center">
-              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'grid' ? "bg-[#9E4024] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Cuadrícula</button>
-              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors", view === 'table' ? "bg-[#9E4024] text-white" : "text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]")}>Tabla</button>
-              <div className="w-px bg-[#ACA899] self-stretch my-0.5 mx-0.5"></div>
+            <div className="flex bg-muted/60 border border-border rounded-md p-0.5 shrink-0 gap-0.5 items-center">
+              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors", view === 'grid' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Cuadrícula</button>
+              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors", view === 'table' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Tabla</button>
+              <div className="w-px bg-border self-stretch my-0.5 mx-0.5"></div>
               <button 
                 type="button" 
                 aria-pressed={compactMode}
                 onClick={() => setCompactMode(!compactMode)} 
                 className={cn(
-                  "px-2 py-0.5 rounded-sm text-[10px] font-bold cursor-pointer transition-colors",
-                  compactMode ? "bg-[#ECE9D8] text-[#9E4024]" : "text-[#444444] hover:bg-[#F5F4EA]"
+                  "px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors",
+                  compactMode ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {compactMode ? "Compacto" : "Completo"}

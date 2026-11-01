@@ -18,16 +18,16 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-3 h-full font-sans">
-      {/* Sub Navigation - Classic Win32 Property Sheet Tabs */}
-      <div className="flex max-w-full overflow-x-auto border-b border-[#ACA899] dark:border-border gap-1 flex-shrink-0" role="group" aria-label="Vistas de memoria SilvaDB">
+      {/* Sub Navigation - Sovereign Palette Tabs */}
+      <div className="flex max-w-full overflow-x-auto border-b border-border pb-2 gap-1.5 flex-shrink-0" role="group" aria-label="Vistas de memoria SilvaDB">
         <button
           type="button"
           aria-pressed={subTab === 'graph'}
           onClick={() => setSubTab('graph')}
-          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'graph'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
-              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
+              ? 'bg-primary/10 text-primary border-primary/30 shadow-sm'
+              : 'bg-card text-muted-foreground border-border hover:bg-muted/60 hover:text-foreground'
           }`}
         >
           <Network className="w-3.5 h-3.5" aria-hidden="true" />
@@ -37,10 +37,10 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           type="button"
           aria-pressed={subTab === 'nodes'}
           onClick={() => setSubTab('nodes')}
-          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'nodes'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
-              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
+              ? 'bg-primary/10 text-primary border-primary/30 shadow-sm'
+              : 'bg-card text-muted-foreground border-border hover:bg-muted/60 hover:text-foreground'
           }`}
         >
           <Radio className="w-3.5 h-3.5" aria-hidden="true" />
@@ -50,16 +50,16 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           type="button"
           aria-pressed={subTab === 'contradictions'}
           onClick={() => setSubTab('contradictions')}
-          className={`flex min-w-max items-center gap-1.5 px-3 py-1 text-[11px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
+          className={`flex min-w-max items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'contradictions'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
-              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
+              ? 'bg-primary/10 text-primary border-primary/30 shadow-sm'
+              : 'bg-card text-muted-foreground border-border hover:bg-muted/60 hover:text-foreground'
           }`}
         >
           <GitCompare className="w-3.5 h-3.5" aria-hidden="true" />
           Contradicciones Cognitivas
           {contradictedCount !== null && contradictedCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-none bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/40 text-[10px] font-mono font-bold">
+            <span className="px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 text-[10px] font-mono font-bold">
               {contradictedCount}
             </span>
           )}
