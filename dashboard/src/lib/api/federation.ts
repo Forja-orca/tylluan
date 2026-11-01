@@ -7,10 +7,17 @@ export async function listMcpExternal(client: Fetcher): Promise<Array<{ name: st
   return await client.fetch('/api/v1/mcp/external');
 }
 
+function launcherSignature(req: { url?: string; command?: string; args?: string[] }): string {
+  if (req.command?.trim()) {
+    return [req.command.trim(), ...(req.args ?? [])].join(' ');
+  }
+  return req.url?.trim() ?? '(none)';
+}
+
 export async function addMcpExternal(client: Fetcher, req: { name: string; url?: string; command?: string; args?: string[] }): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/mcp/external', {
     method: 'POST',
-    body: JSON.stringify(req)
+    body: JSON.stringify({ ...req, confirm: launcherSignature(req) })
   });
 }
 

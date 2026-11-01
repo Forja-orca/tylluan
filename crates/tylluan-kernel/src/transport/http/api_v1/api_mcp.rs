@@ -12,6 +12,8 @@ use crate::transport::http::HttpState;
 #[derive(Deserialize)]
 pub struct AddMcpServerRequest {
     name: String,
+    /// A4: normalized launcher signature the operator confirms. Required.
+    confirm: Option<String>,
     /// HTTP Streamable MCP endpoint
     url: Option<String>,
     /// Classic SSE MCP: GET endpoint (persistent stream)
@@ -84,55 +86,184 @@ pub async fn add_mcp_server_handler(State(state): State<Arc<HttpState>>, Json(re
         }))).into_response();
     }
 
+    let entry = add_entry_from_request(&req);
+    let expected = launcher_signature(&entry);
+    if !confirmation_matches(req.confirm.as_deref(), &expected) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "confirmation_required",
+            "expected_confirm": expected,
+            "reason": "A4: send confirm with the normalized launcher string before registering or spawning an external MCP server."
+        }))).into_response();
+    }
+    audit_mcp_change("add", &entry.name, None, &entry);
+
     // Register with guild registry
     {
         let reg_arc = state.registry.arc();
         let mut reg = reg_arc.write().await;
         if has_sse {
-            let sse_url = req.sse_url.as_deref().unwrap_or("");
-            let post_url = req.post_url.as_deref().unwrap_or("");
+            let sse_url = entry.sse_url.as_deref().unwrap_or("");
+            let post_url = entry.post_url.as_deref().unwrap_or("");
             if sse_url.is_empty() || post_url.is_empty() {
                 return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "sse_url and post_url required for SSE MCP"}))).into_response();
             }
             reg.register_sse_mcp(
-                &req.name,
+                &entry.name,
                 sse_url,
                 post_url,
-                req.headers.clone().unwrap_or_default(),
-                req.timeout_ms,
+                entry.headers.clone().unwrap_or_default(),
+                entry.timeout_ms,
             );
-        } else if let Some(url) = &req.url {
-            reg.register_http_mcp(&req.name, url, req.headers.clone().unwrap_or_default(), req.timeout_ms);
-        } else if let Some(command) = &req.command {
-            reg.register_external(&req.name, command, req.args.clone().unwrap_or_default(), req.cwd.clone().map(std::path::PathBuf::from), req.env.clone(), req.timeout_ms);
+        } else if let Some(url) = &entry.url {
+            reg.register_http_mcp(&entry.name, url, entry.headers.clone().unwrap_or_default(), entry.timeout_ms);
+        } else if let Some(command) = &entry.command {
+            reg.register_external(&entry.name, command, entry.args.clone().unwrap_or_default(), entry.cwd.clone().map(std::path::PathBuf::from), entry.env.clone(), entry.timeout_ms);
         }
     }
 
     // Spawn the new server
-    let _ = state.registry.ensure_running(&req.name).await;
+    let _ = state.registry.ensure_running(&entry.name).await;
 
     // Add to config
     {
         let mut config = state.config.write().await;
-        config.external_mcp.push(crate::config::ExternalMcpConfig {
-            name: req.name.clone(),
-            command: req.command.clone(),
-            args: req.args.clone(),
-            cwd: req.cwd.clone(),
-            url: req.url.clone(),
-            sse_url: req.sse_url.clone(),
-            post_url: req.post_url.clone(),
-            env: req.env.clone(),
-            headers: req.headers.clone(),
-            timeout_ms: req.timeout_ms,
-            active: true,
-        });
+        config.external_mcp.push(entry.clone());
     }
 
     // Persist config
     let _ = persist_external_mcp_config(&state.config).await;
 
     (StatusCode::CREATED, Json(serde_json::json!({"status": "registered", "name": req.name}))).into_response()
+}
+
+fn launcher_signature_from_parts(
+    command: Option<&str>,
+    args: Option<&[String]>,
+    url: Option<&str>,
+    sse_url: Option<&str>,
+    post_url: Option<&str>,
+) -> String {
+    if let Some(command) = command.filter(|c| !c.trim().is_empty()) {
+        let mut out = command.trim().to_string();
+        if let Some(args) = args {
+            for arg in args {
+                out.push(' ');
+                out.push_str(arg);
+            }
+        }
+        return out;
+    }
+    if let Some(url) = url.filter(|u| !u.trim().is_empty()) {
+        return url.trim().to_string();
+    }
+    if let (Some(sse), Some(post)) = (sse_url, post_url) {
+        return format!("sse:{}|post:{}", sse.trim(), post.trim());
+    }
+    "(none)".to_string()
+}
+
+fn launcher_signature(ext: &crate::config::ExternalMcpConfig) -> String {
+    launcher_signature_from_parts(
+        ext.command.as_deref(),
+        ext.args.as_deref(),
+        ext.url.as_deref(),
+        ext.sse_url.as_deref(),
+        ext.post_url.as_deref(),
+    )
+}
+
+fn confirmation_matches(confirm: Option<&str>, expected: &str) -> bool {
+    confirm == Some(expected)
+}
+
+fn add_entry_from_request(req: &AddMcpServerRequest) -> crate::config::ExternalMcpConfig {
+    crate::config::ExternalMcpConfig {
+        name: req.name.clone(),
+        command: req.command.clone(),
+        args: req.args.clone(),
+        cwd: req.cwd.clone(),
+        url: req.url.clone(),
+        sse_url: req.sse_url.clone(),
+        post_url: req.post_url.clone(),
+        env: req.env.clone(),
+        headers: req.headers.clone(),
+        timeout_ms: req.timeout_ms,
+        active: true,
+    }
+}
+
+fn update_touches_launcher(req: &UpdateMcpServerRequest) -> bool {
+    req.url.is_some()
+        || req.sse_url.is_some()
+        || req.post_url.is_some()
+        || req.command.is_some()
+        || req.args.is_some()
+        || req.cwd.is_some()
+        || req.env.is_some()
+        || req.headers.is_some()
+}
+
+fn apply_update_fields(ext: &mut crate::config::ExternalMcpConfig, req: &UpdateMcpServerRequest) {
+    if let Some(url) = req.url.clone() {
+        ext.url = if url.is_empty() { None } else { Some(url) };
+    }
+    if let Some(sse_url) = req.sse_url.clone() {
+        ext.sse_url = if sse_url.is_empty() { None } else { Some(sse_url) };
+    }
+    if let Some(post_url) = req.post_url.clone() {
+        ext.post_url = if post_url.is_empty() { None } else { Some(post_url) };
+    }
+    if let Some(command) = req.command.clone() {
+        ext.command = if command.is_empty() { None } else { Some(command) };
+    }
+    if let Some(args) = req.args.clone() {
+        ext.args = if args.is_empty() { None } else { Some(args) };
+    }
+    if let Some(cwd) = req.cwd.clone() {
+        ext.cwd = if cwd.is_empty() { None } else { Some(cwd) };
+    }
+    if let Some(env) = req.env.clone() {
+        ext.env = if env.is_empty() { None } else { Some(env) };
+    }
+    if let Some(headers) = req.headers.clone() {
+        ext.headers = if headers.is_empty() { None } else { Some(headers) };
+    }
+    if let Some(timeout_ms) = req.timeout_ms {
+        ext.timeout_ms = Some(timeout_ms);
+    }
+}
+
+fn discovery_proposals(entries: &[crate::config::ExternalMcpConfig]) -> Vec<serde_json::Value> {
+    entries
+        .iter()
+        .map(|entry| {
+            serde_json::json!({
+                "name": entry.name,
+                "signature": launcher_signature(entry),
+                "config": entry,
+            })
+        })
+        .collect()
+}
+
+fn audit_mcp_change(action: &str, name: &str, old: Option<&crate::config::ExternalMcpConfig>, new: &crate::config::ExternalMcpConfig) {
+    let old_sig = old.map(launcher_signature).unwrap_or_else(|| "(none)".to_string());
+    let new_sig = launcher_signature(new);
+    let preview = format!(
+        "name={name}\nold={}\nnew={}",
+        crate::logging::scrub(&old_sig),
+        crate::logging::scrub(&new_sig)
+    );
+    crate::transport::server::handler_do::audit_or_warn(
+        &format!("mcp_external_{action}"),
+        "mcp_external",
+        action,
+        "operator",
+        true,
+        &preview,
+        0,
+        true,
+    );
 }
 
 pub async fn remove_mcp_server_handler(State(state): State<Arc<HttpState>>, Path(name): Path<String>) -> impl IntoResponse {
@@ -160,6 +291,8 @@ pub async fn remove_mcp_server_handler(State(state): State<Arc<HttpState>>, Path
 
 #[derive(Deserialize)]
 pub struct UpdateMcpServerRequest {
+    /// A4: normalized launcher signature the operator confirms. Required.
+    confirm: Option<String>,
     active: Option<bool>,
     url: Option<String>,
     sse_url: Option<String>,
@@ -186,6 +319,28 @@ pub async fn update_mcp_server_handler(
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No fields to update"}))).into_response();
     }
 
+    // A4: validate the normalized launcher before touching the live config.
+    let old_entry = {
+        let config = state.config.read().await;
+        match config.external_mcp.iter().find(|e| e.name == name) {
+            Some(e) => e.clone(),
+            None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": format!("External MCP '{}' not found", name)}))).into_response(),
+        }
+    };
+    let candidate = {
+        let mut c = old_entry.clone();
+        apply_update_fields(&mut c, &req);
+        c
+    };
+    let expected = launcher_signature(&candidate);
+    if update_touches_launcher(&req) && !confirmation_matches(req.confirm.as_deref(), &expected) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "confirmation_required",
+            "expected_confirm": expected,
+            "reason": "A4: send confirm with the normalized launcher string before registering or spawning an external MCP server."
+        }))).into_response();
+    }
+
     // Phase 1: Update config entry and detect changes (inside config lock)
     let (old_active, new_active, launcher_changed) = {
         let mut config = state.config.write().await;
@@ -200,34 +355,7 @@ pub async fn update_mcp_server_handler(
         let old_post_url = ext.post_url.clone();
         let old_command = ext.command.clone();
 
-        // Apply field updates
-        if let Some(url) = req.url {
-            ext.url = if url.is_empty() { None } else { Some(url) };
-        }
-        if let Some(sse_url) = req.sse_url {
-            ext.sse_url = if sse_url.is_empty() { None } else { Some(sse_url) };
-        }
-        if let Some(post_url) = req.post_url {
-            ext.post_url = if post_url.is_empty() { None } else { Some(post_url) };
-        }
-        if let Some(command) = req.command {
-            ext.command = if command.is_empty() { None } else { Some(command) };
-        }
-        if let Some(args) = req.args {
-            ext.args = if args.is_empty() { None } else { Some(args) };
-        }
-        if let Some(cwd) = req.cwd {
-            ext.cwd = if cwd.is_empty() { None } else { Some(cwd) };
-        }
-        if let Some(env) = req.env {
-            ext.env = if env.is_empty() { None } else { Some(env) };
-        }
-        if let Some(headers) = req.headers {
-            ext.headers = if headers.is_empty() { None } else { Some(headers) };
-        }
-        if let Some(timeout_ms) = req.timeout_ms {
-            ext.timeout_ms = Some(timeout_ms);
-        }
+        apply_update_fields(ext, &req);
 
         // Detect if launcher type changed
         let launcher_changed = ext.url != old_url
@@ -241,6 +369,8 @@ pub async fn update_mcp_server_handler(
 
         (old_active, new_active, launcher_changed)
     };
+
+    audit_mcp_change("update", &name, Some(&old_entry), &candidate);
 
     // Phase 2: Guild lifecycle management (outside config lock)
     if old_active && (!new_active || launcher_changed) {
@@ -367,22 +497,22 @@ pub async fn discover_mcp_servers_handler(State(state): State<Arc<HttpState>>) -
         }
     }
 
-    if !new_servers.is_empty() {
-        {
-            let mut config = state.config.write().await;
-            config.external_mcp.extend(new_servers);
-        }
-        let _ = persist_external_mcp_config(&state.config).await;
-    }
+    // D1: discover is a proposal, not a registration. Nothing is persisted or
+    // spawned until the operator POSTs the proposal to /api/v1/mcp/external
+    // with the A4 `confirm` signature.
+    let proposals = discovery_proposals(&new_servers);
 
     (StatusCode::OK, Json(serde_json::json!({
         "discovered": discovered.len(),
         "servers": discovered,
+        "proposals": proposals,
         "skipped_existing": skipped_existing,
         "skipped_self": skipped_self,
         "sources_scanned": sources_scanned,
+        "registered": 0,
     }))).into_response()
 }
+
 
 pub async fn persist_external_mcp_config(config_lock: &Arc<tokio::sync::RwLock<crate::config::TylluanConfig>>) -> Result<(), String> {
     let content = {
@@ -395,4 +525,76 @@ pub async fn persist_external_mcp_config(config_lock: &Arc<tokio::sync::RwLock<c
     std::fs::write(&tmp_path, &content).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp_path, &config_path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(command: &str, args: &[&str], url: Option<&str>) -> crate::config::ExternalMcpConfig {
+        crate::config::ExternalMcpConfig {
+            name: "test".into(),
+            command: Some(command.into()),
+            args: Some(args.iter().map(|s| s.to_string()).collect()),
+            cwd: None,
+            url: url.map(str::to_string),
+            sse_url: None,
+            post_url: None,
+            env: None,
+            headers: None,
+            timeout_ms: None,
+            active: false,
+        }
+    }
+
+    #[test]
+    fn a4_launcher_signature_is_stable_and_normalized() {
+        let e = entry("npx", &["-y", "@scope/server"], None);
+        assert_eq!(launcher_signature(&e), "npx -y @scope/server");
+        let http = entry("", &[], Some("https://mcp.example/mcp"));
+        assert_eq!(launcher_signature(&http), "https://mcp.example/mcp");
+    }
+
+    #[test]
+    fn a4_missing_or_wrong_confirmation_is_rejected() {
+        assert!(!confirmation_matches(None, "npx a"));
+        assert!(!confirmation_matches(Some("npx b"), "npx a"));
+        assert!(confirmation_matches(Some("npx a"), "npx a"));
+    }
+
+    #[test]
+    fn a4_update_signature_reflects_new_command_before_mutation() {
+        let mut old = entry("npx", &["old"], None);
+        old.name = "updatable".into();
+        let req = UpdateMcpServerRequest {
+            confirm: Some("npx new --flag".into()),
+            active: None,
+            url: None,
+            sse_url: None,
+            post_url: None,
+            command: Some("npx".into()),
+            args: Some(vec!["new".into(), "--flag".into()]),
+            cwd: None,
+            env: None,
+            headers: None,
+            timeout_ms: None,
+        };
+        let mut candidate = old.clone();
+        apply_update_fields(&mut candidate, &req);
+        assert_eq!(launcher_signature(&candidate), "npx new --flag");
+        assert_eq!(launcher_signature(&old), "npx old", "old entry stays unchanged");
+    }
+
+    #[test]
+    fn d1_discovery_returns_proposals_not_registrations() {
+        let a = entry("npx", &["a"], None);
+        let mut b = entry("", &[], Some("https://mcp.example/b"));
+        b.name = "b".into();
+        let proposals = discovery_proposals(&[a, b]);
+        assert_eq!(proposals.len(), 2);
+        assert_eq!(proposals[0]["name"], "test");
+        assert_eq!(proposals[0]["signature"], "npx a");
+        assert_eq!(proposals[1]["signature"], "https://mcp.example/b");
+        assert_eq!(proposals[0]["config"]["active"], false);
+    }
 }
