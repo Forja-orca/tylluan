@@ -1,6 +1,6 @@
 # ADR-024: Contención de ejecución de procesos por HTTP
 
-- **Estado:** 📝 **PROPUESTO** — borrador de DSH (2026-10-24). **La aprobación es de José**, punto por punto (§9); nada de lo que sigue se implementa hasta que la dé. Este ADR no decide por él.
+- **Estado:** ✅ **APROBADO PARCIALMENTE (2026-11-01)** — por delegacion expresa de José (2026-11-01: "todas esas decisiones ahora son tuyas"), resuelta por el responsable del cierre del proyecto. A1, A4, B1, C3 y D1 aprobados; C1 reservado al dueño; A2/A3/E aplazados (ver «Resolución» al final).
 - **Fecha:** 2026-10-24
 - **Origen:** asignación del TL (T1719 y T1721) a partir de T-DSH-70 (documento de decisiones para José) y T-DSH-71 (coste real de C3). Las filas citadas son las 1, 2, 3, 7, 9 y 10 de T-DSH-69.
 - **Insumos:**
@@ -193,3 +193,19 @@ Cada fase es un PR independiente; ninguna se ejecuta sin la aprobación de José
 - **A1:** no probé el spawn de `.cmd`/`.bat` en Windows en vivo; el caso está deducido de `guild_process.rs`.
 - **Índice de ADRs:** no he actualizado `ARCHITECTURE_DECISIONS.md` (ADR-019 a ADR-022 tampoco figuran en el índice); si el TL quiere que el ADR-024 aparezca, es una entrada de una línea que dejo a su criterio.
 - **Ninguna decisión implementada:** este documento es una propuesta; sin aprobación de José no se toca código.
+
+## Resolución (2026-11-01)
+
+Resuelta por delegacion expresa de José (2026-11-01: "todas esas decisiones ahora son tuyas"), resuelta por el responsable del cierre del proyecto.
+
+| Punto | Resolución | Motivo |
+|---|---|---|
+| A1 Lanzar directo sin `cmd /c` con ruta absoluta verificada | **Aprobado** | Quita una vía de inyección de comandos; el wrapper queda solo para `.cmd`/`.bat`. |
+| A4 Confirmación humana y auditoría del diff al alta/edición de MCP externo | **Aprobado** | Es la primera pieza de la muralla. |
+| B1 Bloquear desde la API las claves `[[external_mcp]]`, `[services]` y `[wake].command` | **Aprobado** | La edición de lo que ejecuta procesos queda solo por fichero. |
+| C3 Endpoint directo de guild restringido a operador para `bash` y `filesystem` | **Aprobado** (solo esas dos) | `code`, `docker` y `git` se evalúan después con datos de uso. |
+| C1 ACL fail-closed sin `default_role` para guilds sensibles | **Reservado al dueño** | Toca `dev_mode` y `default_role = "admin"` de producción: es un interruptor de seguridad. Se prepara el diseño, no se activa. |
+| D1 Descubrimiento de MCP como propuesta con aprobación, sin registro automático | **Aprobado** | Un servidor MCP no debe entrar solo. |
+| A2, A3, E | **Aplazados** | Decisión posterior con datos de las fases 1-3. |
+
+Orden: Fase 1 (A4 + D1), Fase 2 (B1 + A1), Fase 3 (C3); Fase 4 (C1) espera al dueño.

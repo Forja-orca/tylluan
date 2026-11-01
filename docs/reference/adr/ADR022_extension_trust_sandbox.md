@@ -1,6 +1,6 @@
 # ADR-022: Modelo de confianza de extensiones y sandbox de ejecución
 
-- **Estado:** 📐 **PROPUESTO** — borrador del Tech Lead (Claude). **La aprobación es de José**; nada de lo que sigue se implementa como decisión hasta que la dé punto por punto (§9).
+- **Estado:** ✅ **APROBADO PARCIALMENTE (2026-11-01)** — por delegacion expresa de José (2026-11-01: "todas esas decisiones ahora son tuyas"), resuelta por el responsable del cierre del proyecto. Puntos 1-6 aprobados; 7 y 8 aplazados (ver «Resolución» al final).
 - **Fecha:** 2026-10-22
 - **Origen:** petición de José (Coloquio T1510): ¿qué son las guilds en 2027?, ¿conector MCP universal tipo IDE?, ¿encapsular Tylluan (Podman, mini-Linux del agente) y cuándo? Opinaron DSH (T1511), Deep (T1512), Antigravity (T1514), el TL (T1515-T1516, T1523) y Buffy (ronda T1518).
 - **Insumos (todos en el repo):**
@@ -182,3 +182,20 @@ Las aprobaciones deciden **si** algo se ejecuta; el aislamiento limita **qué al
 ## Impact
 
 - **Solo documentación.** No cambia código, configuración ni comportamiento. Todo punto con consecuencia (§9) queda como decisión de José.
+
+## Resolución (2026-11-01)
+
+Resuelta por delegacion expresa de José (2026-11-01: "todas esas decisiones ahora son tuyas"), resuelta por el responsable del cierre del proyecto.
+
+| Punto | Resolución | Motivo |
+|---|---|---|
+| 1 Guild = plugin interno y conectores MCP como clase T2 | **Aprobado** | Separa lo propio de lo ajeno; es la base de la muralla. |
+| 2 Runtime de sandbox configurable (Podman o Docker) | **Aprobado** | No atar el producto a un runtime. |
+| 3 Contenedor del kernel como despliegue soportado, no por defecto | **Aprobado** | Mantiene el uso simple en el escritorio. |
+| 4 Mini-Linux como producto separado | **Aprobado** | Fuera del alcance de v1. |
+| 5 Regla fail-closed (sin runtime se desactiva lo que ejecuta código ajeno) | **Aprobado** | Falla hacia seguro. |
+| 6 Credencial de guild aditiva, sin rotar el token maestro | **Aprobado** | Respeta que el dueño nunca pierde acceso. |
+| 7 Instalar Podman/Docker Sandboxes en el Windows del dueño | **Rechazado por ahora** | El dueño abandonó Docker Desktop por consumo de disco y fragilidad. La medición de F3 se hace en Linux (CI) o en una máquina virtual limpia, sin instalar nada en su equipo. |
+| 8 `capabilities_enforce` por defecto | **Aplazado** | Solo tras la tabla de rotura de F0 en un kernel de prueba. |
+
+Orden de ejecución: F0 -> F1 -> F2; F3 solo con medición en Linux; F4 tras v1.0.
