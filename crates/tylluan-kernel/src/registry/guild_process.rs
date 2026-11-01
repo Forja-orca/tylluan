@@ -9,6 +9,7 @@
 //! - **Linux/macOS/RPi**: Tries `python3` first, then `python`
 
 use crate::registry::proxy::{McpProxy, HttpMcpProxy, SseMcpProxy, ProxyKind, error_result};
+use crate::registry::tool_integrity::ToolIntegrity;
 use crate::config::{TimeoutsConfig, GuildTimeoutsConfig};
 use anyhow::{Result, bail};
 use rmcp::model::{CallToolRequestParam, CallToolResult, Tool};
@@ -227,6 +228,8 @@ pub struct GuildProcess {
     proxy: Option<Arc<ProxyKind>>,
     /// Tools discovered from this guild via list_tools
     pub tools: Vec<Tool>,
+    /// D-89: approved/quarantined tool fingerprints for external MCP servers.
+    pub tool_integrity: ToolIntegrity,
     /// Last time this guild was accessed (for lifecycle management)
     pub last_access: Instant,
     /// Whether this guild is an always-on core guild
@@ -512,6 +515,7 @@ impl GuildProcess {
             launcher,
             proxy: None,
             tools: Vec::new(),
+            tool_integrity: ToolIntegrity::default(),
             last_access: Instant::now(),
             always_on,
             tool_timeout: tool_timeout_ms.map(std::time::Duration::from_millis),
@@ -540,6 +544,7 @@ impl GuildProcess {
             launcher,
             proxy: None,
             tools: Vec::new(),
+            tool_integrity: ToolIntegrity::default(),
             last_access: Instant::now(),
             always_on,
             tool_timeout: tool_timeout_ms.map(std::time::Duration::from_millis),
@@ -581,6 +586,30 @@ impl GuildProcess {
         self.last_access = Instant::now();
     }
 
+    /// D-89: external MCP tools are exposed only if their fingerprint matches
+    /// the approved baseline; Python guilds keep their existing behavior.
+    fn set_discovered_tools(&mut self, tools: Vec<Tool>) {
+        let external = matches!(
+            self.launcher,
+            GuildLauncher::External { .. } | GuildLauncher::Http { .. } | GuildLauncher::Sse { .. }
+        );
+        if external {
+            self.tools = self.tool_integrity.evaluate(&tools).active;
+        } else {
+            self.tools = tools;
+        }
+    }
+
+    /// D-89: re-read tools after an operator approves a quarantined fingerprint.
+    pub async fn refresh_tools(&mut self) -> Result<()> {
+        let Some(proxy) = self.proxy.clone() else {
+            return Ok(());
+        };
+        let tools = proxy.list_tools().await?;
+        self.set_discovered_tools(tools);
+        Ok(())
+    }
+
     /// Spawn the guild. For Http guilds, connects via HTTP; for others, launches subprocess.
     pub async fn spawn(&mut self, guilds_dir: &PathBuf, timeouts: &TimeoutsConfig) -> Result<()> {
         if self.is_running() {
@@ -599,7 +628,7 @@ impl GuildProcess {
             let t = timeout_ms.unwrap_or(30_000);
             let name = self.name.clone();
             let (proxy, tools) = HttpMcpProxy::connect(&name, &url, &headers, t).await?;
-            self.tools = tools;
+            self.set_discovered_tools(tools);
             self.proxy = Some(Arc::new(ProxyKind::Http(proxy)));
             self.last_access = Instant::now();
             return Ok(());
@@ -616,7 +645,7 @@ impl GuildProcess {
             let t = timeout_ms.unwrap_or(30_000);
             let name = self.name.clone();
             let (proxy, tools) = SseMcpProxy::connect(&name, &sse_url, &post_url, &headers, t).await?;
-            self.tools = tools;
+            self.set_discovered_tools(tools);
             self.proxy = Some(Arc::new(ProxyKind::Sse(proxy)));
             self.last_access = Instant::now();
             return Ok(());
@@ -764,7 +793,8 @@ GuildLauncher::Python { module_path } => {
         ).await?;
 
         // Discover tools from the guild
-        self.tools = proxy.list_tools().await?;
+        let discovered = proxy.list_tools().await?;
+        self.set_discovered_tools(discovered);
         info!(
             "📦 Guild '{}' ready: {} tools registered",
             self.name, self.tools.len()
@@ -1581,6 +1611,19 @@ impl GuildRegistry {
     }
 
     /// Rebuild the tool→guild routing table from all running guilds.
+    /// D-89: re-read a guild's `tools/list` and rebuild the routing index.
+    ///
+    /// An approval releases a tool from quarantine inside `GuildProcess`, but
+    /// routing goes through `tool_to_guild`: without this rebuild the tool is
+    /// still "unknown" for `tylluan_do` until the next spawn.
+    pub async fn refresh_guild_tools(&mut self, name: &str) -> Result<()> {
+        if let Some(guild) = self.guilds.get_mut(name) {
+            guild.refresh_tools().await?;
+        }
+        self.rebuild_tool_index();
+        Ok(())
+    }
+
     pub fn rebuild_tool_index(&mut self) {
         self.tool_to_guild.clear();
         for (guild_name, guild) in &self.guilds {
@@ -2281,6 +2324,35 @@ mod tests {
         registry.register("bash", "guilds.core.bash", true, None);
         registry.rebuild_tool_index();
         assert!(registry.tool_to_guild.is_empty());
+    }
+
+    /// D-89: an approval releases a tool inside `GuildProcess`, but `tylluan_do`
+    /// routes through `tool_to_guild`. Re-reading tools must also rebuild the
+    /// index, or the approved tool stays unreachable until the next spawn.
+    #[tokio::test]
+    async fn d89_refresh_guild_tools_reindexes_routing() {
+        let mut registry = GuildRegistry::new(PathBuf::from("."), 300, TimeoutsConfig::default(), 3);
+        registry.register("ext", "guilds.ext", false, None);
+
+        let tool = Tool::new(
+            "ext_echo",
+            "echoes a payload",
+            std::sync::Arc::new(
+                serde_json::json!({"type": "object"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        );
+        registry.guilds.get_mut("ext").unwrap().tools = vec![tool];
+        assert!(
+            registry.find_guild_for_tool("ext_echo").is_none(),
+            "index must still be stale before the refresh"
+        );
+
+        registry.refresh_guild_tools("ext").await.unwrap();
+
+        assert_eq!(registry.find_guild_for_tool("ext_echo"), Some("ext"));
     }
 
     #[tokio::test]

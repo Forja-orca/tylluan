@@ -6,6 +6,7 @@
 //! - **Lifecycle**: Auto-unload guilds after inactivity timeout
 
 pub mod capability_registry;
+pub mod tool_integrity;
 pub mod tools;
 pub mod guild_process;
 pub mod outputs;

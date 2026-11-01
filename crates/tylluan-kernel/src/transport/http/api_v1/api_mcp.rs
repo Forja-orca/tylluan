@@ -542,6 +542,58 @@ pub async fn update_mcp_server_handler(
     (StatusCode::OK, Json(serde_json::json!({"status": "updated", "name": name, "active": new_active}))).into_response()
 }
 
+#[derive(Deserialize)]
+pub struct ApproveMcpToolRequest {
+    approval_nonce: Option<String>,
+    approval_code: Option<String>,
+}
+
+/// POST /api/v1/mcp/external/{name}/tools/{tool}/approve
+/// D-89: release a quarantined tool after the D-86 one-time approval.
+pub async fn approve_mcp_tool_handler(
+    State(state): State<Arc<HttpState>>,
+    Path((name, tool)): Path<(String, String)>,
+    Json(req): Json<ApproveMcpToolRequest>,
+) -> impl IntoResponse {
+    let fingerprint = {
+        let reg_arc = state.registry.arc();
+        let reg = reg_arc.read().await;
+        let Some(guild) = reg.guilds.get(&name) else {
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "external MCP not found"}))).into_response();
+        };
+        let Some(fp) = guild.tool_integrity.quarantine_fingerprint(&tool) else {
+            return (StatusCode::CONFLICT, Json(serde_json::json!({"error": "tool is not quarantined"}))).into_response();
+        };
+        fp.to_string()
+    };
+
+    let signature = format!("tool:{name}:{tool}:{fingerprint}");
+    if let Err(response) = authorize_mcp_change(
+        &signature,
+        req.approval_nonce.as_deref(),
+        req.approval_code.as_deref(),
+    ) {
+        return *response;
+    }
+
+    let reg_arc = state.registry.arc();
+    let mut reg = reg_arc.write().await;
+    {
+        let Some(guild) = reg.guilds.get_mut(&name) else {
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "external MCP not found"}))).into_response();
+        };
+        if !guild.tool_integrity.approve(&tool, &fingerprint) {
+            return (StatusCode::CONFLICT, Json(serde_json::json!({"error": "approval_fingerprint_mismatch"}))).into_response();
+        }
+    }
+    // Re-read tools/list and rebuild tool_to_guild: the approved tool has to
+    // become routable, otherwise `tylluan_do` still answers "unknown tool".
+    if let Err(e) = reg.refresh_guild_tools(&name).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+    }
+    (StatusCode::OK, Json(serde_json::json!({"status": "approved", "guild": name, "tool": tool}))).into_response()
+}
+
 /// POST /api/v1/mcp/external/discover
 /// Scans known MCP config files on this system and registers new servers as inactive.
 /// Sources: Claude Desktop (claude_desktop_config.json), Claude Code (~/.claude/settings.json).
