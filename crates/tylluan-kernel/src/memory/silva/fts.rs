@@ -586,4 +586,53 @@ mod desync_paths {
             "cada UPDATE json_set de metadata debe llamar a fts_refresh_row en la misma transaccion (T-DSH-164)"
         );
     }
+
+    /// T-DSH-170: reproduce el desajuste real (huerfanos en `nodes_fts_docsize`
+    /// cuando una ruta borra de `nodes` sin desindexar) y demuestra cual es la
+    /// reparacion segura.
+    ///
+    /// Hallazgo sobre la COPIA real de silva.db (12.062 nodos, 25.878 docsize,
+    /// 13.822 huerfanos, 6 sin indexar): `DELETE FROM nodes_fts WHERE rowid = X`
+    /// sobre una tabla de contenido externo cuyo nodo ya no existe es un NO-OP
+    /// silencioso (docsize no cambia). Solo `rebuild` deja el indice coherente.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn orphans_from_raw_node_delete_are_only_repaired_by_rebuild() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        for id in ["a", "b", "c"] {
+            db.upsert_node(id, "lesson", &format!("nodo {id}"), "{}").await.unwrap();
+        }
+        assert_synced(&db, "estado inicial").await;
+
+        // Reproduce la ruta infractora: borra de `nodes` sin tocar el indice.
+        let orphan_rowid: i64 = {
+            let conn = db.conn.lock().await;
+            let rowid: i64 = conn
+                .query_row("SELECT rowid FROM nodes WHERE id = 'b'", [], |r| r.get(0))
+                .unwrap();
+            conn.execute("DELETE FROM nodes WHERE id = 'b'", []).unwrap();
+            rowid
+        };
+        let desync = db.fts_desync().await.unwrap();
+        assert_eq!(desync.orphan, 1, "el borrado crudo deja un huerfano en docsize");
+
+        // Delete-by-docid NO repara: es un no-op silencioso porque FTS5 no
+        // encuentra el contenido del nodo borrado.
+        {
+            let conn = db.conn.lock().await;
+            conn.execute("DELETE FROM nodes_fts WHERE rowid = ?1", rusqlite::params![orphan_rowid])
+                .unwrap();
+        }
+        let after_delete = db.fts_desync().await.unwrap();
+        assert_eq!(
+            after_delete.orphan, 1,
+            "DELETE FROM nodes_fts WHERE rowid no elimina el huerfano (no-op silencioso)"
+        );
+
+        // Reparacion segura: rebuild desde `nodes`.
+        db.rebuild_fts_index().await.unwrap();
+        let fixed = db.fts_desync().await.unwrap();
+        assert_eq!(fixed.orphan, 0, "rebuild elimina los huerfanos");
+        assert_eq!(fixed.missing, 0, "rebuild indexa todos los nodos vivos");
+        assert_synced(&db, "tras rebuild").await;
+    }
 }
