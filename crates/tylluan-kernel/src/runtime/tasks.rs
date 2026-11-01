@@ -29,6 +29,24 @@ struct TaskEntry {
     last_run_unix: Option<u64>,
     runs: u64,
     errors: u64,
+    /// T-DSH-167 (F5 Pulso): intervalo nominal del bucle, si es periodico.
+    /// `None` = tarea de una sola vez / sin cadencia conocida (nunca stale).
+    interval_secs: Option<u64>,
+    /// T-DSH-167: ultimo latido correcto (unix). Si es `None`, se usa el
+    /// instante de registro como gracia inicial.
+    last_ok_unix: Option<u64>,
+    /// T-DSH-167: instante de registro, para la gracia inicial.
+    registered_unix: u64,
+}
+
+/// T-DSH-167 (F5 Pulso): bucle que lleva mas de 2x su intervalo sin latido.
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct StaleLoop {
+    pub name: &'static str,
+    pub subruntime: &'static str,
+    pub interval_secs: u64,
+    pub last_ok_unix: Option<u64>,
+    pub stale_for_secs: u64,
 }
 
 /// Registro de tareas de fondo del kernel.
@@ -56,12 +74,16 @@ impl TaskRegistry {
             Ok(g) => g,
             Err(p) => p.into_inner(),
         };
+        let now = now_unix();
         guard.entry(name).or_insert(TaskEntry {
             subruntime,
             state: "idle",
             last_run_unix: None,
             runs: 0,
             errors: 0,
+            interval_secs: None,
+            last_ok_unix: None,
+            registered_unix: now,
         });
     }
 
@@ -100,6 +122,68 @@ impl TaskRegistry {
             t.errors += 1;
             t.state = "idle";
         }
+    }
+
+    /// T-DSH-167: registra (o actualiza) el intervalo nominal de un bucle.
+    /// Llamar justo antes del `loop` de la tarea; el latido va dentro.
+    pub fn set_interval(&self, name: &'static str, interval_secs: u64) {
+        let mut guard = match self.tasks.write() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if let Some(t) = guard.get_mut(name) {
+            t.interval_secs = Some(interval_secs.max(1));
+            t.last_ok_unix.get_or_insert(t.registered_unix);
+        }
+    }
+
+    /// T-DSH-167: latido de una vuelta correcta (fija `last_ok_unix`).
+    pub fn beat(&self, name: &'static str) {
+        self.beat_at(name, now_unix());
+    }
+
+    /// T-DSH-167: latido con instante explicito (tests).
+    pub fn beat_at(&self, name: &'static str, unix: u64) {
+        let mut guard = match self.tasks.write() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if let Some(t) = guard.get_mut(name) {
+            t.last_ok_unix = Some(unix);
+            t.state = "idle";
+        }
+    }
+
+    /// T-DSH-167: bucles periodicos sin latido en mas de 2x su intervalo.
+    /// Ordenado por nombre; no incluye tareas sin intervalo (one-shot).
+    pub fn stale_loops(&self) -> Vec<StaleLoop> {
+        self.stale_loops_at(now_unix())
+    }
+
+    /// Igual que [`Self::stale_loops`] con `now` explicito (tests).
+    pub fn stale_loops_at(&self, now: u64) -> Vec<StaleLoop> {
+        let guard = match self.tasks.read() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        let mut out: Vec<StaleLoop> = guard
+            .iter()
+            .filter_map(|(name, t)| {
+                let interval = t.interval_secs?;
+                let last_ok = t.last_ok_unix.unwrap_or(t.registered_unix);
+                let threshold = interval.saturating_mul(2);
+                let stale_for = now.saturating_sub(last_ok);
+                (stale_for >= threshold).then_some(StaleLoop {
+                    name,
+                    subruntime: t.subruntime,
+                    interval_secs: interval,
+                    last_ok_unix: t.last_ok_unix,
+                    stale_for_secs: stale_for,
+                })
+            })
+            .collect();
+        out.sort_by_key(|s| s.name);
+        out
     }
 
     /// Instantánea ordenada por nombre para la vista REST.
@@ -171,6 +255,32 @@ mod tests {
         let s = reg.snapshot();
         assert_eq!(s[0].errors, 1);
         assert_eq!(s[0].state, "idle");
+    }
+
+    #[test]
+    fn stale_loops_reports_a_periodic_loop_that_stopped_beating() {
+        // T-DSH-167: sin latido en 2x el intervalo, el bucle aparece como
+        // stale; con latido reciente, no. Las tareas sin intervalo nunca
+        // aparecen (son one-shot, no bucles).
+        let reg = TaskRegistry::new();
+        reg.register("flywheel", "Memoria");
+        reg.register("one-shot", "Memoria");
+        reg.set_interval("flywheel", 60);
+        reg.beat_at("flywheel", 1_000);
+
+        assert!(reg.stale_loops_at(1_000).is_empty(), "recien latido: no stale");
+        assert!(reg.stale_loops_at(1_060).is_empty(), "1x intervalo: aun no stale");
+        let stale = reg.stale_loops_at(1_121);
+        assert_eq!(stale.len(), 1, "2x intervalo sin latido: stale");
+        assert_eq!(stale[0].name, "flywheel");
+        assert_eq!(stale[0].interval_secs, 60);
+        assert_eq!(stale[0].last_ok_unix, Some(1_000));
+        assert!(stale[0].stale_for_secs >= 120);
+
+        assert!(reg.stale_loops_at(99_999).iter().all(|s| s.name != "one-shot"));
+
+        reg.beat_at("flywheel", 1_121);
+        assert!(reg.stale_loops_at(1_121).is_empty(), "latido recupera el bucle");
     }
 
     #[test]

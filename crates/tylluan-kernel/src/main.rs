@@ -463,14 +463,17 @@ use tylluan_kernel::router::embeddings::onnx_runtime_ort_compatible;
 /// T-DSH-132: registra un `tokio::spawn` de arranque en la lista de tareas de
 /// fondo para el apagado ordenado (ADR-025 R4). No cambia la logica de la tarea.
 macro_rules! bg_spawn {
-    ($tasks:expr, $name:expr, $sub:expr, $policy:expr, $fut:expr) => {
+    ($tasks:expr, $name:expr, $sub:expr, $policy:expr, $fut:expr) => {{
+        // T-DSH-167 (F5 Pulso): toda tarea de fondo queda registrada; los
+        // bucles periodicos fijan su intervalo y laten dentro del loop.
+        tylluan_kernel::runtime::tasks::global().register($name, $sub);
         $tasks.push(tylluan_kernel::runtime::shutdown::BackgroundTask::new(
             $name,
             $sub,
             $policy,
             tokio::spawn($fut),
         ))
-    };
+    }};
 }
 
 #[tokio::main]
@@ -1270,6 +1273,8 @@ async fn main() -> anyhow::Result<()> {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
         loop {
             interval.tick().await;
+        tylluan_kernel::runtime::tasks::global().set_interval("metrics-interval", 60);
+        tylluan_kernel::runtime::tasks::global().beat("metrics-interval");
             if let Err(e) = metrics_reg.read().await.persist_metrics().await {
                 tracing::warn!("⚠️ Failed to persist guild metrics: {}", e);
             }
@@ -1289,6 +1294,7 @@ async fn main() -> anyhow::Result<()> {
     let doc_token_inner = doc_token.clone();
     bg_spawn!(background_tasks, "doc-token-guard", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Wait, async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
+        tylluan_kernel::runtime::tasks::global().set_interval("doc-token-guard", 60);
         loop {
             tokio::select! {
                 _ = doc_token_inner.cancelled() => {
@@ -1297,6 +1303,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 _ = interval.tick() => {
                     let _ = doctor_bg.diagnose().await;
+                    tylluan_kernel::runtime::tasks::global().beat("doc-token-guard");
                 }
             }
         }
@@ -1329,9 +1336,11 @@ async fn main() -> anyhow::Result<()> {
         let silva_ivf = silva.clone();
         bg_spawn!(background_tasks, "ivf-interval", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             let mut interval = tokio::time::interval(Duration::from_secs(6 * 3600));
+        tylluan_kernel::runtime::tasks::global().set_interval("ivf-interval", 21600);
             interval.tick().await;
             loop {
                 interval.tick().await;
+                tylluan_kernel::runtime::tasks::global().beat("ivf-interval");
                 match silva_ivf.consolidate_ivf_index().await {
                     Ok(r) if !r.skipped => info!("🔬 IVF periodic rebuild: {} centroids in {}ms", r.n_centroids, r.elapsed_ms),
                     Ok(_) => {},
@@ -1629,6 +1638,8 @@ async fn main() -> anyhow::Result<()> {
             bg_spawn!(background_tasks, "coloquio-loop", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
                 loop {
                     tokio::time::sleep(Duration::from_secs(300)).await;
+        tylluan_kernel::runtime::tasks::global().set_interval("coloquio-loop", 300);
+        tylluan_kernel::runtime::tasks::global().beat("coloquio-loop");
                     let cfg = config.read().await;
                     if !cfg.sharing.enabled {
                         let _ = silva.reset_all_shareable().await;
@@ -1650,6 +1661,8 @@ async fn main() -> anyhow::Result<()> {
         bg_spawn!(background_tasks, "blackboard-loop", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        tylluan_kernel::runtime::tasks::global().set_interval("blackboard-loop", 2);
+        tylluan_kernel::runtime::tasks::global().beat("blackboard-loop");
                 if let Ok(Some(job)) = jobs_clone.claim_next("episodic_index") {
                     info!("Processing job: {} ({})", job.id, job.task_type);
                     if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&job.payload) {
@@ -1849,9 +1862,11 @@ async fn main() -> anyhow::Result<()> {
     let hormone_server = server_arc.clone();
     bg_spawn!(background_tasks, "hormones", "Coordinacion", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
+        tylluan_kernel::runtime::tasks::global().set_interval("hormones", 5);
         static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         loop {
             interval.tick().await;
+            tylluan_kernel::runtime::tasks::global().beat("hormones");
             let s = hormone_server.read().await;
             if let Ok(mut h) = s.hormones.lock() {
                 h.tick();
@@ -1889,6 +1904,8 @@ async fn main() -> anyhow::Result<()> {
         let mut decay_interval = tokio::time::interval(Duration::from_secs(300));
         loop {
             decay_interval.tick().await;
+        tylluan_kernel::runtime::tasks::global().set_interval("memory-decay", 300);
+        tylluan_kernel::runtime::tasks::global().beat("memory-decay");
             let silva_inner = silva_decay.clone();
             let guard = GuardedTask::new("Memory Decay", Duration::from_secs(60));
             let _ = guard.run(async move {
@@ -1905,6 +1922,8 @@ async fn main() -> anyhow::Result<()> {
         let mut fly_interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             fly_interval.tick().await;
+        tylluan_kernel::runtime::tasks::global().set_interval("flywheel", 60);
+        tylluan_kernel::runtime::tasks::global().beat("flywheel");
             // T-DSH-166: marca de agua persistente en silva_kv (por canal),
             // consulta `turn >` y relectura que no resucita el peso decaido.
             match tylluan_kernel::memory::coloquio_flywheel::ingest_all(&coloquio_fly, &silva_fly).await {
@@ -1941,6 +1960,8 @@ async fn main() -> anyhow::Result<()> {
         ); // 600s por defecto (toaster-friendly)
         loop {
             reindex_interval.tick().await;
+        tylluan_kernel::runtime::tasks::global().set_interval("reindexer", reindex_tick_secs);
+        tylluan_kernel::runtime::tasks::global().beat("reindexer");
             // Latency budget: skip this tick if the background budget is
             // exhausted (another heavy job holding permits > wait budget).
             let Some(_bg) = budget_reindex.acquire().await else { continue };
@@ -2033,6 +2054,8 @@ async fn main() -> anyhow::Result<()> {
         let mut hnsw_interval = tokio::time::interval(Duration::from_secs(600));
         loop {
             hnsw_interval.tick().await;
+        tylluan_kernel::runtime::tasks::global().set_interval("hnsw-rebuild", 600);
+        tylluan_kernel::runtime::tasks::global().beat("hnsw-rebuild");
             let Some(_bg) = budget_hnsw.acquire().await else { continue };
             let silva_inner = silva_hnsw.clone();
             let guard = GuardedTask::new("HNSW Rebuild", Duration::from_secs(120));
@@ -2065,6 +2088,8 @@ async fn main() -> anyhow::Result<()> {
         );
         loop {
             migrate_interval.tick().await;
+        tylluan_kernel::runtime::tasks::global().set_interval("embedding-migrate", 600);
+        tylluan_kernel::runtime::tasks::global().beat("embedding-migrate");
             if tylluan_kernel::memory::hybrid_migration::migration_complete(&silva_migrate).await {
                 return;
             }
@@ -2117,9 +2142,11 @@ async fn main() -> anyhow::Result<()> {
     bg_spawn!(background_tasks, "consensus", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut consensus_interval = tokio::time::interval(Duration::from_secs(60));
         let mut secs_to_consensus: u64 = 3600;
+        tylluan_kernel::runtime::tasks::global().set_interval("consensus", 60);
         let silva_hub_consensus = silva_consensus;
         loop {
             consensus_interval.tick().await;
+            tylluan_kernel::runtime::tasks::global().beat("consensus");
             
             if secs_to_consensus > 60 {
                 secs_to_consensus -= 60;
@@ -2174,6 +2201,8 @@ async fn main() -> anyhow::Result<()> {
         let mut maint_interval = tokio::time::interval(Duration::from_secs(300));
         loop {
             maint_interval.tick().await;
+        tylluan_kernel::runtime::tasks::global().set_interval("maintenance", 300);
+        tylluan_kernel::runtime::tasks::global().beat("maintenance");
             // Latency budget: skip this tick if the background budget is
             // exhausted (same skip-if-busy pattern as reindexer/HNSW/consensus
             // above). WAL checkpoint can block on busy connections; it must

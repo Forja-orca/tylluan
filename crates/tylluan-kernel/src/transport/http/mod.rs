@@ -1684,6 +1684,9 @@ async fn health_handler(
                 "judge": crate::security::judge_telemetry::judge_telemetry().to_json(),
                 // WS5: canonical identity of this running system — every
                 // benchmark/audit result can cite this instead of prose.
+                // T-DSH-167 (F5 Pulso): bucles periodicos registrados que
+                // llevan mas de 2x su intervalo sin latido (vacio = todos ok).
+                "stale_loops": crate::runtime::tasks::global().stale_loops(),
                 "system_snapshot": crate::router::system_snapshot::global_json()
             }
         }))).into_response();
