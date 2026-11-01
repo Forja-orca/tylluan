@@ -47,7 +47,37 @@ pub async fn guild_reset_backoff_handler(State(state): State<Arc<HttpState>>, Pa
     state.registry.reset_backoff(&name).await.map(|_| StatusCode::OK).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+/// C3: only `bash` and `filesystem` require the operator class on the direct
+/// HTTP guild endpoint. Other guilds keep their agent-class behavior.
+fn is_operator_only_guild(guild: &str) -> bool {
+    matches!(guild, "bash" | "filesystem")
+}
+
+fn guild_call_is_operator_denied(guild: &str, auth: Option<crate::transport::http::auth::AclAuthKind>) -> bool {
+    is_operator_only_guild(guild) && !crate::transport::http::auth::operator_gate_allows(auth)
+}
+
 pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((guild, tool)): Path<(String, String)>, Json(args): Json<serde_json::Value>) -> impl IntoResponse {
+    let auth_kind = crate::transport::http::auth::current_auth_kind();
+    if guild_call_is_operator_denied(&guild, auth_kind) {
+        let agent_id = args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+        crate::transport::server::handler_do::audit_or_warn(
+            "c3_operator_required",
+            &guild,
+            &tool,
+            agent_id,
+            false,
+            "direct HTTP guild call denied: bash/filesystem require operator class",
+            0,
+            false,
+        );
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+            "error": "operator_required",
+            "guild": guild,
+            "reason": "C3: direct HTTP calls to bash/filesystem require the operator class; use tylluan_do/MCP for agents."
+        }))).into_response();
+    }
+
     // ACL check: verify the caller's role has access to this guild
     if let Ok(cfg_lock) = crate::config::TylluanConfig::load_cached() {
         {   let cfg = cfg_lock.read().await;
@@ -216,4 +246,62 @@ pub async fn capability_registry_guild_handler(
         "capabilities": capabilities,
         "count": capabilities.len(),
     }))
+}
+
+#[cfg(test)]
+mod c3_tests {
+    use super::*;
+    use crate::transport::http::auth::AclAuthKind;
+
+    #[test]
+    fn c3_agent_and_untrusted_classes_are_denied_for_bash_and_filesystem() {
+        for guild in ["bash", "filesystem"] {
+            for auth in [
+                Some(AclAuthKind::OAuthJwt),
+                Some(AclAuthKind::PublicBypass),
+                Some(AclAuthKind::GuildToken),
+                Some(AclAuthKind::MasterTokenQuery),
+                None,
+            ] {
+                assert!(
+                    guild_call_is_operator_denied(guild, auth),
+                    "{guild} must require operator for {auth:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn c3_operator_master_and_dev_bypass_are_allowed() {
+        for guild in ["bash", "filesystem"] {
+            for auth in [AclAuthKind::MasterToken, AclAuthKind::DevBypass] {
+                assert!(
+                    !guild_call_is_operator_denied(guild, Some(auth)),
+                    "{guild} must allow operator {auth:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn c3_other_guilds_keep_agent_behavior() {
+        for guild in ["coloquio", "llama_backend", "vision", "code", "docker", "git"] {
+            for auth in [
+                Some(AclAuthKind::OAuthJwt),
+                Some(AclAuthKind::PublicBypass),
+                Some(AclAuthKind::GuildToken),
+                None,
+            ] {
+                assert!(
+                    !guild_call_is_operator_denied(guild, auth),
+                    "{guild} must not be blocked by C3"
+                );
+            }
+        }
+        assert!(is_operator_only_guild("bash"));
+        assert!(is_operator_only_guild("filesystem"));
+        assert!(!is_operator_only_guild("code"));
+        assert!(!is_operator_only_guild("docker"));
+        assert!(!is_operator_only_guild("git"));
+    }
 }
