@@ -42,6 +42,7 @@ pub(crate) const DATA_DBS: &[&str] = &[
     "audit.db",
     "contracts.db",
     "curriculum.db",
+    "episodes.db",
     "jobs.db",
     "journal.db",
     "mailbox.db",

@@ -99,7 +99,46 @@ impl super::TylluanServer {
 
         let is_kernel_tool = Self::kernel_tools().iter().any(|t| t.name == tool_name);
         if is_kernel_tool {
+            // T-DSH-165 (F1): registro fiel write-ahead de las 4 herramientas
+            // soberanas. La peticion se escribe ANTES de ejecutar y la respuesta
+            // antes de devolverla; el contenido pasa por logging::scrub dentro
+            // del propio EpisodeLog. Si el registro falla, no se rompe la tool.
+            let traced = matches!(
+                tool_name.as_str(),
+                "tylluan_do" | "tylluan_remember" | "tylluan_recall" | "tylluan_think"
+            );
+            let traced_agent = request
+                .arguments
+                .as_ref()
+                .and_then(|a| a.get("agent_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("anonymous")
+                .to_string();
+            if traced && let Some(ep) = self.episodes.as_ref() {
+                let payload = request
+                    .arguments
+                    .as_ref()
+                    .map(|a| serde_json::Value::Object(a.clone()).to_string())
+                    .unwrap_or_default();
+                if let Err(e) = ep.append(_session_id, &traced_agent, &tool_name, "request", &payload) {
+                    warn!("episodes: no se pudo registrar la peticion de {tool_name}: {e}");
+                }
+            }
             let result = self.handle_kernel_tool(&tool_name, request.arguments).await?;
+            if traced && let Some(ep) = self.episodes.as_ref() {
+                let mut parts: Vec<String> = Vec::new();
+                for content in &result.content {
+                    if let Some(text) = content.as_text() {
+                        parts.push(text.text.clone());
+                    } else {
+                        parts.push(format!("{content:?}"));
+                    }
+                }
+                let payload = parts.join("\n");
+                if let Err(e) = ep.append(_session_id, &traced_agent, &tool_name, "response", &payload) {
+                    warn!("episodes: no se pudo registrar la respuesta de {tool_name}: {e}");
+                }
+            }
             if let Ok(mut h) = self.hormones.lock() {
                 h.tick();
                 if result.is_error.unwrap_or(false) {

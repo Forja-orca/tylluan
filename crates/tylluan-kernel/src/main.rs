@@ -1388,6 +1388,17 @@ async fn main() -> anyhow::Result<()> {
     server.expose_guild_tools = config.nexus.expose_guild_tools;
     server.set_decision_config(&config);
 
+    // T-DSH-165 (F1): registro fiel append-only (episodes.db en el DATA_DIR).
+    let episodes_path = data_dir.join(tylluan_kernel::memory::episodes::EPISODES_DB_NAME);
+    match tylluan_kernel::memory::episodes::EpisodeLog::open(&episodes_path) {
+        Ok(log) => server.set_episode_log(Arc::new(log)),
+        Err(e) => tracing::warn!(
+            "no se pudo abrir {} (registro de episodios desactivado): {}",
+            episodes_path.display(),
+            e
+        ),
+    }
+
     // Wire crash-safe journal from HttpState into TylluanServer
     let journal_path = "./data/journal.db";
     if std::path::Path::new(journal_path).exists() {

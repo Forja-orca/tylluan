@@ -17,6 +17,7 @@ const DATA_DBS: &[&str] = &[
     "audit.db",
     "contracts.db",
     "curriculum.db",
+    "episodes.db",
     "jobs.db",
     "journal.db",
     "mailbox.db",
@@ -93,11 +94,11 @@ fn names_of(manifest: &serde_json::Value) -> Vec<String> {
         .collect()
 }
 
-/// T-DSH-156: el backup por defecto debe cubrir las 12 bases del DATA_DIR.
+/// T-DSH-156/T-DSH-165: el backup por defecto debe cubrir TODAS las bases del DATA_DIR (incluida episodes.db).
 /// Antes del arreglo faltaban 7: agent_profiles, contracts, curriculum, jobs,
 /// journal, pending_dispatches y task_context.
 #[test]
-fn backup_covers_the_twelve_kernel_databases() {
+fn backup_covers_all_kernel_databases() {
     let setup = Setup::new();
     let backup = setup.root.path().join("backup");
     let out = setup.run(&["backup", backup.to_str().unwrap()]);

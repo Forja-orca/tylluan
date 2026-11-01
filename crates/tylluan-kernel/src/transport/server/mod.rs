@@ -106,6 +106,9 @@ pub struct TylluanServer {
     pub coloquio: Option<Arc<ColoquioDb>>,
     pub node_router: Arc<AgentNodeRouter>,
     pub journal: Option<Arc<JournalDb>>,
+    /// T-DSH-165 (F1): registro fiel append-only de las 4 herramientas
+    /// soberanas (episodes.db en el DATA_DIR). `None` = sin registro.
+    pub episodes: Option<Arc<crate::memory::episodes::EpisodeLog>>,
     pub expose_guild_tools: bool,
     pub jobs: Option<Arc<crate::memory::jobs::JobQueue>>,
     pub mlp_scorer: Option<Arc<MlpScorer>>,
@@ -188,6 +191,7 @@ impl TylluanServer {
             coloquio: None,
             node_router,
             journal: None,
+            episodes: None,
             expose_guild_tools: false,
             jobs: None,
             mlp_scorer: None,
@@ -198,6 +202,11 @@ impl TylluanServer {
             decision_service,
             light_reranker: None,
         }
+    }
+
+    /// T-DSH-165: inyecta el registro de episodios (episodes.db del DATA_DIR).
+    pub fn set_episode_log(&mut self, log: Arc<crate::memory::episodes::EpisodeLog>) {
+        self.episodes = Some(log);
     }
 
     /// Rebuild the decision service from the loaded kernel config (`[decision]`).
