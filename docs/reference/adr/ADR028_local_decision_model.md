@@ -1,6 +1,6 @@
 # ADR-028: Modelo de decisión generalista local en CPU (F10)
 
-- **Estado:** ✅ **ACEPTADO PARCIALMENTE (José, 2026-11-01)** — solo el protocolo de medición (§4); no se integra ningún modelo hasta que pase. Tope de memoria: pendiente de fijar por José.
+- **Estado:** ✅ **ACEPTADO PARCIALMENTE (José, 2026-11-01)** — solo el protocolo de medición (§4); no se integra ningún modelo hasta que pase. No hay tope de memoria fijo: lo pone el usuario con su backend de inferencia (local o proveedor en la nube). Máquina de referencia de la medición: 12 GB de RAM de sistema.
 - **Frente:** F10 del roadmap. Respeta la decisión previa: ONNX sigue en el camino caliente de embeddings; llama.cpp es un sidecar efímero para generación; nada de nube por defecto.
 
 > **Decisión de José (2026-11-01): el proveedor de inferencia lo elige el usuario, en la nube o en local.** El modelo local en CPU de este ADR es la opción por defecto y soberana; un proveedor en la nube solo se activa por decisión expresa del usuario (opt-in por punto de inferencia), nunca en el camino crítico por defecto. El protocolo de medición (§4) aplica igual a cualquier proveedor que se quiera ofrecer como alternativa.
@@ -34,7 +34,7 @@ Descartados: Gemma 3 (licencia con términos propios), LFM2 (licencia con umbral
 4. Dos modos: texto libre y con gramática o esquema. Se miden por separado el JSON válido y el acierto.
 5. Por caso: acierto manual, JSON válido, latencia, tokens/s y pico de RAM.
 6. Barrido de hilos 1, 2 y 4 en el primario; 3 repeticiones, mediana.
-7. **Criterio de paso:** ≥ 90 % de JSON válido con gramática, acierto manual igual o superior al de la reserva, y pico de RAM dentro del presupuesto que fije el dueño.
+7. **Criterio de paso:** ≥ 90 % de JSON válido con gramática, acierto manual igual o superior al de la reserva, y pico de RAM **medido y publicado** en la máquina de referencia (12 GB de RAM de sistema, con el resto de Tylluan en marcha). No hay tope global: el límite de memoria de cada punto de inferencia lo configura el usuario con su backend (decisión de José, 2026-11-01); el modelo se rechaza solo si su pico medido excede el límite configurado.
 8. Si nada lo cumple: **NO-GO documentado** con el dato.
 
 ## 5. Riesgos
