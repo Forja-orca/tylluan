@@ -1,6 +1,6 @@
 # ADR-026: Intermediario de espacio de trabajo para varios agentes (F9)
 
-- **Estado:** 📐 **PROPUESTO** — borrador del responsable del cierre (2026-11-01). No se implementa nada ni se retira ningún worktree hasta que la prueba de aceptación (§6) pase.
+- **Estado:** ✅ **ACEPTADO PARCIALMENTE (José, 2026-11-01)** — solo las fases F9-0 y F9-1 (esquema, reclamos y escritor único de git por rutas). Los worktrees por agente NO se retiran hasta que pase la prueba de aceptación (§6).
 - **Frente:** F9 del roadmap («un espacio de trabajo para todo el equipo»).
 - **Decide el dueño:** si, pasada la prueba, se retiran los worktrees por agente.
 

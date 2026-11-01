@@ -1,6 +1,6 @@
 # ADR-027: Instalación de Tylluan por parte del propio agente (F8)
 
-- **Estado:** 📐 **PROPUESTO** — borrador del responsable del cierre (2026-11-01). No se publica ningún plugin ni marketplace hasta que se aprueben el diseño de confianza (§3) y la firma de releases.
+- **Estado:** ⏸️ **APLAZADO (José, 2026-11-01)** — se retoma cuando exista el instalador para personas (H4) y las releases firmadas. No se publica ningún plugin ni marketplace antes.
 - **Frente:** F8 del roadmap. Va **después** de F6 (instalador para personas): primero la abuela, luego el agente.
 
 ## 1. Contexto

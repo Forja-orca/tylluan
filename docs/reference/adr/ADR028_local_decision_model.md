@@ -1,7 +1,9 @@
 # ADR-028: Modelo de decisión generalista local en CPU (F10)
 
-- **Estado:** 📐 **PROPUESTO** — borrador del responsable del cierre (2026-11-01). No se integra ningún modelo hasta que pase el protocolo de medición (§4) y el dueño fije el presupuesto de memoria.
+- **Estado:** ✅ **ACEPTADO PARCIALMENTE (José, 2026-11-01)** — solo el protocolo de medición (§4); no se integra ningún modelo hasta que pase. Tope de memoria: pendiente de fijar por José.
 - **Frente:** F10 del roadmap. Respeta la decisión previa: ONNX sigue en el camino caliente de embeddings; llama.cpp es un sidecar efímero para generación; nada de nube por defecto.
+
+> **Decisión de José (2026-11-01): el proveedor de inferencia lo elige el usuario, en la nube o en local.** El modelo local en CPU de este ADR es la opción por defecto y soberana; un proveedor en la nube solo se activa por decisión expresa del usuario (opt-in por punto de inferencia), nunca en el camino crítico por defecto. El protocolo de medición (§4) aplica igual a cualquier proveedor que se quiera ofrecer como alternativa.
 
 ## 1. Contexto
 Tylluan necesita un modelo pequeño que tome decisiones locales (clasificar intención, elegir herramienta, valorar si un texto parece una inyección, resumir, extraer JSON) en CPU, con el mínimo consumo, en equipos modestos (objetivo de diseño: Raspberry Pi 4/5 o un portátil antiguo sin GPU).
