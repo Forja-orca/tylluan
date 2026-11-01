@@ -9,15 +9,15 @@ export function MetricCard({ icon: Icon, label, value, unit, sub, valueClass }: 
   valueClass?: string;
 }) {
   return (
-    <div className="p-2 rounded-sm border border-[#ACA899] dark:border-border bg-white dark:bg-card relative">
-      <div className="flex items-center justify-between text-[11px] font-bold text-[#01285F] dark:text-primary mb-1">
+    <div className="p-2.5 rounded-md border border-border bg-muted/40 relative">
+      <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground mb-1">
         <span className="truncate">{label}</span>
         {Icon && <Icon className="w-3.5 h-3.5 opacity-60 shrink-0" aria-hidden="true" />}
       </div>
-      <p className={`text-base font-bold font-mono leading-tight ${valueClass || 'text-[#000000] dark:text-foreground'}`}>
-        {value}{unit && <span className="text-[11px] text-[#555555] dark:text-muted-foreground ml-1 font-normal font-mono">{unit}</span>}
+      <p className={`text-base font-bold font-mono leading-tight ${valueClass || 'text-foreground'}`}>
+        {value}{unit && <span className="text-[11px] text-muted-foreground ml-1 font-normal font-mono">{unit}</span>}
       </p>
-      {sub && <p className="text-[10px] text-[#555555] dark:text-muted-foreground mt-1 font-mono truncate">{sub}</p>}
+      {sub && <p className="text-[10px] text-muted-foreground mt-1 font-mono truncate">{sub}</p>}
     </div>
   );
 }

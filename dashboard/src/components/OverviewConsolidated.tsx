@@ -43,43 +43,43 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
 
   return (
     <div className="space-y-3 font-sans">
-      {/* Substrate Telemetry Header - Windows 2000/XP Classic Header */}
-      <div className="min-w-0 p-3 bg-[#ECE9D8] dark:bg-card border border-[#ACA899] dark:border-border rounded-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+      {/* Substrate Telemetry Header */}
+      <div className="min-w-0 p-3.5 bg-card border border-border rounded-lg shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div className="min-w-0 flex items-center gap-3">
           <TylluanLogo size="md" animated={false} showText={false} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-[#9E4024] dark:text-primary">Sustrato Cognitivo Tylluan</span>
-              <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-muted text-[#000000] dark:text-foreground border border-[#7F9DB9] dark:border-border rounded-none">
+              <span className="text-xs font-bold text-primary">Sustrato Cognitivo Tylluan</span>
+              <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-muted text-foreground border border-border rounded">
                 {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.2'}
               </span>
-              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-white dark:bg-primary/10 text-[#008000] dark:text-emerald-400 border border-[#7F9DB9] dark:border-emerald-500/30 rounded-none">
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 rounded">
                 Estado: Activo
               </span>
             </div>
-            <p className="break-words text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5 font-sans">
+            <p className="break-words text-[11px] text-muted-foreground mt-0.5 font-sans">
               Kernel Local Soberano • Malla P2P Noise XK • Bucle de Señales ADR-011
             </p>
           </div>
         </div>
 
-        <div className="flex max-w-full flex-wrap items-center gap-2 text-[11px] text-[#444444] dark:text-muted-foreground">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-muted border border-[#ACA899] dark:border-border rounded-sm">
+        <div className="flex max-w-full flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-muted/60 border border-border rounded-md">
             <span>Barrera de Coherencia:</span>
-            <span className="text-[#000000] dark:text-foreground font-bold">Capas 1, 2 y 3 activas</span>
+            <span className="text-foreground font-bold">Capas 1, 2 y 3 activas</span>
           </div>
         </div>
       </div>
 
-      {/* Sub Navigation - Classic Win32 Property Sheet Tabs */}
-      <div role="group" aria-label="Secciones de Estado" className="flex max-w-full overflow-x-auto border-b border-[#ACA899] dark:border-border gap-1 font-sans">
+      {/* Sub Navigation */}
+      <div role="group" aria-label="Secciones de Estado" className="flex max-w-full overflow-x-auto border-b border-border gap-1.5 font-sans">
         <button
           aria-pressed={subTab === 'summary'}
           onClick={() => setSubTab('summary')}
-          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
+          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer ${
             subTab === 'summary'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
-              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
+              ? 'bg-card border-t-2 border-t-primary border-x-border border-b-card -mb-px text-primary rounded-t-md shadow-sm'
+              : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-t-md'
           }`}
         >
           Resumen General
@@ -87,10 +87,10 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'interoception'}
           onClick={() => setSubTab('interoception')}
-          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
+          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer ${
             subTab === 'interoception'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
-              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
+              ? 'bg-card border-t-2 border-t-primary border-x-border border-b-card -mb-px text-primary rounded-t-md shadow-sm'
+              : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-t-md'
           }`}
         >
           Interocepción
@@ -98,10 +98,10 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <button
           aria-pressed={subTab === 'system'}
           onClick={() => setSubTab('system')}
-          className={`flex min-w-max items-center px-3 py-1 text-[11px] font-bold transition-all border cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] ${
+          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer ${
             subTab === 'system'
-              ? 'bg-white dark:bg-card border-t-2 border-t-[#9E4024] border-x-[#ACA899] border-b-white dark:border-b-card -mb-px text-[#9E4024] dark:text-primary rounded-t-sm shadow-none'
-              : 'bg-[#ECE9D8] dark:bg-muted/40 border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA] rounded-t-sm'
+              ? 'bg-card border-t-2 border-t-primary border-x-border border-b-card -mb-px text-primary rounded-t-md shadow-sm'
+              : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-t-md'
           }`}
         >
           Configuración del Sistema

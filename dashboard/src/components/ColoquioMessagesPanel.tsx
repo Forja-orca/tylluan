@@ -1,12 +1,17 @@
 import {
   Hash, Search, X, Paperclip, Loader2, Clock,
-  Check, Copy, Quote, FileText, Network, ChevronUp, ChevronLeft
+  Check, Copy, Quote, FileText, ChevronUp, ChevronLeft
 } from 'lucide-react';
 import { useRef, useLayoutEffect, useEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '../lib/utils';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { agentStyle } from '../lib/agent-meta';
 import { parseMarkdown } from '../lib/coloquio-markdown';
+import { parseAgUiMessage } from '../lib/ag-ui-parser';
+import { ColoquioHandoffBadge } from './coloquio/ColoquioHandoffBadge';
+import { ColoquioThinkingBlock } from './coloquio/ColoquioThinkingBlock';
+import { ColoquioToolCard } from './coloquio/ColoquioToolCard';
+import { ColoquioHitlCard } from './coloquio/ColoquioHitlCard';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
@@ -353,34 +358,30 @@ export function ColoquioMessagesPanel({
     // Detect if this message is actively streaming
     const isStreaming = activeStreams[msg.msg_id] !== undefined;
 
-    let mainContent = msg.content;
-    let thoughtContent = "";
-    const thoughtRegex = /\[PENSAMIENTO\]([\s\S]*?)(?:\[FIN PENSAMIENTO\]|$)/i;
-    const thoughtMatch = mainContent.match(thoughtRegex);
-    if (thoughtMatch) {
-      thoughtContent = thoughtMatch[1].trim();
-      mainContent = mainContent.replace(thoughtRegex, "").trim();
-    }
-
-    const isPlan = msg.content.toLowerCase().includes("[plan]");
+    const agUi = parseAgUiMessage(msg);
+    const mainContent = agUi.cleanContent;
+    const thoughtContent = agUi.thoughtContent;
+    const isPlan = agUi.isPlan;
     const planTurn = msg.turn;
     const isApproved = messages.some(
-      otherMsg => otherMsg.turn > planTurn && 
-                  otherMsg.content.toLowerCase().includes(`[aprobado] #${planTurn}`)
+      otherMsg =>
+        otherMsg.turn > planTurn &&
+        (otherMsg.content.toLowerCase().includes(`[aprobado] #${planTurn}`) ||
+          otherMsg.content.toLowerCase().includes(`[approved] #${planTurn}`))
     );
 
     return (
       <>
         {renderDateDiv(msg, prev)}
         <div className={cn(
-          'flex group/msg rounded transition-colors hover:bg-foreground/[0.02]',
-          compactMode ? 'gap-1.5 py-0.5 px-1' : 'gap-2.5 py-1 px-2.5',
+          'flex group/msg rounded-md transition-colors hover:bg-foreground/[0.02]',
+          compactMode ? 'gap-1.5 py-0.5 px-1' : 'gap-2.5 py-1.5 px-2.5',
           isHuman ? 'flex-row-reverse' : ''
         )}>
           <div className={cn('shrink-0 mt-0.5', compactMode ? 'w-6' : 'w-8')}>
             {!cont && (
               <div className={cn(
-                'rounded flex items-center justify-center font-bold border',
+                'rounded-md flex items-center justify-center font-bold border shadow-sm',
                 compactMode ? 'w-6 h-6 text-[11px]' : 'w-8 h-8 text-xs',
                 m.bg, m.color, m.border
               )}>
@@ -388,21 +389,21 @@ export function ColoquioMessagesPanel({
               </div>
             )}
           </div>
-          <div className={cn('flex flex-col gap-0.5 max-w-[85%] min-w-0', isHuman ? 'items-end' : 'items-start')}>
+          <div className={cn('flex flex-col gap-1 max-w-[85%] min-w-0', isHuman ? 'items-end' : 'items-start')}>
             {!cont && (
               <div className={cn('flex items-center gap-2', isHuman ? 'flex-row-reverse' : '')}>
-                <span className={cn('text-[11px] font-semibold', m.color)}>{isHuman ? msg.author_id : `@${msg.author_id}`}</span>
+                <span className={cn('text-xs font-bold tracking-tight', m.color)}>{isHuman ? msg.author_id : `@${msg.author_id}`}</span>
                 <button
                   type="button"
                   onClick={() => scrollToTurn(msg.turn)}
-                  className="text-[11px] text-slate-600 dark:text-slate-400 font-mono hover:text-amber-800 dark:hover:text-amber-400 focus-visible:outline-dotted focus-visible:outline-1 rounded transition-colors"
+                  className="text-[11px] text-muted-foreground font-mono hover:text-primary focus-visible:outline-none rounded transition-colors"
                 >
                   #{msg.turn}
                 </button>
-                <span className="text-[11px] text-slate-600 dark:text-slate-400">{fmtTime(msg.created_at)}</span>
+                <span className="text-[11px] text-muted-foreground font-mono">{fmtTime(msg.created_at)}</span>
                 {isStreaming && (
-                  <span className="text-[11px] text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-1.5 py-0.5 rounded flex items-center gap-1.5 font-medium">
-                    <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
+                  <span className="text-[11px] text-cyan-700 dark:text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded flex items-center gap-1.5 font-semibold">
+                    <span className="w-1.5 h-1.5 bg-cyan-500 dark:bg-cyan-400 rounded-full animate-pulse" />
                     escribiendo...
                   </span>
                 )}
@@ -410,121 +411,90 @@ export function ColoquioMessagesPanel({
             )}
             <div className="relative w-full min-w-0">
               <div className={cn(
-                'rounded border leading-relaxed relative',
-                compactMode ? 'px-2 py-1 text-[11px]' : 'px-3.5 py-2 text-[12px]',
-                isHuman ? 'bg-amber-950/60 dark:bg-amber-950/30 border border-amber-400/40 dark:border-amber-700/40 text-amber-100 rounded-tr-sm'
-                        : `${m.bg} border ${m.border} text-slate-100 rounded-tl-sm`,
-                highlight ? 'ring-2 ring-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.4)]' : ''
+                'rounded-lg border border-border bg-card text-card-foreground shadow-sm relative border-l-2',
+                compactMode ? 'px-2.5 py-1 text-[11.5px] leading-[1.45]' : 'px-3.5 py-2.5 text-[13px] leading-[1.55]',
+                m.accentBorder,
+                highlight ? 'ring-2 ring-primary shadow-md' : ''
               )}>
+                {agUi.handoff && !compactMode && (
+                  <ColoquioHandoffBadge handoff={agUi.handoff} />
+                )}
+
+                {thoughtContent && (
+                  <ColoquioThinkingBlock thoughtContent={thoughtContent} isStreaming={isStreaming} />
+                )}
+
                 <div onClick={handleThreadClick} className="break-words" dangerouslySetInnerHTML={{
                   __html: msgSearch.trim()
-                    ? parseMarkdown(mainContent).replace(new RegExp(`(${escapedSearch})`, 'gi'), '<mark class="bg-amber-400/30 text-amber-200 rounded px-0.5">$1</mark>')
+                    ? parseMarkdown(mainContent).replace(new RegExp(`(${escapedSearch})`, 'gi'), '<mark class="bg-amber-400/30 text-foreground rounded px-0.5">$1</mark>')
                     : parseMarkdown(mainContent)
                 }} />
 
                 {/* Show cursor indicator if streaming */}
                 {isStreaming && (
-                  <span className="inline-block w-1.5 h-3.5 bg-cyan-400 ml-1 animate-pulse align-middle" />
+                  <span className="inline-block w-1.5 h-3.5 bg-cyan-500 dark:bg-cyan-400 ml-1 animate-pulse align-middle" />
                 )}
 
-                {thoughtContent && (
-                  <details className="group/details bg-slate-950/40 border border-border rounded p-2.5 my-2 text-[11px] text-slate-600 dark:text-slate-400 cursor-pointer" open>
-                    <summary className="font-semibold text-primary hover:text-primary/80 transition-colors list-none flex items-center gap-1.5 focus:outline-none">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      🧠 Reasoning
-                    </summary>
-                    <div className="mt-2 pl-3 border-l border-primary/20 whitespace-pre-wrap leading-relaxed text-slate-600 dark:text-slate-300 font-mono text-[11px] select-text cursor-text" dangerouslySetInnerHTML={{
-                      __html: parseMarkdown(thoughtContent)
-                    }} />
-                  </details>
-                )}
-
-                {isPlan && !isApproved && (
-                  <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-amber-800 dark:text-amber-400 font-semibold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                      Plan awaiting human approval
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          const tasks = parsePlanTasks(mainContent);
-                          if (tasks.length > 0) {
-                            window.dispatchEvent(new CustomEvent('canvas_add_plan_diagram', {
-                              detail: { tasks }
-                            }));
-                          }
-                        }}
-                        className="px-3 py-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-[11px] rounded border border-primary transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Network className="w-3 h-3" /> Visualize on Whiteboard
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (bridge) {
-                            await bridge.postColoquioMessage(selectedId!, {
-                              author_id: authorId || 'jose',
-                              role: 'human',
-                              content: `[APPROVED] #${planTurn}`,
-                              metadata: '{}'
-                            });
-                            fetchThread();
-                          }
-                        }}
-                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[11px] rounded border border-amber-600 transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Check className="w-3 h-3 stroke-[3]" /> Approve & Start
-                      </button>
-                    </div>
+                {agUi.toolCalls.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {agUi.toolCalls.map(tc => (
+                      <ColoquioToolCard key={tc.id} toolCall={tc} />
+                    ))}
                   </div>
                 )}
 
-                {isPlan && isApproved && (
-                  <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      Plan approved by human
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const tasks = parsePlanTasks(mainContent);
-                        if (tasks.length > 0) {
-                          window.dispatchEvent(new CustomEvent('canvas_add_plan_diagram', {
-                            detail: { tasks }
-                          }));
-                        }
-                      }}
-                      className="px-3 py-1 bg-primary/20 hover:bg-primary/30 text-primary font-semibold text-[11px] rounded transition-all flex items-center gap-1 border border-primary/30 cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
-                    >
-                      <Network className="w-3 h-3" /> Visualize on Whiteboard
-                    </button>
-                  </div>
+                {isPlan && (
+                  <ColoquioHitlCard
+                    planTurn={planTurn}
+                    isApproved={isApproved}
+                    tasks={parsePlanTasks(mainContent)}
+                    onVisualize={() => {
+                      const tasks = parsePlanTasks(mainContent);
+                      if (tasks.length > 0) {
+                        window.dispatchEvent(
+                          new CustomEvent('canvas_add_plan_diagram', {
+                            detail: { tasks },
+                          })
+                        );
+                      }
+                    }}
+                    onApprove={async () => {
+                      if (bridge) {
+                        await bridge.postColoquioMessage(selectedId!, {
+                          author_id: authorId || 'jose',
+                          role: 'human',
+                          content: `[APPROVED] #${planTurn}`,
+                          metadata: '{}',
+                        });
+                        fetchThread();
+                      }
+                    }}
+                  />
                 )}
                 {(() => {
                   try {
                     const meta = JSON.parse(msg.metadata || '{}');
                     if (meta.attachments?.length > 0) return (
-                      <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-slate-700/30">
+                      <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border">
                         {meta.attachments.map((att: { file: string; name: string }, idx: number) => {
                           const isImg = /\.(jpeg|jpg|gif|png|webp|svg)$/i.test(att.file);
                           const url = bridge ? `${bridge.getBaseUrl()}/api/v1/ingest/files/${att.file}` : '';
-                          if (isImg) return <img key={idx} src={url} alt={att.name} className="max-w-[180px] max-h-[180px] rounded border border-slate-700 cursor-pointer hover:opacity-90" onClick={() => window.open(url, '_blank')} />;
-                          return <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-xs text-slate-300 hover:text-amber-400 transition-colors"><FileText className="w-3 h-3" /><span className="truncate max-w-[140px]">{att.name}</span></a>;
+                          if (isImg) return <img key={idx} src={url} alt={att.name} className="max-w-[180px] max-h-[180px] rounded border border-border cursor-pointer hover:opacity-90" onClick={() => window.open(url, '_blank')} />;
+                          return <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted border border-border rounded text-xs text-foreground hover:text-primary transition-colors"><FileText className="w-3 h-3" /><span className="truncate max-w-[140px]">{att.name}</span></a>;
                         })}
                       </div>
                     );
                   } catch {} return null;
                 })()}
               </div>
-              <div className={cn('absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-card border border-border rounded p-1 opacity-0 group-hover/msg:opacity-100 transition-opacity z-20',
+              <div className={cn('absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-card border border-border shadow-sm rounded-md p-1 opacity-0 group-hover/msg:opacity-100 transition-opacity z-20',
                 isHuman ? 'right-full mr-2' : 'left-full ml-2')}>
                 <button
                   type="button"
                   onClick={() => handleCopy(msg.msg_id, msg.content)}
                   aria-label="Copy message"
                   title="Copy message"
-                  className="p-1.5 hover:bg-slate-800 rounded text-slate-600 dark:text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:outline-dotted focus-visible:outline-1"
+                  className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none"
                 >
                   {copiedId === msg.msg_id ? <Check className="w-3 h-3 text-emerald-700 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 </button>
@@ -533,7 +503,7 @@ export function ColoquioMessagesPanel({
                   onClick={() => handleQuote(msg.author_id, msg.content)}
                   aria-label="Quote message"
                   title="Quote message"
-                  className="p-1.5 hover:bg-slate-800 rounded text-slate-600 dark:text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:outline-dotted focus-visible:outline-1"
+                  className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none"
                 >
                   <Quote className="w-3 h-3" />
                 </button>
@@ -547,39 +517,39 @@ export function ColoquioMessagesPanel({
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b border-slate-700/60 bg-slate-900/60 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b border-border bg-muted/40 shrink-0">
         {onBackToChannels && (
           <button
             type="button"
             onClick={onBackToChannels}
-            className="md:hidden p-2.5 -ml-2.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none rounded"
+            className="md:hidden p-2.5 -ml-2.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
             title="Volver a lista de canales"
             aria-label="Volver a lista de canales"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
         )}
-        <Hash className="w-3.5 h-3.5 text-[#555555] dark:text-slate-400 shrink-0" />
-        <span className="text-xs font-bold text-[#000000] dark:text-foreground truncate">{selectedChannel?.name ?? selectedId}</span>
-        <span className="text-[10px] text-[#555555] dark:text-muted-foreground font-mono hidden sm:inline">{allMessages.length} mensajes</span>
+        <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-bold text-foreground truncate">{selectedChannel?.name ?? selectedId}</span>
+        <span className="text-[11px] text-muted-foreground font-mono hidden sm:inline">{allMessages.length} mensajes</span>
         <button
           type="button"
           onClick={() => setCompactMode(v => !v)}
           className={cn(
-            "ml-auto text-[11px] px-2 py-0.5 rounded-sm border font-bold transition-all cursor-pointer mr-1.5 focus-visible:outline-1 focus-visible:outline-[#9E4024]",
+            "ml-auto text-[11px] px-2.5 py-0.5 rounded border font-semibold transition-all cursor-pointer mr-1.5",
             compactMode 
-              ? "border-[#9E4024] bg-white dark:bg-card text-[#9E4024] dark:text-primary" 
-              : "border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground hover:bg-[#F5F4EA]"
+              ? "border-primary bg-primary/10 text-primary" 
+              : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted/60"
           )}
           title="Alternar densidad compacta"
           aria-label="Alternar densidad compacta"
         >
           Compacto
         </button>
-        <div className="flex items-center gap-1.5 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none px-2 py-0.5">
-          <Search className="w-3 h-3 text-[#555555] dark:text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-1.5 bg-card border border-input rounded px-2 py-0.5 shadow-sm">
+          <Search className="w-3 h-3 text-muted-foreground shrink-0" />
           <input
-            className="w-32 bg-transparent text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none"
+            className="w-32 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none"
             placeholder="Buscar en el canal..."
             aria-label="Buscar mensajes en el canal"
             value={msgSearch}
@@ -587,12 +557,12 @@ export function ColoquioMessagesPanel({
           />
           {msgSearch && (
             <>
-              <span className="text-[10px] text-[#9E4024] font-mono">{filteredMessages.length}/{allMessages.length}</span>
+              <span className="text-[10px] text-primary font-mono font-semibold">{filteredMessages.length}/{allMessages.length}</span>
               <button
                 type="button"
                 onClick={() => setMsgSearch('')}
                 aria-label="Borrar búsqueda"
-                className="text-slate-400 hover:text-slate-200 cursor-pointer focus-visible:outline-none"
+                className="text-muted-foreground hover:text-foreground cursor-pointer focus-visible:outline-none"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -602,8 +572,8 @@ export function ColoquioMessagesPanel({
       </div>
       {allMessages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2 p-6 text-center">
-          <p className="text-xs font-bold text-[#9E4024] dark:text-foreground">Canal sin mensajes</p>
-          <p className="text-[11px] text-[#444444] dark:text-muted-foreground max-w-sm">Escriba el primer mensaje en el campo inferior para iniciar la deliberación en este canal.</p>
+          <p className="text-xs font-bold text-foreground">Canal sin mensajes</p>
+          <p className="text-[11px] text-muted-foreground max-w-sm">Escriba el primer mensaje en el campo inferior para iniciar la deliberación en este canal.</p>
         </div>
       ) : (
         <VirtualMessageList
@@ -620,23 +590,23 @@ export function ColoquioMessagesPanel({
         />
       )}
       {Object.keys(typingStatuses).length > 0 && (
-        <div className="px-3 py-1 text-[10px] text-[#444444] dark:text-muted-foreground flex items-center gap-2 shrink-0 bg-[#ECE9D8] dark:bg-muted/40 border-t border-[#ACA899]">
+        <div className="px-3 py-1 text-[10px] text-muted-foreground flex items-center gap-2 shrink-0 bg-muted/50 border-t border-border">
           <div className="flex flex-col gap-0.5">
             {Object.entries(typingStatuses).map(([agent, val]) => (
-              <span key={agent} className="font-mono text-[10px]"><strong className="text-[#9E4024] dark:text-primary">@{agent}</strong>: <span className="italic">{val.status}</span></span>
+              <span key={agent} className="font-mono text-[10px]"><strong className="text-primary">@{agent}</strong>: <span className="italic">{val.status}</span></span>
             ))}
           </div>
         </div>
       )}
-      <div ref={composerRef} className="border-t border-[#ACA899] dark:border-border px-3 py-2 bg-[#ECE9D8] dark:bg-card shrink-0 font-sans">
+      <div ref={composerRef} className="border-t border-border px-3 py-2.5 bg-muted/30 shrink-0 font-sans">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[11px] font-bold text-[#01285F] dark:text-foreground shrink-0">Autor:</span>
-          <input className="w-24 bg-white dark:bg-muted border border-[#7F9DB9] dark:border-border rounded-none px-2 py-0.5 text-[11px] font-mono text-[#000000] dark:text-foreground focus:outline-none"
+          <span className="text-[11px] font-semibold text-foreground shrink-0">Autor:</span>
+          <input className="w-24 bg-card border border-input rounded px-2 py-0.5 text-[11px] font-mono text-foreground focus:outline-none shadow-sm"
             value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="jose" />
           <button
             type="button"
             onClick={() => setShowTemplates(v => !v)}
-            className="ml-auto text-[11px] font-bold text-[#9E4024] dark:text-primary hover:underline flex items-center gap-1 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] px-1 py-0.5"
+            className="ml-auto text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer px-1 py-0.5 rounded"
           >
             {showTemplates ? 'Ocultar plantillas' : 'Plantillas rápidas'}
           </button>
@@ -648,7 +618,7 @@ export function ColoquioMessagesPanel({
                 type="button"
                 key={t.label}
                 onClick={() => { setDraft(t.text); setShowTemplates(false); }}
-                className="text-[10px] font-bold bg-white dark:bg-muted hover:bg-[#F5F4EA] text-[#9E4024] dark:text-primary px-2 py-0.5 rounded-sm border border-[#ACA899] dark:border-border transition-all cursor-pointer"
+                className="text-[11px] font-semibold bg-card hover:bg-muted text-primary px-2.5 py-0.5 rounded border border-border shadow-sm transition-all cursor-pointer"
               >
                 {t.label}
               </button>
@@ -658,14 +628,14 @@ export function ColoquioMessagesPanel({
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-1.5">
             {attachments.map((att, i) => (
-              <div key={i} className="flex items-center gap-1.5 px-2 py-0.5 bg-white dark:bg-muted border border-[#ACA899] rounded-sm text-[11px] text-foreground">
+              <div key={i} className="flex items-center gap-1.5 px-2 py-0.5 bg-card border border-border rounded text-[11px] text-foreground shadow-sm">
                 <Paperclip className="w-2.5 h-2.5" />
                 <span className="truncate max-w-[120px]">{att.name}</span>
                 <button
                   type="button"
                   onClick={() => setAttachments(p => p.filter((_, j) => j !== i))}
                   aria-label={`Quitar adjunto ${att.name}`}
-                  className="text-slate-400 hover:text-rose-500 ml-1 p-0.5 rounded cursor-pointer"
+                  className="text-muted-foreground hover:text-rose-500 ml-1 p-0.5 rounded cursor-pointer"
                 >
                   <X className="w-2.5 h-2.5" />
                 </button>
@@ -673,21 +643,21 @@ export function ColoquioMessagesPanel({
             ))}
           </div>
         )}
-        <div className="flex gap-1.5 items-end">
+        <div className="flex gap-2 items-end">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             aria-label="Adjuntar archivo"
             title="Adjuntar archivo"
-            className="px-2 py-1.5 bg-white dark:bg-muted hover:bg-[#F5F4EA] disabled:opacity-40 rounded-sm border border-[#ACA899] text-[#000000] dark:text-foreground text-[11px] font-bold shrink-0 cursor-pointer"
+            className="px-2.5 py-2 bg-card hover:bg-muted disabled:opacity-40 rounded border border-border text-foreground text-[11px] font-semibold shrink-0 cursor-pointer shadow-sm transition-colors"
           >
             <Paperclip className="w-3.5 h-3.5" />
           </button>
           <input type="file" ref={fileInputRef} className="hidden" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <textarea
-            className={cn('flex-1 bg-white dark:bg-background border rounded-none px-2.5 py-1.5 text-[11px] text-[#000000] dark:text-foreground placeholder-[#888888] focus:outline-none resize-none font-sans',
-              isDragging ? 'border-amber-500 bg-amber-50' : 'border-t border-l border-[#808080] border-b border-r border-white dark:border-border')}
+            className={cn('flex-1 bg-card border rounded-md px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none resize-none font-sans shadow-sm',
+              isDragging ? 'border-primary bg-primary/5' : 'border-input')}
             rows={2} placeholder="Escriba un mensaje... Mayús+Intro para nueva línea" value={draft}
             onChange={e => {
               setDraft(e.target.value);
@@ -707,12 +677,12 @@ export function ColoquioMessagesPanel({
             onClick={postMessage}
             disabled={posting || (!draft.trim() && !attachments.length)}
             aria-label="Enviar mensaje"
-            className="px-4 py-2 bg-[#9E4024] hover:bg-[#081C52] disabled:opacity-40 rounded-sm text-white font-bold border border-[#9E4024] text-[11px] shrink-0 cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024]"
+            className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-40 rounded-md text-primary-foreground font-semibold border border-primary text-xs shrink-0 cursor-pointer shadow-sm transition-colors"
           >
             Enviar
           </button>
         </div>
-        <div className="flex justify-between items-center mt-1 text-[10px] text-[#555555] dark:text-muted-foreground">
+        <div className="flex justify-between items-center mt-1.5 text-[10px] text-muted-foreground">
           <span>Intro para enviar, Mayús+Intro para salto de línea</span>
           <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Actualización cada 5 s</span>
         </div>

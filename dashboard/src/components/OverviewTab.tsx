@@ -397,15 +397,15 @@ export function OverviewTab({
   return (
     <div className="space-y-3 font-sans">
       {/* What is Tylluan doing now — human-readable status */}
-      <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm">
-        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Estado de Actividad del Sustrato</legend>
+      <fieldset className="border border-border p-3 bg-card rounded-lg shadow-sm">
+        <legend className="text-[11px] font-bold text-primary px-1.5">Estado de Actividad del Sustrato</legend>
         <div className="flex items-center gap-2.5">
-          <span className={`w-2.5 h-2.5 rounded-none border border-[#7F9DB9] ${tylluanStatus.pulse ? 'bg-emerald-600' : 'bg-[#9E4024]'}`} aria-hidden="true" />
+          <span className={`w-2.5 h-2.5 rounded-full border border-border ${tylluanStatus.pulse ? 'bg-cyan-500' : 'bg-primary'}`} aria-hidden="true" />
           <div>
-            <h3 className="text-xs font-bold text-[#000000] dark:text-foreground" aria-label={`Tylluan is ${tylluanStatus.text.toLowerCase()}`}>
+            <h3 className="text-xs font-bold text-foreground" aria-label={`Tylluan is ${tylluanStatus.text.toLowerCase()}`}>
               {tylluanStatus.text}
             </h3>
-            <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">{tylluanStatus.subtext}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{tylluanStatus.subtext}</p>
           </div>
         </div>
       </fieldset>
@@ -415,7 +415,7 @@ export function OverviewTab({
 
       {/* Health Banner */}
       {healthDetailed && typeof healthDetailed.score === 'number' && healthDetailed.score < 70 && (
-        <div role="alert" className="p-3.5 rounded bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
+        <div role="alert" className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" aria-hidden="true" />
           <div className="flex-1">
             <h4 className="text-xs font-bold text-amber-600">Rendimiento Degradado (Salud: {healthDetailed.score}%)</h4>
@@ -433,52 +433,52 @@ export function OverviewTab({
       )}
 
       {/* Hub Status Badges */}
-      <fieldset aria-label="Resumen de Telemetría del Sistema" className="border border-[#ACA899] dark:border-border p-2 bg-[#ECE9D8] dark:bg-card rounded-sm">
-        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Señales del Sistema</legend>
+      <fieldset aria-label="Resumen de Telemetría del Sistema" className="border border-border p-3 bg-card rounded-lg shadow-sm">
+        <legend className="text-[11px] font-bold text-primary px-1.5">Señales del Sistema</legend>
         <div className="flex flex-wrap gap-2 font-mono text-xs">
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
-            <div className={cn("w-2 h-2 rounded-none", kernelHealth.dotClass)} aria-hidden="true"></div>
-            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Kernel: <span className={cn("font-bold text-[#000000] dark:text-foreground", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/50 border border-border">
+            <div className={cn("w-2 h-2 rounded-full", kernelHealth.dotClass)} aria-hidden="true"></div>
+            <span className="text-[11px] text-muted-foreground">Kernel: <span className={cn("font-bold text-foreground", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
-            <div className={cn("w-2 h-2 rounded-none", embeddingsState.dotClass)} aria-hidden="true"></div>
-            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Embeddings: <span className={cn("font-bold text-[#000000] dark:text-foreground", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/50 border border-border">
+            <div className={cn("w-2 h-2 rounded-full", embeddingsState.dotClass)} aria-hidden="true"></div>
+            <span className="text-[11px] text-muted-foreground">Embeddings: <span className={cn("font-bold text-foreground", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
-            <div className={cn("w-2 h-2 rounded-none", sovereignToolsState.dotClass)} aria-hidden="true"></div>
-            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Herramientas Soberanas: <span className={cn("font-bold text-[#000000] dark:text-foreground", sovereignToolsState.colorClass)}>{sovereignToolsState.label}</span></span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/50 border border-border">
+            <div className={cn("w-2 h-2 rounded-full", sovereignToolsState.dotClass)} aria-hidden="true"></div>
+            <span className="text-[11px] text-muted-foreground">Herramientas Soberanas: <span className={cn("font-bold text-foreground", sovereignToolsState.colorClass)}>{sovereignToolsState.label}</span></span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
-            <span className="text-[11px] font-bold text-[#008000] dark:text-emerald-400">{liveMetrics?.activeAgents || 0}</span>
-            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Agentes activos</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/50 border border-border">
+            <span className="text-[11px] font-bold text-cyan-700 dark:text-cyan-400">{liveMetrics?.activeAgents || 0}</span>
+            <span className="text-[11px] text-muted-foreground">Agentes activos</span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
-            <span className="text-[11px] font-bold text-[#9E4024] dark:text-primary">{memoryStats?.node_count || 0}</span>
-            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">Nodos Silva</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/50 border border-border">
+            <span className="text-[11px] font-bold text-primary">{memoryStats?.node_count || 0}</span>
+            <span className="text-[11px] text-muted-foreground">Nodos Silva</span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/50 border border-border">
             <MiniSparkline data={cpuHistory} color="hsl(var(--primary))" />
-            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">CPU</span>
+            <span className="text-[11px] text-muted-foreground">CPU</span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white dark:bg-muted/40 border border-[#ACA899] dark:border-border">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted/50 border border-border">
             <MiniSparkline data={memHistory} color="hsl(var(--primary))" />
-            <span className="text-[11px] text-[#444444] dark:text-muted-foreground">RAM</span>
+            <span className="text-[11px] text-muted-foreground">RAM</span>
           </div>
         </div>
       </fieldset>
 
       {/* T-DSH-114: centinela de write_gate L2 (opt-in, default off) */}
-      <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Centinela de Escritura (write_gate L2)</legend>
+      <fieldset className="border border-border p-3 bg-card rounded-lg shadow-sm font-sans">
+        <legend className="text-[11px] font-bold text-primary px-1.5">Centinela de Escritura (write_gate L2)</legend>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <p className="text-[11px] text-[#444444] dark:text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               {sentinel
                 ? `Modo: ${sentinel.mode ?? 'inactivo'} · Cargado: ${sentinel.loaded ? 'sí' : 'no'} · Fallbacks: ${sentinel.fallbacks ?? 0} · Saltos CPU: ${sentinel.cpu_skips ?? 0} (umbral ${sentinel.max_cpu_pct ?? 85}%)`
                 : 'Estado no disponible'}
             </p>
             {sentinel?.verdicts && (
-              <p className="text-[11px] font-mono text-[#555555] dark:text-muted-foreground mt-0.5">
+              <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
                 Seguro: {sentinel.verdicts.safe ?? 0} · Polémico: {sentinel.verdicts.controversial ?? 0} · Inseguro: {sentinel.verdicts.unsafe ?? 0} · No disponible: {sentinel.verdicts.unavailable ?? 0}
               </p>
             )}
@@ -494,10 +494,10 @@ export function OverviewTab({
                 type="button"
                 disabled={sentinelBusy || !bridge}
                 onClick={() => setSentinelMode(m.id)}
-                className={`px-2 py-0.5 rounded-none text-[10px] font-bold border transition-colors cursor-pointer focus-visible:outline-1 focus-visible:outline-[#9E4024] disabled:opacity-50 ${
+                className={`px-2.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer disabled:opacity-50 ${
                   sentinel?.mode === m.id
-                    ? 'bg-[#9E4024] text-white border-[#9E4024]'
-                    : 'bg-white dark:bg-muted border-[#ACA899] dark:border-border text-[#000000] dark:text-foreground hover:bg-[#F5F4EA]'
+                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                    : 'bg-muted/60 border-border text-foreground hover:bg-muted'
                 }`}
               >
                 {m.label}
@@ -508,8 +508,8 @@ export function OverviewTab({
       </fieldset>
 
       {liveMetrics && (
-        <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Métricas de Operación en Tiempo Real</legend>
+        <fieldset className="border border-border p-3 bg-card rounded-lg shadow-sm font-sans">
+          <legend className="text-[11px] font-bold text-primary px-1.5">Métricas de Operación en Tiempo Real</legend>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             {[ 
               { label: 'Llamadas Totales', value: liveMetrics.totalCalls },
@@ -519,9 +519,9 @@ export function OverviewTab({
               { label: 'Difusiones/h', value: liveMetrics.broadcastsLastHour },
               { label: 'Nodos SilvaDB', value: liveMetrics.graphNodes },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-white dark:bg-card border border-[#ACA899] dark:border-border rounded-none p-2 text-center">
-                <div className="text-sm font-bold font-mono text-[#000000] dark:text-foreground">{value}</div>
-                <div className="text-[10px] text-[#555555] dark:text-muted-foreground mt-0.5">{label}</div>
+              <div key={label} className="bg-muted/40 border border-border rounded-md p-2 text-center">
+                <div className="text-sm font-bold font-mono text-foreground">{value}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
               </div>
             ))}
           </div>
@@ -548,14 +548,14 @@ export function OverviewTab({
           </span>
         </div>
       )}
-      <div className="flex items-center justify-between bg-card border border-border rounded p-4 relative font-sans">
+      <div className="flex items-center justify-between bg-card border border-border rounded-lg shadow-sm p-4 relative font-sans">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <div className="w-12 h-12 rounded border border-primary/30 flex items-center justify-center bg-primary/10">
+            <div className="w-12 h-12 rounded-md border border-primary/30 flex items-center justify-center bg-primary/10">
               <Activity className="w-6 h-6 text-primary" aria-hidden="true" />
             </div>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-card rounded flex items-center justify-center border border-border">
-              <div className="w-2 h-2 bg-emerald-600 rounded-full" aria-hidden="true"></div>
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-card rounded-full flex items-center justify-center border border-border">
+              <div className="w-2 h-2 bg-cyan-500 rounded-full" aria-hidden="true"></div>
             </div>
           </div>
           <div>
@@ -572,14 +572,14 @@ export function OverviewTab({
       </div>
 
       {/* Golden Signals Row */}
-      <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-        <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Señales Doradas de Rendimiento (Golden Signals)</legend>
+      <fieldset className="border border-border p-3 bg-card rounded-lg shadow-sm font-sans">
+        <legend className="text-[11px] font-bold text-primary px-1.5">Señales Doradas de Rendimiento (Golden Signals)</legend>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <MetricCard
             label="Tráfico"
             value={goldenSignals?.traffic?.active_tools || 0} unit=" ops"
             sub={`${activeGuilds} gremios activos`}
-            valueClass="text-[#9E4024] dark:text-primary"
+            valueClass="text-primary"
           />
           <MetricCard
             label="Tasa de Error"
@@ -597,15 +597,15 @@ export function OverviewTab({
             label="Disponibilidad SLO"
             value={sloSummary?.slo_target ?? 99.9} unit="%"
             sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% presupuesto restante` : 'Objetivo 99.9%'}
-            valueClass="text-[#9E4024] dark:text-primary"
+            valueClass="text-primary"
           />
         </div>
       </fieldset>
 
       {/* Cognitive Health */}
       {interoceptionData && (
-        <fieldset className="border border-[#ACA899] dark:border-border p-2.5 bg-[#ECE9D8] dark:bg-card rounded-sm font-sans">
-          <legend className="text-[11px] font-bold text-[#9E4024] dark:text-primary px-1">Salud Cognitiva e Interocepción</legend>
+        <fieldset className="border border-border p-3 bg-card rounded-lg shadow-sm font-sans">
+          <legend className="text-[11px] font-bold text-primary px-1.5">Salud Cognitiva e Interocepción</legend>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               { label: 'Homeostasis', value: interoceptionData.homeostasis, good: (v: number) => v > 0.7, warn: (v: number) => v > 0.4 },
@@ -614,14 +614,14 @@ export function OverviewTab({
               { label: 'Feromonas Activas', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
             ].map(({ label, value, good, warn, invert: _invert }) => {
               const pct = Math.min(100, value * 100);
-              const colorClass = good(value) ? 'text-emerald-700 dark:text-emerald-400' : warn(value) ? 'text-amber-800 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400';
+              const colorClass = good(value) ? 'text-emerald-700 dark:text-emerald-400' : warn(value) ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400';
               const bgClass = good(value) ? 'bg-emerald-600' : warn(value) ? 'bg-amber-600' : 'bg-red-600';
               return (
-                <div key={label} className="p-2 rounded-none bg-white dark:bg-card border border-[#ACA899] dark:border-border">
-                  <div className="text-[10px] font-bold text-[#01285F] dark:text-muted-foreground mb-0.5">{label}</div>
+                <div key={label} className="p-2.5 rounded-md bg-muted/40 border border-border">
+                  <div className="text-[10px] font-bold text-muted-foreground mb-0.5">{label}</div>
                   <div className={cn("text-sm font-bold font-mono", colorClass)}>{pct.toFixed(0)}%</div>
-                  <div className="w-full bg-[#E0E0E0] dark:bg-muted h-1.5 mt-1 rounded-none border border-[#ACA899]">
-                    <div className={cn("h-full", bgClass)} style={{ width: `${pct}%` }} />
+                  <div className="w-full bg-muted h-1.5 mt-1 rounded-full overflow-hidden border border-border">
+                    <div className={cn("h-full rounded-full", bgClass)} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               );

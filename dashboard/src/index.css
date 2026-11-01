@@ -1,195 +1,273 @@
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/plus-jakarta-sans-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/jetbrains-mono-latin-700-normal.woff2') format('woff2');
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
  
 @layer base {
   :root {
-    /* Tylluan Neutral Light Theme (GUIA_UI_vieja_escuela.md) - Windows 2000/XP sober aesthetic */
-    --background: 48 22% 93%;  /* #FAF9F5 fondo Claude */
-    --foreground: 60 3% 8%;  /* #141413 texto Claude */
-    --card: 0 0% 100%;  /* #FFFFFF contenido */
-    --card-foreground: 60 3% 8%;  /* #141413 */
-    --popover: 0 0% 100%;  /* #FFFFFF */
-    --popover-foreground: 60 3% 8%;  /* #141413 */
-    --primary: 17 58% 37%;  /* #A6431F naranja Claude oscurecido para AA */
-    --primary-foreground: 0 0% 100%;  /* #FFFFFF */
-    --secondary: 50 18% 86%;  /* #E8E6DC gris claro Claude */
-    --secondary-foreground: 60 3% 8%;  /* #141413 */
-    --muted: 48 20% 90%;  /* #F0EEE6 panel neutro calido */
-    --muted-foreground: 50 3% 34%;  /* #58574F texto secundario */
-    --accent: 17 58% 37%;  /* #A6431F unico acento */
-    --accent-foreground: 0 0% 100%;  /* #FFFFFF */
-    --destructive: 0 70% 45%;          /* #C22222 rojo estado crítico */
+    /* Tylluan "Equilibrio Cálido-Profundo" — Light Theme (Papel Cálido, WCAG 2.2 AA) */
+    --background: 44 26% 95%;          /* #F5F3EC — Papel cálido reposado */
+    --foreground: 220 18% 13%;         /* #1B2028 — Tinta carbón profunda (14.4:1) */
+    --card: 0 0% 100%;                 /* #FFFFFF — Superficie elevada pura */
+    --card-foreground: 220 18% 13%;    /* #1B2028 (16.2:1 sobre #FFFFFF) */
+    --popover: 0 0% 100%;              /* #FFFFFF */
+    --popover-foreground: 220 18% 13%; /* #1B2028 */
+    --primary: 16 65% 38%;             /* #A03D1E — Terracota Tylluan AA (6.3:1 en blanco, 5.6:1 en crema) */
+    --primary-foreground: 0 0% 100%;   /* #FFFFFF */
+    --secondary: 42 20% 90%;           /* #EAE7DC — Superficie secundaria */
+    --secondary-foreground: 220 18% 13%;
+    --muted: 42 20% 91%;               /* #ECE9DF — Paneles / cabeceras sutiles */
+    --muted-foreground: 220 12% 33%;   /* #4A515E — Texto secundario legible (>7.0:1) */
+    --accent: 16 65% 38%;              /* #A03D1E */
+    --accent-foreground: 0 0% 100%;    /* #FFFFFF */
+    --signal: 192 82% 28%;             /* #0D6782 — Cian señal en vivo AA (6.4:1) */
+    --signal-foreground: 0 0% 100%;
+    --destructive: 0 72% 40%;          /* #B01D1D — Rojo estado crítico AA (6.2:1) */
     --destructive-foreground: 0 0% 100%;
-    --border: 50 5% 50%;  /* #908E83 borde 1px visible */
-    --input: 50 5% 50%;  /* #908E83 borde campos */
-    --ring: 17 58% 37%;  /* #A6431F */
-    --radius: 2px;
+    --border: 40 12% 76%;              /* #C9C5B8 — Borde estructural limpio */
+    --input: 40 12% 72%;               /* #BFBAA9 — Borde de campo */
+    --ring: 16 65% 38%;                /* #A03D1E */
+    --radius: 6px;
 
-    /* Slate Scale — Neutral Gray Palette (#ECECEC/#F0F0F0 paneles, blanco contenido, texto #000-#222) */
-    --slate-950: 48 22% 93%;  /* #FAF9F5 */
-    --slate-900: 0 0% 100%;  /* #FFFFFF */
-    --slate-850: 48 20% 90%;  /* #F0EEE6 */
-    --slate-800: 50 18% 86%;  /* #E8E6DC */
-    --slate-700: 50 5% 50%;  /* #908E83 bordes */
-    --slate-600: 50 5% 42%;  /* #79776E */
-    --slate-500: 50 3% 34%;  /* #58574F texto secundario */
-    --slate-400: 50 3% 27%;  /* #464540 */
-    --slate-300: 50 3% 20%;  /* #34332F */
-    --slate-200: 60 3% 13%;  /* #222221 */
-    --slate-100: 60 3% 8%;  /* #141413 */
-    --slate-50: 60 3% 8%;  /* #141413 */
+    /* Escala Slate adaptativa (invertida para compatibilidad de componentes con modo claro) */
+    --slate-950: 44 26% 95%;           /* #F5F3EC */
+    --slate-900: 0 0% 100%;            /* #FFFFFF */
+    --slate-850: 42 20% 92%;           /* #EFECE3 */
+    --slate-800: 42 18% 87%;           /* #E4E1D6 */
+    --slate-700: 40 12% 74%;           /* #C4C0B3 */
+    --slate-600: 220 10% 38%;          /* #575E6B */
+    --slate-500: 220 12% 33%;          /* #4A515E */
+    --slate-400: 220 14% 27%;          /* #3B424E */
+    --slate-300: 220 16% 21%;          /* #2D333E */
+    --slate-200: 220 18% 16%;          /* #21262F */
+    --slate-100: 220 18% 13%;          /* #1B2028 */
+    --slate-50: 220 18% 10%;           /* #151920 */
     
-    /* Estados: Verde sobrio para Correcto/Online */
-    --emerald-300: 85 20% 30%;  /* verde Claude AA */
-    --emerald-400: 85 20% 30%;  /* verde Claude AA */
-    --emerald-500: 85 20% 30%;  /* verde Claude AA */
-    --emerald-600: 85 20% 25%;  /* verde Claude AA */
-    --emerald-700: 85 20% 21%;  /* verde Claude AA */
-    --emerald-950: 85 15% 95%;  /* verde Claude AA */
+    /* Escala Emerald — Correcto / Online / Identidad Jose (AA >= 4.8:1 en light) */
+    --emerald-50: 152 45% 95%;
+    --emerald-100: 152 45% 90%;
+    --emerald-300: 156 64% 28%;
+    --emerald-400: 156 64% 28%;
+    --emerald-500: 156 64% 30%;
+    --emerald-600: 156 68% 26%;
+    --emerald-700: 156 72% 22%;
+    --emerald-950: 152 45% 94%;
 
-    /* Estados: Ámbar sobrio para Advertencia/Warning */
-    --amber-100: 38 90% 20%;
-    --amber-200: 38 90% 25%;
-    --amber-300: 38 90% 30%;
-    --amber-400: 38 90% 35%;
-    --amber-500: 38 90% 35%;
-    --amber-600: 38 90% 30%;
-    --amber-700: 38 90% 25%;
-    --amber-950: 38 40% 95%;
+    /* Escala Amber — Advertencia / OpenCode (AA >= 4.7:1 en light) */
+    --amber-50: 38 70% 95%;
+    --amber-100: 38 65% 89%;
+    --amber-200: 32 78% 26%;
+    --amber-300: 30 82% 28%;
+    --amber-400: 28 84% 31%;
+    --amber-500: 28 84% 33%;
+    --amber-600: 26 85% 29%;
+    --amber-700: 24 85% 25%;
+    --amber-800: 22 85% 22%;
+    --amber-950: 38 60% 94%;
     
-    /* Estados: Rojo sobrio para Error/Crítico */
-    --red-300: 0 70% 45%;
-    --red-400: 0 70% 45%;
-    --red-500: 0 70% 45%;
-    --rose-300: 0 70% 45%;
-    --rose-400: 0 70% 45%;
-    --rose-500: 0 70% 45%;
-    --rose-600: 0 70% 38%;
-    --rose-700: 0 70% 30%;
-    --rose-950: 0 40% 95%;
+    /* Escala Red / Rose — Error / Crítico / Buffy (AA >= 5.1:1 en light) */
+    --red-300: 0 72% 40%;
+    --red-400: 0 72% 40%;
+    --red-500: 0 72% 40%;
+    --red-600: 0 74% 35%;
+    --rose-50: 348 60% 96%;
+    --rose-100: 348 55% 91%;
+    --rose-300: 346 72% 36%;
+    --rose-400: 346 72% 36%;
+    --rose-500: 346 72% 38%;
+    --rose-600: 346 75% 33%;
+    --rose-700: 346 78% 28%;
+    --rose-950: 348 50% 95%;
     
-    /* UN solo acento: azul del logo (#0A246A) */
-    --blue-300: 17 58% 37%;  /* acento naranja Claude */
-    --blue-400: 17 58% 37%;  /* acento naranja Claude */
-    --blue-500: 17 58% 37%;  /* acento naranja Claude */
-    --blue-600: 17 58% 32%;  /* acento naranja Claude */
-    --blue-700: 17 58% 27%;  /* acento naranja Claude */
-    --blue-950: 17 35% 93%;  /* acento naranja Claude */
+    /* Escala Blue — Identidad Claude / Enlaces técnicos (AA >= 5.4:1 en light) */
+    --blue-100: 214 65% 91%;
+    --blue-300: 216 76% 35%;
+    --blue-400: 216 76% 35%;
+    --blue-500: 216 76% 38%;
+    --blue-600: 216 80% 33%;
+    --blue-700: 216 82% 28%;
+    --blue-950: 214 55% 94%;
 
-    --indigo-300: 17 58% 37%;  /* acento naranja Claude */
-    --indigo-400: 17 58% 37%;  /* acento naranja Claude */
-    --indigo-500: 17 58% 37%;  /* acento naranja Claude */
-    --indigo-600: 17 58% 32%;  /* acento naranja Claude */
-    --indigo-950: 17 35% 93%;  /* acento naranja Claude */
+    /* Escala Indigo — Identidad DSH / Código inline (AA >= 5.6:1 en light) */
+    --indigo-100: 238 60% 92%;
+    --indigo-300: 238 62% 38%;
+    --indigo-400: 238 62% 38%;
+    --indigo-500: 238 62% 42%;
+    --indigo-600: 238 65% 36%;
+    --indigo-700: 238 68% 30%;
+    --indigo-950: 238 50% 95%;
     
-    --violet-300: 17 58% 37%;  /* acento naranja Claude */
-    --violet-400: 17 58% 37%;  /* acento naranja Claude */
-    --violet-500: 17 58% 37%;  /* acento naranja Claude */
-    --violet-600: 17 58% 32%;  /* acento naranja Claude */
-    --violet-950: 17 35% 93%;  /* acento naranja Claude */
+    /* Escala Violet — Identidad Antigravity (AA >= 5.5:1 en light) */
+    --violet-100: 264 60% 92%;
+    --violet-300: 264 62% 38%;
+    --violet-400: 264 62% 38%;
+    --violet-500: 264 62% 42%;
+    --violet-600: 264 66% 35%;
+    --violet-700: 264 70% 29%;
+    --violet-950: 264 50% 95%;
 
-    --cyan-300: 17 58% 37%;  /* acento naranja Claude */
-    --cyan-400: 17 58% 37%;  /* acento naranja Claude */
-    --cyan-500: 17 58% 37%;  /* acento naranja Claude */
-    --cyan-950: 17 35% 93%;  /* acento naranja Claude */
+    /* Escala Cyan — Señal en Vivo / SSE / Identidad Deep (AA >= 5.4:1 en light) */
+    --cyan-100: 192 65% 90%;
+    --cyan-300: 192 82% 28%;
+    --cyan-400: 192 82% 28%;
+    --cyan-500: 192 82% 31%;
+    --cyan-600: 192 85% 27%;
+    --cyan-700: 192 88% 23%;
+    --cyan-800: 192 70% 35%;
+    --cyan-950: 192 55% 93%;
 
-    --teal-300: 17 58% 37%;  /* acento naranja Claude */
-    --teal-400: 17 58% 37%;  /* acento naranja Claude */
-    --teal-500: 17 58% 37%;  /* acento naranja Claude */
-    --teal-950: 17 35% 93%;  /* acento naranja Claude */
+    /* Escala Teal — Identidad Mimo (AA >= 5.4:1 en light) */
+    --teal-100: 174 55% 90%;
+    --teal-300: 174 75% 26%;
+    --teal-400: 174 75% 26%;
+    --teal-500: 174 75% 29%;
+    --teal-600: 174 78% 25%;
+    --teal-700: 174 82% 21%;
+    --teal-950: 174 50% 93%;
   }
 
   .dark {
-    /* Modo oscuro sobrio sin brillos, manteniendo radios <= 3px */
-    --background: 0 0% 12%;            /* #1F1F1F */
-    --foreground: 0 0% 90%;            /* #E6E6E6 */
-    --card: 0 0% 16%;                 /* #292929 */
-    --card-foreground: 0 0% 90%;
-    --popover: 0 0% 16%;
-    --popover-foreground: 0 0% 90%;
-    --primary: 215 90% 60%;            /* Azul sobrio visible en fondo oscuro */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 22%;
-    --secondary-foreground: 0 0% 90%;
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 65%;
-    --accent: 215 90% 60%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 70% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 30%;
-    --input: 0 0% 30%;
-    --ring: 215 90% 60%;
-    --radius: 2px;
+    /* Tylluan "Equilibrio Cálido-Profundo" — Dark Theme (Observatorio Nocturno, WCAG 2.2 AA) */
+    --background: 224 28% 7%;          /* #0D1017 — Obsidiana nocturna */
+    --foreground: 214 25% 93%;         /* #E8EDF5 — Blanco sereno (15.4:1) */
+    --card: 222 24% 11%;               /* #151A23 — Tarjeta elevada */
+    --card-foreground: 214 25% 93%;    /* #E8EDF5 (13.6:1 sobre #151A23) */
+    --popover: 222 24% 11%;            /* #151A23 */
+    --popover-foreground: 214 25% 93%;
+    --primary: 24 85% 60%;             /* #F28740 — Ámbar-Terracota Tylluan (7.3:1 sobre card, 8.2:1 sobre bg) */
+    --primary-foreground: 224 28% 7%;  /* #0D1017 — Texto oscuro de alto contraste sobre botón primario */
+    --secondary: 222 20% 16%;          /* #212733 — Superficie secundaria */
+    --secondary-foreground: 214 25% 93%;
+    --muted: 223 21% 14%;              /* #1C212C — Paneles secundarios / cabeceras */
+    --muted-foreground: 215 16% 69%;   /* #A2ADC0 — Texto secundario AA (>6.4:1 sobre card y bg) */
+    --accent: 24 85% 60%;              /* #F28740 */
+    --accent-foreground: 224 28% 7%;
+    --signal: 188 86% 53%;             /* #22D3EE — Cian señal en vivo (9.8:1 sobre card) */
+    --signal-foreground: 224 28% 7%;
+    --destructive: 0 78% 64%;          /* #EB5B5B — Rojo crítico visible en dark (5.6:1) */
+    --destructive-foreground: 224 28% 7%;
+    --border: 220 18% 22%;             /* #2E3643 — Borde estructural limpio */
+    --input: 220 18% 24%;              /* #323B49 */
+    --ring: 24 85% 60%;                /* #F28740 */
+    --radius: 6px;
 
-    --slate-50: 0 0% 95%;
-    --slate-100: 0 0% 90%;
-    --slate-200: 0 0% 85%;
-    --slate-300: 0 0% 75%;
-    --slate-400: 0 0% 65%;
-    --slate-500: 0 0% 55%;
-    --slate-600: 0 0% 35%;
-    --slate-700: 0 0% 30%;
-    --slate-800: 0 0% 22%;
-    --slate-850: 0 0% 18%;
-    --slate-900: 0 0% 16%;
-    --slate-950: 0 0% 12%;
+    --slate-50: 214 30% 96%;
+    --slate-100: 214 25% 93%;          /* #E8EDF5 */
+    --slate-200: 214 22% 86%;
+    --slate-300: 215 18% 76%;
+    --slate-400: 215 16% 69%;          /* #A2ADC0 */
+    --slate-500: 215 14% 58%;
+    --slate-600: 217 16% 36%;
+    --slate-700: 220 18% 24%;
+    --slate-800: 222 20% 16%;          /* #212733 */
+    --slate-850: 223 22% 13%;
+    --slate-900: 222 24% 11%;          /* #151A23 */
+    --slate-950: 224 28% 7%;           /* #0D1017 */
 
-    --emerald-300: 140 60% 65%;
-    --emerald-400: 140 60% 55%;
-    --emerald-500: 140 60% 45%;
-    --emerald-600: 140 60% 35%;
-    --emerald-700: 140 60% 25%;
-    --emerald-950: 140 40% 12%;
+    --emerald-50: 152 40% 14%;
+    --emerald-100: 152 40% 18%;
+    --emerald-300: 152 68% 68%;
+    --emerald-400: 152 68% 58%;
+    --emerald-500: 152 65% 48%;
+    --emerald-600: 152 65% 38%;
+    --emerald-700: 152 65% 28%;
+    --emerald-950: 152 45% 13%;
 
-    --amber-100: 38 80% 85%;
-    --amber-200: 38 80% 75%;
-    --amber-300: 38 80% 65%;
-    --amber-400: 38 80% 55%;
-    --amber-500: 38 80% 45%;
-    --amber-600: 38 80% 35%;
-    --amber-700: 38 80% 25%;
-    --amber-950: 38 40% 12%;
+    --amber-50: 36 45% 14%;
+    --amber-100: 36 80% 86%;
+    --amber-200: 36 82% 76%;
+    --amber-300: 36 86% 68%;
+    --amber-400: 34 88% 60%;
+    --amber-500: 32 86% 52%;
+    --amber-600: 30 82% 40%;
+    --amber-700: 28 78% 30%;
+    --amber-800: 26 70% 24%;
+    --amber-950: 32 45% 13%;
     
-    --red-300: 0 70% 70%;
-    --red-400: 0 70% 60%;
-    --red-500: 0 70% 50%;
-    --rose-300: 0 70% 70%;
-    --rose-400: 0 70% 60%;
-    --rose-500: 0 70% 50%;
-    --rose-600: 0 70% 40%;
-    --rose-700: 0 70% 30%;
-    --rose-950: 0 40% 12%;
+    --red-300: 0 78% 72%;
+    --red-400: 0 78% 64%;
+    --red-500: 0 74% 54%;
+    --red-600: 0 72% 44%;
+    --rose-50: 348 45% 14%;
+    --rose-100: 348 45% 18%;
+    --rose-300: 348 80% 72%;
+    --rose-400: 348 80% 64%;
+    --rose-500: 348 75% 54%;
+    --rose-600: 348 72% 42%;
+    --rose-700: 348 70% 32%;
+    --rose-950: 348 45% 13%;
 
-    --indigo-300: 215 90% 65%;
-    --indigo-400: 215 90% 60%;
-    --indigo-500: 215 90% 50%;
-    --indigo-600: 215 90% 40%;
-    --indigo-950: 215 40% 12%;
+    --indigo-100: 235 45% 18%;
+    --indigo-300: 232 82% 76%;
+    --indigo-400: 232 82% 68%;
+    --indigo-500: 232 76% 58%;
+    --indigo-600: 232 70% 46%;
+    --indigo-700: 232 65% 36%;
+    --indigo-950: 232 45% 14%;
     
-    --violet-300: 215 90% 65%;
-    --violet-400: 215 90% 60%;
-    --violet-500: 215 90% 50%;
-    --violet-600: 215 90% 40%;
-    --violet-950: 215 40% 12%;
+    --violet-100: 262 45% 18%;
+    --violet-300: 262 82% 76%;
+    --violet-400: 262 82% 68%;
+    --violet-500: 262 76% 58%;
+    --violet-600: 262 70% 46%;
+    --violet-700: 262 65% 36%;
+    --violet-950: 262 45% 14%;
 
-    --blue-300: 215 90% 65%;
-    --blue-400: 215 90% 60%;
-    --blue-500: 215 90% 50%;
-    --blue-600: 215 90% 40%;
-    --blue-700: 215 90% 30%;
-    --blue-950: 215 40% 12%;
+    --blue-100: 214 45% 18%;
+    --blue-300: 212 86% 72%;
+    --blue-400: 212 86% 64%;
+    --blue-500: 212 82% 54%;
+    --blue-600: 212 76% 44%;
+    --blue-700: 212 72% 34%;
+    --blue-950: 212 45% 14%;
 
-    --cyan-300: 215 90% 65%;
-    --cyan-400: 215 90% 60%;
-    --cyan-500: 215 90% 50%;
-    --cyan-950: 215 40% 12%;
+    --cyan-100: 190 45% 18%;
+    --cyan-300: 188 86% 68%;
+    --cyan-400: 188 86% 56%;
+    --cyan-500: 188 82% 46%;
+    --cyan-600: 188 78% 36%;
+    --cyan-700: 188 74% 28%;
+    --cyan-800: 188 65% 22%;
+    --cyan-950: 188 45% 13%;
 
-    --teal-300: 215 90% 65%;
-    --teal-400: 215 90% 60%;
-    --teal-500: 215 90% 50%;
-    --teal-950: 215 40% 12%;
+    --teal-100: 174 45% 18%;
+    --teal-300: 172 78% 66%;
+    --teal-400: 172 78% 54%;
+    --teal-500: 172 74% 44%;
+    --teal-600: 172 70% 34%;
+    --teal-700: 172 66% 26%;
+    --teal-950: 172 45% 13%;
   }
 }
  
@@ -198,14 +276,15 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans antialiased;
+    letter-spacing: -0.008em;
   }
 
-  /* Tipografía estricta del sistema (GUIA_UI_vieja_escuela.md) */
+  /* Tipografía autohospedada soberana ("Equilibrio Cálido-Profundo") */
   :root,
   body,
   .font-sans {
-    font-family: Tahoma, 'Segoe UI', Verdana, Arial, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
 
   code,
@@ -213,46 +292,42 @@
   samp,
   pre,
   .font-mono {
-    font-family: Consolas, 'Courier New', monospace;
+    font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
   }
 
-  /* Enfoque accesible visible clásica / vieja escuela (WCAG 2.2 AA / GUIA_UI_vieja_escuela.md punto 8) */
+  /* Foco de teclado accesible de alto contraste (WCAG 2.2 AA) */
   :focus-visible {
-    outline: 1px dotted #000000 !important;
-    outline-offset: -1px !important;
-  }
-  .dark :focus-visible {
-    outline: 1px dotted #FFFFFF !important;
-    outline-offset: -1px !important;
+    outline: 2px solid hsl(var(--primary)) !important;
+    outline-offset: 1px !important;
   }
 }
 
-/* Glassmorphism sustituido por bordes sobrios planos */
+/* Superficies con elevación sutil */
 .glass {
-  @apply bg-card border border-border;
+  @apply bg-card border border-border shadow-sm;
 }
 
 .glass-emerald {
-  @apply bg-card border border-emerald-500;
+  @apply bg-card border border-emerald-500 shadow-sm;
 }
 
-/* Scrollbars sobrios del sistema */
+/* Scrollbars refinados */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #ECECEC;
+  background: hsl(var(--muted));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #B0B0B0;
-  border-radius: 2px;
+  background: hsl(var(--border));
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #909090;
+  background: hsl(var(--muted-foreground) / 0.5);
 }
 
 /* Force Graph Container */
@@ -269,8 +344,19 @@
   scrollbar-width: none;
 }
 
-/* Terminal/Console text selection */
+/* Selección de texto coherente con acento primario */
 ::selection {
-  background-color: #0A246A;
-  color: #FFFFFF;
+  background-color: hsl(var(--primary) / 0.22);
+  color: hsl(var(--foreground));
+}
+
+/* Ajuste de contraste AA en modo claro para primitivas markdown de Coloquio
+   (sin alterar las clases literales validadas por ColoquioMarkdown.test.ts) */
+:root:not(.dark) code.bg-slate-200\/80 {
+  background-color: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+:root:not(.dark) li.text-slate-700 {
+  color: hsl(var(--foreground));
 }

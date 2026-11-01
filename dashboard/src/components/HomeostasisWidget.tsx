@@ -71,7 +71,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="rounded border border-border bg-card p-4 relative font-sans">
+    <div className="rounded-lg border border-border bg-card shadow-sm p-4 relative font-sans">
       <div className="flex flex-col sm:flex-row items-center gap-6 justify-between">
         {/* Left Side: Text and status description */}
         <div className="space-y-2 text-center sm:text-left flex-1">

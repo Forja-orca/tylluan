@@ -21,21 +21,21 @@ export function ApprovalsAndSecurityTab({ bridge }: ApprovalsAndSecurityTabProps
   return (
     <div className="space-y-3 font-sans">
       {/* Subheader and Property Sheet Tabs */}
-      <div className="border border-[#ACA899] dark:border-border bg-[#ECE9D8] dark:bg-card p-2.5 rounded-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#ACA899] dark:border-border">
+      <div className="border border-border bg-card p-3.5 rounded-lg shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-border">
           <div>
-            <h2 className="text-xs font-bold text-[#01285F] dark:text-foreground flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-[#9E4024] dark:text-primary" aria-hidden="true" />
+            <h2 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-primary" aria-hidden="true" />
               Aprobaciones, Seguridad y Cuarentena
             </h2>
-            <p className="text-[11px] text-[#444444] dark:text-muted-foreground mt-0.5">
+            <p className="text-[11px] text-muted-foreground mt-0.5">
               Gobernanza soberana HITL, aislamiento ASI06, verificación de contratos e historial inmutable de auditoría.
             </p>
           </div>
         </div>
 
         {/* Property Sheet Tabs */}
-        <div role="tablist" aria-label="Secciones de seguridad" className="flex flex-wrap items-center gap-1 mt-2 pt-1 border-t border-[#ACA899] dark:border-border">
+        <div role="tablist" aria-label="Secciones de seguridad" className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-1 border-t border-border">
           {[
             { id: 'all' as SubSection, label: 'Vista Completa' },
             { id: 'trust' as SubSection, label: 'Consola de Confianza' },
@@ -52,10 +52,10 @@ export function ApprovalsAndSecurityTab({ bridge }: ApprovalsAndSecurityTabProps
                 type="button"
                 onClick={() => setActiveSection(tab.id)}
                 className={cn(
-                  "px-3 py-1 text-[11px] font-bold border transition-all cursor-pointer rounded-t-sm -mb-px",
+                  "px-3.5 py-1.5 text-[11px] font-bold border transition-all cursor-pointer rounded-md",
                   isActive
-                    ? "bg-white dark:bg-card border-[#ACA899] dark:border-border border-b-transparent text-[#01285F] dark:text-primary shadow-none"
-                    : "bg-[#D8D4C4] dark:bg-muted/40 border-transparent text-[#555555] dark:text-muted-foreground hover:bg-[#EAE7DC] hover:text-[#000000]"
+                    ? "bg-primary/10 border-primary/40 text-primary shadow-sm"
+                    : "bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
                 {tab.label}

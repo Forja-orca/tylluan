@@ -41,27 +41,27 @@ export const RecallHealthCard: React.FC<RecallHealthCardProps> = ({
         role="region"
         aria-label="Salud del recall"
         className={cn(
-          "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-5 transition-colors",
+          "bg-card border border-border rounded-lg shadow-sm p-5 transition-colors",
           className
         )}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2.5">
             <Activity className="w-5 h-5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="text-base font-semibold text-foreground">
               Salud del recall
             </h2>
           </div>
           <span
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 self-start sm:self-auto"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 self-start sm:self-auto"
           >
             <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
             <span>kernel sin telemetría de recall (actualiza)</span>
           </span>
         </div>
-        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           El kernel en ejecución no expone contadores de telemetría en{' '}
-          <code className="font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">
+          <code className="font-mono text-foreground bg-muted border border-border px-1 py-0.5 rounded">
             components.recall
           </code>
           . Requiere un binario con D-5 compilado y en ejecución para visualizar latencias, ratio de vacías e histograma.
