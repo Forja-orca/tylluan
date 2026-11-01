@@ -214,7 +214,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             onClick={fetchConflicted}
             disabled={loading}
             aria-label="Actualizar lista de nodos en conflicto"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted text-xs font-semibold text-foreground rounded-md border border-border shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted text-xs font-semibold text-foreground rounded-md border border-border shadow-sm transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <RefreshCw className={cn('w-3.5 h-3.5 text-primary', loading && 'animate-spin')} aria-hidden="true" />
             <span>{loading ? 'Cargando...' : 'Actualizar'}</span>
@@ -232,7 +232,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 setEndpointStatus('error');
               }}
               aria-label="Cancel conflicted nodes query"
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold rounded-md transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold rounded-md transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
             >
               Cancelar
             </button>
@@ -363,7 +363,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 type="button"
                 onClick={fetchConflicted}
                 aria-label="Reintentar consulta de nodos en conflicto"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 hover:bg-muted text-foreground font-semibold text-xs border border-border shadow-sm transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 hover:bg-muted text-foreground font-semibold text-xs border border-border shadow-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
                 Reintentar
@@ -384,7 +384,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1 rounded-md bg-muted/60 hover:bg-muted border border-border text-foreground disabled:opacity-40 cursor-pointer"
+              className="px-3 py-1 rounded-md bg-muted/60 hover:bg-muted border border-border text-foreground disabled:opacity-40 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               Prev
             </button>
@@ -392,7 +392,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-3 py-1 rounded-md bg-muted/60 hover:bg-muted border border-border text-foreground disabled:opacity-40 cursor-pointer"
+              className="px-3 py-1 rounded-md bg-muted/60 hover:bg-muted border border-border text-foreground disabled:opacity-40 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               Next
             </button>

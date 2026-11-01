@@ -270,11 +270,19 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
         </div>
 
-        <div role="group" aria-label="Knowledge View Modes" className="flex bg-muted/80 border border-border rounded-lg p-1 gap-1 items-center shrink-0">
+        <div role="tablist" aria-label="Knowledge View Modes" className="flex bg-muted/80 border border-border rounded-lg p-1 gap-1 items-center shrink-0">
           <button 
             type="button" 
-            aria-pressed={activeSubView === 'graph'}
+            role="tab"
+            aria-selected={activeSubView === 'graph'}
+            tabIndex={activeSubView === 'graph' ? 0 : -1}
             onClick={() => setActiveSubView('graph')} 
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                setActiveSubView('list');
+              }
+            }}
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
               activeSubView === 'graph' ? "bg-card text-primary border border-border shadow-sm" : "text-muted-foreground hover:text-foreground border border-transparent"
@@ -284,8 +292,16 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </button>
           <button 
             type="button" 
-            aria-pressed={activeSubView === 'list'}
+            role="tab"
+            aria-selected={activeSubView === 'list'}
+            tabIndex={activeSubView === 'list' ? 0 : -1}
             onClick={() => setActiveSubView('list')} 
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                setActiveSubView('graph');
+              }
+            }}
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
               activeSubView === 'list' ? "bg-card text-primary border border-border shadow-sm" : "text-muted-foreground hover:text-foreground border border-transparent"
@@ -356,7 +372,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 aria-pressed={showRecentSidebar}
                 onClick={() => setShowRecentSidebar(!showRecentSidebar)}
                 className={cn(
-                  "p-1.5 rounded-md border transition-all cursor-pointer",
+                  "p-1.5 rounded-md border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   showRecentSidebar ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 text-foreground border-border hover:bg-muted"
                 )}
                 title="Últimas 24 h"
@@ -367,7 +383,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={runClustering}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/50 hover:bg-muted text-xs font-semibold text-primary border border-border transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/50 hover:bg-muted text-xs font-semibold text-primary border border-border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 <Zap className="w-3.5 h-3.5" aria-hidden="true" /> Detectar comunidades
               </button>
@@ -375,7 +391,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={() => void loadRecent(false)}
                 disabled={loading || isBackgroundRefreshing}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/50 hover:bg-muted text-xs font-semibold text-foreground border border-border transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/50 hover:bg-muted text-xs font-semibold text-foreground border border-border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5 text-primary", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Actualizar
               </button>
@@ -383,21 +399,21 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold border border-primary rounded-md shadow-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold border border-primary rounded-md shadow-sm flex items-center gap-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 {searching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Database className="w-3.5 h-3.5" aria-hidden="true" />} Explorar
               </button>
             </div>
             <div className="flex bg-muted/60 border border-border rounded-md p-0.5 shrink-0 gap-0.5 items-center">
-              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors", view === 'grid' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Cuadrícula</button>
-              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors", view === 'table' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Tabla</button>
+              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none", view === 'grid' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Cuadrícula</button>
+              <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none", view === 'table' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Tabla</button>
               <div className="w-px bg-border self-stretch my-0.5 mx-0.5"></div>
               <button 
                 type="button" 
                 aria-pressed={compactMode}
                 onClick={() => setCompactMode(!compactMode)} 
                 className={cn(
-                  "px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors",
+                  "px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   compactMode ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -407,10 +423,18 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
 
           {showSearchPanel && searchResults.length > 0 && (
-            <div className="absolute z-20 mt-12 w-80 max-h-96 overflow-y-auto bg-slate-900 border border-border rounded shadow-none">
+            <div
+              className="absolute z-20 mt-12 w-80 max-h-96 overflow-y-auto bg-slate-900 border border-border rounded shadow-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setShowSearchPanel(false);
+                }
+              }}
+            >
               <div className="sticky top-0 bg-slate-800 px-3 py-2 flex items-center justify-between">
                 <span className="text-[11px] font-medium text-slate-400">Results</span>
-                <button type="button" aria-label="Close search results" onClick={() => setShowSearchPanel(false)}><X className="w-3 h-3 text-slate-400" aria-hidden="true" /></button>
+                <button type="button" aria-label="Close search results" onClick={() => setShowSearchPanel(false)} className="rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"><X className="w-3 h-3 text-slate-400" aria-hidden="true" /></button>
               </div>
               {searchResults.map((node, i) => (
                 <div
@@ -720,7 +744,13 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                             </div>
                           )}
                         </div>
-                        <button type="button" title="Buscar relacionados" onClick={() => setQuery(node.id)} className="p-1 hover:bg-slate-700 rounded transition-colors">
+                        <button
+                          type="button"
+                          title="Buscar relacionados"
+                          aria-label={`Buscar nodos relacionados con ${node.id}`}
+                          onClick={() => setQuery(node.id)}
+                          className="p-1 hover:bg-slate-700 rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                        >
                           <Search className="w-3 h-3 text-slate-500" />
                         </button>
                       </div>
@@ -813,13 +843,26 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
 
             {/* Recent Nodes Sidebar */}
             {showRecentSidebar && (
-              <div className="absolute left-4 top-32 w-72 max-h-[60vh] bg-slate-900 border border-slate-700 rounded z-10 overflow-hidden flex flex-col">
+              <div
+                className="absolute left-4 top-32 w-72 max-h-[60vh] bg-slate-900 border border-slate-700 rounded z-10 overflow-hidden flex flex-col"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setShowRecentSidebar(false);
+                  }
+                }}
+              >
                 <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-primary" />
                     <span className="text-[11px] font-medium text-slate-300">Últimas 24h</span>
                   </div>
-                  <button onClick={() => setShowRecentSidebar(false)} className="text-slate-500 hover:text-slate-50">
+                  <button
+                    type="button"
+                    aria-label="Cerrar panel de últimas 24h"
+                    onClick={() => setShowRecentSidebar(false)}
+                    className="text-slate-500 hover:text-slate-50 rounded p-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>

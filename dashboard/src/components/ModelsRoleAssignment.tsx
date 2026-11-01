@@ -127,9 +127,10 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
           </p>
         </div>
         <button
+          type="button"
           onClick={handleSaveRoles}
           disabled={savingRoles}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground text-xs font-semibold rounded-md shadow-sm transition-colors disabled:opacity-50 shrink-0 cursor-pointer self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground text-xs font-semibold rounded-md shadow-sm transition-colors disabled:opacity-50 shrink-0 cursor-pointer self-start sm:self-auto focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           <Save className={cn("w-3.5 h-3.5 text-primary", savingRoles && "animate-spin")} />
           {savingRoles ? 'Guardando...' : 'Guardar Asignación'}

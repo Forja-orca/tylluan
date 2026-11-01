@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Upload, ChevronDown, ChevronUp, CheckCircle2, Layers } from 'lucide-react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
@@ -48,6 +48,30 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
   const [urlText, setUrlText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const toggleBtnRef = useRef<HTMLButtonElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const modeList: Array<'text' | 'url' | 'file'> = ['text', 'url', 'file'];
+  const modeRefs = useRef<Record<'text' | 'url' | 'file', HTMLButtonElement | null>>({
+    text: null,
+    url: null,
+    file: null,
+  });
+
+  const handleModeKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: 'text' | 'url' | 'file') => {
+    const idx = modeList.indexOf(current);
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % modeList.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + modeList.length) % modeList.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = modeList.length - 1;
+    if (nextIdx !== -1) {
+      e.preventDefault();
+      const nextMode = modeList[nextIdx];
+      setMode(nextMode);
+      modeRefs.current[nextMode]?.focus();
+    }
+  };
 
   const charCount = text.trim().length;
   const bulkChunks = bulk ? text.split(/\n---+\n/).map(s => s.trim()).filter(Boolean) : null;
@@ -183,14 +207,27 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
   }, [bridge, canSubmit, mode, text, bulkChunks, tags, urlText, selectedFile, notify, onIngestComplete, fetchRecentNodes]);
 
   return (
-    <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden font-sans">
+    <div
+      className="rounded-lg border border-border bg-card shadow-sm overflow-hidden font-sans"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && open) {
+          e.stopPropagation();
+          setOpen(false);
+          toggleBtnRef.current?.focus();
+        }
+      }}
+    >
       {/* Header — toggle */}
       <button
+        ref={toggleBtnRef}
+        type="button"
+        aria-expanded={open}
+        aria-controls="silva-ingest-panel-body"
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-primary hover:bg-muted/50 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-primary hover:bg-muted/50 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
       >
         <div className="flex items-center gap-2">
-          <Upload className="w-3.5 h-3.5" />
+          <Upload className="w-3.5 h-3.5" aria-hidden="true" />
           <span>Ingesta de Conocimiento en SilvaDB</span>
           {recent.length > 0 && (
             <span className="px-1.5 py-0.5 rounded-md bg-muted text-primary text-[10px] font-bold border border-border">
@@ -198,17 +235,23 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
             </span>
           )}
         </div>
-        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        {open ? <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" /> : <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />}
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-3 border-t border-border bg-card">
+        <div id="silva-ingest-panel-body" className="px-4 pb-4 space-y-3 border-t border-border bg-card">
           {/* Mode Selector Tabs */}
-          <div className="flex items-center gap-1.5 border-b border-border pb-2 mt-2.5">
+          <div role="tablist" aria-label="Modo de ingesta" className="flex items-center gap-1.5 border-b border-border pb-2 mt-2.5">
             <button
+              ref={(el) => { modeRefs.current.text = el; }}
+              type="button"
+              role="tab"
+              aria-selected={mode === 'text'}
+              tabIndex={mode === 'text' ? 0 : -1}
               onClick={() => setMode('text')}
+              onKeyDown={(e) => handleModeKeyDown(e, 'text')}
               className={cn(
-                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
+                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                 mode === 'text'
                   ? "bg-primary/10 text-primary border border-primary/30"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-transparent"
@@ -217,9 +260,15 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               Texto
             </button>
             <button
+              ref={(el) => { modeRefs.current.url = el; }}
+              type="button"
+              role="tab"
+              aria-selected={mode === 'url'}
+              tabIndex={mode === 'url' ? 0 : -1}
               onClick={() => setMode('url')}
+              onKeyDown={(e) => handleModeKeyDown(e, 'url')}
               className={cn(
-                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
+                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                 mode === 'url'
                   ? "bg-primary/10 text-primary border border-primary/30"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-transparent"
@@ -228,9 +277,15 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               Enlace URL
             </button>
             <button
+              ref={(el) => { modeRefs.current.file = el; }}
+              type="button"
+              role="tab"
+              aria-selected={mode === 'file'}
+              tabIndex={mode === 'file' ? 0 : -1}
               onClick={() => setMode('file')}
+              onKeyDown={(e) => handleModeKeyDown(e, 'file')}
               className={cn(
-                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
+                "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                 mode === 'file'
                   ? "bg-primary/10 text-primary border border-primary/30"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-transparent"
@@ -267,9 +322,10 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
                 {/* Bulk toggle */}
                 <button
+                  type="button"
                   onClick={() => setBulk(v => !v)}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors cursor-pointer',
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
                     bulk
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -311,7 +367,26 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
           {mode === 'file' && (
             <div className="space-y-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={ev => {
+                  if (ev.target.files && ev.target.files[0]) {
+                    setSelectedFile(ev.target.files[0]);
+                  }
+                }}
+              />
               <div
+                tabIndex={0}
+                role="button"
+                aria-label="Cargar archivo para ingesta en SilvaDB"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
                 onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={e => {
@@ -322,18 +397,10 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   }
                 }}
                 onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.onchange = ev => {
-                    const target = ev.target as HTMLInputElement;
-                    if (target.files && target.files[0]) {
-                      setSelectedFile(target.files[0]);
-                    }
-                  };
-                  input.click();
+                  fileInputRef.current?.click();
                 }}
                 className={cn(
-                  "border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5",
+                  "border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   isDragOver
                     ? "border-primary bg-primary/10"
                     : "border-border bg-muted/30 hover:bg-muted/60"
@@ -348,7 +415,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 ) : (
                   <div className="text-xs text-foreground">
                     <p className="font-bold">Arrastre un archivo aquí</p>
-                    <p className="text-[11px] text-muted-foreground">o haga clic para examinar</p>
+                    <p className="text-[11px] text-muted-foreground">o pulse Enter / haga clic para examinar</p>
                   </div>
                 )}
               </div>
@@ -363,10 +430,11 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
               {mode === 'file' && (selectedFile ? `${selectedFile.name}` : 'Modo Archivo')}
             </span>
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
               className={cn(
-                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer shadow-sm',
+                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer shadow-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
                 canSubmit
                   ? 'bg-primary hover:bg-primary/90 text-primary-foreground border border-primary'
                   : 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'

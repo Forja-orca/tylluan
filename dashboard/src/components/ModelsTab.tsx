@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -21,10 +21,46 @@ export function ModelsTab({ bridge }: Props) {
   const [selectedDevice, setSelectedDevice] = useState('cpu');
   const [initialDevice, setInitialDevice] = useState('cpu');
   const [showRestartModal, setShowRestartModal] = useState(false);
+  const restartModalBtnRef = useRef<HTMLButtonElement>(null);
+  const tabRefs = useRef<Record<SubTab, HTMLButtonElement | null>>({
+    inference: null,
+    roles: null,
+    external: null,
+    embeddings: null,
+  });
+
+  const tabList: SubTab[] = ['inference', 'roles', 'external', 'embeddings'];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: SubTab) => {
+    const idx = tabList.indexOf(current);
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % tabList.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + tabList.length) % tabList.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = tabList.length - 1;
+    if (nextIdx !== -1) {
+      e.preventDefault();
+      const nextTab = tabList[nextIdx];
+      setSubTab(nextTab);
+      tabRefs.current[nextTab]?.focus();
+    }
+  };
+
+  useEffect(() => {
+    if (showRestartModal) {
+      const timer = setTimeout(() => {
+        restartModalBtnRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [showRestartModal]);
 
   useEffect(() => {
     const loadData = async () => {
-      if (!bridge) return;
+      if (!bridge) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const cfg = await bridge.getConfig();
@@ -92,10 +128,13 @@ export function ModelsTab({ bridge }: Props) {
             return (
               <button
                 key={tab.id}
+                ref={(el) => { tabRefs.current[tab.id] = el; }}
                 role="tab"
                 aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
                 type="button"
                 onClick={() => setSubTab(tab.id)}
+                onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
                 className={cn(
                   "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   isActive
@@ -145,11 +184,22 @@ export function ModelsTab({ bridge }: Props) {
 
       {/* Restart Kernel Modal (shared across all sub-tabs) */}
       {showRestartModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4 font-sans">
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="restart-modal-title"
+          className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4 font-sans"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              setShowRestartModal(false);
+            }
+          }}
+        >
           <div className="bg-card border border-border rounded-lg p-5 max-w-md w-full shadow-lg space-y-3">
             <div className="flex items-center gap-2 pb-2.5 border-b border-border">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-              <h3 className="text-sm font-bold text-foreground">Reinicio Requerido</h3>
+              <h3 id="restart-modal-title" className="text-sm font-bold text-foreground">Reinicio Requerido</h3>
             </div>
             
             <p className="text-xs text-muted-foreground leading-normal">
@@ -167,9 +217,10 @@ export function ModelsTab({ bridge }: Props) {
 
             <div className="flex justify-end gap-2 pt-2 border-t border-border">
               <button
+                ref={restartModalBtnRef}
                 type="button"
                 onClick={() => setShowRestartModal(false)}
-                className="px-3.5 py-1.5 bg-muted/60 hover:bg-muted text-foreground border border-border rounded-md text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 bg-muted/60 hover:bg-muted text-foreground border border-border rounded-md text-xs font-semibold shadow-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 Aceptar
               </button>

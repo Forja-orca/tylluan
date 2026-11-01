@@ -114,8 +114,9 @@ export function ModelsExternalProviders({ bridge }: Props) {
             </p>
           </div>
           <button
+            type="button"
             onClick={fetchProviders}
-            className="px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <RefreshCw className="w-3.5 h-3.5 text-primary" />
             Actualizar
@@ -178,12 +179,14 @@ export function ModelsExternalProviders({ bridge }: Props) {
                   </div>
 
                   {/* Models list */}
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Modelos disponibles para ${provider.name}`}>
                     {provider.models?.map((model) => (
-                      <span
+                      <button
+                        type="button"
                         key={model}
+                        aria-pressed={(selectedModels[provider.name] || provider.models[0]) === model}
                         className={cn(
-                          "text-[10px] font-mono px-2 py-0.5 rounded-md border cursor-pointer transition-colors",
+                          "text-[10px] font-mono px-2 py-0.5 rounded-md border cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                           (selectedModels[provider.name] || provider.models[0]) === model
                             ? "bg-primary text-primary-foreground border-primary font-bold"
                             : "bg-card text-foreground border-border hover:bg-muted"
@@ -191,7 +194,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                         onClick={() => setSelectedModels(prev => ({ ...prev, [provider.name]: model }))}
                       >
                         {model}
-                      </span>
+                      </button>
                     ))}
                     {(!provider.models || provider.models.length === 0) && (
                       <span className="text-[10px] text-muted-foreground font-mono">Sin modelos listados</span>
@@ -217,9 +220,10 @@ export function ModelsExternalProviders({ bridge }: Props) {
                   {/* Test button */}
                   <div className="flex justify-end pt-1">
                     <button
+                      type="button"
                       onClick={() => handleTest(provider)}
                       disabled={isTesting}
-                      className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-50 border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-50 border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                     >
                       {isTesting ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />

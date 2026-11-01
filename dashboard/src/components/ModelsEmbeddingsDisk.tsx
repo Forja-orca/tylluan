@@ -167,9 +167,10 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
           </div>
 
           <button
+            type="button"
             onClick={handleSave}
             disabled={saving || !embeddingModel}
-            className="px-3.5 py-1.5 bg-muted/60 hover:bg-muted border border-border disabled:opacity-50 text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 bg-muted/60 hover:bg-muted border border-border disabled:opacity-50 text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" /> : <Save className="w-3.5 h-3.5 text-primary" />}
             {saving ? 'Guardando...' : 'Guardar Configuración'}

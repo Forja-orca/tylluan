@@ -219,6 +219,28 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
     ];
   }, [tasksData, healthDetailed, guildsData, messagesData, sysStatusData]);
 
+  const viewOrder: Array<'rings' | 'flow' | 'heatmap'> = ['rings', 'flow', 'heatmap'];
+  const tabRefs = useRef<Record<'rings' | 'flow' | 'heatmap', HTMLButtonElement | null>>({
+    rings: null,
+    flow: null,
+    heatmap: null,
+  });
+
+  const handleViewTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: 'rings' | 'flow' | 'heatmap') => {
+    const idx = viewOrder.indexOf(current);
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % viewOrder.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + viewOrder.length) % viewOrder.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = viewOrder.length - 1;
+    if (nextIdx !== -1) {
+      e.preventDefault();
+      const nextView = viewOrder[nextIdx];
+      setActiveView(nextView);
+      tabRefs.current[nextView]?.focus();
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full space-y-4 animate-in fade-in duration-300">
       {/* Top Controller Bar */}
@@ -239,10 +261,15 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1 bg-muted/80 p-1 rounded-lg border border-border">
+        <div role="tablist" aria-label="Vistas de la Sala de Control Visual" className="flex items-center gap-1 bg-muted/80 p-1 rounded-lg border border-border">
           <button
+            ref={(el) => { tabRefs.current.rings = el; }}
             type="button"
+            role="tab"
+            aria-selected={activeView === 'rings'}
+            tabIndex={activeView === 'rings' ? 0 : -1}
             onClick={() => setActiveView('rings')}
+            onKeyDown={(e) => handleViewTabKeyDown(e, 'rings')}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               activeView === 'rings'
                 ? 'bg-card text-foreground border border-border shadow-sm'
@@ -252,8 +279,13 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
             1. Anillos de Estado
           </button>
           <button
+            ref={(el) => { tabRefs.current.flow = el; }}
             type="button"
+            role="tab"
+            aria-selected={activeView === 'flow'}
+            tabIndex={activeView === 'flow' ? 0 : -1}
             onClick={() => setActiveView('flow')}
+            onKeyDown={(e) => handleViewTabKeyDown(e, 'flow')}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               activeView === 'flow'
                 ? 'bg-card text-foreground border border-border shadow-sm'
@@ -263,8 +295,13 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
             2. Mapa de Flujo
           </button>
           <button
+            ref={(el) => { tabRefs.current.heatmap = el; }}
             type="button"
+            role="tab"
+            aria-selected={activeView === 'heatmap'}
+            tabIndex={activeView === 'heatmap' ? 0 : -1}
             onClick={() => setActiveView('heatmap')}
+            onKeyDown={(e) => handleViewTabKeyDown(e, 'heatmap')}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               activeView === 'heatmap'
                 ? 'bg-card text-foreground border border-border shadow-sm'

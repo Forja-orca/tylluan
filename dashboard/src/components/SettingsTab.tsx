@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { Key } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -15,6 +15,26 @@ type SubSection = 'connectors' | 'maintenance';
 
 export function SettingsTab({ bridge, notify, onOpenAuthModal }: SettingsTabProps) {
   const [section, setSection] = useState<SubSection>('connectors');
+  const sectionList: SubSection[] = ['connectors', 'maintenance'];
+  const tabRefs = useRef<Record<SubSection, HTMLButtonElement | null>>({
+    connectors: null,
+    maintenance: null,
+  });
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: SubSection) => {
+    const idx = sectionList.indexOf(current);
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % sectionList.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + sectionList.length) % sectionList.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = sectionList.length - 1;
+    if (nextIdx !== -1) {
+      e.preventDefault();
+      const nextSec = sectionList[nextIdx];
+      setSection(nextSec);
+      tabRefs.current[nextSec]?.focus();
+    }
+  };
 
   return (
     <div className="space-y-4 font-sans">
@@ -51,10 +71,13 @@ export function SettingsTab({ bridge, notify, onOpenAuthModal }: SettingsTabProp
             return (
               <button
                 key={tab.id}
+                ref={(el) => { tabRefs.current[tab.id] = el; }}
                 role="tab"
                 aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
                 type="button"
                 onClick={() => setSection(tab.id)}
+                onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
                 className={cn(
                   "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   isActive

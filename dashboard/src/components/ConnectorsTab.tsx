@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Users, 
   RefreshCw, 
@@ -79,6 +79,51 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   const [revokingIds, setRevokingIds] = useState<Set<string>>(new Set());
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [hint, setHint] = useState<SetupHintData | null>(null);
+
+  const subTabList: Array<'sessions' | 'catalog' | 'guides'> = ['sessions', 'catalog', 'guides'];
+  const subTabRefs = useRef<Record<'sessions' | 'catalog' | 'guides', HTMLButtonElement | null>>({
+    sessions: null,
+    catalog: null,
+    guides: null,
+  });
+
+  const handleSubTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: 'sessions' | 'catalog' | 'guides') => {
+    const idx = subTabList.indexOf(current);
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % subTabList.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + subTabList.length) % subTabList.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = subTabList.length - 1;
+    if (nextIdx !== -1) {
+      e.preventDefault();
+      const nextTab = subTabList[nextIdx];
+      setActiveSubTab(nextTab);
+      subTabRefs.current[nextTab]?.focus();
+    }
+  };
+
+  const guideTabList: Array<'cursor' | 'vscode' | 'claude' | 'custom'> = ['cursor', 'vscode', 'claude', 'custom'];
+  const guideTabRefs = useRef<Record<'cursor' | 'vscode' | 'claude' | 'custom', HTMLButtonElement | null>>({
+    cursor: null,
+    vscode: null,
+    claude: null,
+    custom: null,
+  });
+
+  const handleGuideTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: 'cursor' | 'vscode' | 'claude' | 'custom') => {
+    const idx = guideTabList.indexOf(current);
+    let nextIdx = -1;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextIdx = (idx + 1) % guideTabList.length;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') nextIdx = (idx - 1 + guideTabList.length) % guideTabList.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = guideTabList.length - 1;
+    if (nextIdx !== -1) {
+      e.preventDefault();
+      const nextTab = guideTabList[nextIdx];
+      setGuideTab(nextTab);
+      guideTabRefs.current[nextTab]?.focus();
+    }
+  };
 
   const fetchCapabilities = useCallback(async () => {
     if (!bridge) return;
@@ -224,9 +269,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
         <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
           <button 
+            type="button"
             onClick={handleRefresh}
             disabled={globalLoading || localLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border rounded-md text-xs font-semibold text-foreground shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border rounded-md text-xs font-semibold text-foreground shadow-sm transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <RefreshCw className={cn("w-3.5 h-3.5 text-primary", (globalLoading || localLoading) && "animate-spin")} />
             <span>Actualizar Estado</span>
@@ -235,11 +281,17 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
       </div>
 
       {/* Tabs Selector */}
-      <div className="flex flex-wrap border-b border-border pb-2 gap-1.5">
+      <div role="tablist" aria-label="Secciones de conectores" className="flex flex-wrap border-b border-border pb-2 gap-1.5">
         <button 
+          ref={(el) => { subTabRefs.current.sessions = el; }}
+          type="button"
+          role="tab"
+          aria-selected={activeSubTab === 'sessions'}
+          tabIndex={activeSubTab === 'sessions' ? 0 : -1}
           onClick={() => setActiveSubTab('sessions')}
+          onKeyDown={(e) => handleSubTabKeyDown(e, 'sessions')}
           className={cn(
-            "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md",
+            "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
             activeSubTab === 'sessions' 
               ? "bg-primary/10 border-primary/30 text-primary shadow-sm" 
               : "bg-card border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -257,9 +309,15 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         </button>
 
         <button 
+          ref={(el) => { subTabRefs.current.catalog = el; }}
+          type="button"
+          role="tab"
+          aria-selected={activeSubTab === 'catalog'}
+          tabIndex={activeSubTab === 'catalog' ? 0 : -1}
           onClick={() => setActiveSubTab('catalog')}
+          onKeyDown={(e) => handleSubTabKeyDown(e, 'catalog')}
           className={cn(
-            "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md",
+            "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
             activeSubTab === 'catalog' 
               ? "bg-primary/10 border-primary/30 text-primary shadow-sm" 
               : "bg-card border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -277,9 +335,15 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         </button>
 
         <button 
+          ref={(el) => { subTabRefs.current.guides = el; }}
+          type="button"
+          role="tab"
+          aria-selected={activeSubTab === 'guides'}
+          tabIndex={activeSubTab === 'guides' ? 0 : -1}
           onClick={() => setActiveSubTab('guides')}
+          onKeyDown={(e) => handleSubTabKeyDown(e, 'guides')}
           className={cn(
-            "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md",
+            "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
             activeSubTab === 'guides' 
               ? "bg-primary/10 border-primary/30 text-primary shadow-sm" 
               : "bg-card border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -359,10 +423,12 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
+                          type="button"
+                          aria-label={`Revocar sesión ${session.id.slice(0, 8)}`}
                           onClick={() => handleRevoke(session.id)}
                           disabled={revokingIds.has(session.id)}
                           className={cn(
-                            "p-1.5 rounded-md transition-colors border",
+                            "p-1.5 rounded-md transition-colors border cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none",
                             revokingIds.has(session.id) 
                               ? "bg-muted border-border cursor-not-allowed text-muted-foreground" 
                               : "bg-rose-500/10 hover:bg-rose-500/25 text-rose-700 dark:text-rose-400 border-rose-500/20 hover:border-rose-500/40"
@@ -524,11 +590,17 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         {activeSubTab === 'guides' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Guide Tabs */}
-            <div className="space-y-2">
+            <div role="tablist" aria-label="Guías de configuración de clientes" aria-orientation="vertical" className="space-y-2">
               <button 
+                ref={(el) => { guideTabRefs.current.cursor = el; }}
+                type="button"
+                role="tab"
+                aria-selected={guideTab === 'cursor'}
+                tabIndex={guideTab === 'cursor' ? 0 : -1}
                 onClick={() => setGuideTab('cursor')}
+                onKeyDown={(e) => handleGuideTabKeyDown(e, 'cursor')}
                 className={cn(
-                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   guideTab === 'cursor' 
                     ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
@@ -539,9 +611,15 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               </button>
 
               <button 
+                ref={(el) => { guideTabRefs.current.vscode = el; }}
+                type="button"
+                role="tab"
+                aria-selected={guideTab === 'vscode'}
+                tabIndex={guideTab === 'vscode' ? 0 : -1}
                 onClick={() => setGuideTab('vscode')}
+                onKeyDown={(e) => handleGuideTabKeyDown(e, 'vscode')}
                 className={cn(
-                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   guideTab === 'vscode' 
                     ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
@@ -552,9 +630,15 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               </button>
 
               <button 
+                ref={(el) => { guideTabRefs.current.claude = el; }}
+                type="button"
+                role="tab"
+                aria-selected={guideTab === 'claude'}
+                tabIndex={guideTab === 'claude' ? 0 : -1}
                 onClick={() => setGuideTab('claude')}
+                onKeyDown={(e) => handleGuideTabKeyDown(e, 'claude')}
                 className={cn(
-                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   guideTab === 'claude' 
                     ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
@@ -565,9 +649,15 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               </button>
 
               <button 
+                ref={(el) => { guideTabRefs.current.custom = el; }}
+                type="button"
+                role="tab"
+                aria-selected={guideTab === 'custom'}
+                tabIndex={guideTab === 'custom' ? 0 : -1}
                 onClick={() => setGuideTab('custom')}
+                onKeyDown={(e) => handleGuideTabKeyDown(e, 'custom')}
                 className={cn(
-                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between",
+                  "w-full text-left p-4 rounded border transition-colors font-semibold text-xs flex items-center justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   guideTab === 'custom' 
                     ? "bg-primary/10 border-primary text-primary" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
@@ -598,8 +688,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="flex justify-between items-center text-xs text-slate-400">
                       <span>Añada esta entrada en <code>project.json</code> o en la configuración global de Cursor:</span>
                       <button 
+                        type="button"
                         onClick={() => handleCopy(cursorConfig, 'Configuración de Cursor')}
-                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors cursor-pointer rounded px-1.5 py-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                       >
                         {copiedText === 'Configuración de Cursor' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copiar Código</span>
@@ -627,8 +718,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="flex justify-between items-center text-xs text-slate-400">
                       <span>Añada esta configuración a su archivo <code>cline_mcp_settings.json</code>:</span>
                       <button 
+                        type="button"
                         onClick={() => handleCopy(clineConfig, 'Configuración de VS Code')}
-                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors cursor-pointer rounded px-1.5 py-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                       >
                         {copiedText === 'Configuración de VS Code' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copiar Código</span>
@@ -661,8 +753,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="flex justify-between items-center text-xs text-slate-400">
                       <span>Añada esta entrada de servidor dentro de <code>claude_desktop_config.json</code>:</span>
                       <button 
+                        type="button"
                         onClick={() => handleCopy(claudeConfig, 'Configuración de Claude Desktop')}
-                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors cursor-pointer rounded px-1.5 py-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                       >
                         {copiedText === 'Configuración de Claude Desktop' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copiar Código</span>
@@ -686,8 +779,9 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="flex justify-between items-center text-xs text-slate-400">
                       <span>Ejemplo de petición cURL para ejecutar una intención:</span>
                       <button 
+                        type="button"
                         onClick={() => handleCopy(restCurl, 'Comando cURL')}
-                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors cursor-pointer rounded px-1.5 py-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                       >
                         {copiedText === 'Comando cURL' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copiar Código</span>

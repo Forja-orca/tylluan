@@ -161,7 +161,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                           type="button"
                           aria-label={`Seleccionar ${n.agent_id} como destino`}
                           onClick={() => setTargetId(n.agent_id)}
-                          className="px-2.5 py-1 bg-muted/60 hover:bg-muted text-foreground text-[11px] font-semibold rounded-md border border-border cursor-pointer"
+                          className="px-2.5 py-1 bg-muted/60 hover:bg-muted text-foreground text-[11px] font-semibold rounded-md border border-border cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                         >
                           Seleccionar
                         </button>
@@ -202,7 +202,7 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                     aria-pressed={targetId === ag}
                     onClick={() => setTargetId(ag)}
                     className={cn(
-                      "px-2 py-0.5 text-[10px] font-mono font-bold rounded-md border transition-all cursor-pointer",
+                      "px-2 py-0.5 text-[10px] font-mono font-bold rounded-md border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                       targetId === ag
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"

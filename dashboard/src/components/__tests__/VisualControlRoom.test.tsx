@@ -58,8 +58,8 @@ describe('VisualControlRoom — AG-17 Sala de Control Visual', () => {
     render(<VisualControlRoom bridge={mockBridge} online={true} />);
 
     expect(screen.getByText(/Sala de Control Visual/i)).toBeInTheDocument();
-    const btnFlow = screen.getByRole('button', { name: /2\. Mapa de Flujo/i });
-    const btnHeatmap = screen.getByRole('button', { name: /3\. Mapa de Calor/i });
+    const btnFlow = screen.getByRole('tab', { name: /2\. Mapa de Flujo/i });
+    const btnHeatmap = screen.getByRole('tab', { name: /3\. Mapa de Calor/i });
 
     fireEvent.click(btnFlow);
     expect(screen.getByText(/Aristas con grosor y velocidad proporcionales/i)).toBeInTheDocument();

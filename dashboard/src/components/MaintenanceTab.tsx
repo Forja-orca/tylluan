@@ -214,7 +214,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
           <button
             type="button"
             onClick={loadStatus}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border rounded-md text-xs font-semibold text-foreground shadow-sm transition-colors cursor-pointer self-start sm:self-auto"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/60 hover:bg-muted border border-border rounded-md text-xs font-semibold text-foreground shadow-sm transition-colors cursor-pointer self-start sm:self-auto focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <RefreshCw className="w-3.5 h-3.5 text-primary" /> Actualizar
           </button>
@@ -263,7 +263,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 onClick={() => runAction(id, label)}
                 disabled={loading === id}
                 className={cn(
-                  "w-full py-1.5 px-2.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1 border",
+                  "w-full py-1.5 px-2.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1 border focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                   btnClass
                 )}
               >
@@ -369,7 +369,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 notify('Token actualizado en la sesión', 'info');
               }
             }}
-            className="px-3.5 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 bg-muted/60 hover:bg-muted border border-border text-foreground rounded-md text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             Guardar Token
           </button>
