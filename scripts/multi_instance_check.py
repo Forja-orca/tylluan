@@ -38,6 +38,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -147,8 +148,23 @@ def mcp_call(port: int, tool: str, arguments: dict, call_id: int, timeout: int =
         headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read().decode("utf-8", errors="replace")
+    last_exc: Exception | None = None
+    raw = ""
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+            last_exc = None
+            break
+        except (urllib.error.URLError, OSError, TimeoutError, ConnectionError) as exc:
+            # T-DSH-174: un reset de conexion no puede tumbar el script; se
+            # reintenta UNA vez y, si persiste, se devuelve error claro para
+            # que la comprobacion quede en FAIL (nunca traceback).
+            last_exc = exc
+            if attempt == 1:
+                time.sleep(1.5)
+    if last_exc is not None:
+        return {"error": f"red tras 2 intentos: {last_exc}"}
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
