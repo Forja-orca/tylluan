@@ -38,6 +38,26 @@ def warn_with_log(message, category, filename, lineno, file=None, line=None):
 
 warnings.showwarning = warn_with_log
 
+# B24-H5: `guilds/builders/plugins/utils.py` is now a re-export shim of this
+# module instead of a second copy that drifted (that copy carried the hardened
+# `run_command`, this one carried `flag_untrusted_content`; each was missing the
+# other's fix). This list is what the shim inherits through `import *`, and
+# tests/python/test_b24_h5_single_utils_implementation.py fails if it drifts from
+# the names actually defined here.
+__all__ = [
+    "detect_language",
+    "find_executable",
+    "flag_untrusted_content",
+    "format_table",
+    "is_windows_device_path",
+    "run_command",
+    "safe_mcp_run",
+    "safe_read_file",
+    "truncate_output",
+    "validate_path",
+    "warn_with_log",
+]
+
 
 def safe_read_file(path: str, max_size: int = 1_000_000) -> Optional[str]:
     """Read file with size limit (1MB default).
@@ -82,9 +102,17 @@ async def run_command(
         return (-1, "", "Error: Empty command")
     
     try:
+        # stdin=DEVNULL: without this, the child inherits the guild process's
+        # stdin. A command that reads stdin on its own (e.g. `git` prompting
+        # for a credential helper, or a pager) blocks indefinitely -- nothing
+        # ever sends EOF -- until the timeout below kills it, turning a
+        # sub-second command into a 30s+ hang. Found living the real flow:
+        # `git status`/`git --version` timed out while `echo` (never reads
+        # stdin) worked instantly, 2026-07-26.
         process = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=cwd,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE if capture_stderr else None,
         )
@@ -100,8 +128,29 @@ async def run_command(
             stderr.decode(errors="replace") if stderr else "",
         )
     except asyncio.TimeoutError:
-        process.kill()
-        await process.wait()
+        # process.kill() only kills the immediate child (powershell.exe).
+        # Any grandchildren spawned by PowerShell (git.exe, cargo.exe, etc.)
+        # survive as orphans, blocking process.wait() indefinitely and leaving
+        # the guild process hung until the kernel kills and respawns it.
+        # On Windows, taskkill /T /F kills the entire process tree.
+        # Found 2026-07-26 during dogfooding: git commands hung the guild.
+        try:
+            if sys.platform == "win32" and process.pid:
+                tree_kill_cmd = f"taskkill /T /F /PID {process.pid}"
+                kill_proc = await asyncio.create_subprocess_exec(
+                    *tree_kill_cmd.split(),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(kill_proc.wait(), timeout=10)
+            process.kill()
+        except Exception:
+            process.kill()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            pass
         raise asyncio.TimeoutError(f"Command timed out after {timeout_secs}s")
 
 
