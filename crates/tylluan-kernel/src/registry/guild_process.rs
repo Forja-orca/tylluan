@@ -2602,7 +2602,6 @@ mod tests {
         );
     }
 
-    #[cfg(windows)]
     #[test]
     fn a1_absolute_verified_exe_launches_directly() {
         let exe = std::env::current_exe().unwrap();
@@ -2610,18 +2609,29 @@ mod tests {
         assert!(matches!(launch, ExternalLaunch::Direct { .. }));
     }
 
-    #[cfg(windows)]
     #[test]
     fn a1_batch_still_uses_cmd_wrapper() {
         let launch = external_launch(r"C:\temp\server.cmd", &[]).unwrap();
-        assert!(matches!(launch, ExternalLaunch::Cmd { .. }));
+        // Off Windows there is no cmd wrapper at all: everything launches directly, without a shell.
+        if cfg!(target_os = "windows") {
+            assert!(matches!(launch, ExternalLaunch::Cmd { .. }));
+        } else {
+            assert!(matches!(launch, ExternalLaunch::Direct { .. }));
+        }
     }
 
-    #[cfg(windows)]
     #[test]
     fn a1_shell_metacharacters_in_command_are_rejected() {
-        assert!(external_launch(r"C:\Windows\System32\cmd.exe & calc", &[]).is_err());
-        assert!(external_launch(r"C:\Windows\System32\cmd.exe; calc", &[]).is_err());
+        // Windows rejects shell metacharacters; elsewhere no shell is involved, so the string is just a file name.
+        let amp = external_launch(r"C:\Windows\System32\cmd.exe & calc", &[]);
+        let semi = external_launch(r"C:\Windows\System32\cmd.exe; calc", &[]);
+        if cfg!(target_os = "windows") {
+            assert!(amp.is_err());
+            assert!(semi.is_err());
+        } else {
+            assert!(matches!(amp, Ok(ExternalLaunch::Direct { .. })));
+            assert!(matches!(semi, Ok(ExternalLaunch::Direct { .. })));
+        }
     }
 }
 

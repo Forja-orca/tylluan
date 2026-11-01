@@ -104,7 +104,8 @@ pub struct EpisodeLog {
 impl EpisodeLog {
     /// Abre (o crea) `episodes.db` en `path`.
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path)
+        // Single choke point for encryption at rest: never open a database with a raw Connection::open.
+        let conn = crate::config::open_db(path)
             .with_context(|| format!("abriendo {}", path.display()))?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         let _ = conn.pragma_update(None, "journal_mode", "WAL");
