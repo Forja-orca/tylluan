@@ -4,7 +4,7 @@
 # Imprime una tabla OK/FALLA de:
 #   1. cargo deny check advisories  (Rust; exige "advisories ok" y NINGÚN
 #      warning advisory-not-detected, que delata ignores obsoletos en deny.toml)
-#   2. npm audit --omit=dev en dashboard/  (dependencias de producción del dashboard)
+#   2. pnpm audit --prod en dashboard/  (dependencias de producción del dashboard)
 #   3. certifi >= 2026.10.19 y pip >= 26.2.2 en .venv
 #   4. lo mismo en el runtime vendorizado de guilds-python de ESTA plataforma
 #      (windows-x86_64 en Windows, linux-x86_64 en Linux)
@@ -50,18 +50,18 @@ else
     row "cargo deny advisories" "FALLA" "cargo-deny no esta instalado"
 fi
 
-# ─── 2. npm audit (dashboard, solo dependencias de produccion) ───────────────
-if [ -f dashboard/package-lock.json ] && command -v npm >/dev/null 2>&1; then
-    audit_json="$(cd dashboard && npm audit --omit=dev --json 2>/dev/null)"
+# ─── 2. pnpm audit (dashboard, solo dependencias de produccion) ──────────────
+if [ -f dashboard/pnpm-lock.yaml ] && command -v pnpm >/dev/null 2>&1; then
+    audit_json="$(cd dashboard && pnpm audit --prod --json 2>/dev/null)"
     audit_rc=$?
-    audit_total="$(printf '%s' "$audit_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(String(j.metadata?.vulnerabilities?.total ?? ""))}catch(e){process.stdout.write("")}})' 2>/dev/null)"
+    audit_total="$(printf '%s' "$audit_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const v=JSON.parse(s).metadata?.vulnerabilities??{};process.stdout.write(String(["info","low","moderate","high","critical"].reduce((n,k)=>n+(v[k]||0),0)))}catch(e){process.stdout.write("")}})' 2>/dev/null)"
     if [ "$audit_rc" -eq 0 ] && [ "${audit_total:-x}" = "0" ]; then
-        row "npm audit (dashboard, prod)" "OK" "0 vulnerabilidades"
+        row "pnpm audit (dashboard, prod)" "OK" "0 vulnerabilidades"
     else
-        row "npm audit (dashboard, prod)" "FALLA" "exit=$audit_rc total=${audit_total:-?}"
+        row "pnpm audit (dashboard, prod)" "FALLA" "exit=$audit_rc total=${audit_total:-?}"
     fi
 else
-    row "npm audit (dashboard, prod)" "FALLA" "falta dashboard/package-lock.json o npm"
+    row "pnpm audit (dashboard, prod)" "FALLA" "falta dashboard/pnpm-lock.yaml o pnpm"
 fi
 
 # ─── 3/4. certifi y pip en los entornos Python ──────────────────────────────
