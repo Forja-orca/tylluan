@@ -86,6 +86,34 @@ pub(crate) fn fts_clear_all(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// T-DSH-164: refresca UNA fila de `nodes_fts` para un nodo que se acaba de
+/// actualizar. FTS5 de contenido externo (`content=nodes`): hay que borrar con
+/// los valores VIEJOS (leidos antes del UPDATE) y reinsertar con los NUEVOS
+/// (leidos de `nodes` ahora mismo), todo en la misma transaccion que el UPDATE.
+pub(crate) fn fts_refresh_row(
+    conn: &Connection,
+    rowid: i64,
+    id: &str,
+    old_content: &str,
+    old_metadata: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO nodes_fts(nodes_fts, rowid, id, content, metadata) \
+         VALUES ('delete', ?1, ?2, ?3, ?4)",
+        rusqlite::params![rowid, id, old_content, old_metadata],
+    )?;
+    let (content, metadata): (String, String) = conn.query_row(
+        "SELECT content, COALESCE(metadata, '{}') FROM nodes WHERE rowid = ?1",
+        rusqlite::params![rowid],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    conn.execute(
+        "INSERT INTO nodes_fts(rowid, id, content, metadata) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![rowid, id, content, metadata],
+    )?;
+    Ok(())
+}
+
 /// `orphan`/`missing` contados contra `nodes_fts_docsize`, que tiene una fila
 /// por docid **realmente indexado** (a diferencia de `SELECT COUNT(*) FROM
 /// nodes_fts`, que en una tabla de contenido externo lee la tabla `nodes` y por
@@ -543,6 +571,19 @@ mod desync_paths {
                 .count()
                 >= 3,
             "upsert_node_with_validity, update_node_content y update_node_metadata deben reinsertar en nodes_fts"
+        );
+
+        // T-DSH-164: los UPDATE de metadata con json_set (status, superseded_by,
+        // private) tambien indexan `metadata` y deben refrescar nodes_fts.
+        assert_eq!(
+            nodes.matches("json_set(COALESCE(metadata").count(),
+            3,
+            "solo set_status, supersede_agent_summaries y make_private usan json_set sobre metadata: las 3 deben refrescar nodes_fts"
+        );
+        assert_eq!(
+            nodes.matches("fts_refresh_row").count(),
+            3,
+            "cada UPDATE json_set de metadata debe llamar a fts_refresh_row en la misma transaccion (T-DSH-164)"
         );
     }
 }

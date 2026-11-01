@@ -862,13 +862,29 @@ impl super::SilvaDB {
     }
 
     /// Set node status metadata field.
+    ///
+    /// T-DSH-164: `metadata` esta indexada en `nodes_fts`; el UPDATE y el
+    /// refresco del espejo FTS van en la MISMA transaccion (antes el status
+    /// nuevo no era buscable por BM25 hasta un rebuild).
     pub async fn set_status(&self, id: &str, status: &str) -> Result<()> {
         tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
-            conn.execute(
+            let mut conn = self.conn.blocking_lock();
+            let tx = conn.transaction()?;
+            let old = tx.query_row(
+                "SELECT rowid, content, COALESCE(metadata, '{}') FROM nodes WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+            );
+            let Ok((rowid, old_content, old_metadata)) = old else {
+                tx.commit()?;
+                return Ok(());
+            };
+            tx.execute(
                 "UPDATE nodes SET metadata = json_set(COALESCE(metadata, '{}'), '$.status', ?2) WHERE id = ?1",
                 params![id, status],
             )?;
+            super::fts::fts_refresh_row(&tx, rowid, id, &old_content, &old_metadata)?;
+            tx.commit()?;
             Ok::<(), anyhow::Error>(())
         })?;
         Ok(())
@@ -892,7 +908,24 @@ impl super::SilvaDB {
             // literal '%' or '_' inside agent_id as a wildcard, which could
             // otherwise widen the match to unrelated agents.
             let needle = format!("\"agent_id\":\"{}\"", agent_id.replace('"', ""));
-            let updated = conn.execute(
+            // T-DSH-164: metadata indexada por nodes_fts. Se leen las filas
+            // afectadas ANTES del UPDATE (para el 'delete' con valores viejos)
+            // y se refresca cada una en la MISMA transaccion.
+            let mut conn = conn;
+            let tx = conn.transaction()?;
+            let rows: Vec<(i64, String, String, String)> = {
+                let mut stmt = tx.prepare(
+                    "SELECT rowid, id, content, COALESCE(metadata, '{}') FROM nodes
+                     WHERE id != ?2
+                       AND type IN ('agent_summary', 'session_digest')
+                       AND instr(COALESCE(metadata, ''), ?3) > 0
+                       AND json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NULL",
+                )?;
+                stmt.query_map(params![agent_id, new_summary_id, needle], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })?.collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            let updated = tx.execute(
                 "UPDATE nodes SET metadata = json_set(COALESCE(metadata, '{}'), '$.superseded_by', ?2), updated_at = CURRENT_TIMESTAMP
                  WHERE id != ?2
                    AND type IN ('agent_summary', 'session_digest')
@@ -900,6 +933,10 @@ impl super::SilvaDB {
                    AND json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NULL",
                 params![agent_id, new_summary_id, needle],
             )?;
+            for (rowid, nid, old_content, old_metadata) in rows {
+                super::fts::fts_refresh_row(&tx, rowid, &nid, &old_content, &old_metadata)?;
+            }
+            tx.commit()?;
             if updated > 0 {
                 tracing::info!("🌲 SilvaDB: superseded {} previous summaries of agent '{}' (new: {})", updated, agent_id, new_summary_id);
             }
@@ -1584,13 +1621,28 @@ impl super::SilvaDB {
     }
 
     /// Mark node as private (not shared in collective memory).
+    ///
+    /// T-DSH-164: `metadata` esta indexada en `nodes_fts`; UPDATE + refresco
+    /// del espejo en la misma transaccion.
     pub async fn make_private(&self, node_id: &str) -> Result<()> {
         tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
-            conn.execute(
+            let mut conn = self.conn.blocking_lock();
+            let tx = conn.transaction()?;
+            let old = tx.query_row(
+                "SELECT rowid, content, COALESCE(metadata, '{}') FROM nodes WHERE id = ?1",
+                params![node_id],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+            );
+            let Ok((rowid, old_content, old_metadata)) = old else {
+                tx.commit()?;
+                return Ok(());
+            };
+            tx.execute(
                 "UPDATE nodes SET metadata = json_set(COALESCE(metadata, '{}'), '$.private', true) WHERE id = ?1",
                 params![node_id],
             )?;
+            super::fts::fts_refresh_row(&tx, rowid, node_id, &old_content, &old_metadata)?;
+            tx.commit()?;
             Ok::<(), anyhow::Error>(())
         })?;
         Ok(())
@@ -2339,6 +2391,77 @@ mod tests {
         assert!(
             captured.contains("metadata JSON inválida"),
             "la metadata ilegible debe avisar, got: {captured}"
+        );
+    }
+    // ---- T-DSH-164: los UPDATE de metadata deben refrescar nodes_fts ----
+    //
+    // Nota: se consulta el INDICE FTS directamente (no `search_hybrid`), porque
+    // `search_hybrid` cae a LIKE sobre `nodes` cuando el FTS no encuentra nada
+    // y eso enmascararia un espejo FTS obsoleto.
+
+    async fn fts_match_count(db: &crate::memory::silva::SilvaDB, query: &str) -> i64 {
+        let conn_arc = db.conn_lock();
+        let conn = conn_arc.lock().await;
+        conn.query_row(
+            "SELECT COUNT(*) FROM nodes_fts WHERE nodes_fts MATCH ?1",
+            rusqlite::params![query],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn set_status_refreshes_fts_so_the_new_status_is_searchable() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("n1", "memory", "contenido inicial", "{}").await.unwrap();
+        db.set_status("n1", "archived").await.unwrap();
+
+        assert_eq!(
+            fts_match_count(&db, "archived").await,
+            1,
+            "el status nuevo debe estar en nodes_fts (sin refresco, el indice conserva la metadata vieja)"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn make_private_refreshes_fts_so_the_private_marker_is_searchable() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("n2", "memory", "contenido inicial", "{}").await.unwrap();
+        db.make_private("n2").await.unwrap();
+
+        assert_eq!(
+            fts_match_count(&db, "private").await,
+            1,
+            "el marcador private debe estar en nodes_fts (metadata refrescada)"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn supersede_agent_summaries_refreshes_fts_for_every_updated_node() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        let opts = || crate::memory::silva::NodeWriteOptions::new("agent_generated").drift_allowed(true);
+        db.upsert_node_with_validity(
+            "sum:old",
+            "agent_summary",
+            "resumen viejo",
+            "{\"agent_id\":\"agent-x\"}",
+            opts(),
+        ).await.unwrap();
+        db.upsert_node_with_validity(
+            "sum:new",
+            "agent_summary",
+            "resumen nuevo",
+            "{\"agent_id\":\"agent-x\"}",
+            opts(),
+        ).await.unwrap();
+
+        let updated = db.supersede_agent_summaries("agent-x", "sum:new").await.unwrap();
+        assert_eq!(updated, 1, "solo el resumen viejo debe quedar superseded");
+
+        assert_eq!(
+            fts_match_count(&db, "superseded").await,
+            1,
+            "superseded_by anadido a metadata debe estar en nodes_fts"
         );
     }
 }
