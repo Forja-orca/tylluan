@@ -94,6 +94,13 @@ async def code_parse(
     if not file_path or not os.path.isfile(file_path):
         return f"❌ File not found: {file_path or 'none provided'}"
     
+    # B-24 (2026-11-01): this tool read ANY path handed to it - filesystem.py
+    # has the containment guard, code.py never did. Resolve the root per call
+    # (not at import) so an operator can relocate it without restarting.
+    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    if not utils.validate_path(_root, os.path.abspath(file_path)):
+        return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{_root}'."
+
     content = utils.safe_read_file(file_path)
     if content is None:
         return "⚠️ File too large or unreadable"

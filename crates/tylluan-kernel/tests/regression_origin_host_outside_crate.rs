@@ -5,15 +5,15 @@
 //! del enunciado de T-DSH-86 (turno 1762); cola: docs/internal/COLA_buffy_2026-10-25.md.
 //!
 //! Spec MCP 2025-06-18: el servidor "MUST validate the Origin header" de toda
-//! petición entrante (anti DNS-rebinding). Hoy el kernel NO valida: cualquier
+//! petición entrante (anti DNS-rebinding). Sin esa validación, cualquier
 //! página web puede resolver un dominio propio a 127.0.0.1 y ejecutar
 //! `tools/list`/`tools/call` contra el kernel sin token (T-DSH-85, hallazgo
 //! reproducido con router en proceso).
 //!
-//! Los 5 casos que hoy devuelven 200 en vez de 403 llevan
-//! salida en `docs/internal/IMPL_M-BUFFY-10_*.md`). Los 3 casos que ya
-//! deben pasar (orígenes loopback y cliente sin Origin) corren siempre.
-//! Quitaremos el `ignore` cuando T-DSH-86 aterrice.
+//! El rojo medido (5 casos devolvían 200 en vez de 403) está documentado en
+//! `docs/internal/IMPL_M-BUFFY-10_*.md`. Los 8 casos corren siempre desde
+//! 346cf65: T-DSH-86 aterrizó en el mismo commit que este fichero y los
+//! provisionales `#[ignore]` de los 5 casos 403 se retiraron.
 //!
 //! Cada caso se ejecuta en ambos modos: `dev_mode=true` (bypass de auth —
 //! la validación de origen no depende de auth) y `dev_mode=false` con Bearer
@@ -21,7 +21,7 @@
 //!
 //! Run:
 //!   cargo test -p tylluan-kernel --test regression_origin_host_outside_crate
-//!   cargo test -p tylluan-kernel --test regression_origin_host_outside_crate -- --ignored   # rojo esperado hoy
+//!   cargo test -p tylluan-kernel --test regression_origin_host_outside_crate -- --ignored   # sin ignorados desde 346cf65
 
 mod support;
 
@@ -154,7 +154,7 @@ fn tools_probe(
     }
 }
 
-// ─── Casos 403 (ROJO HOY: #[ignore] hasta T-DSH-86) ─────────────────────────
+// ─── Casos 403 (exigen el fix T-DSH-86; gatean desde 346cf65) ─────────────────────────
 
 /// Caso 1 — POST /messages con `Origin: http://evil.example` => 403.
 #[tokio::test(flavor = "multi_thread")]
@@ -322,7 +322,7 @@ async fn c5_options_preflight_evil_origin_403() {
     }
 }
 
-// ─── Casos 200 (deben pasar HOY y tras el fix — sin ignore) ─────────────────
+// ─── Casos 200 (orígenes legítimos; corren siempre) ─────────────────
 
 /// Caso 6 — `Origin: http://127.0.0.1:<puerto>` (loopback) => 200.
 #[tokio::test(flavor = "multi_thread")]

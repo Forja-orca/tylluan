@@ -40,6 +40,14 @@ const FLOORS: &[(&str, usize)] = &[
     ("es_homoglifo_cirilico", 0),
     ("es_ancho_completo", 0),
     ("es_puntuacion", 0),
+    // B-23 (2026-11-01): familias ampliadas. Suelo = lo medido con la capa 1
+    // de hoy; 0 significa "la capa 1 no detecta esta familia" y queda escrito
+    // aqui a proposito para que el hueco sea visible, no silencioso.
+    ("es_etiqueta_unicode", 3),
+    ("es_bidi", 1),
+    ("es_ansi", 2),
+    ("es_base64", 0),
+    ("es_reinyectado", 1),
 ];
 
 fn corpus_path(name: &str) -> PathBuf {
@@ -79,6 +87,11 @@ struct Buckets {
     es_homoglifo_cirilico: (usize, usize),
     es_ancho_completo: (usize, usize),
     es_puntuacion: (usize, usize),
+    es_etiqueta_unicode: (usize, usize),
+    es_bidi: (usize, usize),
+    es_ansi: (usize, usize),
+    es_base64: (usize, usize),
+    es_reinyectado: (usize, usize),
 }
 
 impl Buckets {
@@ -91,6 +104,11 @@ impl Buckets {
             "es_homoglifo_cirilico" => &mut self.es_homoglifo_cirilico,
             "es_ancho_completo" => &mut self.es_ancho_completo,
             "es_puntuacion" => &mut self.es_puntuacion,
+            "es_etiqueta_unicode" => &mut self.es_etiqueta_unicode,
+            "es_bidi" => &mut self.es_bidi,
+            "es_ansi" => &mut self.es_ansi,
+            "es_base64" => &mut self.es_base64,
+            "es_reinyectado" => &mut self.es_reinyectado,
             other => panic!("categoria desconocida en el corpus: {other} (muestra {m})"),
         };
         slot.1 += 1;
@@ -113,6 +131,11 @@ impl Buckets {
             ),
             ("es_ancho_completo", self.es_ancho_completo.0, self.es_ancho_completo.1),
             ("es_puntuacion", self.es_puntuacion.0, self.es_puntuacion.1),
+            ("es_etiqueta_unicode", self.es_etiqueta_unicode.0, self.es_etiqueta_unicode.1),
+            ("es_bidi", self.es_bidi.0, self.es_bidi.1),
+            ("es_ansi", self.es_ansi.0, self.es_ansi.1),
+            ("es_base64", self.es_base64.0, self.es_base64.1),
+            ("es_reinyectado", self.es_reinyectado.0, self.es_reinyectado.1),
         ]
     }
 }
@@ -171,6 +194,11 @@ fn layer1_detection_floors_by_category() {
                 "homoglifo_cirilico" => "es_homoglifo_cirilico",
                 "ancho_completo" => "es_ancho_completo",
                 "puntuacion" => "es_puntuacion",
+                "etiqueta_unicode" => "es_etiqueta_unicode",
+                "bidi" => "es_bidi",
+                "ansi" => "es_ansi",
+                "base64" => "es_base64",
+                "reinyectado" => "es_reinyectado",
                 other => panic!("variante desconocida en el corpus: {other} (muestra {m})"),
             }
         };

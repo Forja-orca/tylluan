@@ -1087,6 +1087,32 @@ pub async fn meta_prune_handler(State(state): State<Arc<HttpState>>) -> impl Int
     }
 }
 
+/// B-22 (2026-11-01): `Host` is client-controlled, so a loopback *prefix* is
+/// not a boundary — `starts_with("127.0.0.1")` also accepted
+/// `127.0.0.1.evil.example` and `localhost.evil.example`. Fail closed unless
+/// the hostname (optional `:port`, optional IPv6 brackets) is exactly loopback.
+/// Defence in depth only: the master token remains the real gate.
+fn is_loopback_host_header(host: &str) -> bool {
+    let hostname = match host.strip_prefix('[') {
+        // IPv6 literal: only "[::1]" or "[::1]:port" may follow the bracket.
+        // B-22: a first version dropped everything after ']' and happily
+        // accepted "[::1].evil.example" — caught by its own test.
+        Some(rest) => match rest.split_once(']') {
+            Some((h, "")) => h,
+            Some((h, tail)) => match tail.strip_prefix(':') {
+                Some(port) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => h,
+                _ => return false,
+            },
+            None => return false,
+        },
+        None => match host.rsplit_once(':') {
+            Some((h, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => h,
+            _ => host,
+        },
+    };
+    matches!(hostname, "127.0.0.1" | "localhost" | "::1")
+}
+
 pub async fn admin_shutdown_handler(
     State(state): State<Arc<HttpState>>,
     headers: axum::http::HeaderMap,
@@ -1095,7 +1121,7 @@ pub async fn admin_shutdown_handler(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    let is_local = host.starts_with("127.0.0.1") || host.starts_with("localhost") || host.starts_with("[::1]");
+    let is_local = is_loopback_host_header(host);
     if !is_local {
         return (
             StatusCode::FORBIDDEN,
@@ -1118,7 +1144,7 @@ pub async fn admin_emergency_kill_handler(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    let is_local = host.starts_with("127.0.0.1") || host.starts_with("localhost") || host.starts_with("[::1]");
+    let is_local = is_loopback_host_header(host);
     if !is_local {
         return (
             StatusCode::FORBIDDEN,
@@ -1157,7 +1183,7 @@ pub async fn admin_kill_guild_handler(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    let is_local = host.starts_with("127.0.0.1") || host.starts_with("localhost") || host.starts_with("[::1]");
+    let is_local = is_loopback_host_header(host);
     if !is_local {
         return (
             StatusCode::FORBIDDEN,
