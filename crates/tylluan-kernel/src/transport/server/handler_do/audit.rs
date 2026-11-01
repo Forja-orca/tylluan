@@ -13,17 +13,137 @@ pub(crate) fn routing_failure_id(intent: &str) -> String {
     format!("lesson:routing_failure:{hash:x}")
 }
 
-/// Resolve the audit store path — THE single owner of path resolution for
-/// `./data/audit.db`. The writer (`log_audit_entry`), the chain verifier
-/// (`verify_audit_chain`), and the MD-7 read endpoint (`/api/v1/audit/latency`,
-/// via handler_do re-export) all call THIS; `TYLLUAN_AUDIT_DB` is checked in
-/// exactly one place. Unset env → byte-identical behavior to the historical
-/// hardcoded `"./data/audit.db"`; set → writer and reader land on the same
-/// file (test seam: pattern of `TYLLUAN_CONFUSION_DB`).
+/// T-DSH-169: DOS almacenes con nombres distintos, ambos bajo el DATA_DIR.
+/// - `audit.db`: almacen generico de auditoria (audit_log, friction_*, ejemplos).
+/// - `guild_audit.db`: SOLO la cadena `guild_audit_log` + `guild_audit_chain_meta`.
+///
+/// Antes, la cadena vivia en `audit_db_path()` = `./data/audit.db` relativo al
+/// CWD: segun desde donde arrancara el kernel acababa en `data/audit.db` o en
+/// `crates/tylluan-kernel/data/audit.db`, fuera del backup y mezclada con el
+/// almacen generico. Los overrides explicitos (`TYLLUAN_AUDIT_DB`,
+/// `TYLLUAN_GUILD_AUDIT_DB`) siguen mandando (seam de tests).
+fn audit_store_paths_from(
+    data_dir: &std::path::Path,
+    audit_env: Option<String>,
+    guild_env: Option<String>,
+) -> (std::path::PathBuf, std::path::PathBuf) {
+    let audit = audit_env
+        .clone()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+    // Compatibilidad de seam: `TYLLUAN_AUDIT_DB` solo (sin
+    // `TYLLUAN_GUILD_AUDIT_DB`) mantiene el comportamiento de un unico fichero
+    // para la cadena, que usan los tests historicos. En produccion (sin env)
+    // los nombres quedan separados: audit.db vs guild_audit.db.
+    let guild = guild_env
+        .or(audit_env)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| data_dir.join("guild_audit.db"));
+    (audit, guild)
+}
+
+/// Ruta del almacen generico de auditoria (`audit.db` bajo el DATA_DIR).
 pub fn audit_db_path() -> std::path::PathBuf {
-    std::env::var("TYLLUAN_AUDIT_DB")
-        .unwrap_or_else(|_| "./data/audit.db".to_string())
-        .into()
+    audit_store_paths_from(
+        &crate::config::data_dir(),
+        std::env::var("TYLLUAN_AUDIT_DB").ok(),
+        std::env::var("TYLLUAN_GUILD_AUDIT_DB").ok(),
+    )
+    .0
+}
+
+/// Ruta de la base que contiene la cadena `guild_audit_log` (`guild_audit.db`).
+pub fn guild_audit_db_path() -> std::path::PathBuf {
+    audit_store_paths_from(
+        &crate::config::data_dir(),
+        std::env::var("TYLLUAN_AUDIT_DB").ok(),
+        std::env::var("TYLLUAN_GUILD_AUDIT_DB").ok(),
+    )
+    .1
+}
+
+/// Numero de filas de `guild_audit_log` en una base, si la tabla existe.
+fn chain_rows_in(path: &std::path::Path) -> Option<i64> {
+    let conn = rusqlite::Connection::open_with_flags(
+        path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .ok()?;
+    conn.query_row("SELECT COUNT(*) FROM guild_audit_log", [], |r| r.get(0))
+        .ok()
+}
+
+/// Rutas heredadas donde la cadena pudo quedar antes del arreglo.
+fn legacy_chain_candidates() -> Vec<std::path::PathBuf> {
+    let mut out = vec![
+        audit_db_path(),
+        std::path::PathBuf::from("./data/audit.db"),
+        std::path::PathBuf::from("./crates/tylluan-kernel/data/audit.db"),
+    ];
+    if let Ok(explicit) = std::env::var("TYLLUAN_AUDIT_DB") {
+        let p = std::path::PathBuf::from(explicit);
+        if !out.contains(&p) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// Copia la cadena heredada a `target` si alli aun no existe. NO borra ni mueve
+/// el origen: la copia es la unica operacion destructiva permitida (y solo
+/// escribe un fichero nuevo). Devuelve el origen copiado.
+fn migrate_chain_from_candidates(
+    target: &std::path::Path,
+    candidates: &[std::path::PathBuf],
+) -> Result<Option<std::path::PathBuf>, String> {
+    if target.exists() {
+        return Ok(None);
+    }
+    for cand in candidates {
+        if cand == target || !cand.exists() {
+            continue;
+        }
+        let Some(rows) = chain_rows_in(cand) else { continue };
+        if rows == 0 {
+            continue;
+        }
+        if let Some(parent) = target.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|e| format!("guild_audit dir: {e}"))?;
+        }
+        std::fs::copy(cand, target).map_err(|e| {
+            format!("copiando cadena heredada {} -> {}: {e}", cand.display(), target.display())
+        })?;
+        // Copiar tambien los sidecars WAL/SHM si existen: una base abierta
+        // puede tener filas recientes solo en el -wal, y copiar solo el .db
+        // las perderia en silencio. Nunca se borra el origen.
+        for suffix in ["-wal", "-shm"] {
+            let mut src_os = cand.as_os_str().to_os_string();
+            src_os.push(suffix);
+            let src = std::path::PathBuf::from(src_os);
+            if src.exists() {
+                let mut dst_os = target.as_os_str().to_os_string();
+                dst_os.push(suffix);
+                let dst = std::path::PathBuf::from(dst_os);
+                std::fs::copy(&src, &dst).map_err(|e| {
+                    format!("copiando sidecar {} -> {}: {e}", src.display(), dst.display())
+                })?;
+            }
+        }
+        tracing::warn!(
+            source = %cand.display(),
+            target = %target.display(),
+            rows,
+            "guild_audit: cadena heredada migrada por COPIA (el original se conserva intacto)"
+        );
+        return Ok(Some(cand.clone()));
+    }
+    Ok(None)
+}
+
+/// T-DSH-169: migra (por copia) la cadena heredada a `guild_audit.db` del
+/// DATA_DIR. Idempotente: si el destino ya existe, no hace nada.
+pub fn migrate_legacy_guild_audit_chain() -> Result<Option<std::path::PathBuf>, String> {
+    migrate_chain_from_candidates(&guild_audit_db_path(), &legacy_chain_candidates())
 }
 
 /// D-84: metadatos de la cadena cuando se purgan filas antiguas. El ancla
@@ -119,7 +239,7 @@ pub fn prune_guild_audit_log_at(
 
 /// D-84: purga de `guild_audit_log` sobre la ruta de auditoría del proceso.
 pub fn prune_guild_audit_log(retention_days: u64) -> Result<usize, String> {
-    prune_guild_audit_log_at(&audit_db_path(), retention_days)
+    prune_guild_audit_log_at(&guild_audit_db_path(), retention_days)
 }
 
 /// Write an audit log entry for every tylluan_do tool call.
@@ -127,13 +247,33 @@ pub fn prune_guild_audit_log(retention_days: u64) -> Result<usize, String> {
 /// making tampering detectable. Called fire-and-forget — errors are non-fatal.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &str, success: bool, preview: &str, latency_ms: u64, human_intervention: bool) -> Result<(), String> {
-    let path = audit_db_path();
+    // T-DSH-169: la cadena vive en guild_audit.db; migrar por copia si viene de
+    // una ubicacion heredada (idempotente y no destructivo).
+    if let Err(e) = migrate_legacy_guild_audit_chain() {
+        tracing::warn!("guild_audit: migracion heredada fallida (se sigue intentando): {e}");
+    }
+    log_audit_entry_at(
+        &guild_audit_db_path(),
+        intent,
+        guild,
+        tool,
+        agent_id,
+        success,
+        preview,
+        latency_ms,
+        human_intervention,
+    )
+}
+
+/// Igual que [`log_audit_entry`] pero sobre una ruta explicita (tests/seam).
+#[allow(clippy::too_many_arguments)]
+fn log_audit_entry_at(path: &std::path::Path, intent: &str, guild: &str, tool: &str, agent_id: &str, success: bool, preview: &str, latency_ms: u64, human_intervention: bool) -> Result<(), String> {
     // A fresh checkout (CI, first run) has no `./data`: without this the open
     // failed and the audit row was silently lost.
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| format!("audit dir: {e}"))?;
     }
-    let conn = crate::config::open_db(&path).map_err(|e| format!("audit open: {e}"))?;
+    let conn = crate::config::open_db(path).map_err(|e| format!("audit open: {e}"))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS guild_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -260,7 +400,7 @@ pub(crate) fn audit_or_warn(intent: &str, guild: &str, tool: &str, agent_id: &st
 /// Verify the integrity of the audit chain from oldest to newest.
 /// Returns (ok_count, bad_count) — bad > 0 means tampering detected.
 pub fn verify_audit_chain() -> Result<(usize, usize), String> {
-    verify_audit_chain_at(&audit_db_path())
+    verify_audit_chain_at(&guild_audit_db_path())
 }
 
 fn verify_audit_chain_at(path: &std::path::Path) -> Result<(usize, usize), String> {
@@ -630,7 +770,7 @@ mod tests {
 
         // 1) Default when unset is the historical path (byte-identical).
         unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
-        assert_eq!(audit_db_path(), std::path::PathBuf::from("./data/audit.db"));
+        assert_eq!(audit_db_path(), crate::config::data_file("audit.db"));
         // 2) Writer resolves through the seam...
         unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", &db) };
         log_audit_entry("seam intent", "guild_x", "tool_y", "agent-z", true, "p", 42, false)
@@ -700,5 +840,74 @@ mod tests {
         unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(value, 42, "audit_or_warn no debe alterar el valor del call-site");
+    }
+
+    #[test]
+    fn audit_stores_are_named_and_live_under_data_dir() {
+        // T-DSH-169: antes la cadena resolvia "./data/audit.db" relativo al CWD
+        // (dos ubicaciones distintas segun desde donde arrancara el kernel).
+        // Ahora ambas cuelgan del DATA_DIR y con nombres separados.
+        let dir = std::path::PathBuf::from("/tmp/t169-data");
+        let (audit, guild) = super::audit_store_paths_from(&dir, None, None);
+        assert_eq!(audit, dir.join("audit.db"));
+        assert_eq!(guild, dir.join("guild_audit.db"));
+        assert_ne!(audit, guild, "almacen generico y cadena no comparten fichero");
+
+        let (audit2, guild2) = super::audit_store_paths_from(
+            &dir,
+            Some("/x/audit-custom.db".to_string()),
+            Some("/y/guild-custom.db".to_string()),
+        );
+        assert_eq!(audit2, std::path::PathBuf::from("/x/audit-custom.db"));
+        assert_eq!(guild2, std::path::PathBuf::from("/y/guild-custom.db"));
+
+        // Seam historico: solo TYLLUAN_AUDIT_DB => un unico fichero para todo.
+        let (audit3, guild3) = super::audit_store_paths_from(
+            &dir,
+            Some("/x/audit-custom.db".to_string()),
+            None,
+        );
+        assert_eq!(audit3, std::path::PathBuf::from("/x/audit-custom.db"));
+        assert_eq!(guild3, audit3, "compatibilidad con el seam anterior");
+    }
+
+    #[test]
+    fn legacy_chain_is_copied_without_deleting_source() {
+        // T-DSH-169: migracion por COPIA. El origen se conserva intacto.
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("legacy_audit.db");
+        {
+            let conn = crate::config::open_db(&legacy).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE guild_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL, guild TEXT NOT NULL, tool_name TEXT NOT NULL, agent_id TEXT NOT NULL DEFAULT '', intent TEXT, status TEXT NOT NULL DEFAULT 'ok', result_preview TEXT, prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL);",
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, status, prev_hash, hash) VALUES ('t','kernel','doctor','a','ok','', 'h1')",
+                [],
+            ).unwrap();
+        }
+        let target = tmp.path().join("guild_audit.db");
+        let copied = super::migrate_chain_from_candidates(&target, std::slice::from_ref(&legacy)).unwrap();
+        assert_eq!(copied.as_deref(), Some(legacy.as_path()), "debe copiar la heredada");
+        assert_eq!(super::chain_rows_in(&target), Some(1), "la cadena llega al destino");
+        assert!(legacy.exists(), "el origen NO se borra");
+        assert_eq!(super::chain_rows_in(&legacy), Some(1), "el origen conserva sus filas");
+
+        // Idempotente: con destino ya creado no vuelve a copiar.
+        let again = super::migrate_chain_from_candidates(&target, std::slice::from_ref(&legacy)).unwrap();
+        assert_eq!(again, None);
+    }
+
+    #[test]
+    fn guild_entries_do_not_land_in_the_generic_audit_db() {
+        // T-DSH-169: la cadena se escribe en guild_audit.db, no en audit.db.
+        let tmp = tempfile::tempdir().unwrap();
+        let guild_db = tmp.path().join("guild_audit.db");
+        let generic_db = tmp.path().join("audit.db");
+        super::log_audit_entry_at(&guild_db, "intent", "kernel", "doctor", "test", true, "ok", 5, false)
+            .expect("escribir guild_audit.db");
+        assert!(guild_db.exists());
+        assert_eq!(super::chain_rows_in(&guild_db), Some(1));
+        assert!(!generic_db.exists(), "el almacen generico no recibe la cadena");
     }
 }

@@ -795,8 +795,8 @@ mod tests {
     /// fire-and-forget and other tests write to the same file, so this waits
     /// rather than assuming a fixed position.
     async fn audit_row(intent: &str) -> Option<(String, i64)> {
-        use crate::transport::server::handler_do::audit::audit_db_path;
-        let path = audit_db_path();
+        use crate::transport::server::handler_do::audit::guild_audit_db_path;
+        let path = guild_audit_db_path();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
             let found = tokio::task::spawn_blocking({

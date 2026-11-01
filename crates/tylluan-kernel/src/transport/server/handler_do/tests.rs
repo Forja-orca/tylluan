@@ -1302,7 +1302,7 @@ async fn d28_tylluan_do_without_agent_id_audits_anonymous_not_empty() {
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         while std::time::Instant::now() < deadline {
-            if let Ok(conn) = crate::config::open_db(&audit_db_path()) {
+            if let Ok(conn) = crate::config::open_db(&crate::transport::server::handler_do::audit::guild_audit_db_path()) {
                 let row = conn.query_row(
                     "SELECT agent_id FROM guild_audit_log WHERE intent = ?1 LIMIT 1",
                     rusqlite::params![unique],

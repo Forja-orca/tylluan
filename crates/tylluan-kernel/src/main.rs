@@ -642,6 +642,18 @@ async fn main() -> anyhow::Result<()> {
     let data_dir = db_path.parent().unwrap_or_else(|| Path::new("data"));
     std::fs::create_dir_all(data_dir).ok();
 
+    // T-DSH-169: si la cadena de auditoria quedo en una ubicacion heredada
+    // (./data/audit.db o crates/tylluan-kernel/data/audit.db), copiarla a
+    // <DATA_DIR>/guild_audit.db. Nunca borra ni mueve el origen.
+    match TylluanServer::migrate_legacy_guild_audit_chain() {
+        Ok(Some(from)) => tracing::warn!(
+            "guild_audit: cadena heredada migrada por copia desde {}",
+            from.display()
+        ),
+        Ok(None) => {}
+        Err(e) => tracing::warn!("guild_audit: migracion heredada fallida: {e}"),
+    }
+
     let jobs_path = data_dir.join("jobs.db");
     let jobs = Arc::new(tylluan_kernel::memory::jobs::JobQueue::open(&jobs_path)?);
     let resumed = jobs.resume_pending()?;

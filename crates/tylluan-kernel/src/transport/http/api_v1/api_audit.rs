@@ -153,7 +153,7 @@ pub(crate) fn error_counts_from(
 /// `available: false` with the reason inline — same non-fatal convention as
 /// `audit_latency_stats_handler`, never a 500.
 pub(crate) async fn golden_errors_block() -> serde_json::Value {
-    let db_path = handler_do::audit_db_path();
+    let db_path = handler_do::audit::guild_audit_db_path();
     let window = ERRORS_WINDOW_MINUTES;
     let res = tokio::task::spawn_blocking(move || error_counts_from(&db_path, window)).await;
     match res {
@@ -233,7 +233,7 @@ pub struct AuditLatencyParams {
 pub async fn audit_latency_stats_handler(
     axum::extract::Query(params): axum::extract::Query<AuditLatencyParams>,
 ) -> impl axum::response::IntoResponse {
-    let db_path = handler_do::audit_db_path();
+    let db_path = handler_do::audit::guild_audit_db_path();
     let cutoff = cutoff_clause(params.window_minutes);
 
     let rows = match tokio::task::spawn_blocking(move || {

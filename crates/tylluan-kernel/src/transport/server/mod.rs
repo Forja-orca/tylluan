@@ -204,6 +204,12 @@ impl TylluanServer {
         }
     }
 
+    /// T-DSH-169: migra por copia la cadena de auditoria heredada a
+    /// `guild_audit.db` del DATA_DIR (no borra ni mueve el origen).
+    pub fn migrate_legacy_guild_audit_chain() -> Result<Option<std::path::PathBuf>, String> {
+        crate::transport::server::handler_do::audit::migrate_legacy_guild_audit_chain()
+    }
+
     /// T-DSH-165: inyecta el registro de episodios (episodes.db del DATA_DIR).
     pub fn set_episode_log(&mut self, log: Arc<crate::memory::episodes::EpisodeLog>) {
         self.episodes = Some(log);

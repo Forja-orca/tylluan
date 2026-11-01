@@ -1705,7 +1705,7 @@ async fn nodes_unregister_handler(
 /// D-53: el endpoint de lectura debe resolver la misma DB que escribe el
 /// kernel (`TYLLUAN_AUDIT_DB` incluido), no una ruta hardcodeada.
 fn audit_read_db_path() -> std::path::PathBuf {
-    crate::transport::server::handler_do::audit_db_path()
+    crate::transport::server::handler_do::audit::guild_audit_db_path()
 }
 
 /// GET /api/v1/audit — Query the audit trail with optional agent_id filter and hash-chain verification.
@@ -2139,8 +2139,8 @@ mod d53_audit_read_path_tests {
         unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
         assert_eq!(
             audit_read_db_path(),
-            std::path::PathBuf::from("./data/audit.db"),
-            "sin env debe conservar la ruta histórica"
+            crate::config::data_file("guild_audit.db"),
+            "sin env la cadena se lee de guild_audit.db del DATA_DIR"
         );
     }
 }
