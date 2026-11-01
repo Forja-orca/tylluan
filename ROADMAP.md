@@ -1,8 +1,8 @@
 # Tylluan Roadmap
 
-## Closing roadmap to v1.0 (final selection, 2026-11-01)
+## Roadmap to v1.0 (scope and quality bars, 2026-11-01)
 
-This section supersedes the open items of every milestone below. Everything not listed here as **In scope** is either **Parked** (not in v1.0) or **Rejected** (do not reopen without new evidence). Per-milestone sections that follow are the historical record.
+This section supersedes the open items of every milestone below; those sections remain as the historical record. v1.0 has **no date**: it ships when every quality bar at the end of this section is met. Anything not listed as **In scope** is either **Parked** (not in v1.0) or **Rejected** (do not reopen without new evidence).
 
 **What Tylluan is:** a local, open-source memory and defence server for AI agents. It runs on the user's own machine (fits on a USB stick, no cloud), remembers what agents did, and stands between agents and the tools they connect to.
 
@@ -13,10 +13,24 @@ This section supersedes the open items of every milestone below. Everything not 
 | F1 | **Remember and be the copy** — faithful append-only record of every agent call and reply (secrets redacted), a reliable Coloquio-to-memory flywheel, backup to a USB stick and restore, proactive recall measured with Recall@5 | 10 calls give 10 stored rows; a restart rewrites no already-seen turn; backup then restore into an empty folder passes `PRAGMA quick_check` on every database |
 | F2 | **IDE sessions load themselves** — hooks and plugins push each turn to Tylluan in the background, with a local queue so nothing is lost if the server is down | Kill the server mid-session: after restart the last confirmed turn is present and nothing is duplicated |
 | F3 | **The wall** — a gateway in the kernel for every MCP server (local or remote): tool-definition pinning by hash, block on change, filtered `tools/list`, per-server namespaces, workspace config approval by hash, egress allow-list, quarantine of tool descriptions (ADR-022, ADR-023, ADR-024) | A server whose tool definition changes after approval is blocked until re-approved; a server that is not on the allow-list does not start |
-| F4 | **Weekly threat watch** — a script reads public feeds (CISA KEV, URLhaus, GitHub Advisory Database), crosses them with our own dependencies and writes a short report | A report exists for each week and flags any match with `Cargo.lock`, the dashboard lockfile or the Python requirements |
+| F4 | **Weekly threat watch** — `scripts/threat_watch.py` reads public feeds (CISA KEV, OSV), crosses them with our own dependencies and writes a short report | A report exists for each week and flags any match with `Cargo.lock`, the dashboard lockfile or the Python requirements (prototype merged; scheduling pending) |
 | F5 | **Pulse** — every background loop reports a heartbeat; a stalled loop is restarted with a cap; `/health` says which loop is stopped | Stopping one loop in a test server shows it in `/health` within one minute |
-| F6 | **Easy for anyone** — a real installer, the minimal old-school dashboard (Claude palette), plain-language backup guide | A person with no technical knowledge installs, backs up and restores following only the guide |
+| F6 | **Easy for anyone** — a real installer, the minimal old-school dashboard, plain-language backup guide | A person with no technical knowledge installs, backs up and restores following only the guide |
 | F7 | **Team network, last** — a simple private VPN per team with one-time pairing (link or QR); never a global mesh (ADR-019) | Two machines pair with a one-time link and exchange memory; revoking the link cuts access |
+| F8 | **Install by agent** — after F6: the user hands a command or an address to their own agent, which installs a clean Tylluan as a plugin or skill in its IDE or CLI (Claude Code first, then Copilot and Cursor); the bootstrap verifies a signed tag and shows the user the source before installing | An agent installs from a single address, refuses a tampered artifact, and the plugin exposes only Tylluan's own tools |
+| F9 | **One workspace for the whole team** — a workspace broker inside Tylluan (tasks, expiring leases, heartbeats, a single git writer, idle agents get the next task) so several agents can share one tree without 200 worktrees | Four simulated agents, 200 overlapping tasks, 10 % of agents killed mid-edit, 50 repetitions: 0 lost writes, 0 double claims, 0 index locks. Worktrees are retired only if this passes |
+| F10 | **Local generalist decision model** — the smallest model that passes our own manual evaluation on CPU with llama.cpp (JSON output enforced by grammar); ONNX stays on the hot path; no cloud by default | 50 real, anonymised cases: at least 90 % valid JSON with grammar and a manual accuracy at or above the reserve model, within a memory budget the owner sets |
+
+### Quality bars for v1.0 (all must pass)
+
+1. **Robustness:** kill -9 at random points during 1,000 write cycles loses no confirmed write and restarts clean; fuzzing and property tests on the input parsers; every background loop has a heartbeat and a capped restart.
+2. **Secure by default:** a written threat model tested point by point; no MCP server runs without approval bound to its fingerprint; least privilege; secrets encrypted or redacted.
+3. **Supply chain:** reproducible builds, an SBOM, signed releases with verifiable provenance, dependencies pinned by hash (ONNX Runtime and the Python lock are already pinned).
+4. **External verification:** an independent audit of the MCP wall and of backup and restore before release.
+5. **Usability:** a person with no technical knowledge installs, backs up and restores on a clean Windows machine.
+6. **No hidden debt:** zero clippy and lint warnings, every number in the documentation recomputed by a command, and for each protection a test that fails when the protection is removed.
+
+A front is not opened until the previous one has passed its tests, a refactor and a measurement.
 
 ### Parked (not in v1.0)
 
@@ -28,7 +42,7 @@ IdleLab as a separate subsystem (ADR-007); NVIDIA OpenShell as a kernel dependen
 
 ### Order of work
 
-1. F1 + F5 + the Claude Code part of F2. 2. F3 (first piece: quarantine of tool descriptions) + F4. 3. F6 + F7. Production restarts only when the owner says so, and `/health` must report the same commit as `main`.
+F1, F5 and the Claude Code part of F2 first; then F3 (first piece: quarantine of tool descriptions) with F4; then F6; then F8, F9 and F10; F7 last. Production restarts only when the owner says so, and `/health` must report the same commit as `main`.
 
 ## v0.1.0 — Alpha Release
 
