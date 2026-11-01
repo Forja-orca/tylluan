@@ -1676,14 +1676,32 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn d80_recall_output_is_sanitized() {
+        // D-80 (2026-10-23) fijaba que la salida de recall no expone el payload
+        // oculto. B-29 (2026-11-01) endurece el mecanismo: un canal de etiquetas
+        // Unicode es señal de inyeccion por si mismo, asi que la capa 1 del
+        // CoherenceGate elimina el nodo en lugar de devolverlo con el payload
+        // enmascarado. Lo que el test protege no cambia (el payload nunca sale
+        // en la respuesta); cambia como se consigue.
         let server = test_server().await;
         let hidden: String = "hidden-tag-payload"
             .chars()
             .map(|c| char::from_u32(0xe0000 + c as u32).unwrap())
             .collect();
+        // Los dos nodos se siembran antes de consultar: recall cachea por
+        // consulta y una segunda llamada reutiliza el conjunto anterior.
         server
             .silva
-            .upsert_node("d80_recall", "concept", &format!("visible {hidden} text"), "{}")
+            .upsert_node(
+                "d80_recall",
+                "concept",
+                &format!("visible marcador-envenenado {hidden} cola"),
+                "{}",
+            )
+            .await
+            .unwrap();
+        server
+            .silva
+            .upsert_node("d80_clean", "concept", "visible texto limpio", "{}")
             .await
             .unwrap();
 
@@ -1697,7 +1715,19 @@ mod tests {
             .first()
             .and_then(|c| c.as_text().map(|t| t.text.clone()))
             .unwrap_or_default();
-        assert!(text.contains("visible"), "unexpected recall output: {text}");
-        assert!(!text.contains('\u{E0069}'), "recall output must not expose tag payload");
+        assert!(
+            !text.contains('\u{E0069}'),
+            "recall output must not expose tag payload: {text}"
+        );
+        assert!(
+            !text.contains("marcador-envenenado"),
+            "a node holding an invisible tag channel must not be served at all: {text}"
+        );
+        // Control: el nodo limpio con la misma palabra si se sirve, para probar
+        // que lo eliminado es el nodo envenenado y no la consulta entera.
+        assert!(
+            text.contains("texto limpio"),
+            "a clean node must still be recalled: {text}"
+        );
     }
 }
