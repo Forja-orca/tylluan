@@ -11,7 +11,7 @@ import {
   Terminal,
   Wrench,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AgUiToolCall } from '../../lib/ag-ui-parser';
 import { cn } from '../../lib/utils';
 
@@ -44,6 +44,15 @@ function getToolIcon(tool: string, guild?: string) {
 
 export function ColoquioToolCard({ toolCall }: ColoquioToolCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape' && expanded) {
+      e.stopPropagation();
+      setExpanded(false);
+      buttonRef.current?.focus();
+    }
+  };
 
   const statusBadge =
     toolCall.status === 'running' ? (
@@ -70,8 +79,12 @@ export function ColoquioToolCard({ toolCall }: ColoquioToolCardProps) {
     'Ejecución de herramienta completada';
 
   return (
-    <div className="my-2 rounded-md border border-border bg-muted/35 overflow-hidden text-[11.5px]">
+    <div
+      onKeyDown={handleKeyDown}
+      className="my-2 rounded-md border border-border bg-muted/35 overflow-hidden text-[11.5px]"
+    >
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setExpanded(prev => !prev)}
         aria-expanded={expanded}

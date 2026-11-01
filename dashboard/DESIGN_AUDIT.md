@@ -255,4 +255,37 @@ Labels: mixed case, muted
 
 ---
 
-*Propuesta lista para revisión por José. No implementar hasta su aprobación.*
+## 6. Estado Implementado en v0.17.2 — "Equilibrio Cálido-Profundo" y Primitivas AG-UI (AG-24 / AG-25, 2026-11-01)
+
+### 6.1 Tokens Semánticos (`dashboard/src/index.css` y `dashboard/tailwind.config.js`)
+
+| Token CSS | Modo Claro ("Papel Cálido") | Modo Oscuro ("Observatorio Nocturno") | Rol y Contraste WCAG 2.2 AA |
+| :--- | :--- | :--- | :--- |
+| `--background` | `42 28% 95%` (`#F5F3EC`) | `224 24% 7%` (`#0D1017`) | Lienzo base sin fatiga ocular |
+| `--card` / `--popover` | `0 0% 100%` (`#FFFFFF`) | `222 22% 11%` (`#151922`) | Superficie elevada para tarjetas y paneles |
+| `--muted` / `--secondary` | `42 20% 91%` (`#ECE9DF`) | `222 18% 15%` (`#1F2430`) | Cabeceras de sección, bloques plegados y `<code>` inline |
+| `--foreground` | `220 18% 13%` (`#1B2028`) | `216 20% 93%` (`#EAECEF`) | Texto principal (`16.51:1` Light / `14.54:1` Dark) |
+| `--muted-foreground` | `220 12% 33%` (`#4A515E`) | `218 13% 69%` (`#A4ADBC`) | Metadatos y etiquetas (`7.99:1` Light / `7.36:1` Dark) |
+| `--primary` / `--ring` | `16 65% 38%` (`#A03D1E`) | `16 74% 62%` (`#E37859`) | Acento primario Terracota/Ámbar (`6.39:1` Light / `6.24:1` Dark) |
+| `--signal` | `192 82% 28%` (`#0D6782`) | `191 82% 52%` (`#21C1E9`) | Cian reservado para señal en vivo y streaming (`6.46:1` / `8.25:1`) |
+| `--border` / `--input` | `40 12% 76%` (`#C9C5B8`) | `220 16% 20%` (`#2B313B`) | Bordes estructurales de 1 px |
+
+### 6.2 Tipografía Local, Radios y Sombras (`dashboard/tailwind.config.js`)
+
+- **Tipografía self-hosted (0 peticiones externas):**
+  - `font-sans`: `'Plus Jakarta Sans'` (`400`, `700` desde `src/assets/fonts/plus-jakarta-sans-latin-*.woff2`) + pila del sistema.
+  - `font-mono`: `'JetBrains Mono'` (`400`, `700` desde `src/assets/fonts/jetbrains-mono-latin-*.woff2`) + `Consolas`.
+- **Jerarquía de radios (`borderRadius`):** `sm: 4px`, `DEFAULT/md: 6px`, `lg: 8px`, `xl/2xl: 10px`.
+- **Sombras multicapa sutiles (`boxShadow`):** `shadow-sm` (`0 1px 2px 0 rgba(15,23,42,0.06)`), `shadow`/`shadow-md` (`0 2px 6px -1px rgba(15,23,42,0.08)`), `shadow-lg` (`0 8px 20px -4px rgba(15,23,42,0.12)`).
+- **Accesibilidad de foco (`:focus-visible`):** `outline: 2px solid hsl(var(--ring))` con `outline-offset: 2px`.
+
+### 6.3 Identidad por Agente y Primitivas AG-UI en Coloquio (`P2` + `P3` + `P4`)
+
+1. **Borde de acento lateral (`border-l-2` en `dashboard/src/lib/agent-meta.ts`):**
+   - `jose`: `border-l-emerald-500` · `claude-code`: `border-l-primary` · `deep`: `border-l-cyan-500` · `antigravity`: `border-l-violet-500` · `buffy`: `border-l-rose-500` · `dsh`: `border-l-indigo-500` · `mimo`: `border-l-teal-500` · `qwen`: `border-l-blue-500` · `opencode`: `border-l-amber-500`.
+2. **Cuatro tarjetas estructuradas AG-UI / CopilotKit (`dashboard/src/components/coloquio/`):**
+   - `ColoquioHandoffBadge.tsx`: cinta semántica (`role="status"`) para entregas, cierres y delegaciones (`@origen → @destino`, `T-Delivered`).
+   - `ColoquioThinkingBlock.tsx`: acordeón accesible (`aria-expanded`, soporte `Tab`/`Enter`/`Space`/`Escape` con retorno de foco) para trazas `<think>` y `[PENSAMIENTO]`.
+   - `ColoquioToolCard.tsx`: tarjeta Generative UI colapsable (`aria-expanded`, cierre con `Escape`) para invocaciones de las 6 herramientas soberanas de `CONTRACT-01` y bloques `ACTION_REPORT`.
+   - `ColoquioHitlCard.tsx`: región Human-in-the-Loop (`role="region"`) para planes `[PLAN]` con previsualización de pasos y aprobación idempotente anti-doble clic.
+

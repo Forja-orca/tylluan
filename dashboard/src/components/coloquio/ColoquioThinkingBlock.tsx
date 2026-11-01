@@ -1,5 +1,5 @@
 import { BrainCircuit, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { parseMarkdown } from '../../lib/coloquio-markdown';
 import { cn } from '../../lib/utils';
 
@@ -10,11 +10,24 @@ interface ColoquioThinkingBlockProps {
 
 export function ColoquioThinkingBlock({ thoughtContent, isStreaming = false }: ColoquioThinkingBlockProps) {
   const [open, setOpen] = useState(isStreaming);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const lineCount = thoughtContent.split(/\r?\n/).filter(Boolean).length;
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape' && open) {
+      e.stopPropagation();
+      setOpen(false);
+      buttonRef.current?.focus();
+    }
+  };
+
   return (
-    <div className="my-2 rounded-md border border-border bg-muted/40 overflow-hidden text-[11px]">
+    <div
+      onKeyDown={handleKeyDown}
+      className="my-2 rounded-md border border-border bg-muted/40 overflow-hidden text-[11px]"
+    >
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen(prev => !prev)}
         aria-expanded={open}
