@@ -90,7 +90,10 @@ pub async fn add_mcp_server_handler(State(state): State<Arc<HttpState>>, Json(re
         }))).into_response();
     }
 
-    let entry = add_entry_from_request(&req);
+    let entry = match add_entry_from_request(&req) {
+        Ok(entry) => entry,
+        Err(key) => return unsafe_env_response(key),
+    };
     let expected = launcher_signature(&entry);
     if let Err(response) = authorize_mcp_change(
         &expected,
@@ -302,7 +305,37 @@ fn authorize_mcp_change(
     }
 }
 
-fn add_entry_from_request(req: &AddMcpServerRequest) -> crate::config::ExternalMcpConfig {
+/// D-92: the same `UNSAFE_ENV_KEYS` rule the importer enforces, now on the manual
+/// add path (and on update, see `apply_update_fields_checked`). The environment
+/// of an external MCP server travels to the child process, so a `PATH` or
+/// `LD_PRELOAD` there is code execution, not configuration.
+fn check_mcp_env(env: &Option<HashMap<String, String>>) -> Result<(), String> {
+    match env.as_ref().and_then(unsafe_env_key) {
+        Some(key) => Err(key),
+        None => Ok(()),
+    }
+}
+
+fn unsafe_env_response(key: String) -> axum::response::Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({
+            "error": "unsafe_env",
+            "key": key,
+            "reason": "this variable changes how the child process is launched; set it directly in tylluan.toml if you really need it",
+        })),
+    )
+        .into_response()
+}
+
+fn add_entry_from_request(
+    req: &AddMcpServerRequest,
+) -> Result<crate::config::ExternalMcpConfig, String> {
+    check_mcp_env(&req.env)?;
+    Ok(add_entry_unchecked(req))
+}
+
+fn add_entry_unchecked(req: &AddMcpServerRequest) -> crate::config::ExternalMcpConfig {
     crate::config::ExternalMcpConfig {
         name: req.name.clone(),
         command: req.command.clone(),
@@ -327,6 +360,15 @@ fn update_touches_launcher(req: &UpdateMcpServerRequest) -> bool {
         || req.cwd.is_some()
         || req.env.is_some()
         || req.headers.is_some()
+}
+
+/// D-92: apply the update and refuse it if it would set a code-execution variable.
+fn apply_update_fields_checked(
+    ext: &mut crate::config::ExternalMcpConfig,
+    req: &UpdateMcpServerRequest,
+) -> Result<(), String> {
+    apply_update_fields(ext, req);
+    check_mcp_env(&ext.env)
 }
 
 fn apply_update_fields(ext: &mut crate::config::ExternalMcpConfig, req: &UpdateMcpServerRequest) {
@@ -458,7 +500,9 @@ pub async fn update_mcp_server_handler(
     };
     let candidate = {
         let mut c = old_entry.clone();
-        apply_update_fields(&mut c, &req);
+        if let Err(key) = apply_update_fields_checked(&mut c, &req) {
+            return unsafe_env_response(key);
+        }
         c
     };
     let expected = launcher_signature(&candidate);
@@ -479,6 +523,10 @@ pub async fn update_mcp_server_handler(
             Some(e) => e,
             None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": format!("External MCP '{}' not found", name)}))).into_response(),
         };
+
+        if let Err(key) = check_mcp_env(&req.env) {
+            return unsafe_env_response(key);
+        }
 
         let old_active = ext.active;
         let old_url = ext.url.clone();
@@ -1461,6 +1509,117 @@ mod tests {
         assert!(accepted.is_empty());
         assert_eq!(rejected.len(), 1);
         assert_eq!(rejected[0].1, "missing mcpServers object");
+    }
+
+    fn env_of(pairs: &[(&str, &str)]) -> Option<HashMap<String, String>> {
+        Some(
+            pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect(),
+        )
+    }
+
+    fn add_req(env: Option<HashMap<String, String>>) -> AddMcpServerRequest {
+        AddMcpServerRequest {
+            name: "manual".into(),
+            approval_nonce: None,
+            approval_code: None,
+            url: None,
+            sse_url: None,
+            post_url: None,
+            command: Some("npx".into()),
+            args: Some(vec!["-y".into(), "pkg".into()]),
+            cwd: None,
+            env,
+            headers: None,
+            timeout_ms: None,
+        }
+    }
+
+    fn update_req(env: Option<HashMap<String, String>>) -> UpdateMcpServerRequest {
+        UpdateMcpServerRequest {
+            approval_nonce: None,
+            approval_code: None,
+            active: None,
+            url: None,
+            sse_url: None,
+            post_url: None,
+            command: None,
+            args: None,
+            cwd: None,
+            env,
+            headers: None,
+            timeout_ms: None,
+        }
+    }
+
+    fn manual_entry() -> crate::config::ExternalMcpConfig {
+        crate::config::ExternalMcpConfig {
+            name: "manual".into(),
+            command: Some("npx".into()),
+            args: None,
+            cwd: None,
+            url: None,
+            sse_url: None,
+            post_url: None,
+            env: None,
+            headers: None,
+            timeout_ms: None,
+            active: true,
+        }
+    }
+
+    /// D-92: the manual add path applies the same UNSAFE_ENV_KEYS rule as the
+    /// importer. Without it, `POST /api/v1/mcp/external` was a way around D-91.
+    #[test]
+    fn d92_manual_add_rejects_unsafe_env() {
+        assert_eq!(
+            add_entry_from_request(&add_req(env_of(&[("PATH", ".")]))).unwrap_err(),
+            "PATH"
+        );
+        assert_eq!(
+            add_entry_from_request(&add_req(env_of(&[("ld_preload", "/tmp/x.so")]))).unwrap_err(),
+            "ld_preload"
+        );
+        assert_eq!(
+            add_entry_from_request(&add_req(env_of(&[("TYLLUAN_TOKEN", "x")]))).unwrap_err(),
+            "TYLLUAN_TOKEN"
+        );
+
+        let ok = add_entry_from_request(&add_req(env_of(&[("GITHUB_TOKEN", "y")])))
+            .expect("a normal variable must pass");
+        assert_eq!(
+            ok.env.as_ref().unwrap().get("GITHUB_TOKEN").map(String::as_str),
+            Some("y")
+        );
+    }
+
+    /// D-92: the update path refuses to write a code-execution variable, and the
+    /// entry is left untouched when the update is rejected.
+    #[test]
+    fn d92_manual_update_rejects_unsafe_env() {
+        let mut entry = manual_entry();
+        assert_eq!(
+            apply_update_fields_checked(&mut entry, &update_req(env_of(&[("LD_PRELOAD", "/x.so")])))
+                .unwrap_err(),
+            "LD_PRELOAD"
+        );
+        assert_eq!(
+            apply_update_fields_checked(
+                &mut entry,
+                &update_req(env_of(&[("NODE_OPTIONS", "--require /tmp/x.js")]))
+            )
+            .unwrap_err(),
+            "NODE_OPTIONS"
+        );
+
+        apply_update_fields_checked(&mut entry, &update_req(env_of(&[("SLACK_TOKEN", "z")])))
+            .expect("a normal variable must pass");
+        assert_eq!(
+            entry.env.as_ref().unwrap().get("SLACK_TOKEN").map(String::as_str),
+            Some("z")
+        );
     }
 
     /// D-91: `env` and `cwd` travel to the child process, so they are part of what
