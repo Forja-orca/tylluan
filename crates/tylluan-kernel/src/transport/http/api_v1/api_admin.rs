@@ -1025,7 +1025,15 @@ pub async fn health_detailed_handler(
     }))
 }
 
-pub async fn admin_reload_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+pub async fn admin_reload_handler(
+    State(state): State<Arc<HttpState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // B-28: localhost-only, checked before the dev_mode gate so a foreign Host
+    // never learns whether dev_mode is on.
+    if let Some(refusal) = loopback_host_refusal(&headers) {
+        return refusal;
+    }
     // Check dev_mode
     if !state.dev_mode.unwrap_or(false) {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -1080,7 +1088,14 @@ pub async fn admin_reload_handler(State(state): State<Arc<HttpState>>) -> impl I
     }))).into_response()
 }
 
-pub async fn meta_prune_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+pub async fn meta_prune_handler(
+    State(state): State<Arc<HttpState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // B-28: archiving cognitive metadata is a write from the admin surface.
+    if let Some(refusal) = loopback_host_refusal(&headers) {
+        return refusal;
+    }
     match state.silva.meta_cognitive_prune(0.15, 168, 48) {
         Ok(count) => Json(serde_json::json!({"archived": count, "status": "ok"})).into_response(),
         Err(e) => Json(serde_json::json!({"error": e.to_string(), "status": "error"})).into_response(),
@@ -1092,7 +1107,7 @@ pub async fn meta_prune_handler(State(state): State<Arc<HttpState>>) -> impl Int
 /// `127.0.0.1.evil.example` and `localhost.evil.example`. Fail closed unless
 /// the hostname (optional `:port`, optional IPv6 brackets) is exactly loopback.
 /// Defence in depth only: the master token remains the real gate.
-fn is_loopback_host_header(host: &str) -> bool {
+pub(crate) fn is_loopback_host_header(host: &str) -> bool {
     let hostname = match host.strip_prefix('[') {
         // IPv6 literal: only "[::1]" or "[::1]:port" may follow the bracket.
         // B-22: a first version dropped everything after ']' and happily
@@ -1111,6 +1126,31 @@ fn is_loopback_host_header(host: &str) -> bool {
         },
     };
     matches!(hostname, "127.0.0.1" | "localhost" | "::1")
+}
+
+/// B-28 (2026-11-01): shared guard for the rest of the admin surface
+/// (`admin/reload`, `admin/meta-prune`, `admin/audit`, `admin/audit/file`).
+/// B-22 fixed the loopback test itself; this exposes the same check to every
+/// handler in the family so a new admin route has one obvious guard to reuse
+/// instead of re-deriving `Host` parsing (these four handlers had none at all).
+/// `None` means "it is loopback, continue".
+pub(crate) fn loopback_host_refusal(
+    headers: &axum::http::HeaderMap,
+) -> Option<axum::response::Response> {
+    let host = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if is_loopback_host_header(host) {
+        return None;
+    }
+    Some(
+        (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Admin actions allowed only from localhost"})),
+        )
+            .into_response(),
+    )
 }
 
 pub async fn admin_shutdown_handler(

@@ -306,7 +306,16 @@ pub async fn audit_latency_stats_handler(
 use crate::config::LoggingConfig;
 
 /// GET /api/v1/admin/audit — lista los ficheros de auditoría (capa opt-in).
-pub async fn admin_audit_list() -> impl axum::response::IntoResponse {
+///
+/// B-28 (2026-11-01): reading the audit trail reveals the operator's activity,
+/// so this admin surface answers loopback `Host` only (same guard as
+/// `admin/shutdown`; the master token stays the real gate).
+pub async fn admin_audit_list(
+    headers: axum::http::HeaderMap,
+) -> impl axum::response::IntoResponse {
+    if let Some(refusal) = super::api_admin::loopback_host_refusal(&headers) {
+        return refusal;
+    }
     let cfg: LoggingConfig = crate::config::TylluanConfig::load()
         .map(|c| c.logging)
         .unwrap_or_default();
@@ -322,18 +331,25 @@ pub async fn admin_audit_list() -> impl axum::response::IntoResponse {
                 "retention_days": cfg.audit_retention_days,
                 "files": out
             })))
+                .into_response()
         }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"ok": false, "error": e.to_string()})),
-        ),
+        )
+            .into_response(),
     }
 }
 
 /// GET /api/v1/admin/audit/file?file=audit.log[.N] — contenido del fichero.
 pub async fn admin_audit_file(
+    headers: axum::http::HeaderMap,
     axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl axum::response::IntoResponse {
+    // B-28: same loopback-only guard before touching the filesystem.
+    if let Some(refusal) = super::api_admin::loopback_host_refusal(&headers) {
+        return refusal;
+    }
     let name = match q.get("file") {
         Some(s) => s.clone(),
         None => {
