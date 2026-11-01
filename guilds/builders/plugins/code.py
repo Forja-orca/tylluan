@@ -258,6 +258,13 @@ async def code_stats(
 
     path = os.path.abspath(path) if path and path not in ('.', '') else path
 
+    # B-30 (B24-H3): enumerating a directory without this guard let the tool count
+    # and read any tree on the machine (`path="E:/"`), which is the same hole B-24
+    # closed for code_parse. Same root and same message, so the refusal is uniform.
+    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    if not utils.validate_path(_root, os.path.abspath(path)):
+        return f"🚫 BLOCKED: Path '{path}' is outside the allowed root '{_root}'."
+
     # If path resolves to a file, delegate to code_parse
     if path and os.path.isfile(path):
         return await code_parse(file_path=path, detail_level="normal", intent=intent)
@@ -354,9 +361,16 @@ async def code_todos(
     if path and os.path.isfile(path):
         return await code_parse(file_path=path, detail_level="normal", intent=intent)
             
+    # B-30 (B24-H3): enumerating a directory without this guard let the tool count
+    # and read any tree on the machine (`path="E:/"`), which is the same hole B-24
+    # closed for code_parse. Same root and same message, so the refusal is uniform.
+    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    if not utils.validate_path(_root, os.path.abspath(path)):
+        return f"🚫 BLOCKED: Path '{path}' is outside the allowed root '{_root}'."
+
     if not os.path.exists(path):
         return f"❌ Path not found: {path}"
-    
+
     search_patterns = [p.strip() for p in patterns.split(",")]
     results = []
     
@@ -367,7 +381,7 @@ async def code_todos(
         if is_file:
             files = [root]
         else:
-            files = [f for f in root.rglob("*") if f.is_file() and detect_language(f.name) != "Unknown"]
+            files = [f for f in root.rglob("*") if f.is_file() and utils.detect_language(f.name) != "Unknown"]
         
         for file_path in files[:200]:
             try:
@@ -419,9 +433,16 @@ async def code_security_scan(
     if path and os.path.isfile(path):
         return await code_parse(file_path=path, detail_level="normal", intent=intent)
             
+    # B-30 (B24-H3): enumerating a directory without this guard let the tool count
+    # and read any tree on the machine (`path="E:/"`), which is the same hole B-24
+    # closed for code_parse. Same root and same message, so the refusal is uniform.
+    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    if not utils.validate_path(_root, os.path.abspath(path)):
+        return f"🚫 BLOCKED: Path '{path}' is outside the allowed root '{_root}'."
+
     if not os.path.exists(path):
         return f"❌ Path not found: {path}"
-    
+
     issues = []
     
     # Patterns that might indicate security issues

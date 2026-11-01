@@ -89,14 +89,13 @@ def test_unc_paths_rejected(tmp_path, unc):
     assert validate_path(str(root), unc) is False
 
 
-def test_windows_reserved_device_name_is_containment_checked_not_name_checked(tmp_path):
-    """KNOWN LIMITATION, asserted so it cannot drift silently: the guard is
-    containment-only. `CON`, `NUL`, `COM1` inside the root are allowed
-    through, and a *write* to them lands on the device instead of a file.
-    Fixing that is a separate change (name deny-list), recorded in the B-24
-    report rather than smuggled into this one."""
+def test_windows_reserved_device_name_is_rejected(tmp_path):
+    """WAS a known limitation in B-24 (containment-only guard, so `CON`/`NUL`/`COM1`
+    inside the root passed and a write landed on the device). Closed by B-30: the
+    name deny-list now runs inside `validate_path`, and this assertion is inverted so
+    the fix cannot silently regress."""
     root, _ = _outside_file(tmp_path)
-    assert validate_path(str(root), str(root / "CON")) is True
+    assert validate_path(str(root), str(root / "CON")) is False
 
 
 # ─── filesystem guild: the guard is wired ───────────────────────────────────

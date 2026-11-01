@@ -134,17 +134,50 @@ async def run_command(
         raise asyncio.TimeoutError(f"Command timed out after {timeout_secs}s")
 
 
+# B-30 (B24-H2): a name that addresses a Windows device is not a file. `NUL`,
+# `CON`, `COM1`... resolve inside any directory, so containment alone lets them
+# through: a write to `NUL` is discarded, `CON` blocks on read, `COM1` writes to a
+# serial port. Win32 also strips trailing dots/spaces and ignores the extension, so
+# `con.txt`, `NUL ` and `aux.` are the same device, and `nul:stream` is an NTFS
+# alternate stream of it. Checked on every platform on purpose: the guild runs on
+# whatever OS the operator has, and a platform-dependent deny-list would make the
+# behaviour untestable on the other one.
+_WINDOWS_DEVICE_NAMES = frozenset(
+    ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"]
+    + [f"COM{i}" for i in range(1, 10)]
+    + [f"LPT{i}" for i in range(1, 10)]
+)
+
+
+def is_windows_device_path(target_path: str) -> bool:
+    """True when any component of `target_path` names a device instead of a file.
+
+    Works on the raw string, not on the resolved path: resolving does not remove the
+    device reference, and the check has to hold for paths that do not exist yet
+    (a write is what creates - or hits - them).
+    """
+    for part in str(target_path).replace("\\", "/").split("/"):
+        name = part.split(":")[0]          # NTFS stream suffix or drive letter
+        name = name.rstrip(" .")           # Win32 strips trailing dots and spaces
+        if name.split(".")[0].upper() in _WINDOWS_DEVICE_NAMES:
+            return True
+    return False
+
+
 def validate_path(base_dir: str, target_path: str) -> bool:
-    """Validate that target path is within base directory (prevent path traversal).
-    
+    """Validate that target path is within base directory (prevent path traversal)
+    and does not address a Windows device.
+
     Args:
         base_dir: Base directory that target must be within
         target_path: Path to validate
-        
+
     Returns:
         True if path is safe, False otherwise
     """
     try:
+        if is_windows_device_path(target_path):
+            return False
         base = Path(os.path.abspath(base_dir)).resolve()
         target = Path(os.path.abspath(target_path)).resolve()
         return target.is_relative_to(base)
