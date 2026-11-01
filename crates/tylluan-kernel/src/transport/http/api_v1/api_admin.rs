@@ -709,16 +709,64 @@ pub async fn delete_session_sandbox_override_handler(
     (StatusCode::OK, Json(serde_json::json!({ "agent_id": agent_id }))).into_response()
 }
 
+/// D-87/B1: secciones que pueden sembrar procesos. B1 las deja solo para
+/// edición manual del fichero; la API de config no puede cambiarlas.
+fn protected_config_changes(
+    old: &toml::Value,
+    new: &toml::Value,
+) -> Vec<&'static str> {
+    let mut changed = Vec::new();
+    if old.get("external_mcp") != new.get("external_mcp") {
+        changed.push("external_mcp");
+    }
+    if old.get("services") != new.get("services") {
+        changed.push("services");
+    }
+    let old_wake = old.get("wake").and_then(|w| w.get("command"));
+    let new_wake = new.get("wake").and_then(|w| w.get("command"));
+    if old_wake != new_wake {
+        changed.push("wake.command");
+    }
+    changed
+}
+
 pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req): Json<SaveConfigRequest>) -> impl IntoResponse {
     // Guard: never write content that doesn't parse as our config TOML.
     // (A dashboard bug once wrote JSON here and bricked the kernel config on restart.)
-    if let Err(e) = toml::from_str::<crate::config::TylluanConfig>(&req.content) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "error": format!("content is not valid tylluan.toml — refusing to write: {}", e)
-        }))).into_response();
-    }
+    let new_config = match toml::from_str::<crate::config::TylluanConfig>(&req.content) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": format!("content is not valid tylluan.toml — refusing to write: {}", e)
+            }))).into_response();
+        }
+    };
 
     let old_config = state.config.read().await.clone();
+    let old_value = match toml::Value::try_from(&old_config) {
+        Ok(v) => v,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": format!("cannot serialize current config: {e}")
+            }))).into_response();
+        }
+    };
+    let new_value = match toml::Value::try_from(&new_config) {
+        Ok(v) => v,
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": format!("cannot serialize submitted config: {e}")
+            }))).into_response();
+        }
+    };
+    let blocked = protected_config_changes(&old_value, &new_value);
+    if !blocked.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "protected_config_keys",
+            "changed": blocked,
+            "reason": "B1: [[external_mcp]], [services] and [wake].command can only be edited directly in tylluan.toml; the HTTP config API cannot seed processes."
+        }))).into_response();
+    }
     let old_embedding = old_config.memory.embedding_model.clone();
 
     let config_path = crate::config::TylluanConfig::find_config_file()
@@ -731,19 +779,17 @@ pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req):
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
     }
 
-    if let Ok(new_config) = toml::from_str::<crate::config::TylluanConfig>(&req.content) {
-        let new_embedding = new_config.memory.embedding_model.clone();
-        if new_embedding != old_embedding {
-            let _ = state.broadcast_tx.send(serde_json::json!({
-                "type": "config_changed",
-                "field": "embedding_model",
-                "old_value": old_embedding,
-                "new_value": new_embedding,
-                "requires_restart": true,
-                "message": "Cambio de modelo de embedding detectado. Se requiere reiniciar el kernel y reindexar todos los nodos.",
-                "ts": chrono::Utc::now().timestamp_millis()
-            }));
-        }
+    let new_embedding = new_config.memory.embedding_model.clone();
+    if new_embedding != old_embedding {
+        let _ = state.broadcast_tx.send(serde_json::json!({
+            "type": "config_changed",
+            "field": "embedding_model",
+            "old_value": old_embedding,
+            "new_value": new_embedding,
+            "requires_restart": true,
+            "message": "Cambio de modelo de embedding detectado. Se requiere reiniciar el kernel y reindexar todos los nodos.",
+            "ts": chrono::Utc::now().timestamp_millis()
+        }));
     }
     (StatusCode::OK, Json(serde_json::json!({ "status": "saved" }))).into_response()
 }
@@ -2145,5 +2191,42 @@ mod tests {
             );
         }
         assert!(validate_skill_name("good-skill_2").is_ok());
+    }
+
+    #[test]
+    fn b1_external_mcp_change_is_blocked() {
+        let old: toml::Value = toml::from_str("[memory]\nembedding_model = \"a\"\n").unwrap();
+        let new: toml::Value = toml::from_str(
+            "[memory]\nembedding_model = \"a\"\n[[external_mcp]]\nname = \"x\"\ncommand = \"calc\"\n",
+        )
+        .unwrap();
+        assert_eq!(protected_config_changes(&old, &new), vec!["external_mcp"]);
+    }
+
+    #[test]
+    fn b1_services_change_is_blocked() {
+        let old: toml::Value = toml::from_str("[memory]\nembedding_model = \"a\"\n").unwrap();
+        let new: toml::Value = toml::from_str(
+            "[memory]\nembedding_model = \"a\"\n[services.evil]\ncommand = \"calc\"\n",
+        )
+        .unwrap();
+        assert_eq!(protected_config_changes(&old, &new), vec!["services"]);
+    }
+
+    #[test]
+    fn b1_wake_command_change_is_blocked() {
+        let old: toml::Value = toml::from_str("[memory]\nembedding_model = \"a\"\n").unwrap();
+        let new: toml::Value = toml::from_str(
+            "[memory]\nembedding_model = \"a\"\n[wake]\ncommand = \"calc\"\n",
+        )
+        .unwrap();
+        assert_eq!(protected_config_changes(&old, &new), vec!["wake.command"]);
+    }
+
+    #[test]
+    fn b1_safe_config_change_is_allowed() {
+        let old: toml::Value = toml::from_str("[memory]\nembedding_model = \"a\"\n").unwrap();
+        let new: toml::Value = toml::from_str("[memory]\nembedding_model = \"b\"\n").unwrap();
+        assert!(protected_config_changes(&old, &new).is_empty());
     }
 }

@@ -22,6 +22,60 @@ use tracing::{info, error, warn, debug};
 use std::sync::Arc;
 use rusqlite::{Connection, params};
 
+/// D-87/A1: how an external MCP command must be launched.
+#[derive(Debug, PartialEq, Eq)]
+enum ExternalLaunch {
+    Direct { program: String, args: Vec<String> },
+    Cmd { command: String, args: Vec<String> },
+}
+
+fn has_shell_metachar(text: &str) -> bool {
+    text.chars()
+        .any(|c| matches!(c, '&' | '|' | '<' | '>' | ';' | '^' | '%' | '"' | '\n' | '\r'))
+}
+
+fn external_launch(command: &str, args: &[String]) -> Result<ExternalLaunch> {
+    if !cfg!(target_os = "windows") {
+        return Ok(ExternalLaunch::Direct {
+            program: command.to_string(),
+            args: args.to_vec(),
+        });
+    }
+    if has_shell_metachar(command) {
+        bail!("external MCP command contains shell metacharacters: {command:?}");
+    }
+    let lower = command.to_ascii_lowercase();
+    let is_batch = lower.ends_with(".cmd") || lower.ends_with(".bat");
+    if is_batch {
+        if args.iter().any(|a| has_shell_metachar(a)) {
+            bail!("external MCP batch arguments contain shell metacharacters");
+        }
+        return Ok(ExternalLaunch::Cmd {
+            command: command.to_string(),
+            args: args.to_vec(),
+        });
+    }
+    let path = std::path::Path::new(command);
+    if path.is_file() {
+        return Ok(ExternalLaunch::Direct {
+            program: command.to_string(),
+            args: args.to_vec(),
+        });
+    }
+    if path.is_absolute() {
+        bail!("external MCP command is an absolute path that does not exist: {command:?}");
+    }
+    // Bare command (e.g. `npx`) keeps the legacy cmd wrapper for compatibility;
+    // it never reaches CreateProcess as a shell string.
+    if args.iter().any(|a| has_shell_metachar(a)) {
+        bail!("external MCP command arguments contain shell metacharacters");
+    }
+    Ok(ExternalLaunch::Cmd {
+        command: command.to_string(),
+        args: args.to_vec(),
+    })
+}
+
 /// D-34: environment a stdio guild may inherit from the kernel.
 ///
 /// Name-based and **fail-closed**: a variable that is not listed here does not
@@ -647,16 +701,20 @@ GuildLauncher::Python { module_path } => {
             }
             GuildLauncher::External { command, args, cwd, env } => {
                 info!("🛠️ Pre-Spawn: Preparing external guild '{}' using command: '{}'", self.name, command);
-                // On Windows, batch scripts (npx.cmd, npm.cmd, yarn.cmd, etc.) cannot be
-                // spawned directly by CreateProcess — they require cmd.exe as the host.
-                let mut cmd = if cfg!(target_os = "windows") {
-                    let mut c = Command::new("cmd");
-                    c.arg("/c").arg(command).args(args);
-                    c
-                } else {
-                    let mut c = Command::new(command);
-                    c.args(args);
-                    c
+                // A1: absolute verified executables spawn directly; only
+                // .cmd/.bat (and bare legacy commands) use the cmd wrapper.
+                let launch = external_launch(command, args).map_err(anyhow::Error::msg)?;
+                let mut cmd = match launch {
+                    ExternalLaunch::Direct { program, args } => {
+                        let mut c = Command::new(program);
+                        c.args(args);
+                        c
+                    }
+                    ExternalLaunch::Cmd { command, args } => {
+                        let mut c = Command::new("cmd");
+                        c.arg("/c").arg(command).args(args);
+                        c
+                    }
                 };
                 if let Some(c) = cwd {
                     cmd.current_dir(c);
@@ -2542,6 +2600,28 @@ mod tests {
             reregistration_action_for(false, false),
             ReregistrationAction::Replace
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a1_absolute_verified_exe_launches_directly() {
+        let exe = std::env::current_exe().unwrap();
+        let launch = external_launch(&exe.to_string_lossy(), &[]).unwrap();
+        assert!(matches!(launch, ExternalLaunch::Direct { .. }));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a1_batch_still_uses_cmd_wrapper() {
+        let launch = external_launch(r"C:\temp\server.cmd", &[]).unwrap();
+        assert!(matches!(launch, ExternalLaunch::Cmd { .. }));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a1_shell_metacharacters_in_command_are_rejected() {
+        assert!(external_launch(r"C:\Windows\System32\cmd.exe & calc", &[]).is_err());
+        assert!(external_launch(r"C:\Windows\System32\cmd.exe; calc", &[]).is_err());
     }
 }
 
