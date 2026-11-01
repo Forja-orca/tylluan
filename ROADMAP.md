@@ -1,5 +1,35 @@
 # Tylluan Roadmap
 
+## Closing roadmap to v1.0 (final selection, 2026-11-01)
+
+This section supersedes the open items of every milestone below. Everything not listed here as **In scope** is either **Parked** (not in v1.0) or **Rejected** (do not reopen without new evidence). Per-milestone sections that follow are the historical record.
+
+**What Tylluan is:** a local, open-source memory and defence server for AI agents. It runs on the user's own machine (fits on a USB stick, no cloud), remembers what agents did, and stands between agents and the tools they connect to.
+
+### In scope for v1.0
+
+| # | Front | Done when |
+|---|---|---|
+| F1 | **Remember and be the copy** — faithful append-only record of every agent call and reply (secrets redacted), a reliable Coloquio-to-memory flywheel, backup to a USB stick and restore, proactive recall measured with Recall@5 | 10 calls give 10 stored rows; a restart rewrites no already-seen turn; backup then restore into an empty folder passes `PRAGMA quick_check` on every database |
+| F2 | **IDE sessions load themselves** — hooks and plugins push each turn to Tylluan in the background, with a local queue so nothing is lost if the server is down | Kill the server mid-session: after restart the last confirmed turn is present and nothing is duplicated |
+| F3 | **The wall** — a gateway in the kernel for every MCP server (local or remote): tool-definition pinning by hash, block on change, filtered `tools/list`, per-server namespaces, workspace config approval by hash, egress allow-list, quarantine of tool descriptions (ADR-022, ADR-023, ADR-024) | A server whose tool definition changes after approval is blocked until re-approved; a server that is not on the allow-list does not start |
+| F4 | **Weekly threat watch** — a script reads public feeds (CISA KEV, URLhaus, GitHub Advisory Database), crosses them with our own dependencies and writes a short report | A report exists for each week and flags any match with `Cargo.lock`, the dashboard lockfile or the Python requirements |
+| F5 | **Pulse** — every background loop reports a heartbeat; a stalled loop is restarted with a cap; `/health` says which loop is stopped | Stopping one loop in a test server shows it in `/health` within one minute |
+| F6 | **Easy for anyone** — a real installer, the minimal old-school dashboard (Claude palette), plain-language backup guide | A person with no technical knowledge installs, backs up and restores following only the guide |
+| F7 | **Team network, last** — a simple private VPN per team with one-time pairing (link or QR); never a global mesh (ADR-019) | Two machines pair with a one-time link and exchange memory; revoking the link cuts access |
+
+### Parked (not in v1.0)
+
+Shared KV-cache across agents; internal society of small models; decision service beyond its first phase; cloud inference per point (needs an ADR-020 amendment); full inference gateway; OS-style microkernel; multi-model consensus between agents (after F3); credit-based inference mesh; automatic update of external binaries.
+
+### Rejected (do not reopen without new evidence)
+
+IdleLab as a separate subsystem (ADR-007); NVIDIA OpenShell as a kernel dependency (ADR-016); RPC backend through satellites; global mesh and iroh (ADR-019); embedded T5/SmolLM2 router (ADR-010); embedding batcher for the routing class (ADR-017).
+
+### Order of work
+
+1. F1 + F5 + the Claude Code part of F2. 2. F3 (first piece: quarantine of tool descriptions) + F4. 3. F6 + F7. Production restarts only when the owner says so, and `/health` must report the same commit as `main`.
+
 ## v0.1.0 — Alpha Release
 
 **Status:** Published. Historical baseline: this describes v0.1.0 as released (47 guilds, BGE-M3, the reranker of that time); today there are 46 guild files, 45 routed by default, and the default embedding model is `mxbai-embed-large`.
