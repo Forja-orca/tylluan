@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/hero/2026-10-29_guardianes.jpg" alt="Illustration: a large blue owl with a glowing ring of connected nodes spreads its wings over a stone hall while a party of small armoured and cloaked characters, animals, a lobster and a robot, stands ready" width="760">
+  <img src="docs/assets/hero/2026-11-01_guardianes.jpg" alt="Illustration: a large blue owl with a glowing magical circle spreads its wings over a stone hall inscribed with runes while a party of small armoured characters, a golem, animals, a lobster and a robot stands ready" width="760">
 </p>
 
 <p align="center">

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/hero/2026-10-29_guardianes.jpg" alt="Ilustración: una gran lechuza azul con un anillo luminoso de nodos conectados extiende las alas sobre una sala de piedra mientras un grupo de pequeños personajes con armadura y capa, animales, una langosta y un robot, espera listo" width="760">
+  <img src="docs/assets/hero/2026-11-01_guardianes.jpg" alt="Ilustración: una gran lechuza azul con un círculo mágico luminoso extiende las alas sobre una sala de piedra con runas mientras un grupo de pequeños personajes con armadura, un gólem, animales, una langosta y un robot espera listo" width="760">
 </p>
 
 <p align="center">
