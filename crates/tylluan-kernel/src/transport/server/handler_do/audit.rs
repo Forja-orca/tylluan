@@ -26,6 +26,102 @@ pub fn audit_db_path() -> std::path::PathBuf {
         .into()
 }
 
+/// D-84: metadatos de la cadena cuando se purgan filas antiguas. El ancla
+/// conserva el último hash borrado para que el tramo vivo siga verificando.
+fn ensure_chain_meta(conn: &rusqlite::Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS guild_audit_chain_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );",
+    )
+    .map_err(|e| format!("audit meta schema: {e}"))
+}
+
+fn chain_anchor(conn: &rusqlite::Connection) -> String {
+    conn.query_row(
+        "SELECT value FROM guild_audit_chain_meta WHERE key = 'anchor'",
+        [],
+        |r| r.get(0),
+    )
+    .unwrap_or_default()
+}
+
+fn timestamp_is_older_than(ts: &str, cutoff: chrono::DateTime<chrono::Utc>) -> bool {
+    let parsed = chrono::DateTime::parse_from_rfc3339(ts)
+        .map(|d| d.with_timezone(&chrono::Utc))
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%S%.f")
+                .map(|d| d.and_utc())
+        })
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S")
+                .map(|d| d.and_utc())
+        });
+    parsed.map(|d| d < cutoff).unwrap_or(false)
+}
+
+/// D-84: purga solo el prefijo más antiguo de la cadena, en orden de `id`.
+/// Antes de borrar guarda el hash del último eliminado como ancla; el
+/// siguiente `log_audit_entry` y `verify_audit_chain` arrancan desde ahí.
+pub fn prune_guild_audit_log_at(
+    path: &std::path::Path,
+    retention_days: u64,
+) -> Result<usize, String> {
+    if retention_days == 0 || !path.exists() {
+        return Ok(0);
+    }
+    let mut conn = crate::config::open_db(path).map_err(|e| format!("audit open: {e}"))?;
+    ensure_chain_meta(&conn)?;
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
+    let mut stmt = conn
+        .prepare("SELECT id, timestamp, hash FROM guild_audit_log ORDER BY id ASC")
+        .map_err(|e| format!("audit retention prepare: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| format!("audit retention query: {e}"))?;
+    let mut last_id: Option<i64> = None;
+    let mut last_hash = String::new();
+    for row in rows {
+        let (id, ts, hash) = row.map_err(|e| format!("audit retention row: {e}"))?;
+        if !timestamp_is_older_than(&ts, cutoff) {
+            break;
+        }
+        last_id = Some(id);
+        last_hash = hash;
+    }
+    let Some(last_id) = last_id else {
+        return Ok(0);
+    };
+    drop(stmt);
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("audit retention tx: {e}"))?;
+    let deleted = tx
+        .execute("DELETE FROM guild_audit_log WHERE id <= ?1", [last_id])
+        .map_err(|e| format!("audit retention delete: {e}"))?;
+    tx.execute(
+        "INSERT INTO guild_audit_chain_meta (key, value) VALUES ('anchor', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [last_hash],
+    )
+    .map_err(|e| format!("audit retention anchor: {e}"))?;
+    tx.commit()
+        .map_err(|e| format!("audit retention commit: {e}"))?;
+    Ok(deleted)
+}
+
+/// D-84: purga de `guild_audit_log` sobre la ruta de auditoría del proceso.
+pub fn prune_guild_audit_log(retention_days: u64) -> Result<usize, String> {
+    prune_guild_audit_log_at(&audit_db_path(), retention_days)
+}
+
 /// Write an audit log entry for every tylluan_do tool call.
 /// Uses SHA-256 hash chaining: each entry stores the hash of the previous entry,
 /// making tampering detectable. Called fire-and-forget — errors are non-fatal.
@@ -66,10 +162,20 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
     let now = chrono::Utc::now().to_rfc3339();
     let status = if success { "ok" } else { "error" };
 
-    // Get previous hash for chaining
+    ensure_chain_meta(&conn)?;
+    // Get previous hash for chaining. After a retention purge the table can be
+    // empty; the anchor preserves the last deleted hash so the live chain still
+    // verifies.
     let prev_hash: String = conn
         .query_row("SELECT hash FROM guild_audit_log ORDER BY id DESC LIMIT 1", [], |r| {
             r.get(0)
+        })
+        .or_else(|_| {
+            conn.query_row(
+                "SELECT value FROM guild_audit_chain_meta WHERE key = 'anchor'",
+                [],
+                |r| r.get(0),
+            )
         })
         .unwrap_or_default();
 
@@ -154,7 +260,11 @@ pub(crate) fn audit_or_warn(intent: &str, guild: &str, tool: &str, agent_id: &st
 /// Verify the integrity of the audit chain from oldest to newest.
 /// Returns (ok_count, bad_count) — bad > 0 means tampering detected.
 pub fn verify_audit_chain() -> Result<(usize, usize), String> {
-    let conn = match crate::config::open_db(&audit_db_path()) {
+    verify_audit_chain_at(&audit_db_path())
+}
+
+fn verify_audit_chain_at(path: &std::path::Path) -> Result<(usize, usize), String> {
+    let conn = match crate::config::open_db(path) {
         Ok(c) => c,
         Err(_) => return Ok((0, 0)),
     };
@@ -172,6 +282,7 @@ pub fn verify_audit_chain() -> Result<(usize, usize), String> {
         "SELECT id, timestamp, guild, tool_name, agent_id, status, prev_hash, hash \
          FROM guild_audit_log ORDER BY id ASC"
     ).map_err(|e| format!("audit prepare: {e}"))?;
+    ensure_chain_meta(&conn)?;
     let rows = stmt.query_map([], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -185,7 +296,7 @@ pub fn verify_audit_chain() -> Result<(usize, usize), String> {
         ))
     }).map_err(|e| format!("audit query: {e}"))?;
 
-    let mut prev = String::new();
+    let mut prev = chain_anchor(&conn);
     let mut ok = 0usize;
     let mut bad = 0usize;
     for row_res in rows {
@@ -260,6 +371,73 @@ pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn guild_audit_retention_prunes_old_prefix_and_preserves_anchor() {
+        use super::{prune_guild_audit_log_at, verify_audit_chain_at};
+
+        let db = std::env::temp_dir().join(format!(
+            "audit_retention_test_{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&db);
+        let conn = crate::config::open_db(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL, guild TEXT NOT NULL, tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '', intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok', result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL,
+                latency_ms INTEGER, human_intervention INTEGER NOT NULL DEFAULT 0,
+                system_snapshot TEXT
+            );",
+        )
+        .unwrap();
+
+        let chain_hash = |prev: &str, ts: &str, guild: &str, tool: &str, agent: &str, status: &str| {
+            use sha2::Digest;
+            let input = format!("{prev}|{ts}|{guild}|{tool}|{agent}|{status}");
+            format!("{:x}", sha2::Sha256::digest(input.as_bytes()))
+        };
+        let old_ts = "2020-01-01T00:00:00Z";
+        let new_ts = "2030-01-01T00:00:00Z";
+        let h1 = chain_hash("", old_ts, "g1", "t1", "a1", "ok");
+        let h2 = chain_hash(&h1, old_ts, "g2", "t2", "a2", "ok");
+        let h3 = chain_hash(&h2, new_ts, "g3", "t3", "a3", "ok");
+        for (ts, guild, tool, agent, prev, hash) in [
+            (old_ts, "g1", "t1", "a1", "", h1.as_str()),
+            (old_ts, "g2", "t2", "a2", h1.as_str(), h2.as_str()),
+            (new_ts, "g3", "t3", "a3", h2.as_str(), h3.as_str()),
+        ] {
+            conn.execute(
+                "INSERT INTO guild_audit_log
+                 (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash)
+                 VALUES (?1, ?2, ?3, ?4, 'retention', 'ok', '', ?5, ?6)",
+                rusqlite::params![ts, guild, tool, agent, prev, hash],
+            )
+            .unwrap();
+        }
+        drop(conn);
+
+        assert_eq!(prune_guild_audit_log_at(&db, 90).unwrap(), 2);
+        let conn = crate::config::open_db(&db).unwrap();
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM guild_audit_log", [], |r| r.get(0))
+            .unwrap();
+        let anchor: String = conn
+            .query_row(
+                "SELECT value FROM guild_audit_chain_meta WHERE key = 'anchor'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 1);
+        assert_eq!(anchor, h2);
+        drop(conn);
+        assert_eq!(verify_audit_chain_at(&db).unwrap(), (1, 0));
+        let _ = std::fs::remove_file(&db);
+    }
+
     #[test]
     fn audit_log_new_columns_and_legacy_rows_coexist() {
         let db_path = std::env::temp_dir().join(format!("audit_test_{}.db", std::process::id()));

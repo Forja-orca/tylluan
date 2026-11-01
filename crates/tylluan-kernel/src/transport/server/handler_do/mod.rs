@@ -54,6 +54,7 @@ pub use timeout::guild_effective_timeout;
 pub(crate) use audit::verify_audit_chain;
 pub use audit::audit_open_readonly;
 pub use audit::audit_db_path;
+pub use audit::prune_guild_audit_log;
 pub use audit::check_dangerous_intent;
 pub(crate) use audit::routing_failure_id;
 pub(crate) use audit::log_audit_entry;

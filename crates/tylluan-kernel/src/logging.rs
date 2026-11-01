@@ -25,6 +25,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// Writer con rotación por tamaño, pensado para `tracing_subscriber`.
@@ -197,13 +198,41 @@ pub fn audit_writer(cfg: &LoggingConfig) -> Option<RotatingFileWriter> {
 /// config. Si `audit_layer=false` el sink es `None` (cero overhead).
 fn audit_sink() -> &'static Option<Mutex<RotatingFileWriter>> {
     static SINK: OnceLock<Option<Mutex<RotatingFileWriter>>> = OnceLock::new();
-    SINK.get_or_init(|| audit_writer(&redaction_cfg()).map(Mutex::new))
+    SINK.get_or_init(|| {
+        let cfg = redaction_cfg();
+        AUDIT_LAYER_LIVE.store(cfg.audit_layer, Ordering::Relaxed);
+        audit_writer(&cfg).map(Mutex::new)
+    })
+}
+
+/// D-84: interruptor vivo de la capa de auditoría. `config::reload()` puede
+/// apagarla sin reiniciar; volver a encenderla en una sesión que arrancó con
+/// `audit_layer=false` sigue exigiendo reinicio (el sink no se creó).
+static AUDIT_LAYER_LIVE: AtomicBool = AtomicBool::new(false);
+
+/// D-84: permite apagar la capa de auditoría en caliente. No crea el sink si
+/// arrancó apagado; ese caso queda documentado como reinicio necesario.
+pub fn set_audit_layer_enabled(enabled: bool) {
+    AUDIT_LAYER_LIVE.store(enabled, Ordering::Relaxed);
+}
+
+/// D-84: estado efectivo del interruptor vivo (para tests y diagnóstico).
+pub fn audit_layer_enabled() -> bool {
+    AUDIT_LAYER_LIVE.load(Ordering::Relaxed)
 }
 
 /// Escribe una línea de auditoría (texto crudo, JSON compacto). No falla:
 /// si el sink está apagado o el lock/contención falla, se ignora silenciosamente.
+fn audit_should_write(live: bool, sink_present: bool) -> bool {
+    live && sink_present
+}
+
 fn audit_write(canal: &str, text: &str) {
-    if let Some(w) = audit_sink().as_ref() {
+    let sink = audit_sink();
+    if !audit_should_write(audit_layer_enabled(), sink.is_some()) {
+        return;
+    }
+    if let Some(w) = sink.as_ref() {
         let _ = w.lock().ok().map(|mut w| {
             let rec = serde_json::json!({
                 "ts": chrono::Utc::now().to_rfc3339(),
@@ -516,8 +545,16 @@ mod redaction_tests {
         let d = crate::config::LoggingConfig::default();
         assert!(!d.log_content);
         assert_eq!(d.log_content_max_chars, 200);
+        assert_eq!(d.guild_audit_retention_days, 0);
         let p: crate::config::LoggingConfig = serde_json::from_str("{}").unwrap();
         assert!(!p.log_content && p.log_content_max_chars == 200);
+    }
+
+    #[test]
+    fn audit_live_switch_gates_writes() {
+        assert!(!audit_should_write(false, true), "apagada no debe escribir");
+        assert!(!audit_should_write(true, false), "sin sink no debe escribir");
+        assert!(audit_should_write(true, true));
     }
 
     // ───────────────────────────────────────────────────────────────────────────

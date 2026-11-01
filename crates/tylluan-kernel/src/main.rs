@@ -2182,6 +2182,7 @@ async fn main() -> anyhow::Result<()> {
     let maint_silva = silva.clone();
     let maint_mailbox = mailbox.clone();
     let budget_maint = background_budget.clone();
+    let guild_audit_retention_days = config.logging.guild_audit_retention_days;
     bg_spawn!(background_tasks, "maintenance", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
         let mut maint_interval = tokio::time::interval(Duration::from_secs(300));
         loop {
@@ -2198,6 +2199,15 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Err(e) = maint_mailbox.checkpoint().await {
                 warn!("⚠️ Mailbox checkpoint failed: {}", e);
+            }
+            if guild_audit_retention_days > 0 {
+                match tylluan_kernel::transport::server::handler_do::prune_guild_audit_log(
+                    guild_audit_retention_days,
+                ) {
+                    Ok(n) if n > 0 => info!("🧹 Pruned {} old guild_audit_log rows", n),
+                    Ok(_) => {}
+                    Err(e) => warn!("⚠️ guild_audit_log retention failed: {}", e),
+                }
             }
             // Prune dead nodes (weight < 0.05, excludes identity & agent_summary)
             let prune_silva = maint_silva.clone();

@@ -297,6 +297,13 @@ pub struct LoggingConfig {
     /// por edad). La rotación por tamaño pone el techo duro de disco.
     #[serde(default = "default_audit_retention_days")]
     pub audit_retention_days: u64,
+
+    /// D-84: días de retención de `guild_audit_log` (audit.db). Se borran
+    /// solo las filas más antiguas en orden de id, preservando el ancla de
+    /// cadena para que `verify_audit_chain` siga validando el tramo vivo.
+    /// Default 0 (sin purga): borrar evidencia de auditoria es decision del dueño; se activa por configuracion.
+    #[serde(default = "default_guild_audit_retention_days")]
+    pub guild_audit_retention_days: u64,
 }
 
 fn default_log_content() -> bool {
@@ -327,6 +334,10 @@ fn default_audit_retention_days() -> u64 {
     14
 }
 
+fn default_guild_audit_retention_days() -> u64 {
+    0
+}
+
 fn default_log_max_size_mb() -> u64 {
     50
 }
@@ -347,6 +358,7 @@ impl Default for LoggingConfig {
             audit_max_mb: default_audit_max_mb(),
             audit_max_files: default_audit_max_files(),
             audit_retention_days: default_audit_retention_days(),
+            guild_audit_retention_days: default_guild_audit_retention_days(),
         }
     }
 }
@@ -2721,8 +2733,13 @@ impl TylluanConfig {
     pub async fn reload() -> anyhow::Result<()> {
         if let Some(cached) = CONFIG_CACHE.get() {
             let new_config = Self::load()?;
+            let audit_layer = new_config.logging.audit_layer;
             let mut guard = cached.write().await;
             *guard = new_config;
+            drop(guard);
+            // D-84: apagar la capa de auditoría en caliente. Encenderla en un
+            // proceso que arrancó con el sink vacío sigue requiriendo reinicio.
+            crate::logging::set_audit_layer_enabled(audit_layer);
             info!("🔄 Config reloaded manually");
         }
         Ok(())

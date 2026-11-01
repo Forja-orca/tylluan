@@ -551,6 +551,34 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn think_marks_untrusted_nodes_with_a_visible_banner() {
+        let server = test_server().await;
+        server
+            .silva
+            .upsert_node(
+                "u1",
+                "concept",
+                "untrusted banner needle content",
+                r#"{"untrusted_content":true,"untrusted_reason":"test-origin"}"#,
+            )
+            .await
+            .unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("needle".to_string()));
+        let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        assert!(
+            text.text.contains("CONTENIDO NO CONFIABLE"),
+            "think must expose the trust banner: {text:?}"
+        );
+        assert!(
+            text.text.contains("test-origin"),
+            "think must preserve the origin in the banner: {text:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn think_shows_ouroboros_experiences_for_agent() {
         let amm = Arc::new(AgentMemoryManager::new(Arc::new(SilvaDB::in_memory().await.unwrap()), 20));
         amm.record_experience("test-agent", "tried git merge without review", "broke main branch", "failed", "always create PR first").await;
