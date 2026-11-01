@@ -35,6 +35,28 @@ fn has_shell_metachar(text: &str) -> bool {
         .any(|c| matches!(c, '&' | '|' | '<' | '>' | ';' | '^' | '%' | '"' | '\n' | '\r'))
 }
 
+/// D-91: same rules A1 applies at spawn time, evaluated on **any** platform.
+///
+/// An imported client config is untrusted data written now and spawned later,
+/// possibly on a different OS, so metacharacters are refused everywhere instead
+/// of only where `cmd /c` would be involved.
+pub fn validate_imported_command(command: &str, args: &[String]) -> Result<()> {
+    if command.trim().is_empty() {
+        bail!("external MCP command is empty");
+    }
+    if has_shell_metachar(command) {
+        bail!("external MCP command contains shell metacharacters: {command:?}");
+    }
+    if args.iter().any(|a| has_shell_metachar(a)) {
+        bail!("external MCP command arguments contain shell metacharacters");
+    }
+    let path = std::path::Path::new(command);
+    if path.is_absolute() && !path.is_file() {
+        bail!("external MCP command is an absolute path that does not exist: {command:?}");
+    }
+    Ok(())
+}
+
 fn external_launch(command: &str, args: &[String]) -> Result<ExternalLaunch> {
     if !cfg!(target_os = "windows") {
         return Ok(ExternalLaunch::Direct {
@@ -1356,12 +1378,19 @@ impl GuildRegistry {
                 last_updated INTEGER NOT NULL DEFAULT (unixepoch())
             )"
         )?;
-        let arc = Arc::new(tokio::sync::Mutex::new(conn));
-        for guild in self.guilds.values_mut() {
-            guild.attach_integrity_store(arc.clone());
-        }
-        self.db_conn = Some(arc);
+        self.attach_integrity_store(Arc::new(tokio::sync::Mutex::new(conn)));
         Ok(())
+    }
+
+    /// D-90: share one connection with the tool-integrity baselines. Guilds
+    /// registered afterwards inherit it through `attach_integrity_to`.
+    pub fn attach_integrity_store(&mut self, store: Arc<tokio::sync::Mutex<Connection>>) {
+        for guild in self.guilds.values_mut() {
+            guild.attach_integrity_store(store.clone());
+        }
+        if self.db_conn.is_none() {
+            self.db_conn = Some(store);
+        }
     }
 
     /// Persist current guild metrics to the database.
@@ -1548,6 +1577,7 @@ impl GuildRegistry {
                 self.max_concurrent,
             ),
         );
+        self.attach_integrity_to(name);
         let _ = self.save();
     }
 
@@ -1587,6 +1617,7 @@ impl GuildRegistry {
                 self.max_concurrent,
             ),
         );
+        self.attach_integrity_to(name);
         let _ = self.save();
     }
 
@@ -2351,6 +2382,32 @@ mod tests {
     /// D-89: an approval releases a tool inside `GuildProcess`, but `tylluan_do`
     /// routes through `tool_to_guild`. Re-reading tools must also rebuild the
     /// index, or the approved tool stays unreachable until the next spawn.
+    /// D-90: HTTP and SSE servers added at runtime (the dashboard path) get the
+    /// persistence store too; the baseline must not be memory-only for them.
+    #[tokio::test]
+    async fn d90_http_and_sse_registrations_get_the_integrity_store() {
+        let mut registry = GuildRegistry::new(PathBuf::from("."), 300, TimeoutsConfig::default(), 3);
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        registry.attach_integrity_store(Arc::new(tokio::sync::Mutex::new(conn)));
+
+        registry.register_http_mcp("api", "https://example.test/mcp", HashMap::new(), None);
+        registry.register_sse_mcp(
+            "sse",
+            "https://example.test/sse",
+            "https://example.test/post",
+            HashMap::new(),
+            None,
+        );
+        registry.register_external("ext", "node", Vec::new(), None, None, None);
+
+        for name in ["api", "sse", "ext"] {
+            assert!(
+                registry.guilds[name].tool_integrity.has_store(),
+                "{name} must share the persisted baseline"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn d89_refresh_guild_tools_reindexes_routing() {
         let mut registry = GuildRegistry::new(PathBuf::from("."), 300, TimeoutsConfig::default(), 3);

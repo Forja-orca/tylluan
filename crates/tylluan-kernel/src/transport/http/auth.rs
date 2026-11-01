@@ -263,6 +263,7 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
         || path == "/api/v1/config"
         || path.starts_with("/api/v1/config/")
         || path.starts_with("/api/v1/mcp/external")
+        || path == "/api/v1/mcp/import"
         || path.starts_with("/api/v1/security/sentinel")
         || path == "/api/v1/inference/llama/start"
         || path == "/api/v1/inference/llama/stop"
@@ -1174,6 +1175,7 @@ mod fase1_operator_tests {
         assert!(operator_class_required("POST", "/api/v1/guilds/foo/start"));
         assert!(operator_class_required("POST", "/api/v1/guilds/foo/stop"));
         assert!(operator_class_required("POST", "/api/v1/mcp/external/discover"));
+        assert!(operator_class_required("POST", "/api/v1/mcp/import"));
         assert!(operator_class_required("DELETE", "/api/v1/silva/nodes/n1"));
         assert!(operator_class_required("POST", "/api/v1/silva/edge"));
         assert!(operator_class_required("POST", "/api/v1/silva/consolidate"));

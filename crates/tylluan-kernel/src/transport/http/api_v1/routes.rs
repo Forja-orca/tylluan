@@ -115,6 +115,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/mcp/external/{name}", delete(remove_mcp_server_handler).put(update_mcp_server_handler))
         .route("/api/v1/mcp/external/{name}/tools", get(list_mcp_tools_handler))
         .route("/api/v1/mcp/external/{name}/tools/{tool}/approve", post(approve_mcp_tool_handler).delete(revoke_mcp_tool_handler))
+        .route("/api/v1/mcp/import", post(import_mcp_servers_handler))
         // F2: A2A outbound — external agent roster persisted in SilvaDB
         .route("/api/v1/a2a/agents", get(a2a_agents_list_handler).post(a2a_agents_create_handler))
         .route("/api/v1/a2a/agents/{id}/test", post(a2a_agents_test_handler))

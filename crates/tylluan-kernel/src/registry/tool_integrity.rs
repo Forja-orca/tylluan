@@ -31,6 +31,8 @@ pub const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS mcp_tool_integrity (
 const REASON_POISON: &str = "poison_patterns: description matches an injection pattern";
 const REASON_CHANGED: &str = "fingerprint_changed: description or inputSchema changed";
 const REASON_NEW: &str = "new_tool: not approved yet";
+const REASON_UNAVAILABLE: &str =
+    "baseline_unavailable: the persisted baseline could not be read";
 
 #[derive(Debug, Clone)]
 pub struct ToolIntegrity {
@@ -39,6 +41,7 @@ pub struct ToolIntegrity {
     quarantined: HashMap<String, (String, String)>,
     bootstrapped: bool,
     loaded: bool,
+    load_failed: bool,
     store: Option<Arc<Mutex<Connection>>>,
 }
 
@@ -70,6 +73,7 @@ impl ToolIntegrity {
             quarantined: HashMap::new(),
             bootstrapped: false,
             loaded: false,
+            load_failed: false,
             store: None,
         }
     }
@@ -94,6 +98,11 @@ impl ToolIntegrity {
     }
 
     /// Load the approved baseline once, before the first evaluation.
+    ///
+    /// D-90: if a store is attached and the read fails, the baseline is
+    /// *unknown*, not empty. Seeding in that state would accept whatever the
+    /// server serves today, so the failure is remembered and every tool stays
+    /// quarantined (fail-closed) until the process restarts with a readable DB.
     async fn ensure_loaded(&mut self) {
         if self.loaded {
             return;
@@ -103,37 +112,55 @@ impl ToolIntegrity {
             return;
         };
         let conn = store.lock().await;
-        if let Err(e) = conn.execute_batch(SCHEMA) {
-            tracing::warn!("mcp_tool_integrity: cannot create schema: {e}");
-            return;
-        }
-        let mut stmt = match conn
-            .prepare("SELECT tool, fingerprint FROM mcp_tool_integrity WHERE guild = ?1")
-        {
-            Ok(stmt) => stmt,
+        match Self::read_baseline(&conn, &self.guild) {
+            Ok(rows) => {
+                for (tool, fp) in rows {
+                    self.approved.insert(tool, fp);
+                }
+                // A persisted baseline means "this server was approved before":
+                // a tool that is not in it is new, not part of a first seeding.
+                if !self.approved.is_empty() {
+                    self.bootstrapped = true;
+                }
+            }
             Err(e) => {
-                tracing::warn!("mcp_tool_integrity: cannot read baseline: {e}");
-                return;
+                tracing::warn!(
+                    "mcp_tool_integrity: baseline unavailable for '{}': {e}",
+                    self.guild
+                );
+                self.load_failed = true;
             }
-        };
-        let rows = stmt.query_map([&self.guild], |row| {
+        }
+    }
+
+    fn read_baseline(conn: &Connection, guild: &str) -> rusqlite::Result<Vec<(String, String)>> {
+        conn.execute_batch(SCHEMA)?;
+        let mut stmt =
+            conn.prepare("SELECT tool, fingerprint FROM mcp_tool_integrity WHERE guild = ?1")?;
+        let rows = stmt.query_map([guild], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        });
-        if let Ok(rows) = rows {
-            for (tool, fp) in rows.flatten() {
-                self.approved.insert(tool, fp);
-            }
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
         }
-        // A persisted baseline means "this server was approved before": a tool
-        // that is not in it is new, not part of a first seeding.
-        if !self.approved.is_empty() {
-            self.bootstrapped = true;
-        }
+        Ok(out)
     }
 
     pub async fn evaluate(&mut self, tools: &[Tool]) -> ToolIntegrityResult {
         self.ensure_loaded().await;
         let mut result = ToolIntegrityResult::default();
+        if self.load_failed {
+            for tool in tools {
+                let name = tool.name.to_string();
+                self.quarantined.insert(
+                    name.clone(),
+                    (fingerprint(tool), REASON_UNAVAILABLE.to_string()),
+                );
+                result.quarantined.push(name);
+            }
+            return result;
+        }
         let bootstrap = !self.bootstrapped;
         if bootstrap {
             self.bootstrapped = true;
@@ -340,6 +367,25 @@ mod tests {
         assert!(integrity.approve("read", &fp).await);
         let result = integrity.evaluate(&[tool("read", "changed")]).await;
         assert_eq!(result.active.len(), 1);
+    }
+
+    /// D-90: an unreadable baseline must not seed. With a store attached and a
+    /// broken table, every tool stays quarantined instead of being trusted.
+    #[tokio::test]
+    async fn d90_unreadable_baseline_is_fail_closed() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE mcp_tool_integrity (guild TEXT)")
+            .unwrap();
+        let mut integrity = ToolIntegrity::with_store("ext", Arc::new(Mutex::new(conn)));
+
+        let result = integrity.evaluate(&[tool("read", "reads a file")]).await;
+
+        assert!(result.active.is_empty(), "must not seed from an unknown baseline");
+        assert_eq!(result.quarantined, vec!["read"]);
+        assert!(integrity
+            .quarantine_reason("read")
+            .unwrap()
+            .starts_with("baseline_unavailable"));
     }
 
     /// D-90 criterion 1: the approved baseline survives a restart. A second

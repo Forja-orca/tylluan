@@ -693,6 +693,348 @@ pub async fn list_mcp_tools_handler(
     (StatusCode::OK, Json(tool_integrity_view(guild))).into_response()
 }
 
+#[derive(Deserialize)]
+pub struct ImportMcpServersRequest {
+    /// The client config document as JSON (Claude / Cursor / any `mcpServers`).
+    /// Treated as untrusted data: nothing from it is executed or spawned.
+    config: serde_json::Value,
+    /// Optional label of where it came from (claude, cursor, ...) for the report.
+    #[serde(default)]
+    source: Option<String>,
+    /// D-86: nonce returned by the approval challenge.
+    approval_nonce: Option<String>,
+    /// D-86: one-time code shown only in the kernel console.
+    approval_code: Option<String>,
+}
+
+/// D-91: environment variables that turn "a config value" into code execution
+/// in the child. An imported config is untrusted data, so an entry that tries to
+/// set any of these is rejected whole instead of being silently stripped.
+const UNSAFE_ENV_KEYS: &[&str] = &[
+    "PATH",
+    "PATHEXT",
+    "COMSPEC",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "NODE_OPTIONS",
+    "NODE_PATH",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTHONSTARTUP",
+    "BASH_ENV",
+    "ENV",
+    "PERL5OPT",
+    "RUBYOPT",
+    "JAVA_TOOL_OPTIONS",
+    "_JAVA_OPTIONS",
+    "GIT_EXEC_PATH",
+    "GIT_SSH_COMMAND",
+];
+
+fn unsafe_env_key(env: &HashMap<String, String>) -> Option<String> {
+    env.keys()
+        .find(|key| {
+            let upper = key.to_ascii_uppercase();
+            UNSAFE_ENV_KEYS.contains(&upper.as_str()) || upper.starts_with("TYLLUAN_")
+        })
+        .cloned()
+}
+
+/// F8 (anti-self-reference): a config that points back at this kernel is never
+/// imported nor proposed. Checks the command, **its arguments** and any URL, so
+/// `npx tylluan-nexus` is caught even though the command itself is just `npx`.
+fn is_self_reference(name: &str, command: &str, args: &[String], urls: &[&str]) -> bool {
+    let command = command.to_lowercase();
+    let args_joined = args.join(" ").to_lowercase();
+    command.contains("tylluan-nexus")
+        || args_joined.contains("tylluan-nexus")
+        || urls.iter().any(|u| u.contains(":47004") || u.contains(":3030"))
+        || name == "tylluannexus-o3"
+}
+
+/// D-91: an import is a plan, not an execution. Pure so the rules can be tested
+/// without a kernel, a registry or a filesystem.
+pub fn plan_mcp_import(
+    config: &serde_json::Value,
+    existing_names: &[String],
+) -> (Vec<crate::config::ExternalMcpConfig>, Vec<(String, String)>) {
+    let mut accepted: Vec<crate::config::ExternalMcpConfig> = Vec::new();
+    let mut rejected: Vec<(String, String)> = Vec::new();
+
+    let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object()) else {
+        rejected.push((
+            "*".to_string(),
+            "missing mcpServers object".to_string(),
+        ));
+        return (accepted, rejected);
+    };
+
+    for (name, def) in servers {
+        let reject = |reason: &str| (name.clone(), reason.to_string());
+
+        if name.trim().is_empty()
+            || !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        {
+            rejected.push(reject("invalid_name"));
+            continue;
+        }
+        if existing_names.iter().any(|n| n == name) {
+            rejected.push(reject("already_registered"));
+            continue;
+        }
+        if accepted.iter().any(|e| &e.name == name) {
+            rejected.push(reject("duplicate_in_import"));
+            continue;
+        }
+        let Some(def) = def.as_object() else {
+            rejected.push(reject("invalid_definition"));
+            continue;
+        };
+
+        let command = def.get("command").and_then(|v| v.as_str()).unwrap_or("");
+        let url = def.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        let sse_url = def.get("sse_url").and_then(|v| v.as_str()).unwrap_or("");
+        let post_url = def.get("post_url").and_then(|v| v.as_str()).unwrap_or("");
+
+        // Untrusted data: a non-string element is a malformed entry, not
+        // something to silently drop.
+        let args: Vec<String> = match def.get("args") {
+            None => Vec::new(),
+            Some(serde_json::Value::Array(items)) => {
+                let mut out = Vec::with_capacity(items.len());
+                let mut bad = false;
+                for item in items {
+                    match item.as_str() {
+                        Some(s) => out.push(s.to_string()),
+                        None => {
+                            bad = true;
+                            break;
+                        }
+                    }
+                }
+                if bad {
+                    rejected.push(reject("invalid_args"));
+                    continue;
+                }
+                out
+            }
+            Some(_) => {
+                rejected.push(reject("invalid_args"));
+                continue;
+            }
+        };
+
+        // F8: never import a pointer back to this kernel.
+        if is_self_reference(name, command, &args, &[url, sse_url, post_url]) {
+            rejected.push(reject("self_reference"));
+            continue;
+        }
+
+        if !command.is_empty()
+            && let Err(e) =
+                crate::registry::guild_process::validate_imported_command(command, &args)
+        {
+            rejected.push(reject(&format!("unsafe_command: {e}")));
+            continue;
+        }
+        if command.is_empty() && url.is_empty() && (sse_url.is_empty() || post_url.is_empty()) {
+            rejected.push(reject("missing_launcher"));
+            continue;
+        }
+
+        let env: Option<HashMap<String, String>> = def
+            .get("env")
+            .and_then(|v| v.as_object())
+            .map(|obj| {
+                obj.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            });
+        if let Some(env) = &env
+            && let Some(key) = unsafe_env_key(env)
+        {
+            rejected.push(reject(&format!("unsafe_env: {key}")));
+            continue;
+        }
+        let headers: Option<HashMap<String, String>> = def
+            .get("headers")
+            .and_then(|v| v.as_object())
+            .map(|obj| {
+                obj.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            });
+
+        accepted.push(crate::config::ExternalMcpConfig {
+            name: name.clone(),
+            command: if command.is_empty() { None } else { Some(command.to_string()) },
+            args: if args.is_empty() { None } else { Some(args) },
+            cwd: def.get("cwd").and_then(|v| v.as_str()).map(String::from),
+            url: if url.is_empty() { None } else { Some(url.to_string()) },
+            sse_url: if sse_url.is_empty() { None } else { Some(sse_url.to_string()) },
+            post_url: if post_url.is_empty() { None } else { Some(post_url.to_string()) },
+            env,
+            headers,
+            timeout_ms: def.get("timeout_ms").and_then(|v| v.as_u64()),
+            // D-91 criterion 1: imported servers are dormant until an operator
+            // activates them with the D-86 one-time code on /api/v1/mcp/external/{name}.
+            active: false,
+        });
+    }
+
+    (accepted, rejected)
+}
+
+/// D-86 signature for one import: deterministic over the accepted launchers so
+/// the code shown in the console is bound to exactly what will be written.
+pub fn import_signature(accepted: &[crate::config::ExternalMcpConfig]) -> String {
+    use sha2::{Digest, Sha256};
+    // Everything that will be written, not only the launcher: `env`, `cwd` and
+    // headers are part of what the operator is approving.
+    let mut parts: Vec<String> = accepted
+        .iter()
+        .map(|e| {
+            let mut env: Vec<String> = e
+                .env
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect();
+            env.sort();
+            let mut headers: Vec<String> = e
+                .headers
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect();
+            headers.sort();
+            format!(
+                "{}|{}|{:?}|{}|{}|{}|{}|{}|{:?}|{}",
+                e.name,
+                launcher_signature(e),
+                e.args,
+                e.cwd.clone().unwrap_or_default(),
+                e.url.clone().unwrap_or_default(),
+                e.sse_url.clone().unwrap_or_default(),
+                e.post_url.clone().unwrap_or_default(),
+                env.join(","),
+                e.timeout_ms,
+                headers.join(","),
+            )
+        })
+        .collect();
+    parts.sort();
+    format!(
+        "import_mcp:{:x}",
+        Sha256::digest(parts.join("|").as_bytes())
+    )
+}
+
+/// POST /api/v1/mcp/import
+/// D-91 (ADR-023 P-2): import `mcpServers` from client configs as **dormant**
+/// entries. Nothing is spawned, nothing is executed, and every entry needs the
+/// operator's one-time approval before it becomes active.
+pub async fn import_mcp_servers_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(req): Json<ImportMcpServersRequest>,
+) -> impl IntoResponse {
+    let existing_names: Vec<String> = {
+        let config = state.config.read().await;
+        config.external_mcp.iter().map(|e| e.name.clone()).collect()
+    };
+
+    let (accepted, rejected) = plan_mcp_import(&req.config, &existing_names);
+    let rejected_json: Vec<serde_json::Value> = rejected
+        .iter()
+        .map(|(name, reason)| serde_json::json!({"name": name, "reason": reason}))
+        .collect();
+
+    if accepted.is_empty() {
+        // Nothing would be written: no approval is consumed for an empty import.
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "imported": 0,
+                "servers": [],
+                "rejected": rejected_json,
+                "active": false,
+                "requires_operator_approval": false,
+                "source": req.source,
+            })),
+        )
+            .into_response();
+    }
+
+    let signature = import_signature(&accepted);
+    if let Err(response) = authorize_mcp_change(
+        &signature,
+        req.approval_nonce.as_deref(),
+        req.approval_code.as_deref(),
+    ) {
+        return *response;
+    }
+
+    // Re-check under the config lock: a name may have appeared between the plan
+    // and the approval round-trip.
+    let mut written: Vec<String> = Vec::new();
+    let mut late_rejections: Vec<serde_json::Value> = Vec::new();
+    {
+        let mut config = state.config.write().await;
+        for entry in &accepted {
+            if config.external_mcp.iter().any(|e| e.name == entry.name) {
+                late_rejections.push(serde_json::json!({
+                    "name": entry.name,
+                    "reason": "already_registered",
+                }));
+                continue;
+            }
+            config.external_mcp.push(entry.clone());
+            written.push(entry.name.clone());
+            audit_mcp_change("import", &entry.name, None, entry);
+        }
+    }
+    let _ = persist_external_mcp_config(&state.config).await;
+
+    let servers: Vec<serde_json::Value> = accepted
+        .iter()
+        .filter(|e| written.contains(&e.name))
+        .map(|e| {
+            serde_json::json!({
+                "name": e.name,
+                "launcher": launcher_signature(e),
+                "active": false,
+            })
+        })
+        .collect();
+
+    let mut all_rejected = rejected_json;
+    all_rejected.extend(late_rejections);
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "imported": written.len(),
+            "servers": servers,
+            "rejected": all_rejected,
+            "active": false,
+            "requires_operator_approval": true,
+            "approval_signature": signature,
+            "source": req.source,
+            "note": "imported servers are dormant: activate one with POST/PUT /api/v1/mcp/external/{name} and the D-86 one-time code",
+        })),
+    )
+        .into_response()
+}
+
 /// POST /api/v1/mcp/external/discover
 /// Scans known MCP config files on this system and registers new servers as inactive.
 /// Sources: Claude Desktop (claude_desktop_config.json), Claude Code (~/.claude/settings.json).
@@ -733,14 +1075,16 @@ pub async fn discover_mcp_servers_handler(State(state): State<Arc<HttpState>>) -
         let servers_obj = json.get("mcpServers").and_then(|v| v.as_object());
         if let Some(servers) = servers_obj {
             for (name, def) in servers {
-                // Skip self-references: any command containing tylluan-nexus or url pointing to :47004/:3030
+                // Skip self-references: command, its arguments or a URL pointing
+                // back at this kernel (same rule the importer uses).
                 let cmd = def.get("command").and_then(|v| v.as_str()).unwrap_or("");
                 let url = def.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                let is_self = cmd.to_lowercase().contains("tylluan-nexus")
-                    || url.contains(":47004")
-                    || url.contains(":3030")
-                    || name == "tylluannexus-o3";
-                if is_self {
+                let args_for_self: Vec<String> = def
+                    .get("args")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+                if is_self_reference(name, cmd, &args_for_self, &[url]) {
                     skipped_self.push(name.clone());
                     continue;
                 }
@@ -1009,4 +1353,179 @@ mod tests {
         assert_eq!(view["persistence"], "silva");
         assert_eq!(view["tools"][0]["status"], "active");
     }
+    fn import_sample() -> serde_json::Value {
+        serde_json::json!({
+            "mcpServers": {
+                "github": {
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-github"],
+                    "env": {"GITHUB_TOKEN": "x"}
+                },
+                "slack": {
+                    "url": "https://mcp.slack.example/mcp"
+                },
+                "files": {
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+                }
+            }
+        })
+    }
+
+    /// D-91 criterion 1 + 4: three servers imported, all dormant (active=false),
+    /// none executed or spawned by the import itself.
+    #[test]
+    fn d91_import_three_servers_enters_inactive() {
+        let (accepted, rejected) = plan_mcp_import(&import_sample(), &[]);
+
+        assert_eq!(accepted.len(), 3, "rejected: {rejected:?}");
+        assert!(rejected.is_empty());
+        let mut names: Vec<&str> = accepted.iter().map(|e| e.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, vec!["files", "github", "slack"]);
+        for entry in &accepted {
+            assert!(!entry.active, "{} must be dormant", entry.name);
+        }
+        let github = accepted.iter().find(|e| e.name == "github").unwrap();
+        assert_eq!(github.command.as_deref(), Some("npx"));
+        assert_eq!(
+            github.env.as_ref().unwrap().get("GITHUB_TOKEN").map(String::as_str),
+            Some("x")
+        );
+    }
+
+    /// F8: a config pointing back at this kernel is never imported.
+    #[test]
+    fn d91_self_reference_is_rejected() {
+        let config = serde_json::json!({
+            "mcpServers": {
+                "loop": {"command": "npx", "args": ["tylluan-nexus"]},
+                "direct": {"url": "http://127.0.0.1:47004/mcp"},
+                "legacy": {"url": "http://localhost:3030/sse"},
+                "tylluannexus-o3": {"command": "node", "args": ["server.js"]}
+            }
+        });
+        let (accepted, rejected) = plan_mcp_import(&config, &[]);
+
+        assert!(accepted.is_empty(), "self references must not be imported");
+        let names: Vec<&str> = rejected.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names.len(), 4);
+        assert!(rejected.iter().all(|(_, reason)| reason == "self_reference"));
+    }
+
+    /// D-87/D-88 + criterion 4: shell metacharacters never make it into config,
+    /// on any platform.
+    #[test]
+    fn d91_command_with_ampersand_is_rejected() {
+        let config = serde_json::json!({
+            "mcpServers": {
+                "evil": {"command": "npx & calc.exe", "args": []},
+                "evil_args": {"command": "npx", "args": ["a;rm -rf /"]},
+                "ok": {"command": "npx", "args": ["-y", "pkg"]}
+            }
+        });
+        let (accepted, rejected) = plan_mcp_import(&config, &[]);
+
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(accepted[0].name, "ok");
+        assert!(!accepted[0].active);
+        let reasons: Vec<String> = rejected.iter().map(|(_, r)| r.clone()).collect();
+        assert_eq!(reasons.len(), 2);
+        assert!(reasons.iter().all(|r| r.starts_with("unsafe_command")));
+    }
+
+    /// Names, duplicates and empty definitions are rejected instead of written.
+    #[test]
+    fn d91_bad_names_duplicates_and_missing_launcher_are_rejected() {
+        let config = serde_json::json!({
+            "mcpServers": {
+                "already": {"command": "npx"},
+                "bad name": {"command": "npx"},
+                "nothing": {"args": ["x"]},
+                "sse_half": {"sse_url": "https://x/sse"}
+            }
+        });
+        let (accepted, rejected) = plan_mcp_import(&config, &["already".to_string()]);
+
+        assert!(accepted.is_empty());
+        let pairs: Vec<(String, String)> = rejected.clone();
+        assert!(pairs.contains(&("already".into(), "already_registered".into())));
+        assert!(pairs.contains(&("bad name".into(), "invalid_name".into())));
+        assert!(pairs.contains(&("nothing".into(), "missing_launcher".into())));
+        assert!(pairs.contains(&("sse_half".into(), "missing_launcher".into())));
+    }
+
+    #[test]
+    fn d91_missing_mcp_servers_object_is_reported() {
+        let (accepted, rejected) = plan_mcp_import(&serde_json::json!({"other": 1}), &[]);
+        assert!(accepted.is_empty());
+        assert_eq!(rejected.len(), 1);
+        assert_eq!(rejected[0].1, "missing mcpServers object");
+    }
+
+    /// D-91: `env` and `cwd` travel to the child process, so they are part of what
+    /// the operator approves. A PATH/LD_PRELOAD injection is rejected outright.
+    #[test]
+    fn d91_env_injection_is_rejected_and_env_is_bound_by_the_signature() {
+        let config = serde_json::json!({
+            "mcpServers": {
+                "pathhack": {"command": "npx", "args": ["-y", "x"], "env": {"PATH": "."}},
+                "preload": {"command": "npx", "args": ["-y", "x"], "env": {"ld_preload": "/tmp/x.so"}},
+                "kernel": {"command": "npx", "args": ["-y", "x"], "env": {"TYLLUAN_TOKEN": "x"}},
+                "clean": {"command": "npx", "args": ["-y", "x"], "env": {"GITHUB_TOKEN": "y"}}
+            }
+        });
+        let (accepted, rejected) = plan_mcp_import(&config, &[]);
+
+        assert_eq!(accepted.len(), 1, "rejected: {rejected:?}");
+        assert_eq!(accepted[0].name, "clean");
+        let reasons: Vec<&str> = rejected.iter().map(|(_, r)| r.as_str()).collect();
+        assert_eq!(reasons.len(), 3);
+        assert!(reasons.iter().all(|r| r.starts_with("unsafe_env: ")));
+        assert!(!reasons.contains(&"unsafe_env: "), "the key must be named");
+
+        // The signature must change when only `env` changes: it is part of the
+        // approved write, not just the launcher command.
+        let mut other = accepted.clone();
+        other[0]
+            .env
+            .get_or_insert_with(std::collections::HashMap::new)
+            .insert("EXTRA".into(), "1".into());
+        assert_ne!(import_signature(&accepted), import_signature(&other));
+    }
+
+    /// D-91: malformed args are rejected instead of being silently dropped.
+    #[test]
+    fn d91_non_string_args_are_rejected() {
+        let config = serde_json::json!({
+            "mcpServers": {
+                "numbers": {"command": "npx", "args": [1, 2]},
+                "not_array": {"command": "npx", "args": "npx"}
+            }
+        });
+        let (accepted, rejected) = plan_mcp_import(&config, &[]);
+
+        assert!(accepted.is_empty());
+        assert_eq!(rejected.len(), 2);
+        assert!(rejected.iter().all(|(_, r)| r == "invalid_args"));
+    }
+
+    /// D-86: the approval signature is bound to exactly what will be written and
+    /// does not depend on the JSON key order.
+    #[test]
+    fn d91_import_signature_is_stable_and_order_independent() {
+        let (a, _) = plan_mcp_import(&import_sample(), &[]);
+        let (b, _) = plan_mcp_import(&import_sample(), &[]);
+        let mut reordered = b.clone();
+        reordered.reverse();
+
+        assert_eq!(import_signature(&a), import_signature(&b));
+        assert_eq!(import_signature(&a), import_signature(&reordered));
+        assert!(import_signature(&a).starts_with("import_mcp:"));
+
+        let mut changed = a.clone();
+        changed[0].args = Some(vec!["--version".to_string()]);
+        assert_ne!(import_signature(&a), import_signature(&changed));
+    }
+
 }
