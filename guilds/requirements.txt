@@ -1,7 +1,8 @@
 # ForjaNexus Guild Dependencies
 # ──────────────────────────────────────────────────────────────────────────────
 # Install with:
-#   pip install -r guilds/requirements.txt
+#   pip install --require-hashes -r guilds/requirements-hashes.txt
+# (requirements.txt remains the range source; regenerate the hash lock with uv)
 #
 # For vision + PDF support:
 #   pip install -r guilds/requirements.txt -r guilds/requirements-optional.txt

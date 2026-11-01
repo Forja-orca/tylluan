@@ -61,7 +61,7 @@ irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
 This puts `tylluan-nexus` (the kernel) and `tylluan-cli` in `~/.tylluan/bin/` and adds them to your `PATH`. Open a new terminal afterwards.
 
-The kernel needs no Rust, Python or Node. The 45 guilds behind `tylluan_do` are Python programs and need **Python 3.12 and FastMCP** installed separately (`pip install -r guilds/requirements.txt`; the file ships in the release archive and in this repository); without them those guilds fail to start and `/api/v1/doctor` reports `degraded`. Memory and recall work without Python.
+The kernel needs no Rust, Python or Node. The 45 guilds behind `tylluan_do` are Python programs and need **Python 3.12 and FastMCP** installed separately (`pip install --require-hashes -r guilds/requirements-hashes.txt`; both files ship in the release archive and in this repository); without them those guilds fail to start and `/api/v1/doctor` reports `degraded`. Memory and recall work without Python.
 
 To build from source, see [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md).
 

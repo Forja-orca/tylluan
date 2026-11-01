@@ -280,7 +280,8 @@ else
     REQ_DIR="guilds"
   fi
   info "  $("$GUILD_PY" --version 2>&1) found, guild deps missing. Install them with:"
-  info "    $GUILD_PY -m pip install -r ${REQ_DIR}/requirements.txt"
+  info "    $GUILD_PY -m pip install --require-hashes -r ${REQ_DIR}/requirements-hashes.txt"
+  info "    (fallback if the release lacks that file: ${GUILD_PY} -m pip install -r ${REQ_DIR}/requirements.txt)"
 fi
 say ""
 

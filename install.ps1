@@ -372,7 +372,8 @@ if (-not $GuildPy) {
             $ReqDir = Join-Path $BinDir "guilds"
             if (-not (Test-Path (Join-Path $ReqDir "requirements.txt"))) { $ReqDir = "guilds" }
             Write-Host "  $Ver found, guild deps missing. Install them with:" -ForegroundColor Yellow
-            Write-Host "    $GuildPy -m pip install -r $ReqDir/requirements.txt" -ForegroundColor Yellow
+            Write-Host "    $GuildPy -m pip install --require-hashes -r $ReqDir/requirements-hashes.txt" -ForegroundColor Yellow
+            Write-Host "    (fallback if the release lacks that file: $GuildPy -m pip install -r $ReqDir/requirements.txt)" -ForegroundColor Yellow
         }
     }
 }

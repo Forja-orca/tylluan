@@ -41,7 +41,7 @@ cargo build --release -p tylluan-kernel
 # (Optional) Set up Python virtual environment for guilds
 python -m venv .venv
 source .venv/bin/activate    # On Windows: .venv\Scripts\activate
-pip install -r guilds/requirements.txt
+pip install --require-hashes -r guilds/requirements-hashes.txt
 ```
 
 The compiled binary will be located at `target/release/tylluan-nexus` (or `target/release/tylluan-nexus.exe` on Windows).
@@ -137,7 +137,7 @@ Guilds extend Tylluan's execution capabilities. Guild scripts in `guilds/` are a
 # Set up guild environment
 python -m venv .venv
 source .venv/bin/activate
-pip install -r guilds/requirements.txt
+pip install --require-hashes -r guilds/requirements-hashes.txt
 
 # Verify guild status
 tylluan-cli doctor

@@ -109,7 +109,8 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install ruff pytest pytest-asyncio -r guilds/requirements.txt
+          pip install ruff pytest pytest-asyncio
+          pip install --require-hashes -r guilds/requirements-hashes.txt
       - name: Ruff lint
         run: ruff check guilds/ tests/python/
       - name: Pytest

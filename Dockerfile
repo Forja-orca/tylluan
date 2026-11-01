@@ -41,13 +41,19 @@ COPY --from=builder /build/target/release/tylluan-nexus /usr/local/bin/
 COPY --from=builder /build/target/release/tylluan-cli /usr/local/bin/
 
 # Install ONNX Runtime shared library based on target architecture
+# ONNX Runtime 1.22.0 official Linux assets. SHA-256 calculated from the
+# downloaded release assets:
+#   curl -fsSL -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
+#   sha256sum ort.tgz
+# Recalculate both hashes if the version changes; do not reuse them.
 RUN dpkgArch="$(dpkg --print-architecture)" \
     && case "${dpkgArch}" in \
-        amd64) ortArch="x64" ;; \
-        arm64) ortArch="aarch64" ;; \
+        amd64) ortArch="x64"; ortSha="8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3" ;; \
+        arm64) ortArch="aarch64"; ortSha="bb76395092d150b52c7092dc6b8f2fe4d80f0f3bf0416d2f269193e347e24702" ;; \
         *) echo "Unsupported architecture: ${dpkgArch}"; exit 1 ;; \
     esac \
-    && curl -L -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-${ortArch}-1.22.0.tgz" \
+    && curl -fsSL -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-${ortArch}-1.22.0.tgz" \
+    && echo "${ortSha}  /tmp/onnxruntime.tgz" | sha256sum -c - \
     && tar -zxvf /tmp/onnxruntime.tgz -C /tmp \
     && mv /tmp/onnxruntime-linux-${ortArch}-1.22.0/lib/libonnxruntime.so* /usr/lib/ \
     && rm -rf /tmp/onnxruntime* \

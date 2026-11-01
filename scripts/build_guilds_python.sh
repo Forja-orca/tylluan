@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 TARGET_DIR="${REPO_ROOT}/guilds-python/linux-x86_64"
-REQUIREMENTS_FILE="${REPO_ROOT}/guilds/requirements.txt"
+REQUIREMENTS_FILE="${REPO_ROOT}/guilds/requirements-hashes.txt"
 
 echo "=== [1/4] Checking prerequisites ==="
 # Ensure uv is in PATH or check ~/.local/bin / ~/.cargo/bin
@@ -47,14 +47,14 @@ fi
 echo "✅ Python standalone binary located at: ${PYTHON_BIN}"
 echo "   Version: $("${PYTHON_BIN}" --version)"
 
-echo "=== [3/4] Installing guild dependencies from requirements.txt ==="
+echo "=== [3/4] Installing guild dependencies from requirements-hashes.txt ==="
 if [ ! -f "${REQUIREMENTS_FILE}" ]; then
     echo "❌ Requirements file not found: ${REQUIREMENTS_FILE}"
     exit 1
 fi
 
 # Use --break-system-packages because python-build-standalone marks itself EXTERNALLY-MANAGED
-uv pip install --break-system-packages -r "${REQUIREMENTS_FILE}" --python "${PYTHON_BIN}"
+uv pip install --break-system-packages --require-hashes -r "${REQUIREMENTS_FILE}" --python "${PYTHON_BIN}"
 
 echo "=== [4/4] Verifying portable environment ==="
 PYTHONNOUSERSITE=1 "${PYTHON_BIN}" -c "import mcp, fastmcp, psutil; print('✅ Imported core dependencies successfully in portable environment')"

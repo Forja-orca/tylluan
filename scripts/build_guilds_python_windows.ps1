@@ -13,7 +13,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path "$ScriptDir\..").Path
 
 $TargetDir = Join-Path $RepoRoot "guilds-python\windows-x86_64"
-$RequirementsFile = Join-Path $RepoRoot "guilds\requirements.txt"
+$RequirementsFile = Join-Path $RepoRoot "guilds\requirements-hashes.txt"
 
 Write-Host "=== [1/4] Checking prerequisites ==="
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
@@ -42,7 +42,7 @@ if (-not $PythonBin -or -not (Test-Path $PythonBin)) {
 Write-Host "OK: Python standalone binary located at: $PythonBin"
 & $PythonBin --version
 
-Write-Host "=== [3/4] Installing guild dependencies from requirements.txt ==="
+Write-Host "=== [3/4] Installing guild dependencies from requirements-hashes.txt ==="
 if (-not (Test-Path $RequirementsFile)) {
     Write-Host "ERROR: Requirements file not found: $RequirementsFile" -ForegroundColor Red
     exit 1
@@ -50,7 +50,7 @@ if (-not (Test-Path $RequirementsFile)) {
 
 # Use --break-system-packages because python-build-standalone marks itself EXTERNALLY-MANAGED
 $env:PYTHONIOENCODING = "utf-8"
-uv pip install --break-system-packages -r $RequirementsFile --python $PythonBin
+uv pip install --break-system-packages --require-hashes -r $RequirementsFile --python $PythonBin
 
 Write-Host "=== [4/4] Verifying portable environment ==="
 $env:PYTHONNOUSERSITE = "1"
