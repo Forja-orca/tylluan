@@ -32,6 +32,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -126,7 +127,7 @@ def wake_once(base_url: str, inbox_path: Path, limit: int, ack: bool,
         try:
             data = http_json(
                 base_url,
-                f"/api/v1/coloquio/channels/{ch_id}/new?reader={READER_ID}"
+                f"/api/v1/coloquio/channels/{quote(ch_id, safe='')}/new?reader={READER_ID}"
                 f"&limit={max(limit, n_unread)}&mark_read={mark}",
             )
         except (urllib.error.URLError, TimeoutError, OSError) as e:
