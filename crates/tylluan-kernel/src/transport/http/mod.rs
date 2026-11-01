@@ -661,13 +661,17 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         cancel_token,
         node_router: crate::memory::agent_nodes::AgentNodeRouter::new(broadcast_tx.clone()),
         journal: Arc::new(
-            crate::transport::http::api_v1::api_journal::JournalDb::open("./data/journal.db")
+            crate::transport::http::api_v1::api_journal::JournalDb::open(
+                &crate::config::data_file("journal.db").to_string_lossy(),
+            )
                 .expect("journal.db init failed")
         ),
         agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
         contract_registry: crate::transport::http::api_v1::api_contracts::ContractRegistry::new(),
         contract_db: Arc::new(
-            crate::transport::http::api_v1::api_contracts::ContractDb::open("./data/contracts.db")
+            crate::transport::http::api_v1::api_contracts::ContractDb::open(
+                &crate::config::data_file("contracts.db").to_string_lossy(),
+            )
                 .expect("contracts.db init failed")
         ),
         task_context: Arc::new(
@@ -676,7 +680,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             ).expect("task_context.db init failed")
         ),
         peer_db: Arc::new(
-            crate::federation::PeerDb::open("./data/peers.db")
+            crate::federation::PeerDb::open(
+                &crate::config::data_file("peers.db").to_string_lossy(),
+            )
                 .expect("peers.db init failed")
         ),
         health_ready,

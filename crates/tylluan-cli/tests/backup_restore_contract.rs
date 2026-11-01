@@ -423,3 +423,39 @@ fn in_place_restore_works_when_nothing_responds() {
     let journal = setup.data().join("journal.db");
     assert!(journal.exists(), "journal.db debe seguir en el DATA_DIR tras el restore in situ");
 }
+
+/// T-DSH-168: el inventario del backup debe cubrir TODAS las bases del
+/// DATA_DIR. Si alguien anade una base al kernel y olvida registrarla aqui
+/// (o borra `episodes.db`), este test falla y el simulacro de recuperacion
+/// no puede darse por bueno.
+#[test]
+fn data_dbs_inventory_is_complete_or_the_drill_fails() {
+    const REQUIRED: &[&str] = &[
+        "agent_profiles.db",
+        "audit.db",
+        "contracts.db",
+        "curriculum.db",
+        "episodes.db",
+        "jobs.db",
+        "journal.db",
+        "mailbox.db",
+        "peers.db",
+        "pending_dispatches.db",
+        "silva.db",
+        "task_context.db",
+        "tylluan.db",
+    ];
+    for name in REQUIRED {
+        assert!(
+            DATA_DBS.contains(name),
+            "falta la base '{name}' en tylluan-cli::backup::DATA_DBS: el backup/restore no la cubriria"
+        );
+    }
+    assert_eq!(
+        DATA_DBS.len(),
+        REQUIRED.len(),
+        "DATA_DBS tiene {} bases y el inventario esperado es {}: revisa la lista",
+        DATA_DBS.len(),
+        REQUIRED.len()
+    );
+}

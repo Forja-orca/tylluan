@@ -29,8 +29,8 @@ use std::sync::Mutex;
 /// historical default; set → writer and reader land on the same file).
 pub fn task_context_db_path() -> std::path::PathBuf {
     std::env::var("TYLLUAN_TASK_CONTEXT_DB")
-        .unwrap_or_else(|_| "./data/task_context.db".to_string())
-        .into()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| crate::config::data_file("task_context.db"))
 }
 
 /// One decision entry — additive, never overwritten or deleted

@@ -51,8 +51,8 @@ use std::sync::Mutex;
 /// Wired into the kernel's boot in BWC-3.
 pub fn dispatch_db_path() -> std::path::PathBuf {
     std::env::var("TYLLUAN_DISPATCH_DB")
-        .unwrap_or_else(|_| "./data/pending_dispatches.db".to_string())
-        .into()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| crate::config::data_file("pending_dispatches.db"))
 }
 
 /// Lifecycle of a queued dispatch. Transitions: `Pending →

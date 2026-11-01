@@ -1943,6 +1943,21 @@ impl Default for SecurityConfig {
 /// [0-9a-f] so string interpolation cannot produce SQL injection.
 /// The key is applied BEFORE any other PRAGMA to avoid reading an encrypted
 /// DB with WAL mode before it is unlocked.
+/// T-DSH-168: directorio de datos efectivo del kernel.
+/// `TYLLUAN_DATA_DIR` manda; sin el, el historico `./data`.
+pub fn data_dir() -> std::path::PathBuf {
+    std::env::var("TYLLUAN_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("./data"))
+}
+
+/// T-DSH-168: ruta de un fichero de datos bajo el DATA_DIR efectivo.
+/// Evita que journal/contracts/peers/dispatch/task_context se escriban en
+/// `./data` fijo y queden fuera del backup de una instancia con DATA_DIR propio.
+pub fn data_file(name: &str) -> std::path::PathBuf {
+    data_dir().join(name)
+}
+
 pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     let conn = rusqlite::Connection::open(path)?;
 

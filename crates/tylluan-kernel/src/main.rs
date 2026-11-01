@@ -1409,9 +1409,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Wire crash-safe journal from HttpState into TylluanServer
-    let journal_path = "./data/journal.db";
-    if std::path::Path::new(journal_path).exists() {
-        match crate::transport::http::api_v1::api_journal::JournalDb::open(journal_path) {
+    let journal_path_buf = tylluan_kernel::config::data_file("journal.db");
+    let journal_path = journal_path_buf.to_string_lossy().into_owned();
+    if std::path::Path::new(&journal_path).exists() {
+        match crate::transport::http::api_v1::api_journal::JournalDb::open(&journal_path) {
             Ok(j) => server.journal = Some(Arc::new(j)),
             Err(e) => tracing::warn!("⚠️ Failed to open journal.db: {}", e),
         }
