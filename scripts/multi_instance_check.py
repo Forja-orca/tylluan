@@ -87,7 +87,12 @@ db_path = "{(data_dir / 'tylluan.db').as_posix()}"
 
 
 def start_kernel(
-    nexus: str, data_dir: Path, cwd: Path, port: int, log_path: Path
+    nexus: str,
+    data_dir: Path,
+    cwd: Path,
+    port: int,
+    log_path: Path,
+    cache_dir: Path | None = None,
 ) -> tuple[subprocess.Popen, object]:
     cfg = write_config(data_dir, port)
     env = dict(os.environ)
@@ -98,6 +103,13 @@ def start_kernel(
     env["OPENBLAS_NUM_THREADS"] = str(THREADS_PER_INSTANCE)
     env["MKL_NUM_THREADS"] = str(THREADS_PER_INSTANCE)
     env["NUMEXPR_NUM_THREADS"] = str(THREADS_PER_INSTANCE)
+    if cache_dir is not None:
+        # T-DSH-174: una sola cache de modelos, compartida por todas las
+        # instancias y usada en modo lectura (sin descargas: offline).
+        env["FASTEMBED_CACHE_DIR"] = str(cache_dir)
+        env["HF_HUB_OFFLINE"] = "1"
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        env["HF_HUB_DISABLE_TELEMETRY"] = "1"
     log = open(log_path, "w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen(
         [nexus, "--config", str(cfg), "--port", str(port)],
@@ -235,6 +247,31 @@ def global_roots(repo: Path | None, work: Path) -> list[tuple[str, Path]]:
     return roots
 
 
+def dir_bytes(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+
+
+def seed_cache(dest: Path, seed: Path | None, label: str) -> None:
+    """Siembra una cache de modelos desde una caliente (evita descargar)."""
+    if dest.exists() and any(dest.iterdir()):
+        log(f"  cache {label}: ya existe ({dir_bytes(dest)} bytes)")
+        return
+    if seed is None:
+        dest.mkdir(parents=True, exist_ok=True)
+        log(f"  cache {label}: vacia (sin --seed-cache; la primera instancia descargara)")
+        return
+    if not seed.is_dir():
+        raise RuntimeError(f"--seed-cache no es un directorio: {seed}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.perf_counter()
+    if dest.exists():
+        shutil.rmtree(dest, ignore_errors=True)
+    shutil.copytree(seed, dest)
+    log(f"  cache {label}: sembrada desde {seed} en {time.perf_counter() - t0:.1f}s ({dir_bytes(dest)} bytes)")
+
+
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -248,6 +285,14 @@ def main() -> int:
     ap.add_argument("--base-port", type=int, default=DEFAULT_PORTS[0], help="primer puerto")
     ap.add_argument("--repo", help="raiz del repo (para vigilar estado global)")
     ap.add_argument("--keep", action="store_true", help="no borrar la carpeta de trabajo")
+    ap.add_argument(
+        "--cache-mode",
+        choices=("shared", "per-instance"),
+        default="shared",
+        help="shared: una cache de modelos para todas las instancias (T-DSH-174); "
+        "per-instance: una copia por instancia (comportamiento anterior)",
+    )
+    ap.add_argument("--seed-cache", help="cache ya caliente que se copia en la cache destino (evita descargar)")
     args = ap.parse_args()
 
     n = args.n
@@ -283,6 +328,17 @@ def main() -> int:
     log(f"work_dir={work}")
     log(f"nexus={nexus}")
     log(f"instancias={n} puertos={ports} hilos_por_instancia={THREADS_PER_INSTANCE}")
+    cache_mode = args.cache_mode
+    seed = Path(args.seed_cache).resolve() if args.seed_cache else None
+    if seed is not None and not seed.is_dir():
+        log(f"ERROR: --seed-cache no es un directorio: {seed}")
+        return 1
+    log(f"cache_modelos={cache_mode}" + (f" seed={seed}" if seed else ""))
+    shared_cache: Path | None = work / "model_cache" if cache_mode == "shared" else None
+    shared_cache_before: dict[str, tuple[int, int]] = {}
+    if shared_cache is not None:
+        seed_cache(shared_cache, seed, "compartida")
+        shared_cache_before = snapshot(shared_cache)
     log()
 
     # ---- 4a) snapshot ANTES de arrancar --------------------------------
@@ -306,9 +362,26 @@ def main() -> int:
             cwd.mkdir(parents=True)
             marker = f"{MARKER_PREFIX}-{i}-{int(time.time() * 1000)}"
             markers.append(marker)
-            proc, logf = start_kernel(nexus, data, cwd, port, inst / "kernel.log")
+            if cache_mode == "shared":
+                cache_dir = shared_cache
+            else:
+                cache_dir = cwd / ".fastembed_cache"
+                seed_cache(cache_dir, seed, f"inst{i}")
+            t_start = time.perf_counter()
+            proc, logf = start_kernel(nexus, data, cwd, port, inst / "kernel.log", cache_dir)
             instances.append(
-                {"i": i, "port": port, "proc": proc, "log": logf, "data": data, "cwd": cwd, "marker": marker}
+                {
+                    "i": i,
+                    "port": port,
+                    "proc": proc,
+                    "log": logf,
+                    "data": data,
+                    "cwd": cwd,
+                    "marker": marker,
+                    "cache": cache_dir,
+                    "t_start": t_start,
+                    "startup_s": 0.0,
+                }
             )
             log(f"  inst{i}: pid={proc.pid} port={port} TYLLUAN_DATA_DIR={data}")
         check("arranque", True, f"{n} procesos lanzados por PID propio")
@@ -318,11 +391,13 @@ def main() -> int:
         log("--- 2) /health de cada instancia ---")
         for inst in instances:
             health = wait_health(inst["port"])
+            inst["startup_s"] = time.perf_counter() - inst["t_start"]
             ok = health.get("status") in {"healthy", "ok", "warming_up"}
             check(
                 f"health-inst{inst['i']}",
                 ok,
-                f"status={health.get('status')} commit={health.get('commit')}",
+                f"status={health.get('status')} commit={health.get('commit')} "
+                f"startup={inst['startup_s']:.1f}s",
             )
 
         # ---- 3) memoria aislada -----------------------------------------
@@ -381,6 +456,31 @@ def main() -> int:
             while time.time() < deadline and not port_is_free(inst["port"]):
                 time.sleep(0.5)
             check(f"puerto-liberado-inst{inst['i']}", port_is_free(inst["port"]), f":{inst['port']} libre")
+
+    # ---- 3c) cache de modelos: disco y arranque -----------------------
+    log()
+    log(f"--- 3c) cache de modelos ({cache_mode}) ---")
+    startups = [inst["startup_s"] for inst in instances]
+    log(f"  arranques (s): {', '.join(f'{v:.1f}' for v in startups)} (max {max(startups):.1f}s)")
+    if cache_mode == "shared":
+        cache_bytes = dir_bytes(shared_cache)
+        log(f"  UNA cache compartida: {shared_cache} = {cache_bytes} bytes")
+        check("cache-compartida", cache_bytes > 0, f"{cache_bytes} bytes en una sola cache")
+        writes = diff_snapshot(shared_cache_before, snapshot(shared_cache))
+        check(
+            "cache-solo-lectura",
+            len(writes) == 0,
+            "la cache compartida no se modifico durante la prueba"
+            if not writes
+            else f"{len(writes)} ficheros escritos en la cache compartida: {writes[:10]}",
+        )
+    else:
+        cache_bytes = sum(dir_bytes(inst["cache"]) for inst in instances)
+        log(
+            f"  {len(instances)} copias de cache (una por instancia) = "
+            f"{cache_bytes} bytes"
+        )
+        check("cache-por-instancia", cache_bytes > 0, f"{cache_bytes} bytes en {len(instances)} copias")
 
     # ---- 4b) snapshot DESPUES y ficheros fuera del DATA_DIR ------------
     log()
