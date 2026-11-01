@@ -5,15 +5,19 @@ use axum::{
     response::IntoResponse,
 };
 use std::sync::Arc;
+use std::sync::{Mutex, OnceLock};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 use serde::Deserialize;
 use crate::transport::http::HttpState;
 
 #[derive(Deserialize)]
 pub struct AddMcpServerRequest {
     name: String,
-    /// A4: normalized launcher signature the operator confirms. Required.
-    confirm: Option<String>,
+    /// D-86: nonce returned by the approval challenge.
+    approval_nonce: Option<String>,
+    /// D-86: one-time code shown only in the kernel console.
+    approval_code: Option<String>,
     /// HTTP Streamable MCP endpoint
     url: Option<String>,
     /// Classic SSE MCP: GET endpoint (persistent stream)
@@ -88,12 +92,12 @@ pub async fn add_mcp_server_handler(State(state): State<Arc<HttpState>>, Json(re
 
     let entry = add_entry_from_request(&req);
     let expected = launcher_signature(&entry);
-    if !confirmation_matches(req.confirm.as_deref(), &expected) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "error": "confirmation_required",
-            "expected_confirm": expected,
-            "reason": "A4: send confirm with the normalized launcher string before registering or spawning an external MCP server."
-        }))).into_response();
+    if let Err(response) = authorize_mcp_change(
+        &expected,
+        req.approval_nonce.as_deref(),
+        req.approval_code.as_deref(),
+    ) {
+        return *response;
     }
     audit_mcp_change("add", &entry.name, None, &entry);
 
@@ -172,8 +176,130 @@ fn launcher_signature(ext: &crate::config::ExternalMcpConfig) -> String {
     )
 }
 
-fn confirmation_matches(confirm: Option<&str>, expected: &str) -> bool {
-    confirm == Some(expected)
+const MCP_APPROVAL_TTL: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApprovalError {
+    UnknownOrUsed,
+    Expired,
+    WrongSignature,
+    WrongCode,
+}
+
+struct PendingApproval {
+    signature: String,
+    code: String,
+    expires_at: Instant,
+}
+
+#[derive(Default)]
+struct ApprovalStore {
+    pending: Mutex<HashMap<String, PendingApproval>>,
+}
+
+impl ApprovalStore {
+    fn issue_with_ttl(&self, signature: &str, ttl: Duration) -> (String, String) {
+        let nonce = uuid::Uuid::new_v4().simple().to_string();
+        let code = format!(
+            "{:010x}",
+            (uuid::Uuid::new_v4().as_u128() >> 88) as u64
+        );
+        let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+        let now = Instant::now();
+        pending.retain(|_, approval| approval.expires_at > now);
+        pending.insert(
+            nonce.clone(),
+            PendingApproval {
+                signature: signature.to_string(),
+                code: code.clone(),
+                expires_at: now + ttl,
+            },
+        );
+        (nonce, code)
+    }
+
+    fn consume(&self, nonce: &str, code: &str, signature: &str) -> Result<(), ApprovalError> {
+        let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+        let approval = pending
+            .get(nonce)
+            .ok_or(ApprovalError::UnknownOrUsed)?;
+        if approval.expires_at <= Instant::now() {
+            pending.remove(nonce);
+            return Err(ApprovalError::Expired);
+        }
+        if approval.signature != signature {
+            return Err(ApprovalError::WrongSignature);
+        }
+        if approval.code != code {
+            return Err(ApprovalError::WrongCode);
+        }
+        pending.remove(nonce);
+        Ok(())
+    }
+}
+
+fn approval_store() -> &'static ApprovalStore {
+    static STORE: OnceLock<ApprovalStore> = OnceLock::new();
+    STORE.get_or_init(ApprovalStore::default)
+}
+
+fn issue_mcp_approval(signature: &str) -> (String, String) {
+    let (nonce, code) = approval_store().issue_with_ttl(signature, MCP_APPROVAL_TTL);
+    tracing::warn!(
+        nonce = %nonce,
+        code = %code,
+        "MCP external approval code (60s, single-use) — read it in the kernel console"
+    );
+    (nonce, code)
+}
+
+fn authorize_mcp_change(
+    signature: &str,
+    nonce: Option<&str>,
+    code: Option<&str>,
+) -> Result<(), Box<axum::response::Response>> {
+    match (nonce, code) {
+        (Some(nonce), Some(code)) => match approval_store().consume(nonce, code, signature) {
+            Ok(()) => Ok(()),
+            Err(reason) => Err(Box::new(
+                (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({
+                        "error": "approval_invalid",
+                        "reason": format!("{reason:?}"),
+                    })),
+                )
+                    .into_response(),
+            )),
+        },
+        (None, None) => {
+            let (nonce, _code) = issue_mcp_approval(signature);
+            Err(Box::new(
+                (
+                    StatusCode::PRECONDITION_REQUIRED,
+                    Json(serde_json::json!({
+                        "error": "approval_required",
+                        "nonce": nonce,
+                        "expires_in_secs": MCP_APPROVAL_TTL.as_secs(),
+                        "message": format!(
+                            "approval_required: nonce={nonce}. Read the one-time code in the kernel console and retry with approval_nonce + approval_code."
+                        )
+                    })),
+                )
+                    .into_response(),
+            ))
+        }
+        _ => Err(Box::new(
+            (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "approval_invalid",
+                    "reason": "approval_nonce and approval_code must be sent together",
+                })),
+            )
+                .into_response(),
+        )),
+    }
 }
 
 fn add_entry_from_request(req: &AddMcpServerRequest) -> crate::config::ExternalMcpConfig {
@@ -291,8 +417,10 @@ pub async fn remove_mcp_server_handler(State(state): State<Arc<HttpState>>, Path
 
 #[derive(Deserialize)]
 pub struct UpdateMcpServerRequest {
-    /// A4: normalized launcher signature the operator confirms. Required.
-    confirm: Option<String>,
+    /// D-86: nonce returned by the approval challenge.
+    approval_nonce: Option<String>,
+    /// D-86: one-time code shown only in the kernel console.
+    approval_code: Option<String>,
     active: Option<bool>,
     url: Option<String>,
     sse_url: Option<String>,
@@ -319,7 +447,8 @@ pub async fn update_mcp_server_handler(
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No fields to update"}))).into_response();
     }
 
-    // A4: validate the normalized launcher before touching the live config.
+    // D-86: validate the normalized launcher and its one-time approval before
+    // touching the live config.
     let old_entry = {
         let config = state.config.read().await;
         match config.external_mcp.iter().find(|e| e.name == name) {
@@ -333,12 +462,14 @@ pub async fn update_mcp_server_handler(
         c
     };
     let expected = launcher_signature(&candidate);
-    if update_touches_launcher(&req) && !confirmation_matches(req.confirm.as_deref(), &expected) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "error": "confirmation_required",
-            "expected_confirm": expected,
-            "reason": "A4: send confirm with the normalized launcher string before registering or spawning an external MCP server."
-        }))).into_response();
+    if update_touches_launcher(&req)
+        && let Err(response) = authorize_mcp_change(
+            &expected,
+            req.approval_nonce.as_deref(),
+            req.approval_code.as_deref(),
+        )
+    {
+        return *response;
     }
 
     // Phase 1: Update config entry and detect changes (inside config lock)
@@ -499,7 +630,7 @@ pub async fn discover_mcp_servers_handler(State(state): State<Arc<HttpState>>) -
 
     // D1: discover is a proposal, not a registration. Nothing is persisted or
     // spawned until the operator POSTs the proposal to /api/v1/mcp/external
-    // with the A4 `confirm` signature.
+    // with the D-86 approval nonce + one-time code.
     let proposals = discovery_proposals(&new_servers);
 
     (StatusCode::OK, Json(serde_json::json!({
@@ -556,10 +687,52 @@ mod tests {
     }
 
     #[test]
-    fn a4_missing_or_wrong_confirmation_is_rejected() {
-        assert!(!confirmation_matches(None, "npx a"));
-        assert!(!confirmation_matches(Some("npx b"), "npx a"));
-        assert!(confirmation_matches(Some("npx a"), "npx a"));
+    fn d86_without_code_requests_approval() {
+        let response = authorize_mcp_change("npx a", None, None)
+            .expect_err("without approval code the handler must not authorize");
+        assert_eq!(response.status(), StatusCode::PRECONDITION_REQUIRED);
+    }
+
+    #[test]
+    fn d86_reused_code_is_rejected() {
+        let store = ApprovalStore::default();
+        let (nonce, code) = store.issue_with_ttl("npx a", Duration::from_secs(60));
+        assert_eq!(store.consume(&nonce, &code, "npx a"), Ok(()));
+        assert_eq!(
+            store.consume(&nonce, &code, "npx a"),
+            Err(ApprovalError::UnknownOrUsed)
+        );
+    }
+
+    #[test]
+    fn d86_expired_code_is_rejected() {
+        let store = ApprovalStore::default();
+        let (nonce, code) = store.issue_with_ttl("npx b", Duration::from_secs(0));
+        assert_eq!(
+            store.consume(&nonce, &code, "npx b"),
+            Err(ApprovalError::Expired)
+        );
+    }
+
+    #[test]
+    fn d86_code_is_bound_to_launcher_signature() {
+        let store = ApprovalStore::default();
+        let (nonce, code) = store.issue_with_ttl("npx c", Duration::from_secs(60));
+        assert_eq!(
+            store.consume(&nonce, &code, "npx other"),
+            Err(ApprovalError::WrongSignature)
+        );
+    }
+
+    #[test]
+    fn d86_wrong_code_is_rejected_without_consuming_the_challenge() {
+        let store = ApprovalStore::default();
+        let (nonce, code) = store.issue_with_ttl("npx d", Duration::from_secs(60));
+        assert_eq!(
+            store.consume(&nonce, "wrong", "npx d"),
+            Err(ApprovalError::WrongCode)
+        );
+        assert_eq!(store.consume(&nonce, &code, "npx d"), Ok(()));
     }
 
     #[test]
@@ -567,7 +740,8 @@ mod tests {
         let mut old = entry("npx", &["old"], None);
         old.name = "updatable".into();
         let req = UpdateMcpServerRequest {
-            confirm: Some("npx new --flag".into()),
+            approval_nonce: None,
+            approval_code: None,
             active: None,
             url: None,
             sse_url: None,

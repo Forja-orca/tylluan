@@ -144,6 +144,8 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
  const [newUrl, setNewUrl] = useState('');
  const [newCommand, setNewCommand] = useState('');
  const [newArgs, setNewArgs] = useState('');
+ const [approvalNonce, setApprovalNonce] = useState('');
+ const [approvalCode, setApprovalCode] = useState('');
  const [submitting, setSubmitting] = useState(false);
  
  // Integration setup hint modal
@@ -247,7 +249,18 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
 
  setSubmitting(true);
  try {
- const payload: { name: string; url?: string; command?: string; args?: string[] } = { name: newName.trim() };
+ const payload: {
+   name: string;
+   url?: string;
+   command?: string;
+   args?: string[];
+   approval_nonce?: string;
+   approval_code?: string;
+ } = { name: newName.trim() };
+ if (approvalNonce.trim() && approvalCode.trim()) {
+   payload.approval_nonce = approvalNonce.trim();
+   payload.approval_code = approvalCode.trim();
+ }
  if (serverType === 'url') {
  if (!newUrl.trim()) {
  notify('Server URL is required.', 'error');
@@ -275,6 +288,8 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
  setNewUrl('');
  setNewCommand('');
  setNewArgs('');
+ setApprovalNonce('');
+ setApprovalCode('');
  setIsModalOpen(false);
  
  // Refresh list
@@ -789,6 +804,29 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
  </div>
  </div>
  )}
+
+ <div className="space-y-2 border-t border-slate-850 pt-3">
+ <p className="text-[11px] text-slate-500 font-mono leading-relaxed">
+ First attempt returns <span className="text-amber-400">approval_required</span> with a nonce.
+ Read the one-time code in the kernel console, then paste both here and register again.
+ </p>
+ <div className="grid grid-cols-2 gap-2">
+ <input
+ type="text"
+ placeholder="approval nonce"
+ value={approvalNonce}
+ onChange={(e) => setApprovalNonce(e.target.value)}
+ className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:outline-none text-xs text-slate-200 font-mono"
+ />
+ <input
+ type="text"
+ placeholder="one-time code"
+ value={approvalCode}
+ onChange={(e) => setApprovalCode(e.target.value)}
+ className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:outline-none text-xs text-slate-200 font-mono"
+ />
+ </div>
+ </div>
 
  {/* Action Buttons */}
  <div className="flex gap-3 justify-end pt-4 border-t border-slate-850">
