@@ -101,10 +101,19 @@ async fn wait_row(db: &std::path::Path, sql: &str, param: &str) -> Option<AuditR
 // ─── Servidor MCP falso (HTTP Streamable, solo loopback) ────────────────────
 
 fn fake_mcp_app() -> axum::Router {
-    axum::Router::new().route("/mcp", axum::routing::post(fake_mcp_handler))
+    fake_mcp_app_with(FAKE_TOOL, json!({ "type": "object", "properties": {} }))
+}
+
+type FakeToolState = std::sync::Arc<(String, serde_json::Value)>;
+
+fn fake_mcp_app_with(tool: &str, schema: serde_json::Value) -> axum::Router {
+    axum::Router::new()
+        .route("/mcp", axum::routing::post(fake_mcp_handler))
+        .with_state(std::sync::Arc::new((tool.to_string(), schema)))
 }
 
 async fn fake_mcp_handler(
+    axum::extract::State(state): axum::extract::State<FakeToolState>,
     axum::extract::Json(body): axum::extract::Json<serde_json::Value>,
 ) -> (StatusCode, axum::response::Json<serde_json::Value>) {
     let id = body.get("id").cloned().unwrap_or(serde_json::Value::Null);
@@ -117,9 +126,9 @@ async fn fake_mcp_handler(
         }),
         "tools/list" => json!({
             "tools": [{
-                "name": FAKE_TOOL,
-                "description": "mb7 probe tool zqxwjv",
-                "inputSchema": { "type": "object", "properties": {} }
+                "name": state.0,
+                "description": format!("mb7 probe tool zqxwjv {}", state.0),
+                "inputSchema": state.1
             }]
         }),
         "tools/call" => json!({
@@ -282,6 +291,101 @@ async fn mb7_rows_2_and_4_write_audit_rows() {
                 failures.push(format!("FILA 4: la llamada al MCP falso deberia registrar status='ok' (got {status:?})"));
             }
             println!("MB7 fila4 OK: intent={intent:?} guild={guild:?} tool={tool:?} agent={agent:?} status={status:?}");
+        }
+    }
+
+    // ── D-93-fix: esquema AUSENTE + solo-intent → error Y fila de audit con
+    // status != ok. Un despacho rechazado también es un hecho auditable.
+    const NOSCHEMA_SERVER: &str = "mb7nosrv";
+    const NOSCHEMA_TOOL: &str = "mb7_noschema_probe";
+    let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr2 = listener2.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener2, fake_mcp_app_with(NOSCHEMA_TOOL, json!({}))).await;
+    });
+    let url2 = format!("http://{addr2}/mcp");
+    {
+        let mut cfg = state.config.write().await;
+        cfg.external_mcp
+            .push(tylluan_kernel::config::ExternalMcpConfig {
+                name: NOSCHEMA_SERVER.to_string(),
+                command: None,
+                args: None,
+                cwd: None,
+                url: Some(url2.clone()),
+                sse_url: None,
+                post_url: None,
+                env: None,
+                headers: None,
+                timeout_ms: Some(5000),
+                active: true,
+            });
+    }
+    {
+        let srv = state.server.clone().expect("HttpState.server presente en harness");
+        let tylluan_server = srv.write().await;
+        tylluan_server
+            .registry
+            .write()
+            .await
+            .register_http_mcp(NOSCHEMA_SERVER, &url2, Default::default(), Some(5000));
+        tylluan_server
+            .registry
+            .write()
+            .await
+            .ensure_guild_running(NOSCHEMA_SERVER)
+            .await
+            .expect("el MCP falso sin schema debe conectar");
+    }
+
+    let unique_rejected = format!(
+        "{NOSCHEMA_SERVER} rechazado {} {}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let (_st5, body5) = mcp_call(
+        &app,
+        &jwt,
+        "tylluan_do",
+        json!({ "intent": unique_rejected, "agent_id": AGENT }),
+    )
+    .await;
+    if !mcp_error(&body5) {
+        failures.push(format!(
+            "D-93-fix: un MCP sin inputSchema deberia rechazar la llamada solo-intent (body={})",
+            body5.chars().take(300).collect::<String>()
+        ));
+    }
+    match wait_row(
+        &db,
+        "SELECT intent, guild, tool_name, agent_id, status FROM guild_audit_log \
+         WHERE intent = ?1 LIMIT 1",
+        &unique_rejected,
+    )
+    .await
+    {
+        None => failures.push(format!(
+            "D-93-fix: un despacho rechazado no dejo fila de audit (intent '{unique_rejected}'): \
+             toda salida anticipada de do_external_call debe auditarse"
+        )),
+        Some((_, guild, tool, _, status)) => {
+            let expected_guild = format!("external_mcp:{NOSCHEMA_SERVER}");
+            if guild != expected_guild {
+                failures.push(format!(
+                    "D-93-fix: guild en la fila ({guild:?}) != esperado ({expected_guild:?})"
+                ));
+            }
+            if tool != NOSCHEMA_TOOL {
+                failures.push(format!(
+                    "D-93-fix: tool en la fila ({tool:?}) != esperado ({NOSCHEMA_TOOL:?})"
+                ));
+            }
+            if status == "ok" {
+                failures.push(
+                    "D-93-fix: una llamada rechazada quedo auditada con status='ok'".to_string(),
+                );
+            }
+            println!("D-93-fix rechazo OK: guild={guild:?} tool={tool:?} status={status:?}");
         }
     }
 

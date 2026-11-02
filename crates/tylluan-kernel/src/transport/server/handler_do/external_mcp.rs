@@ -194,12 +194,31 @@ pub(super) fn build_external_tool_args(
         })
         .unwrap_or_default();
 
-    // Undeclared schema: nothing to validate against. Explicit args pass
-    // through; without them we send **no** arguments instead of inventing eight
-    // fields, and the call still happens (a server that declares nothing gets an
-    // empty object, which is what it asked for).
+    // Two different things, and only one of them can be called blind:
+    // - the tool **declares an object with no arguments** (`properties` present
+    //   but empty, no `required`): call it with an empty argument set;
+    // - the tool **declares no schema at all** (neither `properties` nor
+    //   `required`): an intent-only call would be a guess, so it is rejected
+    //   with an explicit message. Explicit args still pass through.
+    let schema_declares_arguments = schema.get("properties").is_some() || schema.get("required").is_some();
     if properties.is_empty() && required.is_empty() {
-        return Ok(explicit.cloned().unwrap_or_default());
+        if let Some(explicit) = explicit {
+            return Ok(explicit.clone());
+        }
+        if schema_declares_arguments {
+            let mut args = serde_json::Map::new();
+            if schema
+                .get("properties")
+                .and_then(|p| p.get("timeout_secs"))
+                .is_some()
+            {
+                args.insert("timeout_secs".to_string(), serde_json::json!(timeout_secs));
+            }
+            return Ok(args);
+        }
+        return Err(
+            "this external tool declares no inputSchema: call it again with args={...} and the arguments it expects".to_string(),
+        );
     }
 
     if let Some(explicit) = explicit {
@@ -539,15 +558,30 @@ mod d93_tests {
         assert!(err.contains("args={...}"), "{err}");
     }
 
-    /// D-93: a schema-less tool is called with **no** arguments (never with the
-    /// invented eight fields) and explicit args still pass through.
+    /// D-93: a tool that **declares no arguments** (`properties: {}`) is called
+    /// with an empty argument set — never with the invented eight fields.
     #[test]
-    fn d93_schema_less_tool_sends_no_arguments() {
-        let empty = serde_json::json!({});
-        let none = build_external_tool_args(&empty, "do it", None, 30).expect("no schema, no args");
-        assert!(none.is_empty(), "nothing invented: {none:?}");
-        let ok = build_external_tool_args(&empty, "do it", Some(&args(&[("anything", "1")])), 30)
-            .expect("undeclared schema passes args through");
+    fn d93_tool_without_arguments_is_called_with_empty_args() {
+        let no_args = serde_json::json!({"type": "object", "properties": {}});
+        let out = build_external_tool_args(&no_args, "do it", None, 30)
+            .expect("a declared tool with no arguments must be callable");
+        assert!(out.is_empty(), "nothing invented: {out:?}");
+
+        let with_timeout =
+            serde_json::json!({"type": "object", "properties": {"timeout_secs": {"type": "integer"}}});
+        let out = build_external_tool_args(&with_timeout, "do it", None, 45).expect("timeout declared");
+        assert_eq!(out.get("timeout_secs").unwrap(), 45);
+    }
+
+    /// D-93: **no schema at all** cannot be called from an intent: it is a guess.
+    /// Explicit args still pass through.
+    #[test]
+    fn d93_absent_schema_requires_explicit_args() {
+        let absent = serde_json::json!({});
+        let err = build_external_tool_args(&absent, "do it", None, 30).unwrap_err();
+        assert!(err.contains("declares no inputSchema"), "{err}");
+        let ok = build_external_tool_args(&absent, "do it", Some(&args(&[("anything", "1")])), 30)
+            .expect("explicit args pass through");
         assert_eq!(ok.get("anything").unwrap(), "1");
     }
 
