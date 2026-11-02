@@ -95,9 +95,24 @@ fn is_lock_error(error: &anyhow::Error) -> bool {
 }
 
 /// Rechaza una ruta que no sea relativa, no tenga `..`, ni salga del repo.
+///
+/// Independiente del SO: git siempre usa `/` como separador, asi que `\` se
+/// rechaza en cualquier plataforma (en Linux `a\..\..\b` es un unico componente
+/// normal y en Windows escaparia del repo), igual que un prefijo de unidad
+/// (`C:`) o UNC (`\\srv`). Sin esto, la misma ruta se comportaba distinto en
+/// Windows y Linux (CI rojo en push 254).
 pub fn validate_repo_relative_path(repo: &Path, raw: &str) -> Result<PathBuf> {
     if raw.trim().is_empty() {
         bail!("ruta vacia");
+    }
+    // 1) Separador de Windows: git no lo entiende y su semantica cambia por SO.
+    if raw.contains('\\') {
+        bail!("ruta con separador '\\' rechazada (git usa '/'): {raw}");
+    }
+    // 2) Prefijo de unidad `X:` (absoluta en Windows, relativa "rara" en Linux).
+    let bytes = raw.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        bail!("ruta con prefijo de unidad rechazada: {raw}");
     }
     let path = Path::new(raw);
     if path.is_absolute() {
@@ -106,7 +121,14 @@ pub fn validate_repo_relative_path(repo: &Path, raw: &str) -> Result<PathBuf> {
     let mut parts = 0usize;
     for component in path.components() {
         match component {
-            Component::Normal(_) => parts += 1,
+            Component::Normal(part) => {
+                // Un componente con ':' solo puede ser algo tipo `C:foo`/ADS de
+                // Windows; git no lo necesita y es ambiguo por SO.
+                if part.to_string_lossy().contains(':') {
+                    bail!("componente de ruta con ':' rechazado: {raw}");
+                }
+                parts += 1;
+            }
             Component::CurDir => {}
             Component::ParentDir => bail!("ruta con '..' rechazada: {raw}"),
             Component::RootDir | Component::Prefix(_) => {

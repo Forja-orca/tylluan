@@ -117,12 +117,29 @@ fn commit_paths_rejects_paths_outside_the_claim() {
 #[test]
 fn paths_with_dotdot_or_absolute_are_rejected_before_git() {
     let (_repo_dir, repo) = init_repo(&[("a.txt", "a")]);
-    for bad in ["../escape.txt", "/etc/passwd", "a/../../b", "C:\\Windows\\x"] {
-        let error = validate_repo_relative_path(&repo, bad).unwrap_err();
+    // Debe ser igual en Windows y Linux: `\` se rechaza siempre (en Linux
+    // `a\..\..\b` es un solo componente normal; en Windows escaparia), igual
+    // que unidad `X:` y UNC `\\srv`.
+    for bad in [
+        "../escape.txt",
+        "/etc/passwd",
+        "a/../../b",
+        "C:\\Windows\\x",
+        "C:/x",
+        "C:Windows/x",
+        "\\srv\\share\\x",
+        "a\\..\\..\\b",
+        "a\\b.txt",
+    ] {
+        let error = match validate_repo_relative_path(&repo, bad) {
+            Ok(_) => panic!("ruta {bad:?} debe fallar"),
+            Err(error) => error,
+        };
         assert!(!error.to_string().is_empty(), "ruta {bad:?} debe fallar");
     }
     assert!(validate_repo_relative_path(&repo, "a.txt").is_ok());
     assert!(validate_repo_relative_path(&repo, "sub/dir/a.txt").is_ok());
+    assert!(validate_repo_relative_path(&repo, "sub/a-b_c.123").is_ok());
 }
 
 #[test]
