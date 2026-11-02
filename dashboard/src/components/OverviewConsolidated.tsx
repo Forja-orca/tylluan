@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { OverviewTab } from './OverviewTab';
-import { SystemTab } from './SystemTab';
 import { InteroceptionTab } from './InteroceptionTab';
 import ResumeSessionWidget from './ResumeSessionWidget';
 import { usePolling } from '../hooks/usePolling';
@@ -38,8 +37,30 @@ interface OverviewConsolidatedProps {
   refreshData: () => Promise<void>;
 }
 
+type OverviewSubTab = 'summary' | 'interoception';
+
 export function OverviewConsolidated(props: OverviewConsolidatedProps) {
-  const [subTab, setSubTab] = useState('summary');
+  const [subTab, setSubTab] = useState<OverviewSubTab>('summary');
+  const tabRefs = useRef<Record<OverviewSubTab, HTMLButtonElement | null>>({
+    summary: null,
+    interoception: null,
+  });
+  const subTabs: OverviewSubTab[] = ['summary', 'interoception'];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: OverviewSubTab) => {
+    const idx = subTabs.indexOf(current);
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % subTabs.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + subTabs.length) % subTabs.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = subTabs.length - 1;
+    if (nextIdx !== -1) {
+      e.preventDefault();
+      const nextTab = subTabs[nextIdx];
+      setSubTab(nextTab);
+      tabRefs.current[nextTab]?.focus();
+    }
+  };
 
   return (
     <div className="space-y-3 font-sans">
@@ -72,11 +93,21 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
       </div>
 
       {/* Sub Navigation */}
-      <div role="group" aria-label="Secciones de Estado" className="flex max-w-full overflow-x-auto border-b border-border gap-1.5 font-sans">
+      <div
+        role="tablist"
+        aria-label="Secciones de Estado y Salud"
+        className="flex max-w-full overflow-x-auto border-b border-border gap-1.5 font-sans"
+      >
         <button
-          aria-pressed={subTab === 'summary'}
+          ref={(el) => { tabRefs.current.summary = el; }}
+          role="tab"
+          id="tab-overview-summary"
+          aria-controls="panel-overview-summary"
+          aria-selected={subTab === 'summary'}
+          tabIndex={subTab === 'summary' ? 0 : -1}
           onClick={() => setSubTab('summary')}
-          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer ${
+          onKeyDown={(e) => handleTabKeyDown(e, 'summary')}
+          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'summary'
               ? 'bg-card border-t-2 border-t-primary border-x-border border-b-card -mb-px text-primary rounded-t-md shadow-sm'
               : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-t-md'
@@ -85,9 +116,15 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
           Resumen General
         </button>
         <button
-          aria-pressed={subTab === 'interoception'}
+          ref={(el) => { tabRefs.current.interoception = el; }}
+          role="tab"
+          id="tab-overview-interoception"
+          aria-controls="panel-overview-interoception"
+          aria-selected={subTab === 'interoception'}
+          tabIndex={subTab === 'interoception' ? 0 : -1}
           onClick={() => setSubTab('interoception')}
-          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer ${
+          onKeyDown={(e) => handleTabKeyDown(e, 'interoception')}
+          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
             subTab === 'interoception'
               ? 'bg-card border-t-2 border-t-primary border-x-border border-b-card -mb-px text-primary rounded-t-md shadow-sm'
               : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-t-md'
@@ -95,23 +132,17 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         >
           Interocepción
         </button>
-        <button
-          aria-pressed={subTab === 'system'}
-          onClick={() => setSubTab('system')}
-          className={`flex min-w-max items-center px-3.5 py-1.5 text-[11px] font-bold transition-all border cursor-pointer ${
-            subTab === 'system'
-              ? 'bg-card border-t-2 border-t-primary border-x-border border-b-card -mb-px text-primary rounded-t-md shadow-sm'
-              : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:bg-muted rounded-t-md'
-          }`}
-        >
-          Configuración del Sistema
-        </button>
       </div>
 
       {/* Tab Panels */}
       <div>
         {subTab === 'summary' && (
-          <div className="space-y-3">
+          <div
+            role="tabpanel"
+            id="panel-overview-summary"
+            aria-labelledby="tab-overview-summary"
+            className="space-y-3"
+          >
             <OverviewTab
               bridge={props.bridge}
               goldenSignals={props.goldenSignals}
@@ -137,18 +168,16 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
           </div>
         )}
         {subTab === 'interoception' && (
-          <InteroceptionTab
-            interoception={props.interoception}
-            memoryStats={props.memoryStats}
-          />
-        )}
-        {subTab === 'system' && (
-          <SystemTab
-            bridge={props.bridge}
-            notify={props.notify}
-            events={props.events}
-            onClearLogs={props.onClearLogs}
-          />
+          <div
+            role="tabpanel"
+            id="panel-overview-interoception"
+            aria-labelledby="tab-overview-interoception"
+          >
+            <InteroceptionTab
+              interoception={props.interoception}
+              memoryStats={props.memoryStats}
+            />
+          </div>
         )}
       </div>
     </div>
