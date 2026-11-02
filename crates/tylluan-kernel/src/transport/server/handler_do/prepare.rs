@@ -92,6 +92,31 @@ pub(super) async fn resolve_and_prepare_tool_call(
                     return Err(error_result(&msg));
                 }
         }
+
+        // D-96: an external MCP server is also a guild, so naming it in
+        // `guild_hint` (or resolving it directly) would otherwise skip the
+        // external ACL, which only ran on the dispatch fallback path.
+        if cfg.external_mcp.iter().any(|e| e.name == guild_name)
+            && !cfg.security.external_acl.allows(agent_id.as_deref(), &guild_name)
+        {
+            let aid = agent_id.as_deref().unwrap_or("anonymous");
+            let msg = format!(
+                "ACCESS_DENIED: agent '{aid}' may not use external MCP server '{guild_name}'. \
+                 Ask the operator to add it to [security.external_acl] in tylluan.toml."
+            );
+            warn!("{}", msg);
+            crate::transport::server::handler_do::audit_or_warn(
+                intent,
+                &format!("external_mcp:{guild_name}"),
+                "tylluan_do",
+                aid,
+                false,
+                "denied by [security.external_acl] (guild path)",
+                0,
+                false,
+            );
+            return Err(error_result(&msg));
+        }
     }
 
     if let Err(e) = server.registry.write().await.ensure_guild_running(&guild_name).await {

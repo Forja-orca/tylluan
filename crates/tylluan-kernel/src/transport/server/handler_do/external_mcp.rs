@@ -26,13 +26,18 @@ pub(super) async fn try_external_mcp_dispatch(
         return None;
     }
 
-    let external_servers = {
+    let (external_servers, external_acl) = {
         let config = TylluanConfig::load_cached().ok()?;
         let cfg = config.read().await;
-        cfg.external_mcp.iter()
-            .filter(|s| s.active)
-            .map(|s| s.name.clone())
-            .collect::<Vec<_>>()
+        (
+            cfg.external_mcp
+                .iter()
+                .filter(|s| s.active)
+                .map(|s| s.name.clone())
+                .collect::<Vec<_>>(),
+            // D-96: disabled by default -> every agent keeps its current access.
+            cfg.security.external_acl.clone(),
+        )
     };
 
     if external_servers.is_empty() {
@@ -46,6 +51,19 @@ pub(super) async fn try_external_mcp_dispatch(
     for name in &external_servers {
         let name_lower = name.to_lowercase();
         if intent_lower.contains(&name_lower) || intent_lower.contains(&name_lower.replace('_', " ")) {
+            if !external_acl.allows(agent_id, name) {
+                return Some(
+                    deny_external_call(
+                        server,
+                        name,
+                        &best_tool_of(server, name).await,
+                        intent,
+                        agent_id,
+                        "agent not listed for this server in [security.external_acl]",
+                    )
+                    .await,
+                );
+            }
             info!("external_mcp: explicit server name '{}' matched in intent", name);
             return dispatch_to_external(server, name, &tokens, intent, agent_id, explicit_args).await;
         }
@@ -72,6 +90,19 @@ pub(super) async fn try_external_mcp_dispatch(
     }
 
     if let Some((server_name, tool_name)) = best {
+        if !external_acl.allows(agent_id, &server_name) {
+            return Some(
+                deny_external_call(
+                    server,
+                    &server_name,
+                    &tool_name,
+                    intent,
+                    agent_id,
+                    "agent not listed for this server in [security.external_acl]",
+                )
+                .await,
+            );
+        }
         info!(
             "external_mcp: routing '{}' → server='{}' tool='{}' score={:.2}",
             intent, server_name, tool_name, best_score
@@ -310,6 +341,36 @@ pub(super) fn external_timeout_secs(tool_timeout: Option<std::time::Duration>) -
         .map(|d| d.as_secs().max(1))
         .unwrap_or(30)
         .max(30)
+}
+
+/// D-96: name of the tool a denial should mention (best effort, the server may
+/// still be starting). The audit row needs a tool column, not a perfect guess.
+async fn best_tool_of(server: &TylluanServer, server_name: &str) -> String {
+    let reg = server.registry.read().await;
+    reg.guilds
+        .get(server_name)
+        .and_then(|g| g.tools.first())
+        .map(|t| t.name.to_string())
+        .unwrap_or_else(|| "<none>".to_string())
+}
+
+/// D-96: deny an external dispatch **and** leave the audit row (criterion 4: a
+/// denial is a security event, not silence).
+async fn deny_external_call(
+    server: &TylluanServer,
+    server_name: &str,
+    tool_name: &str,
+    intent: &str,
+    agent_id: Option<&str>,
+    reason: &str,
+) -> CallToolResult {
+    let result = error_result(&format!(
+        "ACCESS_DENIED: agent '{}' may not use external MCP server '{server_name}' ({reason}). \
+         Ask the operator to add it to [security.external_acl] in tylluan.toml.",
+        agent_id.unwrap_or("anonymous")
+    ));
+    finalize_external_call(server, server_name, tool_name, intent, agent_id, &result);
+    result
 }
 
 /// D-93 fix (CI rojo push 251): every external dispatch leaves its audit row,

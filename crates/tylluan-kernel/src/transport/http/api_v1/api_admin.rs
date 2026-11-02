@@ -722,6 +722,13 @@ fn protected_config_changes(
     if old.get("services") != new.get("services") {
         changed.push("services");
     }
+    // D-96 (ADR-023 P-4): the agent × external-server allow-list is an operator
+    // decision; the config API must not be able to widen it.
+    let old_ext_acl = old.get("security").and_then(|s| s.get("external_acl"));
+    let new_ext_acl = new.get("security").and_then(|s| s.get("external_acl"));
+    if old_ext_acl != new_ext_acl {
+        changed.push("security.external_acl");
+    }
     let old_wake = old.get("wake").and_then(|w| w.get("command"));
     let new_wake = new.get("wake").and_then(|w| w.get("command"));
     if old_wake != new_wake {

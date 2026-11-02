@@ -389,6 +389,133 @@ async fn mb7_rows_2_and_4_write_audit_rows() {
         }
     }
 
+    // ── D-96 (ADR-023 P-4): ACL agente × servidor externo. Agente fuera de la
+    // lista: denegado Y auditado con status de error.
+    {
+        let mut cfg = state.config.write().await;
+        cfg.security.external_acl.enabled = true;
+        cfg.security.external_acl.agents.insert(
+            "mb7-allowed".to_string(),
+            vec![SERVER.to_string()],
+        );
+    }
+    let intent_denied = format!(
+        "{SERVER} acl {} {}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let (_std, body_denied) = mcp_call(
+        &app,
+        &jwt,
+        "tylluan_do",
+        json!({ "intent": intent_denied, "agent_id": "mb7-outside" }),
+    )
+    .await;
+    if !mcp_error(&body_denied) {
+        failures.push(format!(
+            "D-96: un agente fuera de [security.external_acl] deberia quedar denegado (body={})",
+            body_denied.chars().take(300).collect::<String>()
+        ));
+    }
+    match wait_row(
+        &db,
+        "SELECT intent, guild, tool_name, agent_id, status FROM guild_audit_log \
+         WHERE intent = ?1 LIMIT 1",
+        &intent_denied,
+    )
+    .await
+    {
+        None => failures.push(format!(
+            "D-96: la denegacion por ACL no dejo fila de audit (intent '{intent_denied}')"
+        )),
+        Some((_, guild, _, agent, status)) => {
+            if guild != format!("external_mcp:{SERVER}") {
+                failures.push(format!("D-96: guild en la fila ({guild:?}) inesperado"));
+            }
+            if agent != "mb7-outside" {
+                failures.push(format!("D-96: agent en la fila ({agent:?}) != 'mb7-outside'"));
+            }
+            if status == "ok" {
+                failures.push("D-96: una denegacion quedo auditada con status='ok'".to_string());
+            }
+            println!("D-96 denegacion OK: guild={guild:?} agent={agent:?} status={status:?}");
+        }
+    }
+
+    // D-96: el bypass por `guild_hint` (el servidor externo es también un guild)
+    // tiene que quedar cubierto igual: error + fila de auditoría.
+    let intent_hint = format!(
+        "{SERVER} hint {} {}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let (_sth, body_hint) = mcp_call(
+        &app,
+        &jwt,
+        "tylluan_do",
+        json!({ "intent": intent_hint, "guild_hint": SERVER, "agent_id": "mb7-outside" }),
+    )
+    .await;
+    if !mcp_error(&body_hint) {
+        failures.push(format!(
+            "D-96: guild_hint hacia un externo denegado deberia fallar (body={})",
+            body_hint.chars().take(300).collect::<String>()
+        ));
+    }
+    // Con el resolver actual el `guild_hint` hacia un externo acaba en el
+    // dispatch externo (que ya aplica la ACL); la guardia del camino de guild es
+    // defensa en profundidad. Aquí se exige el resultado, no el camino.
+    let _ = &intent_hint;
+
+    // D-96: y por la ruta REST directa de guild (sin pasar por tylluan_do).
+    let rest_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/guilds/{SERVER}/call/{FAKE_TOOL}"))
+        .header(header::AUTHORIZATION, format!("Bearer {jwt}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "agent_id": "mb7-outside" }).to_string()))
+        .unwrap();
+    let rest_resp = app.clone().oneshot(rest_req).await.unwrap();
+    let rest_status = rest_resp.status();
+    if rest_status != StatusCode::FORBIDDEN {
+        failures.push(format!(
+            "D-96: la ruta REST de guild deberia responder 403 a un agente denegado (got {rest_status})"
+        ));
+    }
+    if wait_row(
+        &db,
+        "SELECT intent, guild, tool_name, agent_id, status FROM guild_audit_log \
+         WHERE result_preview LIKE '%(REST guild path)%' AND agent_id = ?1 LIMIT 1",
+        "mb7-outside",
+    )
+    .await
+    .is_none()
+    {
+        failures.push(
+            "D-96: la guardia de la ruta REST de guild no dejo su fila de audit".to_string(),
+        );
+    }
+
+    // Y el agente declarado sigue pasando con la ACL activada.
+    let intent_allowed = format!(
+        "{SERVER} aclok {} {}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let (_sta, body_allowed) = mcp_call(
+        &app,
+        &jwt,
+        "tylluan_do",
+        json!({ "intent": intent_allowed, "agent_id": "mb7-allowed" }),
+    )
+    .await;
+    if mcp_error(&body_allowed) {
+        failures.push(format!(
+            "D-96: el agente declarado deberia pasar con la ACL activada (body={})",
+            body_allowed.chars().take(300).collect::<String>()
+        ));
+    }
+
     assert!(
         failures.is_empty(),
         "M-BUFFY-7: la auditoria de T-DSH-67 no sobrevive en estas rutas:\n  - {}",

@@ -1778,6 +1778,9 @@ pub struct SecurityConfig {
     pub sandbox: SandboxConfig,
     #[serde(default)]
     pub acl: AclConfig,
+    /// D-96: agent × external-MCP-server allow-list (disabled by default).
+    #[serde(default)]
+    pub external_acl: ExternalAclConfig,
     /// Enable SQLCipher encryption at rest. Defaults to true ONLY when the binary
     /// was compiled with the `encryption` feature — that feature is not in the
     /// default feature set (bundles SQLCipher+OpenSSL from source, unsupported on
@@ -1919,6 +1922,7 @@ impl Default for SecurityConfig {
             capabilities_enforce: default_capabilities_enforce(),
             sandbox: SandboxConfig::default(),
             acl: AclConfig::default(),
+            external_acl: ExternalAclConfig::default(),
             encrypt_at_rest: default_encrypt_at_rest(),
             coherence_gate_hybrid_enabled: default_coherence_gate_hybrid_enabled(),
             coherence_semantic_scope: default_coherence_semantic_scope(),
@@ -2278,6 +2282,53 @@ impl Default for SandboxConfig {
             memory: default_sandbox_memory(),
             network: false,
             timeout_secs: default_sandbox_timeout_secs(),
+        }
+    }
+}
+
+/// D-96 (ADR-023 P-4): declarative allow-list of external MCP servers per agent.
+///
+/// **Disabled by default on purpose**: production already talks to external
+/// servers, and turning a deny-by-default matrix on without the operator
+/// declaring the agents would silently cut them off.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExternalAclConfig {
+    /// Explicit operator switch. When false, every agent may use every active
+    /// external server (the behaviour before D-96).
+    #[serde(default)]
+    pub enabled: bool,
+    /// `agent_id -> allowed server names`. `"*"` inside the list means "any
+    /// server"; the key `"*"` means "any agent". Nothing else is allowed.
+    #[serde(default)]
+    pub agents: HashMap<String, Vec<String>>,
+}
+
+fn external_acl_list_allows(list: &[String], server: &str) -> bool {
+    list.iter().any(|s| s == server || s == "*")
+}
+
+impl ExternalAclConfig {
+    /// Deny-by-default when enabled: an agent (or server) that is not declared
+    /// does not get through.
+    pub fn allows(&self, agent_id: Option<&str>, server: &str) -> bool {
+        if !self.enabled {
+            return true;
+        }
+        let agent = agent_id.map(str::trim).filter(|a| !a.is_empty());
+        match agent {
+            Some(agent) => {
+                self.agents
+                    .get(agent)
+                    .is_some_and(|list| external_acl_list_allows(list, server))
+                    || self
+                        .agents
+                        .get("*")
+                        .is_some_and(|list| external_acl_list_allows(list, server))
+            }
+            None => self
+                .agents
+                .get("anonymous")
+                .is_some_and(|list| external_acl_list_allows(list, server)),
         }
     }
 }
@@ -4049,5 +4100,45 @@ mod t138_reindex_config_tests {
         assert_eq!(cfg.memory.reindex_nodes_per_tick, 7);
         assert_eq!(cfg.memory.reindex_tick_secs, 30);
         assert_eq!(cfg.memory.reindex_skip_types, vec!["session_digest".to_string(), "routing_anchor".to_string()]);
+    }
+
+    /// D-96: the matrix is disabled by default, so existing installs keep their
+    /// access; when enabled it denies by default and only lets declared pairs
+    /// through.
+    #[test]
+    fn d96_external_acl_matrix() {
+        use super::ExternalAclConfig;
+        use std::collections::HashMap;
+
+        let disabled = ExternalAclConfig::default();
+        assert!(disabled.allows(Some("deep"), "github"));
+        assert!(disabled.allows(None, "github"));
+
+        let mut agents = HashMap::new();
+        agents.insert("deep".to_string(), vec!["github".to_string()]);
+        agents.insert("mimo".to_string(), vec!["*".to_string()]);
+        let enabled = ExternalAclConfig {
+            enabled: true,
+            agents,
+        };
+
+        assert!(enabled.allows(Some("deep"), "github"), "declared pair");
+        assert!(!enabled.allows(Some("deep"), "slack"), "undeclared server");
+        assert!(!enabled.allows(Some("buffy"), "github"), "undeclared agent");
+        assert!(enabled.allows(Some("mimo"), "slack"), "wildcard server list");
+        assert!(!enabled.allows(None, "github"), "anonymous is denied by default");
+        assert!(!enabled.allows(Some("  "), "github"), "blank agent counts as anonymous");
+
+        let mut with_anon = enabled.clone();
+        with_anon
+            .agents
+            .insert("anonymous".to_string(), vec!["github".to_string()]);
+        assert!(with_anon.allows(None, "github"), "anonymous can be listed");
+
+        let mut any_agent = enabled.clone();
+        any_agent
+            .agents
+            .insert("*".to_string(), vec!["slack".to_string()]);
+        assert!(any_agent.allows(Some("buffy"), "slack"), "wildcard agent key");
     }
 }

@@ -78,6 +78,35 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
         }))).into_response();
     }
 
+    // D-96: the direct REST guild path can also reach an external MCP server, so
+    // the external ACL must not be skippable by going around `tylluan_do`.
+    {
+        let agent = args
+            .get("agent_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("anonymous");
+        let cfg = state.config.read().await;
+        if cfg.external_mcp.iter().any(|e| e.name == guild)
+            && !cfg.security.external_acl.allows(Some(agent), &guild)
+        {
+            crate::transport::server::handler_do::audit_or_warn(
+                &format!("direct guild call {guild}/{tool}"),
+                &format!("external_mcp:{guild}"),
+                &tool,
+                agent,
+                false,
+                "denied by [security.external_acl] (REST guild path)",
+                0,
+                false,
+            );
+            return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+                "error": "access_denied",
+                "guild": guild,
+                "reason": "D-96: this agent is not allowed to use this external MCP server; ask the operator to add it to [security.external_acl]",
+            }))).into_response();
+        }
+    }
+
     // ACL check: verify the caller's role has access to this guild
     if let Ok(cfg_lock) = crate::config::TylluanConfig::load_cached() {
         {   let cfg = cfg_lock.read().await;
