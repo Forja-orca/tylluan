@@ -52,6 +52,7 @@ pub(crate) const DATA_DBS: &[&str] = &[
     "silva.db",
     "task_context.db",
     "tylluan.db",
+    "workspace.db",
 ];
 
 /// T-DSH-156: sensitive files, copied verbatim and only with `--with-secrets`.

@@ -27,6 +27,7 @@ const DATA_DBS: &[&str] = &[
     "silva.db",
     "task_context.db",
     "tylluan.db",
+    "workspace.db",
 ];
 
 fn bin() -> &'static str {
@@ -446,6 +447,7 @@ fn data_dbs_inventory_is_complete_or_the_drill_fails() {
         "silva.db",
         "task_context.db",
         "tylluan.db",
+        "workspace.db",
     ];
     for name in REQUIRED {
         assert!(
