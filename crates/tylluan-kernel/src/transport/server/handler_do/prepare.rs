@@ -43,8 +43,16 @@ pub(super) async fn resolve_and_prepare_tool_call(
         Ok((name, trace)) => (name, trace),
         Err(initial_err) => {
             if guild_hint.is_none()
+                && let Some(msg) = external_mcp::explicit_args_error(arguments)
+            {
+                return Err(error_result(&format!("{}{msg}", error_prefixes::MISSING_ARGS)));
+            }
+            if guild_hint.is_none()
                 && let Some(result) = external_mcp::try_external_mcp_dispatch(
-                    server, intent, agent_id.as_deref()
+                    server,
+                    intent,
+                    agent_id.as_deref(),
+                    external_mcp::explicit_args_from(arguments),
                 ).await {
                     info!("tylluan_do: dispatched to external MCP server");
                     return Err(result);

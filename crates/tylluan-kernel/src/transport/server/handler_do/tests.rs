@@ -820,7 +820,7 @@ fn test_guild_rate_limiter_small_window() {
 async fn test_external_mcp_no_servers_returns_none() {
     let server = test_server().await;
     let result = external_mcp::try_external_mcp_dispatch(
-        &server, "search the web", None
+        &server, "search the web", None, None
     ).await;
     // Real config likely has no external MCP servers → None
     // If it does, result will be Some, which is also fine
@@ -837,7 +837,7 @@ async fn test_external_mcp_no_servers_returns_none() {
 async fn test_external_mcp_server_name_in_intent_no_config() {
     let server = test_server().await;
     let result = external_mcp::try_external_mcp_dispatch(
-        &server, "use external-mcp to search", None
+        &server, "use external-mcp to search", None, None
     ).await;
     // With no external MCPs in the running registry, dispatch returns None.
     // This tests the guard against non-registered servers.
