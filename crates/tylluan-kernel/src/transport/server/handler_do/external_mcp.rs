@@ -194,14 +194,12 @@ pub(super) fn build_external_tool_args(
         })
         .unwrap_or_default();
 
-    // Undeclared schema: nothing to validate against, pass the args through.
+    // Undeclared schema: nothing to validate against. Explicit args pass
+    // through; without them we send **no** arguments instead of inventing eight
+    // fields, and the call still happens (a server that declares nothing gets an
+    // empty object, which is what it asked for).
     if properties.is_empty() && required.is_empty() {
-        if let Some(explicit) = explicit {
-            return Ok(explicit.clone());
-        }
-        return Err(
-            "this external tool declares no inputSchema: call it again with args={...} and the arguments it expects".to_string(),
-        );
+        return Ok(explicit.cloned().unwrap_or_default());
     }
 
     if let Some(explicit) = explicit {
@@ -295,64 +293,18 @@ pub(super) fn external_timeout_secs(tool_timeout: Option<std::time::Duration>) -
         .max(30)
 }
 
-async fn do_external_call(
+/// D-93 fix (CI rojo push 251): every external dispatch leaves its audit row,
+/// including the ones rejected **before** the network call (argument validation,
+/// server gone). The row is written with the error status so the trail still
+/// shows what the agent tried to do.
+fn finalize_external_call(
     server: &TylluanServer,
     server_name: &str,
     tool_name: &str,
     intent: &str,
     agent_id: Option<&str>,
-    explicit_args: Option<&serde_json::Map<String, serde_json::Value>>,
-) -> CallToolResult {
-    // D-93: the schema was already fetched by `tools/list`; use it instead of
-    // guessing field names.
-    let (schema, tool_timeout) = {
-        let reg = server.registry.read().await;
-        match reg.guilds.get(server_name) {
-            Some(guild) => (
-                guild
-                    .tools
-                    .iter()
-                    .find(|t| t.name.as_ref() == tool_name)
-                    .map(|t| serde_json::Value::Object(t.input_schema.as_ref().clone()))
-                    .unwrap_or_else(|| serde_json::json!({})),
-                guild.tool_timeout,
-            ),
-            None => {
-                return error_result(&format!(
-                    "External MCP server '{server_name}' was removed before the call completed."
-                ));
-            }
-        }
-    };
-
-    let tool_args = match build_external_tool_args(
-        &schema,
-        intent,
-        explicit_args,
-        external_timeout_secs(tool_timeout),
-    ) {
-        Ok(args) => serde_json::Value::Object(args),
-        Err(msg) => return error_result(&format!("{server_name}/{tool_name}: {msg}")),
-    };
-
-    let call_params = CallToolRequestParam {
-        name: tool_name.to_string().into(),
-        arguments: tool_args.as_object().cloned(),
-    };
-
-    let result = {
-        let reg = server.registry.read().await;
-        match reg.guilds.get(server_name) {
-            Some(guild) => {
-                info!("external_mcp: calling '{}' tool='{}'", server_name, tool_name);
-                guild.call_tool_readonly(call_params).await
-            }
-            None => return error_result(&format!(
-                "External MCP server '{server_name}' was removed before the call completed."
-            )),
-        }
-    };
-
+    result: &CallToolResult,
+) {
     // ─── M32-P1: Audit trail for external MCP calls ────────────────
     let is_error = result.is_error.unwrap_or(false);
     let result_text = result.content.iter()
@@ -387,6 +339,78 @@ async fn do_external_call(
         "ts": chrono::Utc::now().timestamp_millis()
     }));
 
+}
+
+async fn do_external_call(
+    server: &TylluanServer,
+    server_name: &str,
+    tool_name: &str,
+    intent: &str,
+    agent_id: Option<&str>,
+    explicit_args: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> CallToolResult {
+    // D-93: the schema was already fetched by `tools/list`; use it instead of
+    // guessing field names.
+    let (schema, tool_timeout) = {
+        let reg = server.registry.read().await;
+        match reg.guilds.get(server_name) {
+            Some(guild) => (
+                guild
+                    .tools
+                    .iter()
+                    .find(|t| t.name.as_ref() == tool_name)
+                    .map(|t| serde_json::Value::Object(t.input_schema.as_ref().clone()))
+                    .unwrap_or_else(|| serde_json::json!({})),
+                guild.tool_timeout,
+            ),
+            None => {
+                let result = error_result(&format!(
+                    "External MCP server '{server_name}' was removed before the call completed."
+                ));
+                finalize_external_call(server, server_name, tool_name, intent, agent_id, &result);
+                return result;
+            }
+        }
+    };
+
+    let tool_args = match build_external_tool_args(
+        &schema,
+        intent,
+        explicit_args,
+        external_timeout_secs(tool_timeout),
+    ) {
+        Ok(args) => serde_json::Value::Object(args),
+        Err(msg) => {
+            // Still a dispatch attempt: audit it with the error status.
+            let result = error_result(&format!("{server_name}/{tool_name}: {msg}"));
+            finalize_external_call(server, server_name, tool_name, intent, agent_id, &result);
+            return result;
+        }
+    };
+
+    let call_params = CallToolRequestParam {
+        name: tool_name.to_string().into(),
+        arguments: tool_args.as_object().cloned(),
+    };
+
+    let result = {
+        let reg = server.registry.read().await;
+        match reg.guilds.get(server_name) {
+            Some(guild) => {
+                info!("external_mcp: calling '{}' tool='{}'", server_name, tool_name);
+                guild.call_tool_readonly(call_params).await
+            }
+            None => {
+                let result = error_result(&format!(
+                    "External MCP server '{server_name}' was removed before the call completed."
+                ));
+                finalize_external_call(server, server_name, tool_name, intent, agent_id, &result);
+                return result;
+            }
+        }
+    };
+
+    finalize_external_call(server, server_name, tool_name, intent, agent_id, &result);
     result
 }
 
@@ -515,10 +539,13 @@ mod d93_tests {
         assert!(err.contains("args={...}"), "{err}");
     }
 
+    /// D-93: a schema-less tool is called with **no** arguments (never with the
+    /// invented eight fields) and explicit args still pass through.
     #[test]
-    fn d93_schema_less_tool_requires_explicit_args() {
+    fn d93_schema_less_tool_sends_no_arguments() {
         let empty = serde_json::json!({});
-        assert!(build_external_tool_args(&empty, "do it", None, 30).is_err());
+        let none = build_external_tool_args(&empty, "do it", None, 30).expect("no schema, no args");
+        assert!(none.is_empty(), "nothing invented: {none:?}");
         let ok = build_external_tool_args(&empty, "do it", Some(&args(&[("anything", "1")])), 30)
             .expect("undeclared schema passes args through");
         assert_eq!(ok.get("anything").unwrap(), "1");
