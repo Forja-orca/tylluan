@@ -15,27 +15,13 @@ import {
   List,
   ShieldAlert
 } from 'lucide-react';
-import type { NexusBridge, GraphNode, NexusEvent } from '../lib/nexus-bridge';
+import type { NexusBridge, GraphNode } from '../lib/nexus-bridge';
 import { LifecycleBadge } from '../lib/nexus-bridge';
 import type { MemoryStats } from '../hooks/useNexus';
 import { useNexus } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
 import { IngestPanel } from './IngestPanel';
-
-// The graph canvas is heavy enough to warrant code-splitting — only load it
-// when the Knowledge tab is actually opened. 2D canvas renderer (see
-// same semantics, a fraction of the cost).
-function LightGraphPlaceholder({ bridge: _bridge }: { bridge: NexusBridge; events: NexusEvent[] }) {
-  return (
-    <div className="flex-1 min-h-[300px] rounded-lg bg-card border border-border shadow-sm flex flex-col items-center justify-center p-6 text-center">
-      <Network className="w-10 h-10 text-primary/60 mb-3" />
-      <h4 className="text-sm font-semibold text-foreground">Explorador Estructural SilvaDB</h4>
-      <p className="text-xs text-muted-foreground max-w-md mt-1">
-        Consulta recuerdos estructurados y relaciones directamente desde la pestana de Nodos para maxima velocidad y cero consumo de GPU/WebGL.
-      </p>
-    </div>
-  );
-}
+import { RadialSilvaGraph } from './graph/RadialSilvaGraph';
 
 interface Props {
   bridge: NexusBridge | null;
@@ -79,8 +65,9 @@ interface ExtendedGraphNode extends Omit<GraphNode, 'lifecycle_state'> {
 }
 
 export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
-  const { events } = useNexus();
-  const [activeSubView, setActiveSubView] = useState<'graph' | 'list'>('graph');
+  useNexus();
+  const [activeSubView, setActiveSubView] = useState<'graph' | 'list'>('list');
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ExtendedGraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
@@ -323,7 +310,11 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                     <RefreshCw className="w-4 h-4 animate-spin" /> Cargando visor de grafo...
                   </div>
                 }>
-                  <LightGraphPlaceholder bridge={bridge} events={events} />
+                  <RadialSilvaGraph
+                    bridge={bridge}
+                    initialNodeId={selectedGraphNodeId}
+                    onSelectNode={setSelectedGraphNodeId}
+                  />
                 </Suspense>
               </div>
               <IngestPanel bridge={bridge} notify={notify} onIngestComplete={handleIngestComplete} />
@@ -744,15 +735,29 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                             </div>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          title="Buscar relacionados"
-                          aria-label={`Buscar nodos relacionados con ${node.id}`}
-                          onClick={() => setQuery(node.id)}
-                          className="p-1 hover:bg-slate-700 rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                        >
-                          <Search className="w-3 h-3 text-slate-500" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            title="Ver en constelación radial"
+                            aria-label={`Ver vecindad de ${node.label || node.id} en constelación radial`}
+                            onClick={() => {
+                              setSelectedGraphNodeId(node.id);
+                              setActiveSubView('graph');
+                            }}
+                            className="p-1 hover:bg-slate-700 text-primary rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                          >
+                            <Network className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Buscar relacionados"
+                            aria-label={`Buscar nodos relacionados con ${node.id}`}
+                            onClick={() => setQuery(node.id)}
+                            className="p-1 hover:bg-slate-700 rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                          >
+                            <Search className="w-3 h-3 text-slate-500" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -832,7 +837,24 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                               }
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-right text-[11px] font-mono font-medium text-amber-800 dark:text-amber-400">{(node.weight || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-[11px] font-mono font-medium text-amber-800 dark:text-amber-400">{(node.weight || 0).toFixed(2)}</span>
+                              <button
+                                type="button"
+                                title="Ver en constelación radial"
+                                aria-label={`Ver vecindad de ${node.label || node.id} en grafo`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedGraphNodeId(node.id);
+                                  setActiveSubView('graph');
+                                }}
+                                className="p-1 hover:bg-slate-700 text-primary rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                              >
+                                <Network className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
