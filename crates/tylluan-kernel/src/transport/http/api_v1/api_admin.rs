@@ -327,7 +327,20 @@ pub struct SetSessionSandboxOverrideRequest {
 pub async fn get_config_handler() -> impl IntoResponse {
     match crate::config::TylluanConfig::load_cached() {
         Ok(c) => match c.try_read() {
-            Ok(config) => Json(config.clone()).into_response(),
+            // A0 (SPEC 2026-11-02): nunca devolver valores de secretos
+            // (external_mcp[*].env/headers, services[*].env, acl.tokens,
+            // federation_peers[*].auth_token/shared_secret). F4: `x-config-etag`
+            // permite que /config/edit detecte cambios concurrentes (409).
+            Ok(config) => {
+                let mut response = Json(super::config_safe::redacted_config_json(&config)).into_response();
+                let raw = crate::config::TylluanConfig::find_config_file()
+                    .and_then(|p| std::fs::read_to_string(p).ok())
+                    .unwrap_or_default();
+                if let Ok(value) = axum::http::HeaderValue::from_str(&super::config_safe::etag_of(&raw)) {
+                    response.headers_mut().insert("x-config-etag", value);
+                }
+                response
+            }
             Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Config lock poisoned: {e}")).into_response(),
         },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
@@ -778,6 +791,20 @@ pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req):
 
     let config_path = crate::config::TylluanConfig::find_config_file()
         .unwrap_or_else(|| std::path::PathBuf::from("tylluan.toml"));
+    // A0: copia previa antes de cualquier escritura (la vía nueva es
+    // /config/edit; este POST se conserva por compatibilidad).
+    let backup = match super::config_safe::backup_path_for(&config_path) {
+        Ok(path) => path,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e }))).into_response();
+        }
+    };
+    if let Err(e) = fs::copy(&config_path, &backup) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("no se pudo hacer copia previa: {e}")
+        }))).into_response();
+    }
+    let diff = super::config_safe::config_diff(&old_value, &new_value);
     let tmp_path = config_path.with_extension("toml.tmp");
     if let Err(e) = fs::write(&tmp_path, &req.content) {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
@@ -785,6 +812,7 @@ pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req):
     if let Err(e) = fs::rename(&tmp_path, &config_path) {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
     }
+    super::config_safe::audit_change(&diff, &backup, "POST /api/v1/config", "config_api");
 
     let new_embedding = new_config.memory.embedding_model.clone();
     if new_embedding != old_embedding {

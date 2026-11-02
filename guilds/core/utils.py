@@ -198,11 +198,32 @@ def validate_path(base_dir: str, target_path: str) -> bool:
     try:
         if is_windows_device_path(target_path):
             return False
+        # H2 (B-32): a UNC target makes Path.resolve() open the network
+        # resource, and on Windows that costs ~5.5 s per *new* hostname
+        # (measured 2026-10-31: //zz1fuzz/x 5.5 s, //zz2fuzz/x 5.8 s; 2 ms
+        # when the host repeats because the negative lookup is cached). A
+        # share can never be inside a local base, so reject that mismatch
+        # before any I/O: otherwise a caller cycling hostnames blocks a guild
+        # worker for seconds per request and pays nothing for it.
+        if _is_unc_path(target_path) and not _is_unc_path(base_dir):
+            return False
         base = Path(os.path.abspath(base_dir)).resolve()
         target = Path(os.path.abspath(target_path)).resolve()
         return target.is_relative_to(base)
     except Exception:
         return False
+
+
+def _is_unc_path(path: str) -> bool:
+    r"""True for Windows UNC paths (``\\host\share``, ``//host/share``).
+
+    Purely lexical on purpose: it must never touch the network. It exists to
+    decide *before* ``Path.resolve()`` whether resolving is safe to attempt.
+    """
+    if not isinstance(path, str):
+        return False
+    stripped = path.lstrip()
+    return stripped.startswith("\\\\") or stripped.startswith("//")
 
 
 def detect_language(filename: str) -> str:

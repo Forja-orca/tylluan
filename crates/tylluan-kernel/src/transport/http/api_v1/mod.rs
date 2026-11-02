@@ -6,6 +6,7 @@ use axum::{
 };
 use std::sync::Arc;
 use uuid;
+use rmcp::{Error as McpError, model::ErrorCode};
 
 use crate::transport::http::{
     HttpState, EdgePayload, EdgeSearchQuery, EdgeSearchResult, CreateNodePayload, SilvaQueryParams, SilvaRecentQuery,
@@ -17,6 +18,7 @@ use crate::memory::mailbox::BlackboardMessage;
 pub mod api_guilds;
 pub mod api_outputs;
 pub mod api_admin;
+pub mod config_safe;
 pub mod api_coloquio;
 pub mod api_federation;
 pub mod api_ingest;
@@ -470,7 +472,7 @@ async fn do_intent_handler(
                 "ts": chrono::Utc::now().timestamp_millis()
             }));
             (
-                status_for_tool_call_error(&e.to_string()),
+                status_for_tool_call_error(&e),
                 Json(serde_json::json!({"error": e.to_string()})),
             )
                 .into_response()
@@ -481,9 +483,34 @@ async fn do_intent_handler(
 /// H1 (B-32, 2026-11-01): a malformed request from the caller is a client
 /// error. Returning 500 made agents retry a call that could never succeed and
 /// hid the real cause behind "internal error".
-fn status_for_tool_call_error(message: &str) -> StatusCode {
-    let upper = message.to_ascii_uppercase();
-    if upper.contains("INVALID_PARAMS") || upper.contains("INVALID_REQUEST") {
+/// The decision is taken on the JSON-RPC code, not on the wording of the
+/// message. The first version of this helper matched the strings
+/// `INVALID_PARAMS`/`INVALID_REQUEST`, which never appear in what the kernel
+/// actually emits: `McpError::invalid_params` renders as `-32602: <message>`
+/// (verified 2026-11-02 on db08f3d5: `POST /api/v1/do` with an unknown `tool`
+/// still answered 500). The text check stays only as a fallback for errors
+/// whose code was flattened into the message.
+fn status_for_tool_call_error(err: &McpError) -> StatusCode {
+    let client_side_code = matches!(
+        err.code,
+        ErrorCode::INVALID_PARAMS
+            | ErrorCode::INVALID_REQUEST
+            | ErrorCode::METHOD_NOT_FOUND
+            | ErrorCode::PARSE_ERROR
+    );
+    if client_side_code {
+        return StatusCode::BAD_REQUEST;
+    }
+    let message = err.to_string().to_ascii_uppercase();
+    let legacy_text_markers = [
+        "INVALID_PARAMS",
+        "INVALID_REQUEST",
+        "-32602",
+        "-32600",
+        "-32601",
+        "-32700",
+    ];
+    if legacy_text_markers.iter().any(|m| message.contains(m)) {
         StatusCode::BAD_REQUEST
     } else {
         StatusCode::INTERNAL_SERVER_ERROR
@@ -2168,22 +2195,51 @@ mod d94_status_tests {
     /// H1 (B-32): client-side failures map to 400, everything else stays 500.
     /// Without the mapping a malformed call answered 500, which reads as a kernel
     /// failure and makes agents retry something that can never succeed.
+    ///
+    /// The classification reads the JSON-RPC code, not the message text: the
+    /// kernel renders `McpError::invalid_params` as `-32602: <text>`, which the
+    /// first version of this helper did not match, so an unknown tool kept
+    /// answering 500 in production (B-32 H1, verified 2026-11-02 on db08f3d5).
     #[test]
     fn h1_client_errors_are_bad_request_not_internal() {
         assert_eq!(
-            status_for_tool_call_error("INVALID_PARAMS: missing field `path`"),
+            status_for_tool_call_error(&McpError::invalid_params("missing field `path`", None)),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            status_for_tool_call_error("invalid_request: no tool named foo"),
+            status_for_tool_call_error(&McpError::invalid_request("no tool named foo", None)),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            status_for_tool_call_error("guild 'bash' crashed"),
+            status_for_tool_call_error(&McpError::parse_error("bad json", None)),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status_for_tool_call_error(&McpError::internal_error("guild 'bash' crashed", None)),
             StatusCode::INTERNAL_SERVER_ERROR
         );
+    }
+
+    #[test]
+    fn h1_unknown_kernel_tool_is_bad_request() {
+        // Exact error built by transport/server/handlers.rs for an unregistered
+        // tool. Display prefija el codigo: "-32602: Unknown kernel tool: ...".
+        let err = McpError::invalid_params("Unknown kernel tool: no-existe", None);
+        assert_eq!(err.to_string(), "-32602: Unknown kernel tool: no-existe");
+        assert_eq!(status_for_tool_call_error(&err), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn h1_flattened_code_in_message_still_client_side() {
+        // Defensive: a path that flattened the code into an internal error.
+        let err = McpError::internal_error("-32602: Unknown kernel tool: x", None);
+        assert_eq!(status_for_tool_call_error(&err), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn h1_server_failure_without_markers_stays_500() {
         assert_eq!(
-            status_for_tool_call_error(""),
+            status_for_tool_call_error(&McpError::internal_error("", None)),
             StatusCode::INTERNAL_SERVER_ERROR
         );
     }

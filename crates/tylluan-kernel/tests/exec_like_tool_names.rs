@@ -473,9 +473,9 @@ fn exec_like_heuristic_measured_over_real_core_tools() {
         "coloquio_digest:279 _run_reasoning_background",
         "scheduler:171 _run_deepeval_once",
         "utils:84 run_command",
-        "utils:247 find_executable",
-        "utils:259 truncate_output",
-        "utils:354 safe_mcp_run",
+        "utils:268 find_executable",
+        "utils:280 truncate_output",
+        "utils:375 safe_mcp_run",
         "vision:338 _run_vision",
     ];
     let fragile_keys: Vec<String> = fragile

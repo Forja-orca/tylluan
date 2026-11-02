@@ -88,6 +88,10 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/security/scopes", get(get_security_scopes_handler).post(save_security_scopes_handler))
         .route("/api/v1/memory/recall-feedback/stats", get(api_security::recall_feedback_stats))
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
+        // A0 «Ajustes completos»: contrato seguro de configuración.
+        .route("/api/v1/config/schema", get(super::config_safe::config_schema_handler))
+        .route("/api/v1/config/validate", post(super::config_safe::validate_config_handler))
+        .route("/api/v1/config/edit", post(super::config_safe::edit_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
         .route("/api/v1/config/device/status", get(device_status_handler))
         .route("/api/v1/config/inference-llama", post(set_inference_llama_config_handler))
