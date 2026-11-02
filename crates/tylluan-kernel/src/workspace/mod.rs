@@ -44,6 +44,8 @@ pub const EVENT_KINDS: &[&str] = &[
     "requeued",
 ];
 
+pub mod git_writer;
+
 /// Estado de una tarea.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {
@@ -293,6 +295,60 @@ impl WorkspaceStore {
             .query_row("SELECT status FROM tasks WHERE id = ?1", params![task_id], |r| r.get(0))
             .optional()?;
         Ok(status.map(|s| TaskStatus::from_str(&s)))
+    }
+
+    /// F9-1: ¿sigue vigente este reclamo? (mismo token/epoca y sin liberar ni
+    /// caducar). Lo usa el escritor de git antes de tocar nada.
+    pub fn claim_is_current(&self, claim: &Claim, now_ms: i64) -> Result<bool> {
+        let conn = self.conn()?;
+        let found: Option<i64> = conn
+            .query_row(
+                "SELECT 1 FROM claims
+                 WHERE task_id = ?1 AND agent_id = ?2 AND epoch = ?3 AND token_hash = ?4
+                   AND released_at IS NULL AND expires_at > ?5",
+                params![
+                    claim.task_id,
+                    claim.agent_id,
+                    claim.epoch,
+                    claim.token_hash,
+                    now_ms
+                ],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(found.is_some())
+    }
+
+    /// Glob de rutas del reclamo `(task_id, epoch)`.
+    pub fn claim_path_glob(&self, task_id: &str, epoch: i64) -> Result<Option<String>> {
+        let conn = self.conn()?;
+        Ok(conn
+            .query_row(
+                "SELECT path_glob FROM claims WHERE task_id = ?1 AND epoch = ?2",
+                params![task_id, epoch],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// F9-1: deja la tarea en `review` (p. ej. tras guardar un parche de
+    /// recuperación) y lo registra en `events`.
+    pub fn mark_task_review(&self, task_id: &str, now_ms: i64) -> Result<bool> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let changed = tx.execute(
+            "UPDATE tasks SET status = 'review' WHERE id = ?1",
+            params![task_id],
+        )?;
+        if changed > 0 {
+            tx.execute(
+                "INSERT INTO events (ts, agent_id, task_id, kind, payload)
+                 VALUES (?1, 'broker', ?2, 'review', '{}')",
+                params![now_ms, task_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(changed > 0)
     }
 
     pub fn task_glob(&self, task_id: &str) -> Result<Option<String>> {
