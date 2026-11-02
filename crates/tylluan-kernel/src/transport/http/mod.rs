@@ -3,6 +3,7 @@
 //! Provides SSE, JSON-RPC (MCP), and Management API (V1).
 //! Orchestrates routing using modular sub-routers.
 
+pub mod instance;
 pub mod auth;
 pub mod oauth;
 pub mod oauth_consent;
@@ -445,27 +446,21 @@ pub async fn start_http_server(
     let shutdown_token = state.cancel_token.clone();
     let app = build_router(state);
     
-    // Read the old port before we overwrite it to perform a true hot-swap
-    let mut old_port = None;
-    let active_port_file = std::path::Path::new("data/active_port.json");
-    if active_port_file.exists()
-        && let Ok(content) = std::fs::read_to_string(active_port_file)
-            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
-                && let Some(p) = val.get("port").and_then(|p| p.as_u64()) {
-                    old_port = Some(p as u16);
-                }
+    // D-94: `active_port.json` belongs to the instance DATA_DIR (same root as
+    // the PID file), never to `./data` of whatever the cwd happens to be.
+    let instance_dir = instance::data_dir(port);
+    let active_port_file = instance::active_port_path(&instance_dir);
+    let old_port = instance::read_active_port(&active_port_file);
+    let previous_kernel_alive = instance::read_pid(&instance_dir.join(instance::PID_FILE))
+        .map(instance::process_is_kernel_alive)
+        .unwrap_or(false);
 
     // D-38: si hay un kernel anterior, pedirle el shutdown ANTES de bindear.
-    // El arranque ya no elige otro puerto en silencio: reintenta el puerto
-    // configurado durante `port_retry_secs` y, si sigue ocupado, falla con un
-    // error claro. `active_port.json` solo se usa para localizar al kernel
-    // anterior, y solo dentro del rango que este kernel pudo haber bindeado
-    // (configurado..configurado+100, por el fallback histórico).
-    let own_port_range = port..=(port.saturating_add(100));
-    if let Some(op) = old_port
-        && op != 0
-        && own_port_range.contains(&op)
-    {
+    // D-94: solo si ese kernel esta VIVO (PID del DATA_DIR) y su puerto no es el
+    // nuestro. Antes bastaba con que el puerto cayera en `port..=port+100`, asi
+    // que un fichero obsoleto apuntando a nuestro propio puerto nos pedia el
+    // shutdown a nosotros mismos en cuanto el listener existia (B-31).
+    if let Some(op) = instance::shutdown_target(old_port, port, previous_kernel_alive) {
         info!("🔌 Pidiendo shutdown al kernel anterior en :{} (active_port.json)...", op);
         let client = reqwest::Client::new();
         let shutdown_url = format!("http://127.0.0.1:{op}/api/v1/admin/shutdown");
@@ -485,14 +480,14 @@ pub async fn start_http_server(
     let bound_port = bound_addr.port();
     info!("\u{1F680} TylluanNexus HTTP Gateway listening on {}", bound_addr);
     
-    // Write active port to data/active_port.json
-    let _ = std::fs::create_dir_all("data");
-    let payload = serde_json::json!({ "port": bound_port });
-    let port_json = serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string());
-    if let Err(e) = std::fs::write("data/active_port.json", port_json) {
-        error!("❌ Failed to write active_port.json: {}", e);
-    } else {
-        info!("📝 Written active port {} to data/active_port.json", bound_port);
+    // D-94: the instance DATA_DIR is the single place where the port is recorded.
+    match instance::write_active_port(&active_port_file, bound_port) {
+        Ok(()) => info!(
+            "Written active port {} to {}",
+            bound_port,
+            active_port_file.display()
+        ),
+        Err(e) => error!("Failed to write {}: {e}", active_port_file.display()),
     }
 
     // D-39: el puerto ya está bound; despertar al constructor del repo map.

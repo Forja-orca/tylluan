@@ -469,8 +469,24 @@ async fn do_intent_handler(
                 "error": Some(e.to_string()),
                 "ts": chrono::Utc::now().timestamp_millis()
             }));
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response()
+            (
+                status_for_tool_call_error(&e.to_string()),
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
         }
+    }
+}
+
+/// H1 (B-32, 2026-11-01): a malformed request from the caller is a client
+/// error. Returning 500 made agents retry a call that could never succeed and
+/// hid the real cause behind "internal error".
+fn status_for_tool_call_error(message: &str) -> StatusCode {
+    let upper = message.to_ascii_uppercase();
+    if upper.contains("INVALID_PARAMS") || upper.contains("INVALID_REQUEST") {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
@@ -2141,6 +2157,34 @@ mod d53_audit_read_path_tests {
             audit_read_db_path(),
             crate::config::data_file("guild_audit.db"),
             "sin env la cadena se lee de guild_audit.db del DATA_DIR"
+        );
+    }
+}
+
+#[cfg(test)]
+mod d94_status_tests {
+    use super::*;
+
+    /// H1 (B-32): client-side failures map to 400, everything else stays 500.
+    /// Without the mapping a malformed call answered 500, which reads as a kernel
+    /// failure and makes agents retry something that can never succeed.
+    #[test]
+    fn h1_client_errors_are_bad_request_not_internal() {
+        assert_eq!(
+            status_for_tool_call_error("INVALID_PARAMS: missing field `path`"),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status_for_tool_call_error("invalid_request: no tool named foo"),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status_for_tool_call_error("guild 'bash' crashed"),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_eq!(
+            status_for_tool_call_error(""),
+            StatusCode::INTERNAL_SERVER_ERROR
         );
     }
 }

@@ -272,14 +272,8 @@ fn parse_listen_port_from_listing(text: &str, pid: u32) -> Option<u16> {
 
 /// Live sybl kernel probe: PID exists AND its executable looks like a kernel.
 fn process_is_kernel_alive(pid: u32) -> bool {
-    let mut sys = sysinfo::System::new();
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]), true);
-    sys.process(sysinfo::Pid::from_u32(pid))
-        .map(|p| {
-            let name = p.name().to_string_lossy().to_lowercase();
-            name.contains("tylluan-nexus") || name.contains("tylluan_nexus")
-        })
-        .unwrap_or(false)
+    // D-94: one implementation, shared with the HTTP instance bookkeeping.
+    tylluan_kernel::transport::http::instance::process_is_kernel_alive(pid)
 }
 
 /// Decide how to treat the kernel behind the PID file given our effective
