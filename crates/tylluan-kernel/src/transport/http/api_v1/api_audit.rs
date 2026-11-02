@@ -4,20 +4,36 @@ use crate::transport::server::handler_do;
 
 pub async fn audit_verify() -> impl axum::response::IntoResponse {
     match handler_do::verify_audit_chain() {
-        Ok((ok, bad)) => {
-            let status = if bad == 0 { "clean" } else { "tampered" };
-            let message = if ok == 0 && bad == 0 {
+        Ok(report) => {
+            // D-95: a broken link is not tampering: report both kinds apart, with
+            // their row ids, so an operator can look at the rows that broke.
+            let bad = report.bad();
+            let status = if report.is_clean() { "clean" } else { "broken" };
+            let message = if report.ok == 0 && bad == 0 {
                 "No audit entries yet.".to_string()
             } else if bad == 0 {
-                format!("✅ Chain integrity verified — {ok} entries intact.")
+                format!(
+                    "Chain integrity verified — {} entries intact.",
+                    report.ok
+                )
             } else {
-                format!("🚨 Chain broken — {ok} valid, {bad} tampered entries.")
+                format!(
+                    "Chain has {} problem row(s) — {} intact, {} edited, {} link break(s).",
+                    bad,
+                    report.ok,
+                    report.hash_inconsistent.len(),
+                    report.link_breaks.len()
+                )
             };
             (axum::http::StatusCode::OK, Json(serde_json::json!({
                 "ok": true,
                 "status": status,
-                "valid_count": ok,
+                "valid_count": report.ok,
                 "tampered_count": bad,
+                "hash_inconsistent_count": report.hash_inconsistent.len(),
+                "link_break_count": report.link_breaks.len(),
+                "hash_inconsistent_ids": report.hash_inconsistent,
+                "link_break_ids": report.link_breaks,
                 "message": message,
             })))
         }

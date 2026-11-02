@@ -273,7 +273,7 @@ fn log_audit_entry_at(path: &std::path::Path, intent: &str, guild: &str, tool: &
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| format!("audit dir: {e}"))?;
     }
-    let conn = crate::config::open_db(path).map_err(|e| format!("audit open: {e}"))?;
+    let mut conn = crate::config::open_db(path).map_err(|e| format!("audit open: {e}"))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS guild_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -302,16 +302,23 @@ fn log_audit_entry_at(path: &std::path::Path, intent: &str, guild: &str, tool: &
     let now = chrono::Utc::now().to_rfc3339();
     let status = if success { "ok" } else { "error" };
 
-    ensure_chain_meta(&conn)?;
+    // D-95: two writers that read "the last hash" and then insert on their own
+    // connections both chain to the same predecessor and the second one breaks
+    // the link. `BEGIN IMMEDIATE` serializes the read+insert pair, so the chain
+    // stays linear without rewriting a single existing row.
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| format!("audit tx: {e}"))?;
+    ensure_chain_meta(&tx)?;
     // Get previous hash for chaining. After a retention purge the table can be
     // empty; the anchor preserves the last deleted hash so the live chain still
     // verifies.
-    let prev_hash: String = conn
+    let prev_hash: String = tx
         .query_row("SELECT hash FROM guild_audit_log ORDER BY id DESC LIMIT 1", [], |r| {
             r.get(0)
         })
         .or_else(|_| {
-            conn.query_row(
+            tx.query_row(
                 "SELECT value FROM guild_audit_chain_meta WHERE key = 'anchor'",
                 [],
                 |r| r.get(0),
@@ -327,11 +334,12 @@ fn log_audit_entry_at(path: &std::path::Path, intent: &str, guild: &str, tool: &
     let snapshot_json = crate::router::system_snapshot::global()
         .and_then(|s| serde_json::to_string(s).ok());
 
-    conn.execute(
+    tx.execute(
         "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash, latency_ms, human_intervention, system_snapshot)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         rusqlite::params![now, guild, tool, agent_id, intent, status, preview, prev_hash, hash, latency_ms as i64, if human_intervention { 1 } else { 0 }, snapshot_json],
     ).map_err(|e| format!("audit insert: {e}"))?;
+    tx.commit().map_err(|e| format!("audit commit: {e}"))?;
     Ok(())
 }
 
@@ -397,16 +405,45 @@ pub(crate) fn audit_or_warn(intent: &str, guild: &str, tool: &str, agent_id: &st
     }
 }
 
+/// D-95: verdict of one chain pass. The two failure kinds are kept apart because
+/// they mean different things:
+/// - `hash_inconsistent`: the stored hash does not match the row's own content
+///   (the row was edited);
+/// - `link_breaks`: the row's `prev_hash` does not match its predecessor's hash
+///   (a hole in the chain, typically two writers chaining to the same
+///   predecessor).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct AuditChainReport {
+    /// Rows that are self-consistent and correctly linked.
+    pub ok: usize,
+    /// Row ids whose stored hash does not match their content.
+    pub hash_inconsistent: Vec<i64>,
+    /// Row ids whose `prev_hash` does not match the previous row's hash.
+    pub link_breaks: Vec<i64>,
+}
+
+impl AuditChainReport {
+    pub fn bad(&self) -> usize {
+        self.hash_inconsistent.len() + self.link_breaks.len()
+    }
+
+    pub fn is_clean(&self) -> bool {
+        self.bad() == 0
+    }
+}
+
 /// Verify the integrity of the audit chain from oldest to newest.
-/// Returns (ok_count, bad_count) — bad > 0 means tampering detected.
-pub fn verify_audit_chain() -> Result<(usize, usize), String> {
+pub fn verify_audit_chain() -> Result<AuditChainReport, String> {
     verify_audit_chain_at(&guild_audit_db_path())
 }
 
-fn verify_audit_chain_at(path: &std::path::Path) -> Result<(usize, usize), String> {
+/// D-95: the scan **resynchronizes** after every failure. Before, a link break
+/// left `prev` pointing at the old hash, so every later row was reported as
+/// tampered too (6.200 "tampered" for 25 real breaks on the production DB).
+pub(crate) fn verify_audit_chain_at(path: &std::path::Path) -> Result<AuditChainReport, String> {
     let conn = match crate::config::open_db(path) {
         Ok(c) => c,
-        Err(_) => return Ok((0, 0)),
+        Err(_) => return Ok(AuditChainReport::default()),
     };
     // Ensure table exists (no-op if it does)
     let _ = conn.execute_batch(
@@ -437,26 +474,27 @@ fn verify_audit_chain_at(path: &std::path::Path) -> Result<(usize, usize), Strin
     }).map_err(|e| format!("audit query: {e}"))?;
 
     let mut prev = chain_anchor(&conn);
-    let mut ok = 0usize;
-    let mut bad = 0usize;
+    let mut report = AuditChainReport::default();
     for row_res in rows {
         let row = row_res.map_err(|e| format!("audit row: {e}"))?;
-        let (_id, ts, guild, tool_name, agent_id, status, stored_prev, stored_hash) = row;
-        if stored_prev != prev {
-            bad += 1;
-            continue;
-        }
+        let (id, ts, guild, tool_name, agent_id, status, stored_prev, stored_hash) = row;
         let chain_input = format!("{stored_prev}|{ts}|{guild}|{tool_name}|{agent_id}|{status}");
         use sha2::Digest;
         let computed = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
+
         if computed != stored_hash {
-            bad += 1;
-            continue;
+            report.hash_inconsistent.push(id);
+        } else if stored_prev != prev {
+            report.link_breaks.push(id);
+        } else {
+            report.ok += 1;
         }
+
+        // Resynchronize: the chain continues from what is actually stored, so a
+        // single bad row is reported once instead of poisoning the rest.
         prev = stored_hash;
-        ok += 1;
     }
-    Ok((ok, bad))
+    Ok(report)
 }
 
 /// Open ./data/audit.db strictly for reading (SQLITE_OPEN_READ_ONLY).
@@ -511,9 +549,11 @@ pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    use super::verify_audit_chain_at;
+
     #[test]
     fn guild_audit_retention_prunes_old_prefix_and_preserves_anchor() {
-        use super::{prune_guild_audit_log_at, verify_audit_chain_at};
+        use super::prune_guild_audit_log_at;
 
         let db = std::env::temp_dir().join(format!(
             "audit_retention_test_{}.db",
@@ -574,7 +614,9 @@ mod tests {
         assert_eq!(remaining, 1);
         assert_eq!(anchor, h2);
         drop(conn);
-        assert_eq!(verify_audit_chain_at(&db).unwrap(), (1, 0));
+        let report = verify_audit_chain_at(&db).unwrap();
+        assert_eq!(report.ok, 1);
+        assert!(report.is_clean(), "pruning must not break the live chain");
         let _ = std::fs::remove_file(&db);
     }
 
@@ -910,4 +952,181 @@ mod tests {
         assert_eq!(super::chain_rows_in(&guild_db), Some(1));
         assert!(!generic_db.exists(), "el almacen generico no recibe la cadena");
     }
+
+    /// D-95: build a synthetic chain of `n` rows directly in SQLite. Each row
+    /// chains to the previous row's stored hash, except the ones the caller
+    /// overrides (that is exactly what a second concurrent writer produces: a
+    /// self-consistent row whose `prev_hash` is not its predecessor).
+    fn build_chain_with(db: &std::path::Path, n: usize, overrides: &[(usize, &str)]) -> Vec<i64> {
+        use sha2::Digest;
+        let conn = crate::config::open_db(db).expect("open");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL, guild TEXT NOT NULL, tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '', intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok', result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL
+            );",
+        )
+        .expect("schema");
+        let mut prev = String::new();
+        let mut ids = Vec::new();
+        for i in 0..n {
+            let ts = format!("2026-11-0{}T00:00:0{}Z", (i % 9) + 1, i % 10);
+            let guild = "coloquio";
+            let tool = "read_channel";
+            let agent = "deep";
+            let status = "ok";
+            let used_prev = overrides
+                .iter()
+                .find(|(idx, _)| *idx == i)
+                .map(|(_, p)| (*p).to_string())
+                .unwrap_or_else(|| prev.clone());
+            let input = format!("{used_prev}|{ts}|{guild}|{tool}|{agent}|{status}");
+            let hash = format!("{:x}", sha2::Sha256::digest(input.as_bytes()));
+            conn.execute(
+                "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, status, prev_hash, hash)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![ts, guild, tool, agent, status, used_prev, hash],
+            )
+            .expect("insert");
+            ids.push(conn.last_insert_rowid());
+            prev = hash;
+        }
+        ids
+    }
+
+    fn build_chain(db: &std::path::Path, n: usize) -> Vec<i64> {
+        build_chain_with(db, n, &[])
+    }
+
+    /// D-95: two link breaks do not poison the rows that come after them. The
+    /// old scan kept `prev` at the pre-break hash, so every later row was also
+    /// reported as tampered (6.200 of them on the production DB for 25 breaks).
+    #[test]
+    fn d95_two_link_breaks_are_reported_without_cascading() {
+        let db = std::env::temp_dir().join(format!("audit_d95_breaks_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        // Rows 2 and 4 chain to the anchor instead of their predecessor, the way a
+        // second writer that read the same "last hash" would.
+        let ids = build_chain_with(&db, 5, &[(1, ""), (3, "")]);
+
+        let report = verify_audit_chain_at(&db).expect("verify");
+        assert_eq!(report.link_breaks, vec![ids[1], ids[3]]);
+        assert!(report.hash_inconsistent.is_empty());
+        assert_eq!(report.ok, 3, "rows 1, 3 and 5 are intact");
+        assert!(!report.is_clean());
+        let _ = std::fs::remove_file(&db);
+    }
+
+    /// D-95: an edited row is reported as `hash_inconsistent`, not as a link
+    /// break, and the rows after it stay valid (the scan resynchronizes on the
+    /// stored hash).
+    #[test]
+    fn d95_edited_row_is_reported_apart_and_does_not_cascade() {
+        let db = std::env::temp_dir().join(format!("audit_d95_edit_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        let ids = build_chain(&db, 4);
+        let conn = crate::config::open_db(&db).expect("open");
+        conn.execute(
+            "UPDATE guild_audit_log SET status = 'error' WHERE id = ?1",
+            rusqlite::params![ids[1]],
+        )
+        .expect("tamper");
+
+        let report = verify_audit_chain_at(&db).expect("verify");
+        assert_eq!(report.hash_inconsistent, vec![ids[1]]);
+        assert!(report.link_breaks.is_empty(), "an edited row is not a broken link");
+        assert_eq!(report.ok, 3, "the rows after the edited one stay valid");
+        let _ = std::fs::remove_file(&db);
+    }
+
+    /// D-95: a clean chain stays clean (no false positives from the rewrite).
+    #[test]
+    fn d95_clean_synthetic_chain_has_no_findings() {
+        let db = std::env::temp_dir().join(format!("audit_d95_clean_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        build_chain(&db, 6);
+        let report = verify_audit_chain_at(&db).expect("verify");
+        assert!(report.is_clean(), "{report:?}");
+        assert_eq!(report.ok, 6);
+        let _ = std::fs::remove_file(&db);
+    }
+
+    /// D-95: 8 writers × 25 rows. With `BEGIN IMMEDIATE` the read+insert pair
+    /// serializes, so every row lands and the chain stays linear; the connection
+    /// waits on the 5 s busy_timeout instead of dropping audit rows.
+    #[test]
+    fn d95_many_concurrent_writers_keep_the_chain_linear() {
+        use super::log_audit_entry_at;
+        let db = std::env::temp_dir().join(format!("audit_d95_stress_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+
+        let mut handles = Vec::new();
+        for w in 0..8 {
+            let db = db.clone();
+            handles.push(std::thread::spawn(move || {
+                for i in 0..25 {
+                    let _ = log_audit_entry_at(
+                        &db,
+                        &format!("stress-{w}-{i}"),
+                        "g",
+                        "t",
+                        &format!("agent-{w}"),
+                        true,
+                        "",
+                        0,
+                        false,
+                    );
+                }
+            }));
+        }
+        for h in handles {
+            h.join().expect("writer thread");
+        }
+
+        let report = verify_audit_chain_at(&db).expect("verify");
+        assert_eq!(
+            report.ok, 200,
+            "every row must land and chain: {:?} link breaks, {:?} edited",
+            report.link_breaks, report.hash_inconsistent
+        );
+        assert!(report.is_clean(), "{report:?}");
+        let _ = std::fs::remove_file(&db);
+    }
+
+    /// D-95: the writer serializes "read last hash + insert", so concurrent
+    /// writers cannot both chain to the same predecessor.
+    #[test]
+    fn d95_concurrent_writes_keep_the_chain_linear() {
+        use super::log_audit_entry_at;
+        let db = std::env::temp_dir().join(format!("audit_d95_conc_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+
+        let db_a = db.clone();
+        let a = std::thread::spawn(move || {
+            for i in 0..10 {
+                let _ = log_audit_entry_at(&db_a, &format!("intent-a-{i}"), "g", "t", "a", true, "", 0, false);
+            }
+        });
+        let db_b = db.clone();
+        let b = std::thread::spawn(move || {
+            for i in 0..10 {
+                let _ = log_audit_entry_at(&db_b, &format!("intent-b-{i}"), "g", "t", "b", true, "", 0, false);
+            }
+        });
+        a.join().expect("thread a");
+        b.join().expect("thread b");
+
+        let report = verify_audit_chain_at(&db).expect("verify");
+        assert!(
+            report.link_breaks.is_empty(),
+            "two writers must not break the chain: {:?}",
+            report.link_breaks
+        );
+        assert_eq!(report.ok, 20);
+        let _ = std::fs::remove_file(&db);
+    }
+
 }
