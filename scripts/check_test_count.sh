@@ -6,14 +6,30 @@
 # count drifted out of sync with reality after milestones closed -- STATUS.md
 # (the internal source of truth) got updated correctly each time, but the
 # public-facing README lagged behind because nothing forced it to stay
-# accurate. This script is that force: it runs the actual test suites,
-# counts real passes, and fails CI if README.md's number doesn't match.
+# accurate. This script is that force: it gets the real per-suite pass
+# counts and fails CI if README.md's number doesn't match.
 #
 # 2026-10-10 (José, checklist P1 "AGENTS.md cifras falsas sin gate"): the
 # same gate now covers AGENTS.md component-wise (kernel/link/fsrs), because
 # that file is auto-loaded by every agent on connect and had drifted to
 # "790 en verde" while reality was 1079 -- the exact incident class its own
 # header warns about, but with no CI line forcing it honest.
+#
+# 2026-11-03 (T2590 punto 6, TL order, hermes): REUSE mode. scripts/verify.sh
+# already ran kernel --lib, link --lib --tests and fsrs this very run; before
+# this change this gate RE-RAN all three (122 s measured, pure duplicate).
+# Now verify.sh exports TYLLUAN_TMC_DIR with the tee'd per-gate logs and this
+# script sums those instead (~5 s). Semantics are identical because only the
+# "Running unittests src/lib.rs" blocks are counted (exactly what the old
+# per-crate "--lib" invocations measured) -- integration-binary blocks in
+# reused logs are provably ignored (the self-test plants a decoy block for
+# this). No TYLLUAN_TMC_DIR (standalone run, CI job) -> falls back to running
+# cargo itself, byte-for-byte the old behavior.
+# SELF-TEST (TL demanded evidence the detector is not vacuous): before any
+# real comparison, a throwaway tree with planted counts and a planted FAKE
+# claim must exit 1, and the same tree with correct claims must exit 0.
+# Mirrors check_async_guild_io.py's "runs its own fixture self-test first"
+# pattern. A broken detector fails the push instead of passing silently.
 #
 # Usage: scripts/check_test_count.sh [--fix]
 # Exit 0 if README.md and AGENTS.md match reality, exit 1 (with a diff)
@@ -28,12 +44,79 @@
 #        design (it carries hash + date + context).
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+
+# ── self-test FIRST on every normal run (async-guild-io pattern), ────────
+# unless explicitly suppressed (inner wrapper sets the guard env).
+# --self-test        : kept as a no-op-compatible alias (self-test runs anyway)
+# --self-test-inner  : one comparison pass inside the planted tree (guard env set)
+if [ "${TYLLUAN_TMC_NO_SELFTEST:-}" != "1" ]; then
+    FIX=$(mktemp -d)
+    mkdir -p "$FIX/logs"
+    # Planted real counts: kernel=10 (lib only, decoy integration block
+    # must NOT count), link=4 (lib) + decoy, fsrs=2 (lib) + decoy.
+    printf '     Running unittests src\\lib.rs (target/debug/deps/tylluan_kernel-0000000000)\n\nrunning 10 tests\ntest result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n\n     Running tests\\decoy_must_not_count.rs (target/debug/deps/decoy-1111)\n\nrunning 999 tests\ntest result: ok. 999 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n' > "$FIX/logs/kernel_lib.log"
+    cat > "$FIX/logs/link_all.log" <<'EOF'
+     Running unittests src/lib.rs (target/debug/deps/tylluan_link-2222)
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+     Running tests/integration.rs (target/debug/deps/integration-3333)
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+EOF
+    cat > "$FIX/logs/fsrs_all.log" <<'EOF'
+     Running unittests src/lib.rs (target/debug/deps/tylluan_fsrs-4444)
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+EOF
+    printf '%s\n' 'Some README' '402 tests across Rust kernel --lib, tylluan-link, and tylluan-fsrs — all green.' > "$FIX/README.md"
+    printf '%s\n' '# AGENTS' '**Tests:** 10 lib tests (kernel) + 4 (tylluan-link) + 2 (tylluan-fsrs) = 16 en verde — x' > "$FIX/AGENTS.md"
+    # Negative control: planted FAKE README claim (402 vs real 16) MUST be caught.
+    if TYLLUAN_TMC_NO_SELFTEST=1 TYLLUAN_TMC_ROOT="$FIX" TYLLUAN_TMC_DIR="$FIX/logs" bash "$0" --self-test-inner >"$FIX/neg.out" 2>&1; then
+        echo "❌ SELF-TEST FAILED: gate PASSED against a planted fake count (402 vs 16) -- detector is vacuous. Refusing to run as a real gate."
+        cat "$FIX/neg.out"; rm -rf "$FIX"; exit 1
+    fi
+    if ! grep -qi 'MISMATCH' "$FIX/neg.out"; then
+        echo "❌ SELF-TEST FAILED: gate exited non-zero but never said MISMATCH -- wrong failure mode."
+        cat "$FIX/neg.out"; rm -rf "$FIX"; exit 1
+    fi
+    # Positive control: fix README to the real planted number -> MUST exit 0.
+    printf '%s\n' 'Some README' '16 tests across Rust kernel --lib, tylluan-link, and tylluan-fsrs — all green.' > "$FIX/README.md"
+    if ! TYLLUAN_TMC_NO_SELFTEST=1 TYLLUAN_TMC_ROOT="$FIX" TYLLUAN_TMC_DIR="$FIX/logs" bash "$0" --self-test-inner >"$FIX/pos.out" 2>&1; then
+        echo "❌ SELF-TEST FAILED: gate rejected the CORRECT counts (16/10+4+2). Integration blocks may be leaking into the sum:"
+        cat "$FIX/pos.out"; rm -rf "$FIX"; exit 1
+    fi
+    rm -rf "$FIX"
+    echo "✅ check_test_count self-test: planted mismatch caught, correct counts accepted (detector proven, not vacuous)."
+fi
+
+REPO_ROOT="${TYLLUAN_TMC_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+cd "$REPO_ROOT"
 
 sum_passed() {
     # Sums every "N passed" from `cargo test` output across however many
     # test binaries got run (lib + each tests/*.rs integration file).
     grep -oE '[0-9]+ passed' | awk '{sum += $1} END {print sum+0}'
+}
+
+lib_passed_from_log() {
+    # REUSE mode: sum "N passed" ONLY from the 'Running unittests src/lib.rs'
+    # block(s) of a tee'd verify.sh log -- i.e. exactly what the old
+    # `cargo test -p X --lib` measured. Every other "Running ..." block
+    # (integration binaries under tests/*.rs) flips the filter off again.
+    # A suite that FAILED flips the whole gate to a hard fail (defensive:
+    # verify.sh already failed those gates; never compare against garbage).
+    if grep -q 'test result: FAILED' "$1" 2>/dev/null; then
+        echo "FAILED-SUITE"
+        return
+    fi
+    awk '
+        /^ *(Running|Doc-tests)/ { inlib = (index($0, "unittests src") > 0); next }
+        inlib && /test result:/ {
+            if (match($0, /[0-9]+ passed/)) sum += substr($0, RSTART, RLENGTH) + 0
+        }
+        END { print sum+0 }
+    ' "$1"
 }
 
 CARGO_CMD="cargo"
@@ -76,14 +159,38 @@ run_and_count() {
     rm -f "$out"
 }
 
-echo "Running tylluan-kernel lib tests..."
-kernel_count=$(run_and_count -p tylluan-kernel --lib)
-
-echo "Running tylluan-link lib tests..."
-link_count=$(run_and_count -p tylluan-link --lib)
-
-echo "Running tylluan-fsrs lib tests..."
-fsrs_count=$(run_and_count -p tylluan-fsrs --lib)
+kernel_count=""; link_count=""; fsrs_count=""
+if [ -n "${TYLLUAN_TMC_DIR:-}" ] \
+   && [ -f "$TYLLUAN_TMC_DIR/kernel_lib.log" ] \
+   && [ -f "$TYLLUAN_TMC_DIR/link_all.log" ] \
+   && [ -f "$TYLLUAN_TMC_DIR/fsrs_all.log" ]; then
+    echo "Reusing this run's test output (TYLLUAN_TMC_DIR set; no re-run)..."
+    kernel_count=$(lib_passed_from_log "$TYLLUAN_TMC_DIR/kernel_lib.log")
+    link_count=$(lib_passed_from_log "$TYLLUAN_TMC_DIR/link_all.log")
+    fsrs_count=$(lib_passed_from_log "$TYLLUAN_TMC_DIR/fsrs_all.log")
+    for c in "$kernel_count" "$link_count" "$fsrs_count"; do
+        if [ "$c" = "FAILED-SUITE" ]; then
+            echo "❌ A reused test log contains a FAILED suite -- fix the tests, this gate will not compare against broken runs."
+            exit 1
+        fi
+    done
+    if [ "$kernel_count" -eq 0 ] || [ "$link_count" -eq 0 ] || [ "$fsrs_count" -eq 0 ]; then
+        echo "⚠️  Reused logs yielded a zero count (wording change?) -- falling back to live runs."
+        kernel_count=""; link_count=""; fsrs_count=""
+    fi
+fi
+if [ -z "$kernel_count" ]; then
+    echo "Running tylluan-kernel lib tests..."
+    kernel_count=$(run_and_count -p tylluan-kernel --lib)
+fi
+if [ -z "$link_count" ]; then
+    echo "Running tylluan-link lib tests..."
+    link_count=$(run_and_count -p tylluan-link --lib)
+fi
+if [ -z "$fsrs_count" ]; then
+    echo "Running tylluan-fsrs lib tests..."
+    fsrs_count=$(run_and_count -p tylluan-fsrs --lib)
+fi
 
 real_total=$((kernel_count + link_count + fsrs_count))
 
@@ -127,16 +234,12 @@ fi
 echo "✅ README.md's test count matches reality ($real_total)."
 
 # ── AGENTS.md: same claim, validated component-wise ───────────────────────
-# AGENTS.md's line looks like:
-#   **Tests:** 998 lib tests (kernel) + 69 (tylluan-link) + 12 (tylluan-fsrs) = 1079 en verde — ...
-# Unlike README's single number, this one carries the three per-suite counts
-# too, so validate all four figures against the real per-suite runs above.
-# Added 2026-10-10 (José: extend the gate to AGENTS.md).
+# (unchanged semantics; full rationale in the 2026-10-10 note above)
 agents_line=$(grep -m1 -E '^\*\*Tests:\*\* [0-9]+ lib tests \(kernel\)' AGENTS.md || true)
 if [ -z "$agents_line" ]; then
     echo "❌ Could not find the test-count line in AGENTS.md (expected a line matching"
     echo "   '**Tests:** <N> lib tests (kernel) + <N> (tylluan-link) + <N> (tylluan-fsrs) = <N> en verde')."
-    echo "   Did the wording change? Update this script's grep pattern to match."
+    echo "   Did the wording change? Update this script's grep patterns to match."
     exit 1
 fi
 

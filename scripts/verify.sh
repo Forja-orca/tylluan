@@ -73,6 +73,14 @@ echo
 # is not optional decoration.
 if [ "$RUN_RUST" = "1" ]; then
     echo "── Rust (toolchain: 1.99.1, same as CI) ──"
+    # T2590 punto 6 (T2603): the three lib-suite gates below tee their output
+    # into a fresh temp dir exported as TYLLUAN_TMC_DIR, so the check_test_count
+    # gate in the docs section reuses this run's numbers instead of re-running
+    # kernel+link+fsrs a second time (122 s measured duplicate, T2589). Fresh
+    # mktemp dir per run = no stale reuse ever; trap cleans both exit paths.
+    TYLLUAN_TMC_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tylluan-tmc.XXXXXXXX")
+    export TYLLUAN_TMC_DIR
+    trap 'rm -rf "$TYLLUAN_TMC_DIR"' EXIT
     if command -v rustup >/dev/null 2>&1; then
         RUST_CARGO="rustup run 1.99.1 cargo"
     elif command -v rustup.exe >/dev/null 2>&1; then
@@ -91,7 +99,7 @@ if [ "$RUN_RUST" = "1" ]; then
         fail "cargo check -p tylluan-kernel"
     fi
 
-    if $RUST_CARGO test -p tylluan-kernel --lib; then
+    if $RUST_CARGO test -p tylluan-kernel --lib 2>&1 | tee "$TYLLUAN_TMC_DIR/kernel_lib.log"; then
         ok "cargo test -p tylluan-kernel --lib"
     else
         fail "cargo test -p tylluan-kernel --lib"
@@ -105,7 +113,19 @@ if [ "$RUN_RUST" = "1" ]; then
         fail "cargo clippy -p tylluan-kernel --all-targets -D warnings"
     fi
 
-    if $RUST_CARGO test -p tylluan-link --lib --tests; then
+    # Pilar 2 deterministic contract tests: production structs (EmbedRequest/
+    # EmbedResponse/HealthResponse) validated against schemas/ — no network, no
+    # live kernel. Wired in 2026-11-03 (T2590 punto 4, from the hermes pre-push
+    # profiling T2589): before this, NOTHING ran contracts_test.rs — neither
+    # verify.sh (only --lib/--lib --tests) nor CI's security-audit job. It is
+    # the deterministic coverage that the live probe below can never guarantee.
+    if $RUST_CARGO test -p tylluan-kernel --test contracts_test; then
+        ok "cargo test -p tylluan-kernel --test contracts_test"
+    else
+        fail "cargo test -p tylluan-kernel --test contracts_test — schema/struct contract drift, see crates/tylluan-kernel/tests/contracts_test.rs"
+    fi
+
+    if $RUST_CARGO test -p tylluan-link --lib --tests 2>&1 | tee "$TYLLUAN_TMC_DIR/link_all.log"; then
         ok "cargo test -p tylluan-link --lib --tests"
     else
         fail "cargo test -p tylluan-link --lib --tests"
@@ -117,7 +137,7 @@ if [ "$RUN_RUST" = "1" ]; then
         fail "cargo clippy -p tylluan-link --lib --tests -D warnings"
     fi
 
-    if $RUST_CARGO test -p tylluan-fsrs; then
+    if $RUST_CARGO test -p tylluan-fsrs 2>&1 | tee "$TYLLUAN_TMC_DIR/fsrs_all.log"; then
         ok "cargo test -p tylluan-fsrs"
     else
         fail "cargo test -p tylluan-fsrs"
@@ -142,6 +162,50 @@ if [ "$RUN_DASHBOARD" = "1" ]; then
     fi
 
     if command -v pnpm >/dev/null 2>&1 || command -v pnpm.cmd >/dev/null 2>&1; then
+        # CI builds the shared package FIRST (dashboard jobs, step "Build shared
+        # package (@tylluan/ui-core)"): dashboard imports it as sources needing
+        # their own deps (clsx etc). Without this mirror, pnpm test fails on a
+        # CLEAN checkout (unresolved import) — caught by the 2026-11-03 pre-push
+        # profiling (T2589/T2590 punto 2); only persisted node_modules were
+        # hiding it. npm is deliberate here: ui-core is npm-managed (AGENTS.md
+        # rule 3 exception), dashboard stays on pnpm.
+        NPM_CMD="npm"
+        if ! command -v npm >/dev/null 2>&1; then
+            if command -v npm.cmd >/dev/null 2>&1; then NPM_CMD="npm.cmd"; fi
+        fi
+        # T2603-P3-BEGIN — conditional ui-core install (Deep's change, TL order):
+        # unconditional `npm ci` was wrong — it wipes node_modules, needs network
+        # and fails against a dev server holding files open. Rule: reuse when
+        # node_modules/.package-lock.json (npm's install stamp) is NEWER than the
+        # committed package-lock.json (installed from current lock, still on
+        # disk); otherwise --prefer-offline ci (works from npm's local cache when
+        # the lock matches, only hits network when it doesn't). --no-audit
+        # --no-fund: no telemetry round-trips in a pre-push hot path.
+        UICORE_DIR="packages/tylluan-ui-core"
+        NEED_CI=1
+        if [ -d "$UICORE_DIR/node_modules" ] && [ -f "$UICORE_DIR/node_modules/.package-lock.json" ] \
+           && [ "$UICORE_DIR/node_modules/.package-lock.json" -nt "$UICORE_DIR/package-lock.json" ]; then
+            NEED_CI=0
+        fi
+        if command -v "$NPM_CMD" >/dev/null 2>&1 || command -v npm.cmd >/dev/null 2>&1; then
+            if [ "$NEED_CI" = "1" ]; then
+                if (cd "$UICORE_DIR" && $NPM_CMD ci --prefer-offline --no-audit --no-fund && $NPM_CMD run build); then
+                    ok "npm ci --prefer-offline + build in $UICORE_DIR (node_modules absent, stale vs lock, or first run)"
+                else
+                    fail "packages/tylluan-ui-core build failed (or npm ci out of sync with its package-lock) — dashboard lint/test below need this built"
+                fi
+            else
+                if (cd "$UICORE_DIR" && $NPM_CMD run build); then
+                    ok "npm run build only in $UICORE_DIR (node_modules installed from current lock — ci skipped on purpose)"
+                else
+                    fail "packages/tylluan-ui-core build failed — dashboard lint/test below need this built"
+                fi
+            fi
+        else
+            echo "⚠️  npm not found on PATH — skipping @tylluan/ui-core build; dashboard tests may fail on a clean checkout (CI runs this step itself)."
+        fi
+        # T2603-P3-END
+
         if (cd dashboard && $PNPM_CMD install --frozen-lockfile); then
             ok "pnpm install --frozen-lockfile (package.json matches pnpm-lock.yaml)"
         else
@@ -207,20 +271,14 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "broken Markdown links — see scripts/check_doc_links.py output above"
     fi
 
-    # README claims guardian (H-24/H-25, 2026-10-24): sovereign-tool counts,
-    # test-count cross-consistency (README.md vs README.es.md vs AGENTS.md),
-    # version badges and relative file links, verified statically and read-only.
-    # REPORT-ONLY on purpose (TL's H-25 spec "modo informe"): the live per-suite
-    # test counts remain check_test_count.sh's job in CI; this catches the
-    # cross-document drift class check_test_count.sh can't see (it never reads
-    # README.es.md — the first run found exactly that: "1125 tests" vs 1329).
-    # Do NOT route this through fail(): scripts/test_verify_semantics.sh T2
-    # asserts this stays non-blocking, and T6 forces it to remain wired.
-    if bash scripts/check_readme_claims.sh; then
-        ok "README claims vs tree consistency (check_readme_claims.sh, report-only)"
-    else
-        echo "⚠️  README claims drifted — see scripts/check_readme_claims.sh output above. Report-only, does not block this push."
-    fi
+    # README claims guardian (H-24/H-25) moved OUT of the pre-push chain
+    # 2026-11-03 (T2590 punto 3, TL): it is report-only by design (never flips
+    # FAILED — old T2 assertion preserved in CI wiring) but cost ~146 s per
+    # push for a notice nothing acted on locally. It stays wired in CI
+    # (docs job, continue-on-error step), which is what the meta-test's
+    # zero-orphan invariant (T6) requires: wired in verify.sh OR CI. Do NOT
+    # re-add it here without re-classifying: scripts/test_verify_semantics.sh
+    # REPORT_ONLY_GATES still lists check_readme_claims should it return.
 
     # Pilar 2 (repo-pillars) contract gate: JSON schemas under schemas/ are
     # valid, and if a kernel happens to be live on :47004 its real endpoints

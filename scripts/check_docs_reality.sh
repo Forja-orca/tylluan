@@ -46,9 +46,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DOCS=(STATUS.md README.md AGENTS.md CLAUDE.md)
+# Tracked docs ONLY (T2590 punto 1, TL 2026-11-03): `find docs` also scanned
+# gitignored local notes (docs/internal/*), which exist per-checkout and never
+# reach CI — the gate then produced per-agent results that can't be compared
+# (and cost 452 s of scanning private files). The reference-path side of this
+# script already used `git ls-files`; aligning the scanned set to tracked
+# files makes local and CI coverage identical.
 while IFS= read -r d; do
     DOCS+=("$d")
-done < <(find docs -name '*.md' -type f 2>/dev/null | sort || true)
+done < <(git ls-files -- 'docs' | grep '\.md$' | sort)
 # Test hook: DOCS_REALITY_DOCS="a.md b.md" replaces the doc list (used to
 # prove the checks are not vacuous against a fixture; never set in CI).
 if [ -n "${DOCS_REALITY_DOCS:-}" ]; then
@@ -73,7 +79,7 @@ if [ ! -f "$port_source" ]; then
 fi
 real_port=$(awk '/^\[nexus\]/{f=1} f&&/^port[[:space:]]*=/{ if (match($0, /port[[:space:]]*=[[:space:]]*[0-9]+/)) { v=substr($0, RSTART, RLENGTH); gsub(/[^0-9]/,"",v); print v; exit } }' "$port_source" | head -1)
 echo "Real port ($port_source [nexus]): ${real_port:-<none>}"
-echo "Docs scanned: ${#DOCS[@]} (STATUS.md, README.md, AGENTS.md, CLAUDE.md, docs/**/*.md)"
+echo "Docs scanned: ${#DOCS[@]} (STATUS.md, README.md, AGENTS.md, CLAUDE.md, tracked docs/**/*.md only)"
 echo ""
 
 problems=0

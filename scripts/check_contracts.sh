@@ -34,9 +34,21 @@ done
 
 # 2. Execute verify_contracts.py against the live kernel, if one is reachable
 # (won't be in a fresh CI runner -- degrades gracefully to static-only).
+# The LIVE probe is WARN-ONLY since 2026-11-03 (T2590 punto 5, TL order, from
+# the hermes pre-push profiling): push 259 died here -- healthz passed, then
+# the embed request timed out (10 s) because production's ONNX path was CPU/
+# GPU-starved by concurrent builds. Kernel availability must never fail a
+# code push; the deterministic struct<->schema coverage that must block lives
+# in tests/contracts_test.rs (wired into verify.sh --rust and CI's security
+# job the same day). Static schema validation below STAYS blocking by design.
 if curl -s -m 2 http://127.0.0.1:47004/health >/dev/null 2>&1; then
-    echo "Live kernel detected on :47004 — running live contract verification..."
-    "$PY_BIN" scripts/verify_contracts.py
+    echo "Live kernel detected on :47004 — running live contract verification (warn-only)..."
+    if "$PY_BIN" scripts/verify_contracts.py; then
+        echo "✅ Live endpoints comply with schemas/"
+    else
+        echo "⚠️  Live contract probe failed or timed out — WARN only, does not block this push."
+        echo "    (kernel busy/stale? re-check after builds; deterministic contract coverage is contracts_test.rs in the Rust gates)"
+    fi
 else
     echo "No live kernel on :47004 — schemas validated statically (Rust integration tests cover struct contracts)."
 fi

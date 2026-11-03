@@ -56,7 +56,14 @@ fi
 
 # ── Gate classification: the ONE place mapping gate -> blocking semantics ──
 # Gates wired in verify.sh --docs that must NEVER flip FAILED (report-only).
-REPORT_ONLY_GATES="check_no_predation check_dead_code_tests check_live_kernel_drift check_dead_config check_supply_chain check_readme_claims"
+# check_readme_claims left verify.sh for CI (continue-on-error step in the
+# docs job) on 2026-11-03, TL order T2590 punto 3: ~146 s per push for a
+# non-blocking notice. It is NOT listed here while unwired from verify.sh --
+# this list is only for gates the T1-T4 sandbox can exercise; the
+# zero-orphan invariant (T6) still guards it via its CI wiring. If it ever
+# returns to verify.sh, re-add it here FIRST (so T2 covers it from birth)
+# and note the pre-push cost that got it moved.
+REPORT_ONLY_GATES="check_no_predation check_dead_code_tests check_live_kernel_drift check_dead_config check_supply_chain"
 # All other discovered gates are exercised as blocking by T3.
 
 # ── Discover gates dynamically from verify.sh's own body ──

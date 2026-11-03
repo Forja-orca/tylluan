@@ -27,6 +27,11 @@ jobs:
       - run: cargo check -p tylluan-kernel
       - run: cargo test -p tylluan-kernel --lib
       - run: cargo clippy -p tylluan-kernel --all-targets -- -D warnings
+      # Pilar 2 deterministic contract tests (structs vs schemas/, no network):
+      # wired 2026-11-03 (T2590 punto 4) — before this, contracts_test.rs ran
+      # in NO job and NO local chain, while the live endpoint probe could only
+      # observe availability. Pairs with the same gate in scripts/verify.sh.
+      - run: cargo test -p tylluan-kernel --test contracts_test
       - run: cargo test -p tylluan-cli
       # Optional features get no --features anywhere else in CI, so tylluan-link's
       # mainline-dht code never compiled: it was written against the mainline 0.x
@@ -232,6 +237,14 @@ jobs:
       # looked at real Markdown links. Standard library only.
       - name: Verify Markdown relative links resolve to tracked paths
         run: python3 scripts/check_doc_links.py
+      # Cross-document claims guardian (H-24/H-25) moved here from the local
+      # pre-push chain 2026-11-03 (T2590 punto 3, TL): ~146 s per push for a
+      # report that never blocked anything. Advisory by design (continue-on-
+      # error); this CI wiring is also what keeps scripts/check_readme_claims.sh
+      # wired under test_verify_semantics.sh's zero-orphan invariant (T6).
+      - name: README claims vs tree (report-only)
+        run: bash scripts/check_readme_claims.sh
+        continue-on-error: true
 
   contracts-check:
     name: Pilar 2 — schemas valid, live endpoints checked if reachable

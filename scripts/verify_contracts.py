@@ -96,7 +96,11 @@ def main():
             data=req_body,
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=10) as r:
+        # Timeout 5 s (was 10 s): TL order T2590 punto 5 (2026-11-03). The probe
+        # is warn-only now; a shorter ceiling keeps a starved ONNX path from
+        # dragging every push. Warm embed measures ~0.13-0.3 s even at 1100
+        # words (H-58), so 5 s is >15x the worst healthy-case latency.
+        with urllib.request.urlopen(req, timeout=5) as r:
             embed_data = json.loads(r.read())
             validate_object(embed_data, embed_resp_schema)
             dim = embed_data.get("dimension")
