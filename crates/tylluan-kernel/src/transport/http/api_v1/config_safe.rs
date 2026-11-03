@@ -220,6 +220,35 @@ pub fn etag_of(raw: &str) -> String {
     hex[..16].to_string()
 }
 
+/// R2 (D-101): el etag es OBLIGATORIO en /config/edit (nada de «última gana»
+/// silencioso): ausente -> 400; distinto -> 409.
+pub fn etag_guard(
+    expected: Option<&str>,
+    current: &str,
+) -> Result<(), (StatusCode, serde_json::Value)> {
+    match expected {
+        None => Err((
+            StatusCode::BAD_REQUEST,
+            json!({
+                "ok": false,
+                "error": "etag_required",
+                "etag": current,
+                "reason": "falta el etag de /config; vuelve a leer GET /config o /config/validate",
+            }),
+        )),
+        Some(value) if value != current => Err((
+            StatusCode::CONFLICT,
+            json!({
+                "ok": false,
+                "error": "etag_mismatch",
+                "etag": current,
+                "reason": "la config cambio desde que la leiste; vuelve a leerla y repite la validacion",
+            }),
+        )),
+        Some(_) => Ok(()),
+    }
+}
+
 fn json_to_toml(value: &serde_json::Value) -> Result<toml::Value, String> {
     match value {
         serde_json::Value::Bool(b) => Ok(toml::Value::Boolean(*b)),
@@ -280,8 +309,10 @@ fn validate_edit(edit: &ConfigEdit) -> Result<toml::Value, String> {
                 _ => return Err(format!("{} debe ser string (enum)", edit.key)),
             };
             if !field.options.contains(&s.as_str()) {
+                // Nunca repetir el valor recibido: puede ser un secreto pegado
+                // en el campo equivocado (R1 de D-101).
                 return Err(format!(
-                    "{} valor invalido {s:?}; opciones: {:?}",
+                    "{} valor invalido; opciones: {:?}",
                     edit.key, field.options
                 ));
             }
@@ -500,15 +531,8 @@ pub async fn edit_config_handler(
         }
     };
     let current_etag = etag_of(&raw);
-    if let Some(expected) = req.etag.as_deref()
-        && expected != current_etag
-    {
-        return (StatusCode::CONFLICT, Json(json!({
-            "ok": false,
-            "error": "etag_mismatch",
-            "etag": current_etag,
-            "reason": "la config cambio desde que la leiste; vuelve a leerla y repite la validacion",
-        }))).into_response();
+    if let Err((status, body)) = etag_guard(req.etag.as_deref(), &current_etag) {
+        return (status, Json(body)).into_response();
     }
     let (_old, new_value, diff) = match candidate_config(&raw, &req.edits) {
         Ok(v) => v,
@@ -696,6 +720,31 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
         assert!(redacted["external_mcp"].as_array().unwrap().iter().any(|s| {
             s["env"]["CENTINELA"] == REDACTED
         }));
+        // R1 (D-101): una edicion invalida con el centinela en el valor no puede
+        // devolverlo en el JSON de errors (ni en el cuerpo 400).
+        let bad = candidate_config(
+            &raw,
+            &[ConfigEdit {
+                key: "inference.device".into(),
+                value: json!("TOKEN_SECRETO_123"),
+            }],
+        )
+        .expect_err("edicion invalida");
+        let errors = serde_json::to_string(&bad).expect("json");
+        assert!(!errors.contains("TOKEN_SECRETO_123"), "fuga en errors: {errors}");
+    }
+
+    #[test]
+    fn etag_is_required_and_mismatch_is_409() {
+        let current = etag_of("[memory]\nembedding_model = \"a\"\n");
+        let (status, body) = etag_guard(None, &current).expect_err("sin etag");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "etag_required");
+        let (status, body) = etag_guard(Some("otro"), &current).expect_err("etag distinto");
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "etag_mismatch");
+        assert_eq!(body["etag"], current);
+        assert!(etag_guard(Some(&current), &current).is_ok());
     }
 
     #[test]

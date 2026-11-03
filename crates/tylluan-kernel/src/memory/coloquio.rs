@@ -65,6 +65,88 @@ pub fn is_valid_channel_slug(id: &str) -> bool {
         && id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
 }
 
+/// D-99 (rescate de ForjaMCPo3): normalize a channel id so case/accent variants
+/// collapse to one channel instead of silently fragmenting the conversation
+/// ("tecnico" vs "Técnico", "general" vs "General"). Applied by the write paths
+/// **only when the channel does not already exist**, so existing production
+/// channels keep their exact id (no migration, no renaming).
+pub fn normalize_channel_id(id: &str) -> String {
+    id.trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'ä' | 'â' => 'a',
+            'é' | 'è' | 'ë' | 'ê' => 'e',
+            'í' | 'ì' | 'ï' | 'î' => 'i',
+            'ó' | 'ò' | 'ö' | 'ô' => 'o',
+            'ú' | 'ù' | 'ü' | 'û' => 'u',
+            'ñ' => 'n',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
+}
+
+/// Classic Levenshtein distance, O(n*m). Channel names are short and the list
+/// is tiny, so no dependency is worth pulling in for this.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let (n, m) = (a.len(), b.len());
+    if n == 0 {
+        return m;
+    }
+    if m == 0 {
+        return n;
+    }
+    let mut prev: Vec<usize> = (0..=m).collect();
+    let mut curr = vec![0usize; m + 1];
+    for i in 1..=n {
+        curr[0] = i;
+        for j in 1..=m {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            curr[j] = (curr[j - 1] + 1).min(prev[j] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[m]
+}
+
+/// Strips a trailing run of ASCII digits: "sprint12" -> "sprint".
+fn strip_trailing_digits(s: &str) -> &str {
+    s.trim_end_matches(|c: char| c.is_ascii_digit())
+}
+
+/// D-99: an existing channel whose normalized name is within a small edit
+/// distance of `candidate`. Only meaningful for names long enough that a
+/// distance of 2 is not noise, and numbered series ("sprint1", "sprint2") are
+/// legitimate names, not typos.
+pub fn find_near_duplicate_channel(candidate: &str, existing: &[String]) -> Option<String> {
+    const MIN_LEN_FOR_CHECK: usize = 5;
+    const MAX_DISTANCE: usize = 2;
+    let candidate = normalize_channel_id(candidate);
+    if candidate.chars().count() < MIN_LEN_FOR_CHECK {
+        return None;
+    }
+    let candidate_base = strip_trailing_digits(&candidate);
+    existing
+        .iter()
+        .map(|e| (e, normalize_channel_id(e)))
+        .filter(|(_, norm)| norm.chars().count() >= MIN_LEN_FOR_CHECK)
+        .find(|(_, norm)| {
+            norm.as_str() != candidate
+                && levenshtein(&candidate, norm) <= MAX_DISTANCE
+                && strip_trailing_digits(norm) != candidate_base
+        })
+        .map(|(original, _)| original.clone())
+}
+
+/// D-99: window in which a byte-identical repost by the same author in the same
+/// channel is treated as a duplicate instead of a new turn. Short messages are
+/// exempt (an agent answering "ok" twice is not spam).
+const REPOST_DEDUP_WINDOW_SECS: i64 = 60;
+const REPOST_DEDUP_MIN_CHARS: usize = 40;
+
 impl ColoquioDb {
     /// Whether a channel already exists. Exists-check without the
     /// auto-create side effects of `post_message`: lets HTTP handlers
@@ -187,10 +269,32 @@ impl ColoquioDb {
     }
 
     pub async fn create_channel(&self, channel_id: &str, name: &str) -> Result<ColoquioChannel> {
-        let channel_id = channel_id.to_string();
+        // D-99: an existing id is used verbatim (no rename of live channels); a
+        // new one is normalized, and a near-duplicate of an existing channel is
+        // refused with the name of the channel the caller probably meant.
+        let requested = channel_id.trim().to_string();
         let name = name.to_string();
         tokio::task::block_in_place(|| {
             let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM coloquio_channels WHERE channel_id = ?1)",
+                params![requested],
+                |row| row.get(0),
+            )?;
+            let channel_id = if exists { requested.clone() } else { normalize_channel_id(&requested) };
+            if !exists {
+                let mut stmt = conn.prepare("SELECT channel_id FROM coloquio_channels")?;
+                let existing: Vec<String> = stmt
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .filter_map(std::result::Result::ok)
+                    .collect();
+                drop(stmt);
+                if let Some(near) = find_near_duplicate_channel(&channel_id, &existing) {
+                    anyhow::bail!(
+                        "channel '{channel_id}' looks like a duplicate of existing channel '{near}'"
+                    );
+                }
+            }
             conn.execute(
                 "INSERT OR IGNORE INTO coloquio_channels (channel_id, name) VALUES (?1, ?2)",
                 params![channel_id, name],
@@ -517,7 +621,10 @@ impl ColoquioDb {
         content: &str,
         metadata: &str,
     ) -> Result<ColoquioMessage> {
-        let channel_id = channel_id.to_string();
+        // D-99: the raw id is kept as-is when that channel already exists; a
+        // *new* channel is normalized so "General"/"Técnico" collapse into the
+        // canonical lowercase/unaccented name instead of fragmenting the DB.
+        let channel_id = channel_id.trim().to_string();
         let author_id = if Self::PROTECTED_AUTHORS.contains(&author_id) && role != "human" {
             tracing::warn!("⛔ Coloquio: blocked impersonation attempt of protected author '{}'", author_id);
             format!("agent-as-{author_id}")
@@ -538,12 +645,42 @@ impl ColoquioDb {
                 let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 // Auto-create only slug-safe channel ids; posting to an existing
                 // channel (whatever its id) keeps working for backward compat.
-                let exists: bool = conn.query_row(
+                let mut channel_id = channel_id.clone();
+                let mut exists: bool = conn.query_row(
                     "SELECT EXISTS(SELECT 1 FROM coloquio_channels WHERE channel_id = ?1)",
                     params![channel_id],
                     |row| row.get(0),
                 )?;
                 if !exists {
+                    // D-99: only a channel that does not exist yet gets normalized.
+                    let normalized = normalize_channel_id(&channel_id);
+                    if normalized != channel_id {
+                        let normalized_exists: bool = conn.query_row(
+                            "SELECT EXISTS(SELECT 1 FROM coloquio_channels WHERE channel_id = ?1)",
+                            params![normalized],
+                            |row| row.get(0),
+                        )?;
+                        if normalized_exists {
+                            channel_id = normalized;
+                            exists = true;
+                        } else {
+                            channel_id = normalized;
+                        }
+                    }
+                }
+                if !exists {
+                    // D-99: refuse to spawn a near-duplicate channel ("generall"
+                    // when "general" already exists) and point at the real one.
+                    let existing: Vec<String> = {
+                        let mut stmt = conn.prepare("SELECT channel_id FROM coloquio_channels")?;
+                        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+                        rows.filter_map(std::result::Result::ok).collect()
+                    };
+                    if let Some(near) = find_near_duplicate_channel(&channel_id, &existing) {
+                        anyhow::bail!(
+                            "channel '{channel_id}' looks like a duplicate of existing channel '{near}'. Post there, or create the new one explicitly with POST /api/v1/coloquio/channels"
+                        );
+                    }
                     if !is_valid_channel_slug(&channel_id) {
                         // Do NOT interpolate the channel id into the error:
                         // it is unvalidated client input and HTTP handlers
@@ -557,6 +694,46 @@ impl ColoquioDb {
                         "INSERT OR IGNORE INTO coloquio_channels (channel_id, name) VALUES (?1, ?1)",
                         params![channel_id],
                     )?;
+                }
+                // D-99: a byte-identical repost by the same author inside the
+                // window is not a new turn (system-event spam on every rebuild).
+                if content.chars().count() >= REPOST_DEDUP_MIN_CHARS {
+                    let recent: Option<(String, String, i64)> = conn
+                        .query_row(
+                            "SELECT author_id, content, created_at FROM coloquio_messages \
+                             WHERE channel_id = ?1 ORDER BY turn DESC LIMIT 1",
+                            params![channel_id],
+                            |row| {
+                                Ok((
+                                    row.get::<_, String>(0)?,
+                                    row.get::<_, String>(1)?,
+                                    get_flexible_created_at(row, 2)?,
+                                ))
+                            },
+                        )
+                        .ok();
+                    if let Some((last_author, last_content, created_at)) = recent
+                        && last_author == author_id
+                        && last_content == content
+                        && chrono::Utc::now().timestamp() - created_at < REPOST_DEDUP_WINDOW_SECS
+                    {
+                        let msg = conn.query_row(
+                            "SELECT msg_id, channel_id, author_id, role, content, turn, created_at, metadata
+                             FROM coloquio_messages WHERE channel_id = ?1 ORDER BY turn DESC LIMIT 1",
+                            params![channel_id],
+                            |row| Ok(ColoquioMessage {
+                                msg_id: row.get(0)?,
+                                channel_id: row.get(1)?,
+                                author_id: row.get(2)?,
+                                role: row.get(3)?,
+                                content: row.get(4)?,
+                                turn: row.get(5)?,
+                                created_at: get_flexible_created_at(row, 6)?,
+                                metadata: row.get(7)?,
+                            }),
+                        )?;
+                        return Ok(msg);
+                    }
                 }
                 // Auto-increment turn within channel
                 let next_turn: i64 = conn.query_row(
@@ -1050,5 +1227,127 @@ mod tests {
         assert_eq!(since[0].turn, 9);
         assert_eq!(since[1].turn, 10);
     }
+    // ── D-99: normalización de canales, casi-duplicados y reposts ──────────
+
+    #[test]
+    fn d99_normalize_channel_id_collapses_case_and_accents() {
+        // Acentos y mayúsculas -> una sola forma canónica.
+        assert_eq!(normalize_channel_id("Técnico"), "tecnico");
+        assert_eq!(normalize_channel_id("  General  "), "general");
+        assert_eq!(normalize_channel_id("ÑANDÚ"), "nandu");
+        assert_eq!(normalize_channel_id("MISION-ACTIVA"), "mision-activa");
+        assert_eq!(normalize_channel_id("diseño_ui"), "diseno_ui");
+        // Lo que ya es canónico no cambia (no hay migración de canales vivos).
+        assert_eq!(normalize_channel_id("general"), "general");
+    }
+
+    #[test]
+    fn d99_near_duplicate_detects_typos_but_not_numbered_series() {
+        let existing = vec!["general".to_string(), "sprint11".to_string(), "abc".to_string()];
+        // Un typo de un carácter sobre un canal existente: se detecta.
+        assert_eq!(
+            find_near_duplicate_channel("generall", &existing).as_deref(),
+            Some("general")
+        );
+        // "General" no es un casi-duplicado: es el MISMO nombre canónico, y de
+        // eso se encarga normalize_channel_id (no hay nada que sugerir).
+        assert_eq!(find_near_duplicate_channel("General", &existing), None);
+        // Serie numerada legítima: no es un typo.
+        assert_eq!(find_near_duplicate_channel("sprint12", &existing), None);
+        // Nombres cortos: no se comprueban (falsos positivos).
+        assert_eq!(find_near_duplicate_channel("abd", &existing), None);
+        // Canal realmente distinto.
+        assert_eq!(find_near_duplicate_channel("infraestructura", &existing), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d99_post_creates_the_normalized_channel_and_reuses_it() {
+        let db = ColoquioDb::in_memory().expect("db");
+        let first = db
+            .post_message("Técnico", "deep", "agent", "hola", "{}")
+            .await
+            .expect("post");
+        assert_eq!(first.channel_id, "tecnico", "el canal nuevo se normaliza");
+
+        let second = db
+            .post_message("técnico", "deep", "agent", "otra cosa", "{}")
+            .await
+            .expect("post");
+        assert_eq!(second.channel_id, "tecnico", "la variante cae en el mismo canal");
+        assert_eq!(second.turn, 2, "no se creó un canal paralelo");
+
+        let channels = db.list_channels().await.expect("list");
+        let tecnico: Vec<_> = channels
+            .iter()
+            .filter(|c| c.channel_id == "tecnico")
+            .collect();
+        assert_eq!(tecnico.len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d99_post_refuses_a_near_duplicate_channel() {
+        let db = ColoquioDb::in_memory().expect("db");
+        db.post_message("general", "deep", "agent", "hola", "{}")
+            .await
+            .expect("primer canal");
+
+        let err = db
+            .post_message("generall", "deep", "agent", "hola", "{}")
+            .await
+            .expect_err("un casi-duplicado debe rechazarse");
+        let text = err.to_string();
+        assert!(text.contains("general"), "el error sugiere el canal real: {text}");
+        assert!(
+            !db.channel_exists("generall").await,
+            "no se creó el canal casi-duplicado"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d99_existing_channel_keeps_its_exact_id() {
+        let db = ColoquioDb::in_memory().expect("db");
+        // Un canal legado con mayúsculas (creado antes de D-99) sigue siendo el mismo:
+        // se inserta a mano para simular una base existente.
+        {
+            let conn = db.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            conn.execute(
+                "INSERT INTO coloquio_channels (channel_id, name) VALUES ('General', 'General')",
+                [],
+            )
+            .expect("legacy channel");
+        }
+        let msg = db
+            .post_message("General", "deep", "agent", "hola", "{}")
+            .await
+            .expect("post al canal existente");
+        assert_eq!(msg.channel_id, "General", "no se renombra ni se fragmenta");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d99_identical_repost_does_not_duplicate_the_turn() {
+        let db = ColoquioDb::in_memory().expect("db");
+        let text = "anuncio de reinicio del kernel: reconectar en unos 60 segundos, sin cambios pendientes";
+        let first = db.post_message("general", "system", "system", text, "{}").await.expect("post");
+        let second = db.post_message("general", "system", "system", text, "{}").await.expect("repost");
+
+        assert_eq!(second.turn, first.turn, "el repost no crea un turno nuevo");
+        assert_eq!(second.msg_id, first.msg_id);
+
+        // Contenido distinto -> turno nuevo.
+        let third = db
+            .post_message("general", "system", "system", "otro anuncio distinto del anterior", "{}")
+            .await
+            .expect("post");
+        assert_eq!(third.turn, first.turn + 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d99_short_repeats_are_not_deduplicated() {
+        let db = ColoquioDb::in_memory().expect("db");
+        db.post_message("general", "deep", "agent", "ok", "{}").await.expect("post");
+        let second = db.post_message("general", "deep", "agent", "ok", "{}").await.expect("post");
+        assert_eq!(second.turn, 2, "un 'ok' repetido no es spam");
+    }
+
 }
 

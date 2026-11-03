@@ -1148,10 +1148,12 @@ async fn capabilities_handler(State(state): State<Arc<HttpState>>) -> Response {
     let guilds = state.registry.status_all().await.unwrap_or_default();
 
     // 3. Get all tools from all guilds
-    let guild_tools = {
+    let (guild_tools, tool_collisions) = {
         let registry_arc = state.registry.arc();
         let registry_guard = registry_arc.read().await;
-        registry_guard.all_tools()
+        // D-102 (F6): a tool name exposed by two guilds is no longer dropped in
+        // silence; this lists the keeper and the shadowed servers.
+        (registry_guard.all_tools(), registry_guard.tool_collisions())
     };
 
     // 4. Get active sessions
@@ -1194,6 +1196,7 @@ async fn capabilities_handler(State(state): State<Arc<HttpState>>) -> Response {
         },
         "guilds": guilds,
         "all_guild_tools": guild_tools,
+        "tool_collisions": tool_collisions,
         "mcp": {
             "prompts": mcp_prompts,
             "resources": mcp_resources

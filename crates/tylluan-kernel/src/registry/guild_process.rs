@@ -1205,6 +1205,17 @@ fn reregistration_action_for(existing_running: bool, same_descriptor: bool) -> R
 }
 
 
+/// D-102 (F6 de ADR-023): two guilds exposing the same tool name. Before this,
+/// the duplicate simply vanished from the tool list and nobody could tell which
+/// server had won (and the winner was not even deterministic: it depended on
+/// `HashMap` iteration order).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ToolCollision {
+    pub name: String,
+    pub kept_server: String,
+    pub shadowed_servers: Vec<String>,
+}
+
 pub struct GuildRegistry {
     /// All known guilds, keyed by name
     pub guilds: HashMap<String, GuildProcess>,
@@ -1679,13 +1690,21 @@ impl GuildRegistry {
 
     pub fn rebuild_tool_index(&mut self) {
         self.tool_to_guild.clear();
-        for (guild_name, guild) in &self.guilds {
-            for tool in &guild.tools {
-                self.tool_to_guild.insert(
-                    tool.name.to_string(),
-                    guild_name.clone(),
-                );
+        // D-102: deterministic owner for a colliding tool name. Guilds are walked
+        // in name order and the first one keeps the tool, which is exactly what
+        // `tool_collisions()` reports and what `all_tools()` exposes.
+        let mut names: Vec<&String> = self.guilds.keys().collect();
+        names.sort();
+        let mut entries: Vec<(String, String)> = Vec::new();
+        for guild_name in names {
+            if let Some(guild) = self.guilds.get(guild_name) {
+                for tool in &guild.tools {
+                    entries.push((tool.name.to_string(), guild_name.clone()));
+                }
             }
+        }
+        for (tool_name, guild_name) in entries {
+            self.tool_to_guild.entry(tool_name).or_insert(guild_name);
         }
         debug!(
             "🗺️  Tool index rebuilt: {} tools across {} guilds",
@@ -1701,9 +1720,47 @@ impl GuildRegistry {
 
     /// Get all tools from all running guilds.
     pub fn all_tools(&self) -> Vec<Tool> {
-        self.guilds
-            .values()
+        // D-102: name order so a colliding tool name is always kept by the same
+        // server (HashMap order made the "winner" change between calls).
+        let mut names: Vec<&String> = self.guilds.keys().collect();
+        names.sort();
+        names
+            .into_iter()
+            .filter_map(|n| self.guilds.get(n))
             .flat_map(|g| g.tools.clone())
+            .collect()
+    }
+
+    /// D-102 (F6): every tool name that more than one guild exposes, with the
+    /// server that keeps it and the ones that stay shadowed. Deterministic:
+    /// guilds in name order, first one wins (same rule as `rebuild_tool_index`
+    /// and `all_tools`).
+    pub fn tool_collisions(&self) -> Vec<ToolCollision> {
+        let mut names: Vec<&String> = self.guilds.keys().collect();
+        names.sort();
+        let mut owners: std::collections::BTreeMap<String, Vec<String>> =
+            std::collections::BTreeMap::new();
+        for guild_name in names {
+            if let Some(guild) = self.guilds.get(guild_name) {
+                for tool in &guild.tools {
+                    let servers = owners.entry(tool.name.to_string()).or_default();
+                    if !servers.contains(guild_name) {
+                        servers.push(guild_name.clone());
+                    }
+                }
+            }
+        }
+        owners
+            .into_iter()
+            .filter(|(_, servers)| servers.len() > 1)
+            .map(|(name, mut servers)| {
+                let kept_server = servers.remove(0);
+                ToolCollision {
+                    name,
+                    kept_server,
+                    shadowed_servers: servers,
+                }
+            })
             .collect()
     }
 
@@ -2783,6 +2840,70 @@ mod tests {
             assert!(matches!(amp, Ok(ExternalLaunch::Direct { .. })));
             assert!(matches!(semi, Ok(ExternalLaunch::Direct { .. })));
         }
+    }
+
+    // ── D-102 (F6): colisión de nombres de tools entre guilds ─────────────
+
+    /// Dos guilds con la MISMA tool: antes el duplicado desaparecía en silencio y
+    /// el "ganador" dependía del orden del HashMap. Ahora se informa y el ganador
+    /// es determinista (orden alfabético de guild).
+    #[test]
+    fn d102_colliding_tool_is_reported_and_owner_is_deterministic() {
+        let mut registry = GuildRegistry::new(PathBuf::from("."), 300, TimeoutsConfig::default(), 3);
+        registry.register("zeta", "guilds.catalog.zeta", false, None);
+        registry.register("alfa", "guilds.catalog.alfa", false, None);
+
+        let mk = |name: &str| {
+            Tool::new(
+                name.to_string(),
+                format!("{name} desc"),
+                std::sync::Arc::new(
+                    serde_json::json!({"type": "object"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
+            )
+        };
+        for (guild, unique) in [("zeta", "zeta_only"), ("alfa", "alfa_only")] {
+            if let Some(g) = registry.guilds.get_mut(guild) {
+                g.tools = vec![mk("shared_tool"), mk(unique)];
+            }
+        }
+
+        let collisions = registry.tool_collisions();
+        assert_eq!(collisions.len(), 1, "{collisions:?}");
+        assert_eq!(collisions[0].name, "shared_tool");
+        assert_eq!(collisions[0].kept_server, "alfa", "orden alfabetico: alfa gana");
+        assert_eq!(collisions[0].shadowed_servers, vec!["zeta".to_string()]);
+
+        registry.rebuild_tool_index();
+        assert_eq!(
+            registry.find_guild_for_tool("shared_tool"),
+            Some("alfa"),
+            "el enrutado debe coincidir con el keeper que se informa"
+        );
+        assert!(collisions.iter().all(|c| c.name != "alfa_only"));
+    }
+
+    /// Sin colisiones, el informe va vacío (no inventa entradas).
+    #[test]
+    fn d102_no_collisions_means_empty_report() {
+        let mut registry = GuildRegistry::new(PathBuf::from("."), 300, TimeoutsConfig::default(), 3);
+        registry.register("uno", "guilds.catalog.uno", false, None);
+        if let Some(g) = registry.guilds.get_mut("uno") {
+            g.tools = vec![Tool::new(
+                "solo".to_string(),
+                "unica".to_string(),
+                std::sync::Arc::new(
+                    serde_json::json!({"type": "object"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
+            )];
+        }
+        assert!(registry.tool_collisions().is_empty());
     }
 }
 
