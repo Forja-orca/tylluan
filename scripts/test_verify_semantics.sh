@@ -29,10 +29,21 @@
 #       and portability scripts on disk must be wired in verify.sh, CI, or caller gates
 #   T7  negative control for gate coverage: an uninvoked gate in sandbox
 #       MUST cause the coverage test to fail (proves T6 is load-bearing)
+#   T8  integration test coverage (MD-10, TL decision T2620-C, claimed T2629):
+#       every binary tests/*.rs under the kernel must be wired (stem cited in
+#       verify.sh or a CI workflow), marked manual (contains #[ignore] -- the
+#       TL's literal criterion; a file mixing ignored and live tests is a
+#       known loophole flagged in the delivery report), or grandfathered in
+#       scripts/integration_tests_baseline.txt (the 98 known-orphans at base
+#       2016fa85, which belong to the (B) wiring project, not to new drift).
+#       A NEW file satisfying none of those is red.
+#   T9  negative control for T8: a planted unwired binary MUST fire the rule;
+#       planted #[ignore] and baseline-grandfathered variants MUST NOT --
+#       proves T8 load-bearing without becoming a hair trigger.
 #
 # Hermetic by design: T0-T4 never touch git or cargo (all gates stubbed);
 # T5 runs inside a disposable git worktree that is removed afterwards. The
-# real checkout, its refs and its working tree are never modified; T6-T7 inspect
+# real checkout, its refs and its working tree are never modified; T6-T9 inspect
 # file trees and sandbox copies.
 #
 # Concurrency (2026-11-03, TL go-ahead T2610): PS4 traces measured the 14
@@ -149,6 +160,73 @@ find_orphan_gates() {
                 c = C[i]
                 if (index(exempt, " " c " ") > 0) continue
                 if (hit[c] == 0) { out = out (out == "" ? "" : " ") c; miss = 1 }
+            }
+            print out
+            exit miss
+        }
+    ' "${inputs[@]}"
+}
+
+# ── Integration test coverage (MD-10, TL decision T2620-C, hermes claim T2629) ──
+# Every binary tests/*.rs under crates/tylluan-kernel/tests must be:
+#   wired   -- its stem cited in verify.sh or any CI workflow (the future
+#              integration-tests job will cite --tests per binary; substring
+#              inclusion has the same mild leniency as MD-9 gate coverage), or
+#   manual  -- the file itself contains #[ignore (TL's literal criterion), or
+#   grandfathered -- listed in scripts/integration_tests_baseline.txt (the
+#              98 orphans existing at base 2016fa85; the manifest shrinks as
+#              the (B) project wires them and must NEVER grow for new files).
+# One awk pass, no per-file grep. A stem is never wired by its OWN source file
+# (a test mentioning its own name does not wire itself).
+INTEGRATION_BASELINE_REL="scripts/integration_tests_baseline.txt"
+
+find_orphan_integration_tests() {
+    local root="$1"
+    local stems=() f
+    for f in "$root"/crates/tylluan-kernel/tests/*.rs; do
+        [ -e "$f" ] || continue
+        stems+=("$(basename "$f" .rs)")
+    done
+    [ "${#stems[@]}" -gt 0 ] || return 0
+
+    local inputs=()
+    [ -f "$root/scripts/verify.sh" ] && inputs+=("$root/scripts/verify.sh")
+    for f in "$root"/.github/workflows/*.yml "$root"/.github/workflows/*.yaml; do
+        [ -f "$f" ] && inputs+=("$f")
+    done
+    for f in "$root"/crates/tylluan-kernel/tests/*.rs; do
+        [ -f "$f" ] && inputs+=("$f")
+    done
+
+    local bl=""
+    [ -f "$root/$INTEGRATION_BASELINE_REL" ] && bl="$(grep -v '^#' "$root/$INTEGRATION_BASELINE_REL" | tr '\n' ' ')"
+
+    awk -v cands="${stems[*]}" -v baseline="$bl" '
+        BEGIN {
+            n = split(cands, C, " ")
+            for (i = 1; i <= n; i++) { need[C[i]] = 1; wired[C[i]] = 0; ign[C[i]] = 0 }
+            m = split(baseline, B, " ")
+            for (i = 1; i <= m; i++) inbase[B[i]] = 1
+        }
+        FNR == 1 {
+            src = FILENAME; sub(/.*[\/\\]/, "", src)
+            stem = src; sub(/\.rs$/, "", stem)
+            is_testsrc = (src ~ /\.rs$/)
+        }
+        {
+            if (is_testsrc) {
+                if ((stem in need) && ign[stem] == 0 && index($0, "#[ignore") > 0) ign[stem] = 1
+            } else {
+                for (c in need)
+                    if (wired[c] == 0 && index($0, c) > 0) wired[c] = 1
+            }
+        }
+        END {
+            out = ""; miss = 0
+            for (i = 1; i <= n; i++) {
+                c = C[i]
+                if (wired[c] == 1 || ign[c] == 1 || (c in inbase)) continue
+                out = out (out == "" ? "" : " ") c; miss = 1
             }
             print out
             exit miss
@@ -456,6 +534,46 @@ else
         okt "synthetic orphan gate detected as expected -> T6 criterion is load-bearing"
     else
         badt "coverage check failed but did not name check_orphan_test_dummy.sh: $uninvoked_neg"
+    fi
+fi
+
+# ── T8: Integration test coverage invariant (MD-10, T2620-C) ────────────
+# No binary tests/*.rs may exist that (a) no chain runs (uncited in verify.sh
+# and CI), (b) is not manual (no #[ignore in the file), and (c) is not
+# grandfathered in the baseline manifest. The 98 known orphans at base
+# 2016fa85 are in the manifest -- they belong to the (B) wiring project.
+t "T8: every tests/ binary is wired, #[ignore]-manual, or baseline-grandfathered"
+if uninvoked_it=$(find_orphan_integration_tests "$REPO_ROOT"); then
+    okt "no integration test binary hides from every chain outside the grandfather manifest"
+else
+    badt "integration test binary(ies) run by NO chain, not ignored, not grandfathered: $uninvoked_it"
+fi
+
+# ── T9: negative control for T8 ─────────────────────────────────────────
+# Three planted binaries: unwired (MUST fire), #[ignore] (must NOT), baseline
+# (must NOT). Proves T8 is load-bearing without being a hair trigger.
+t "T9: negative control -- planted unwired test binary MUST fire; ignored/grandfathered MUST NOT"
+SBX_T9="$SBASHOME/t9_neg"
+mkdir -p "$SBX_T9/scripts" "$SBX_T9/.github/workflows" "$SBX_T9/crates/tylluan-kernel/tests"
+cp "$VERIFY_SRC" "$SBX_T9/scripts/verify.sh"
+cp "$REPO_ROOT/.github/workflows/ci.yml" "$SBX_T9/.github/workflows/ci.yml"
+printf '#[test]\nfn t_unwired() { assert!(false); }\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_planted_unwired.rs"
+printf '#[ignore]\n#[test]\nfn t_manual() {}\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_planted_ignored.rs"
+printf '#[test]\nfn t_manifested() {}\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_planted_manifested.rs"
+printf '# grandfather fixture for T9\nt9_planted_manifested\n' > "$SBX_T9/$INTEGRATION_BASELINE_REL"
+if uninvoked_it_neg=$(find_orphan_integration_tests "$SBX_T9"); then
+    badt "planted unwired test binary was NOT detected -- T8 rule is vacuous"
+else
+    fired_ok=0
+    echo "$uninvoked_it_neg" | grep -q "t9_planted_unwired" && fired_ok=1
+    false_hits=""
+    for unexpected in t9_planted_ignored t9_planted_manifested; do
+        if echo "$uninvoked_it_neg" | grep -q "$unexpected"; then false_hits="$false_hits $unexpected"; fi
+    done
+    if [ "$fired_ok" -eq 1 ] && [ -z "$false_hits" ]; then
+        okt "unwired planted fired; ignored and grandfathered silent -> T8 load-bearing, not hair-trigger"
+    else
+        badt "T9 mismatch: fired=[$uninvoked_it_neg] expected only t9_planted_unwired (false_positives=[$false_hits])"
     fi
 fi
 

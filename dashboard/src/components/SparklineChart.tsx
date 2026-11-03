@@ -124,7 +124,7 @@ export function SparklineChart({
   // ResizeObserver for responsive redraws
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => draw());
     ro.observe(container);
     return () => ro.disconnect();

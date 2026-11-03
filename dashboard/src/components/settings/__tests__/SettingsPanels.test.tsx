@@ -4,7 +4,66 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { GeneralSettingsPanel } from '../GeneralSettingsPanel';
 import { InferenceSettingsPanel } from '../InferenceSettingsPanel';
 import { SecuritySettingsPanel } from '../SecuritySettingsPanel';
+import { ConnectorsTab } from '../../ConnectorsTab';
+import { MaintenanceTab } from '../../MaintenanceTab';
 import type { NexusBridge } from '../../../lib/nexus-bridge';
+
+// Mock canvas getContext to avoid JSDOM stderr noise
+(HTMLCanvasElement.prototype as unknown as Record<string, unknown>).getContext = vi.fn().mockReturnValue({
+  fillRect: vi.fn(),
+  clearRect: vi.fn(),
+  getImageData: vi.fn(),
+  putImageData: vi.fn(),
+  createImageData: vi.fn(),
+  setTransform: vi.fn(),
+  drawImage: vi.fn(),
+  save: vi.fn(),
+  fillText: vi.fn(),
+  restore: vi.fn(),
+  beginPath: vi.fn(),
+  moveTo: vi.fn(),
+  lineTo: vi.fn(),
+  closePath: vi.fn(),
+  stroke: vi.fn(),
+  translate: vi.fn(),
+  scale: vi.fn(),
+  rotate: vi.fn(),
+  arc: vi.fn(),
+  fill: vi.fn(),
+  measureText: vi.fn().mockReturnValue({ width: 0 }),
+  transform: vi.fn(),
+  rect: vi.fn(),
+  clip: vi.fn(),
+});
+
+class MockResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+(globalThis as unknown as Record<string, unknown>).ResizeObserver = MockResizeObserver;
+
+const mockUseNexusState = {
+  bridge: null as unknown as NexusBridge,
+  sessions: [] as unknown[],
+  loading: false,
+  refreshData: vi.fn(),
+  sysStatus: {
+    system: { cpu_usage: 15, memory_percent: 42, used_memory_mb: 4096, total_memory_mb: 16384 },
+  },
+};
+
+vi.mock('../../../hooks/useNexus', () => ({
+  useNexus: () => mockUseNexusState,
+}));
+
+vi.mock('@tylluan/ui-core', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    useNexus: () => mockUseNexusState,
+  };
+});
 
 describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () => {
   let mockBridge: { fetchRaw: ReturnType<typeof vi.fn> };
@@ -230,6 +289,227 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
 
       // Aviso de inmutabilidad
       expect(screen.getByText(/Seguridad Fail-Closed e Inmutabilidad por Interfaz/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('ConnectorsTab (A3)', () => {
+    it('renderiza servidores MCP externos con variables redactadas y maneja tool_collisions presentes', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/mcp/external') {
+          return Promise.resolve([
+            {
+              name: 'gitkraken',
+              active: true,
+              running: true,
+              command: 'gk',
+              args: ['mcp', '--scheme=tylluan'],
+              env: { API_KEY: '***', SECRET_SOURCE: '***' },
+              tools: [{ name: 'git_status' }],
+            },
+          ]);
+        }
+        if (url === '/api/v1/setup-hint') {
+          return Promise.resolve({});
+        }
+        return Promise.resolve({});
+      });
+
+      const mockGetCapabilities = vi.fn().mockResolvedValue({
+        status: 'ok',
+        version: '0.17.2',
+        sovereign_contract: { tools: [] },
+        guilds: [],
+        all_guild_tools: [],
+        mcp: { prompts: [], resources: [] },
+        sessions: [],
+        tool_collisions: [
+          {
+            name: 'analyze_code',
+            kept_server: 'codebase_memory',
+            shadowed_servers: ['gitkraken'],
+          },
+        ],
+      });
+
+      const fullBridge = {
+        ...mockBridge,
+        getCapabilities: mockGetCapabilities,
+        getBaseUrl: () => 'http://localhost:47004',
+        sessions: [],
+        loading: false,
+        refreshData: vi.fn(),
+      };
+
+      mockUseNexusState.bridge = fullBridge as unknown as NexusBridge;
+
+      render(<ConnectorsTab notify={mockNotify} />);
+
+      // Switch to external MCP tab
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /servidores mcp externos/i })).toBeInTheDocument();
+      });
+
+      const extTab = screen.getByRole('tab', { name: /servidores mcp externos/i });
+      fireEvent.click(extTab);
+
+      // Verify tool collisions banner
+      expect(screen.getByText(/Colisiones de Herramientas MCP Detectadas/i)).toBeInTheDocument();
+      expect(screen.getByText('analyze_code')).toBeInTheDocument();
+      expect(screen.getByText('codebase_memory')).toBeInTheDocument();
+      expect(screen.getAllByText('gitkraken').length).toBeGreaterThanOrEqual(1);
+
+      // Verify external server details and masked env
+      expect(screen.getByText(/API_KEY/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/\*\*\*/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/Protegido A0/i)).toBeInTheDocument();
+    });
+
+    it('degrada limpiamente cuando tool_collisions no está presente en capabilities', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/mcp/external') {
+          return Promise.resolve([]);
+        }
+        return Promise.resolve({});
+      });
+
+      const mockGetCapabilities = vi.fn().mockResolvedValue({
+        status: 'ok',
+        version: '0.17.2',
+        sovereign_contract: { tools: [] },
+        guilds: [],
+        all_guild_tools: [],
+        mcp: { prompts: [], resources: [] },
+        sessions: [],
+        // tool_collisions is omitted intentionally
+      });
+
+      const fullBridge = {
+        ...mockBridge,
+        getCapabilities: mockGetCapabilities,
+        getBaseUrl: () => 'http://localhost:47004',
+        sessions: [],
+        loading: false,
+        refreshData: vi.fn(),
+      };
+
+      mockUseNexusState.bridge = fullBridge as unknown as NexusBridge;
+
+      render(<ConnectorsTab notify={mockNotify} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /servidores mcp externos/i })).toBeInTheDocument();
+      });
+
+      // No collision banner should be present and no crash
+      expect(screen.queryByText(/Colisiones de Herramientas MCP Detectadas/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('MaintenanceTab (A3)', () => {
+    it('muestra métricas de storage, no contiene botones prohibidos de VACUUM/ONNX y permite editar parámetros', async () => {
+      const fullBridge = {
+        ...mockBridge,
+        maintenance_status: vi.fn().mockResolvedValue({
+          status: 'ok',
+          brain_size_bytes: 1048576,
+          brain_size_human: '1.00 MB',
+          last_export: '2026-11-03 10:00:00',
+          storage_mode: 'SQLite WAL',
+          node_count: 42,
+          edge_count: 84,
+          orphan_node_count: 0,
+        }),
+        probe: vi.fn().mockResolvedValue({
+          kernel_version: '0.17.2',
+          port: 47004,
+          detected_dialect: 'standard',
+        }),
+        getMetricsHistory: vi.fn().mockResolvedValue({
+          snapshots: [{ timestamp: 1, cpu: 12, mem: 45 }],
+        }),
+      };
+
+      mockUseNexusState.bridge = fullBridge as unknown as NexusBridge;
+
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') {
+          return Promise.resolve({
+            memory: {
+              background_concurrency: 4,
+              background_max_wait_secs: 60,
+              reindex_node_delay_ms: 200,
+              reindex_nodes_per_tick: 100,
+              reindex_tick_secs: 600,
+            },
+            logging: {
+              max_file_size_mb: 50,
+              max_files: 5,
+            },
+          });
+        }
+        if (url === '/api/v1/config/schema') {
+          return Promise.resolve({
+            fields: [
+              { key: 'memory.background_concurrency', section: 'maintenance', editable_via_api: true },
+            ],
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<MaintenanceTab bridge={fullBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Mantenimiento del Sustrato Soberano/i)).toBeInTheDocument();
+      });
+
+      // Verificamos que se muestren las métricas de memoria
+      expect(screen.getByText('1.00 MB')).toBeInTheDocument();
+      expect(screen.getByText('42')).toBeInTheDocument();
+
+      // Verificamos que VACUUM y ONNX no tengan botones ejecutables activos (Turn #2562)
+      expect(screen.queryByRole('button', { name: /ejecutar vacuum/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /purgar caché onnx/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/Compactación SQLite \(VACUUM\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/No disponible por API/i)).toBeInTheDocument();
+
+      // Cambiamos parámetro editable
+      await waitFor(() => {
+        expect(screen.getByLabelText(/hilos de fondo/i)).toHaveValue(4);
+      });
+      const concurrencyInput = screen.getByLabelText(/hilos de fondo/i);
+      fireEvent.change(concurrencyInput, { target: { value: '8' } });
+      expect(concurrencyInput).toHaveValue(8);
+
+      const saveBtn = screen.getByRole('button', { name: /guardar parámetros/i });
+      expect(saveBtn).not.toBeDisabled();
+
+      // Simular guardado seguro
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config/validate') {
+          return Promise.resolve({ ok: true, dry_run: true, etag: 'etag-maint-456', diff: [] });
+        }
+        if (url === '/api/v1/config/edit') {
+          return Promise.resolve({ ok: true, status: 'applied', backup: 'backup_maint.toml' });
+        }
+        return Promise.resolve({});
+      });
+
+      fireEvent.click(saveBtn);
+
+      await waitFor(() => {
+        expect(mockBridge.fetchRaw).toHaveBeenCalledWith(
+          '/api/v1/config/validate',
+          expect.objectContaining({ method: 'POST' })
+        );
+        expect(mockBridge.fetchRaw).toHaveBeenCalledWith(
+          '/api/v1/config/edit',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.stringContaining('"etag":"etag-maint-456"'),
+          })
+        );
+      });
     });
   });
 });

@@ -452,6 +452,50 @@ jobs:
           cargo test -p tylluan-kernel --test cycle_closeout_memory
           cargo test -p tylluan-kernel --test mojibake_tripwire_test
 
+  integration-tests:
+    name: Rust — integration test binaries (MD-10, TL T2626-2/T2627)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          toolchain: 1.99.1
+
+      # Wiring per TL decision T2626-(2)+T2627: binaries deep-measured GREEN with
+      # real tests (tables T2622/T2625; literal output T2633). NO
+      # continue-on-error -- a red here fails the job, that is the point.
+      # Hermetic by construction, verified by reading tests/support/mod.rs
+      # (2026-11-03, not assumed): in-process router tests -- zero sockets
+      # (47004 NEVER touched), journal :memory:, per-tag temp ids
+      # (tylluan_id_<tag>_<n> under the system temp dir). No env pinning:
+      # these binaries read no env, so pinning one would be cargo-cult.
+      # NOT wired here, with reasons (TL T2626-(3)):
+      #   approve_action_self_approval / asi06_judge_hang_health /
+      #   approve_action_intent_adversarial -- entirely #[ignore] (vacuous).
+      #   sqlcipher_audit -- needs --features encryption; @deep must confirm
+      #   that feature compiles on Linux CI, then it gets its own step here.
+      #   (asi06_layer1_ingest_memory_write is wired below since D-105 updated its
+      #   stale contract: inj_26 base64 detected by B-29.)
+      # layer1_corpus_acceptance is included beyond the 12 named: T2633's
+      # literal output shows it green in 0.03 s with the real 348-injection
+      # corpus -- inside the "los que salgan verdes" clause of T2626-(2).
+      - name: Run deep-measured green integration binaries
+        run: |
+          cargo test -p tylluan-kernel --test b20_auth_route_matrix
+          cargo test -p tylluan-kernel --test b22_admin_host_guard
+          cargo test -p tylluan-kernel --test b28_admin_surface_host_guard
+          cargo test -p tylluan-kernel --test capabilities_enforce_matrix
+          cargo test -p tylluan-kernel --test asi06_layer1_ofuscacion_regresion
+          cargo test -p tylluan-kernel --test oauth_f2_consent_adversarial
+          cargo test -p tylluan-kernel --test untrusted_writers_integration
+          cargo test -p tylluan-kernel --test approve_action_intent_route
+          cargo test -p tylluan-kernel --test d18_untrusted_visibility
+          cargo test -p tylluan-kernel --test asi06_redteam_memory_poisoning
+          cargo test -p tylluan-kernel --test asi06_redteam_vias3_6
+          cargo test -p tylluan-kernel --test approve_audit_matrix
+          cargo test -p tylluan-kernel --test layer1_corpus_acceptance
+          cargo test -p tylluan-kernel --test asi06_layer1_ingest_memory_write
+
   desktop-tauri-check:
     name: Desktop — Tauri shell check
     runs-on: ubuntu-latest

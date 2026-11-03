@@ -1,0 +1,93 @@
+# Baseline manifest (MD-10 / meta-test T8): integration test binaries under
+# crates/tylluan-kernel/tests/ that are NOT wired in verify.sh or CI as of
+# base commit 2016fa85 (2026-11-03). Grandfathered here deliberately: they
+# belong to the integration-tests wiring project (TL decision T2620-B/C),
+# not to the meta-test red.
+# Shrink rule: when you wire a binary (verify.sh/CI) or mark it #[ignore]
+# with a written reason, DELETE its line from this file. NEVER add lines for
+# files newer than the base -- those must be wired or ignored from birth;
+# that is exactly what T8 enforces.
+a2a_hitl_test
+a2a_live
+adr024_containment_pending
+adversarial_http_battery
+agent_session_persistence
+approve_action_intent_adversarial
+approve_action_self_approval
+asi06_judge_hang_health
+asi06_judge_hang_writes
+audit_latency_endpoint_test
+blackboard_e2e
+broadcast_integration
+bwc_agent_binding
+bwc_close_binding
+cola_d29_d30_acceptance
+cola_d32_acceptance
+cola_d33_acceptance
+cola_d34_acceptance
+cola_d35_acceptance
+coloquio_invisible_text
+coloquio_pagination_e2e
+concurrency_load
+concurrent_agents
+consensus_stress_test
+continuity_probes
+contracts_audit
+corpus_es_shape
+d17_layer1_write_paths
+d32_vias_escritura_regresion
+decide_admin_read_api
+decide_adversarial
+decide_parity_e2e
+decide_systemone_http
+dump_catalog_test
+exec_like_tool_names
+exec_like_tool_names_all_guilds
+exec_tools_declarations_cover_fn_table
+fingerprint_counters_endpoint_test
+guild_env_audit
+guild_env_reads_are_covered
+guilds_v2_integration
+health_sovereign_count
+http_endpoint_tests
+integration_mcp
+knowledge_guild_test
+layer1_fp_hunt_repo
+layer1_squash_collisions
+mailbox_protocol_test
+mailbox_stress
+mcp_2026_07_28_tasks_test
+memory_write_concurrency
+oauth_consent_audit_t24
+oauth_consent_file_adversarial
+oauth_f2_adversarial_spec
+oauth_f2_consent
+oauth_f2_scope_challenges
+oauth_operator_gate
+outputs_endpoint_test
+pipeline_tests
+project_skills_store_mismatch
+quarantine_endpoint_test
+remember_long_text_recall
+repo_map_endpoint_test
+repo_map_real_measure
+resume_session_test
+route_uniqueness
+router_websearch_args
+runtime_tasks
+sandbox_runtimes_detect
+semantic_load_test
+slo_target_config
+sovereign_e2e
+sovereign_tools_e2e
+sparse_cascade_bench
+sparse_signature_spike
+sqlcipher_audit
+stigmergy_zones_endpoint_test
+t1253_buffy_adversarial
+tool_description_corpus_v1
+trust_banners_adversarial
+trust_inbox_legacy
+trust_summary_retro
+trust_think_banner
+workspace_acceptance

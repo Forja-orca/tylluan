@@ -15,11 +15,33 @@ import {
   BookOpen,
   Cpu,
   Link2,
-  Plug
+  Plug,
+  AlertTriangle
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import type { McpSession } from '../lib/nexus-bridge';
 import { cn, relativeTime } from '../lib/utils';
+
+export interface ToolCollision {
+  name: string;
+  kept_server: string;
+  shadowed_servers: string[];
+}
+
+export interface ExternalMcpServer {
+  name: string;
+  active: boolean;
+  running: boolean;
+  command?: string | null;
+  args?: string[] | null;
+  cwd?: string | null;
+  env?: Record<string, string> | null;
+  headers?: Record<string, string> | null;
+  tools?: Array<{ name: string; description?: string }>;
+  url?: string | null;
+  sse_url?: string | null;
+  timeout_ms?: number | null;
+}
 
 interface CapabilitiesData {
   status: string;
@@ -48,6 +70,7 @@ interface CapabilitiesData {
     resources: Array<{ uri: string; name: string; description: string; mimeType: string }>;
   };
   sessions: McpSession[];
+  tool_collisions?: ToolCollision[];
 }
 
 interface SetupHintData {
@@ -70,24 +93,28 @@ interface SetupHintData {
   [key: string]: unknown;
 }
 
+export type ConnectorSubTab = 'sessions' | 'external' | 'catalog' | 'guides';
+
 export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' | 'error') => void }) {
   const { bridge, sessions: globalSessions, loading: globalLoading, refreshData } = useNexus();
   const [capabilities, setCapabilities] = useState<CapabilitiesData | null>(null);
+  const [externalServers, setExternalServers] = useState<ExternalMcpServer[]>([]);
   const [localLoading, setLocalLoading] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'sessions' | 'catalog' | 'guides'>('sessions');
+  const [activeSubTab, setActiveSubTab] = useState<ConnectorSubTab>('sessions');
   const [guideTab, setGuideTab] = useState<'cursor' | 'vscode' | 'claude' | 'custom'>('cursor');
   const [revokingIds, setRevokingIds] = useState<Set<string>>(new Set());
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [hint, setHint] = useState<SetupHintData | null>(null);
 
-  const subTabList: Array<'sessions' | 'catalog' | 'guides'> = ['sessions', 'catalog', 'guides'];
-  const subTabRefs = useRef<Record<'sessions' | 'catalog' | 'guides', HTMLButtonElement | null>>({
+  const subTabList: ConnectorSubTab[] = ['sessions', 'external', 'catalog', 'guides'];
+  const subTabRefs = useRef<Record<ConnectorSubTab, HTMLButtonElement | null>>({
     sessions: null,
+    external: null,
     catalog: null,
     guides: null,
   });
 
-  const handleSubTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: 'sessions' | 'catalog' | 'guides') => {
+  const handleSubTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: ConnectorSubTab) => {
     const idx = subTabList.indexOf(current);
     let nextIdx = -1;
     if (e.key === 'ArrowRight') nextIdx = (idx + 1) % subTabList.length;
@@ -125,17 +152,30 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
     }
   };
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const fetchCapabilities = useCallback(async () => {
     if (!bridge) return;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLocalLoading(true);
     try {
-      const [data, hintData] = await Promise.allSettled([
+      const [data, hintData, extData] = await Promise.allSettled([
         bridge.getCapabilities(),
-        bridge.fetchRaw('/api/v1/setup-hint'),
+        bridge.fetchRaw('/api/v1/setup-hint', { signal: controller.signal }),
+        bridge.fetchRaw('/api/v1/mcp/external', { signal: controller.signal }),
       ]);
       if (data.status === 'fulfilled') setCapabilities(data.value as CapabilitiesData);
       if (hintData.status === 'fulfilled') setHint(hintData.value as SetupHintData);
+      if (extData.status === 'fulfilled' && Array.isArray(extData.value)) {
+        setExternalServers(extData.value as ExternalMcpServer[]);
+      }
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       console.error('Failed to fetch capabilities:', e);
       notify('Failed to load server capabilities', 'error');
     } finally {
@@ -145,6 +185,11 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
   useEffect(() => {
     fetchCapabilities();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchCapabilities]);
 
   const handleRefresh = async () => {
@@ -189,8 +234,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   // Snippets are built from the kernel's setup-hint (URL derived from the Host
   // the dashboard used to reach it — correct for legacy 3030, local 4000, or any
   // custom port). Never hardcode the port.
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:47004';
+  const baseUrl = typeof bridge?.getBaseUrl === 'function' ? bridge.getBaseUrl() : originUrl;
   const sseUrl = hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url
-    ?? `${bridge?.getBaseUrl() ?? window.location.origin}/sse`;
+    ?? `${baseUrl}/sse`;
 
   // Bridge is mcp-remote (real, published on npm) — NOT '@modelcontextprotocol/client-cli',
   // which does not exist on the npm registry (verified via `npm view`, 404). That fake
@@ -228,7 +275,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   }
 }`;
 
-  const restCurl = `curl -X POST ${hint?.verify?.dashboard ?? `${bridge?.getBaseUrl() ?? window.location.origin}`}/api/v1/do \\
+  const restCurl = `curl -X POST ${hint?.verify?.dashboard ?? baseUrl}/api/v1/do \\
   -H "Authorization: Bearer TU_TOKEN_AQUI" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -303,6 +350,32 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             {activeSessions.length > 0 && (
               <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-[10px] font-mono text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
                 {activeSessions.length}
+              </span>
+            )}
+          </div>
+        </button>
+
+        <button 
+          ref={(el) => { subTabRefs.current.external = el; }}
+          type="button"
+          role="tab"
+          aria-selected={activeSubTab === 'external'}
+          tabIndex={activeSubTab === 'external' ? 0 : -1}
+          onClick={() => setActiveSubTab('external')}
+          onKeyDown={(e) => handleSubTabKeyDown(e, 'external')}
+          className={cn(
+            "px-3 py-1.5 text-xs font-semibold border transition-all cursor-pointer rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+            activeSubTab === 'external' 
+              ? "bg-primary/10 border-primary/30 text-primary shadow-sm" 
+              : "bg-card border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          )}
+        >
+          <div className="flex items-center gap-1.5">
+            <Plug className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+            <span>Servidores MCP Externos</span>
+            {externalServers.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-[10px] font-mono text-purple-700 dark:text-purple-400 border border-purple-500/30">
+                {externalServers.length}
               </span>
             )}
           </div>
@@ -460,8 +533,199 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           </div>
         )}
 
+        {activeSubTab === 'external' && (
+          <div className="space-y-4">
+            {/* Tool Collisions Banner if present */}
+            {capabilities?.tool_collisions && capabilities.tool_collisions.length > 0 && (
+              <div role="alert" className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-900 dark:text-amber-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Colisiones de Herramientas MCP Detectadas ({capabilities.tool_collisions.length})</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Múltiples guilds o servidores MCP declaran herramientas con el mismo nombre. Tylluan aplica precedencia determinista en orden alfabético: el primer servidor retiene la herramienta activa y los restantes quedan enmascarados.
+                </p>
+                <div className="overflow-x-auto mt-2">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border/60 text-muted-foreground font-semibold">
+                        <th className="py-1 px-2.5">Herramienta</th>
+                        <th className="py-1 px-2.5">Servidor Activo (Retenido)</th>
+                        <th className="py-1 px-2.5">Servidores Enmascarados</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40 font-mono">
+                      {capabilities.tool_collisions.map((c) => (
+                        <tr key={c.name} className="hover:bg-amber-500/5">
+                          <td className="py-1.5 px-2.5 font-bold text-foreground">{c.name}</td>
+                          <td className="py-1.5 px-2.5">
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[11px]">
+                              {c.kept_server}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-2.5">
+                            <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-[11px]">
+                              {c.shadowed_servers.join(', ')}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {capabilities?.tool_collisions && capabilities.tool_collisions.length === 0 && (
+              <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-800 dark:text-emerald-300 text-xs font-mono">
+                <Check className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span>Sin colisiones de herramientas en los conectores MCP registrados</span>
+              </div>
+            )}
+
+            <div className="bg-card p-4 rounded-lg border border-border shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-border">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <Plug className="w-4 h-4 text-primary" />
+                    <span>Servidores MCP Externos Configurados</span>
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Procesos stdio y servicios remotos integrados mediante el protocolo MCP. Sanitización A0 activa en variables de entorno y cabeceras.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded bg-muted text-xs font-mono text-muted-foreground border border-border flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>A0 Sanitizado</span>
+                  </span>
+                </div>
+              </div>
+
+              {externalServers.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center p-4">
+                  <Plug className="w-8 h-8 mb-2 opacity-40 text-primary" />
+                  <p className="text-xs font-bold text-foreground">Sin servidores MCP externos registrados</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                    Puede registrar servidores externos en <code>tylluan.toml</code> bajo la sección <code>[[external_mcp]]</code> o importarlos mediante la API administrativa.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {externalServers.map((server) => (
+                    <div key={server.name} className="p-4 bg-muted/30 border border-border rounded-lg space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-foreground font-mono">{server.name}</h4>
+                          {server.cwd && (
+                            <p className="text-[11px] text-muted-foreground font-mono truncate max-w-xs">
+                              CWD: {server.cwd}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-mono border",
+                            server.active 
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                              : "bg-muted text-muted-foreground border-border"
+                          )}>
+                            {server.active ? 'Activo' : 'Inactivo'}
+                          </span>
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-mono border",
+                            server.running 
+                              ? "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30"
+                              : "bg-muted text-muted-foreground border-border"
+                          )}>
+                            {server.running ? 'En Ejecución' : 'Detenido'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {server.command && (
+                        <div className="p-2.5 bg-card border border-border rounded text-xs font-mono text-foreground break-all">
+                          <div className="text-[10px] text-muted-foreground mb-1 uppercase font-semibold">Comando Stdio</div>
+                          <code>{server.command} {server.args?.join(' ')}</code>
+                        </div>
+                      )}
+
+                      {(server.url || server.sse_url) && (
+                        <div className="p-2.5 bg-card border border-border rounded text-xs font-mono text-muted-foreground break-all">
+                          <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">URL Remota</div>
+                          <code>{server.url || server.sse_url}</code>
+                        </div>
+                      )}
+
+                      {server.env && Object.keys(server.env).length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] uppercase font-semibold text-muted-foreground flex items-center justify-between">
+                            <span>Variables de Entorno (Redactadas)</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                              <Shield className="w-3 h-3" /> Protegido A0
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(server.env).map(([k, v]) => (
+                              <span key={k} className="px-2 py-0.5 bg-card border border-border rounded text-[11px] font-mono text-muted-foreground">
+                                <span className="text-foreground font-semibold">{k}</span>={v}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {server.headers && Object.keys(server.headers).length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] uppercase font-semibold text-muted-foreground">
+                            Encabezados HTTP Sanitizados
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(server.headers).map(([k, v]) => (
+                              <span key={k} className="px-2 py-0.5 bg-card border border-border rounded text-[11px] font-mono text-muted-foreground">
+                                <span className="text-foreground font-semibold">{k}</span>={v}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {server.tools && server.tools.length > 0 && (
+                        <div className="space-y-1 pt-1 border-t border-border/60">
+                          <div className="text-[10px] uppercase font-semibold text-muted-foreground">
+                            Herramientas Expuestas ({server.tools.length})
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {server.tools.map((t) => (
+                              <span key={t.name} className="px-1.5 py-0.5 bg-primary/10 border border-primary/20 rounded text-[10px] font-mono text-primary">
+                                {t.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeSubTab === 'catalog' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="space-y-4">
+            {capabilities?.tool_collisions && capabilities.tool_collisions.length > 0 && (
+              <div role="alert" className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-900 dark:text-amber-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Colisiones de Herramientas MCP Detectadas ({capabilities.tool_collisions.length})</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Múltiples guilds declaran herramientas con el mismo nombre. Se aplica precedencia determinista en orden alfabético: el servidor retenido ejecuta las llamadas y los demás quedan enmascarados.
+                </p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Left Col: Sovereign Contract */}
             <div className="space-y-4">
               <fieldset className="p-4 bg-card border border-border rounded-lg shadow-sm">
@@ -585,7 +849,8 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               </fieldset>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {activeSubTab === 'guides' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

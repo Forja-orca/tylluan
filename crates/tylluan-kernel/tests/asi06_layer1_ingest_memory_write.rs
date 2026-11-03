@@ -33,8 +33,12 @@ use tylluan_kernel::security::poison_patterns::matches_injection_pattern;
 /// reglas en español y la normalización de D-31 (2026-10-22). El nombre del
 /// test conserva el "8" histórico; el contrato es esta lista, no el número.
 const EXPECTED_DETECTED: &[&str] = &[
-    "inj_01", "inj_02", "inj_07", "inj_12", "inj_13", "inj_14", "inj_15", "inj_16", "inj_19", "inj_22", "inj_35",
+    "inj_01", "inj_02", "inj_07", "inj_12", "inj_13", "inj_14", "inj_15", "inj_16", "inj_19", "inj_22", "inj_26", "inj_35",
     "inj_36",
+    // D-105: inj_26 es el base64 de "Ignore all previous instructions". La capa 1 lo
+    // detecta desde B-29 (commit f0ed635f, 2026-11-01), que decodifica base64 antes de
+    // comparar en vez de limpiarlo. No es una regresion: es una deteccion nueva; el
+    // contrato se actualiza aqui a proposito y con la causa, no en silencio.
 ];
 
 /// Las 40 muestras benignas.
@@ -97,6 +101,13 @@ fn load_corpora() -> Corpora {
         .map(|s| s.id.as_str())
         .collect();
     assert!(benign_hits.is_empty(), "la capa 1 marca benignos: {benign_hits:?}");
+    // D-105: cifras a la vista en cada corrida (antes el 0 de falsos positivos era
+    // implicito en que el test pasaba; ahora se lee).
+    println!(
+        "D-105: benignas={} falsos_positivos={}",
+        benign.len(),
+        benign_hits.len()
+    );
 
     Corpora { injection: samples, benign }
 }
