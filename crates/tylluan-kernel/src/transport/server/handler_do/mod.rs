@@ -466,7 +466,19 @@ pub async fn handle_tylluan_do(
                 cleaned.trim().to_string()
             });
             let available_guilds = server.matcher.available_guilds();
-            let result_json = TylluanServer::explore_actionable_tools(&target_domain, &available_guilds);
+            let mut result_json =
+                TylluanServer::explore_actionable_tools(&target_domain, &available_guilds);
+            // P-6 (ADR-023): the static catalog above does not know about live
+            // external MCP servers. Attach them from the registry: only external
+            // launchers, only approved tools (quarantine is already excluded from
+            // `guild.tools`), with the D-102 collision verdict per tool.
+            if let Some(obj) = result_json.as_object_mut() {
+                let snapshot = {
+                    let reg = server.registry.read().await;
+                    reg.external_tool_snapshot(&target_domain)
+                };
+                obj.insert("external".to_string(), snapshot);
+            }
             return Ok(CallToolResult {
                 content: vec![Content::text(serde_json::to_string_pretty(&result_json).unwrap_or_default())],
                 is_error: Some(false),

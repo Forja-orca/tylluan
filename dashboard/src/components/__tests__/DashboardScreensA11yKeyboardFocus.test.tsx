@@ -194,7 +194,7 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
   });
 
   describe('SettingsTab Tablist Navigation', () => {
-    it('supports Arrow navigation and focus rings across settings tabs', () => {
+    it('supports Arrow navigation and focus rings across the 5 settings tabs', () => {
       const mockOpenAuth = vi.fn();
       render(
         <SettingsTab
@@ -207,21 +207,34 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
       const tablist = screen.getByRole('tablist', { name: /secciones de ajustes/i });
       expect(tablist).toBeInTheDocument();
 
-      const connectorsTab = screen.getByRole('tab', { name: /conexión mcp/i });
-      const maintenanceTab = screen.getByRole('tab', { name: /mantenimiento del sistema/i });
+      const generalTab = screen.getByRole('tab', { name: /^general$/i });
+      const inferenceTab = screen.getByRole('tab', { name: /^inferencia$/i });
+      const securityTab = screen.getByRole('tab', { name: /^seguridad$/i });
+      const connectorsTab = screen.getByRole('tab', { name: /^conectores$/i });
+      const maintenanceTab = screen.getByRole('tab', { name: /^mantenimiento$/i });
 
-      expect(connectorsTab).toHaveAttribute('aria-selected', 'true');
+      expect(generalTab).toHaveAttribute('aria-selected', 'true');
 
-      // ArrowRight switches to maintenance
-      connectorsTab.focus();
-      fireEvent.keyDown(connectorsTab, { key: 'ArrowRight' });
+      // ArrowRight switches to inference
+      generalTab.focus();
+      fireEvent.keyDown(generalTab, { key: 'ArrowRight' });
+      expect(inferenceTab).toHaveAttribute('aria-selected', 'true');
+      expect(document.activeElement).toBe(inferenceTab);
+
+      // ArrowRight switches to security
+      fireEvent.keyDown(inferenceTab, { key: 'ArrowRight' });
+      expect(securityTab).toHaveAttribute('aria-selected', 'true');
+      expect(document.activeElement).toBe(securityTab);
+
+      // End switches to maintenance
+      fireEvent.keyDown(securityTab, { key: 'End' });
       expect(maintenanceTab).toHaveAttribute('aria-selected', 'true');
       expect(document.activeElement).toBe(maintenanceTab);
 
-      // ArrowLeft switches back to connectors
-      fireEvent.keyDown(maintenanceTab, { key: 'ArrowLeft' });
-      expect(connectorsTab).toHaveAttribute('aria-selected', 'true');
-      expect(document.activeElement).toBe(connectorsTab);
+      // Home switches to general
+      fireEvent.keyDown(maintenanceTab, { key: 'Home' });
+      expect(generalTab).toHaveAttribute('aria-selected', 'true');
+      expect(document.activeElement).toBe(generalTab);
 
       // Configurar Token button has focus-visible ring
       const tokenBtn = screen.getByRole('button', { name: /configurar token/i });
