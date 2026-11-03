@@ -59,6 +59,15 @@ fn init_repo(dir: &Path) -> PathBuf {
     repo
 }
 
+/// Predicado INDEPENDIENTE del que usa el broker (no llama a globs_overlap):
+/// sirve para detectar que dos reclamos activos realmente se pisan aunque la
+/// guarda del kernel se mute a `false`.
+fn test_overlap(a: &str, b: &str) -> bool {
+    let a = a.trim_end_matches("/**");
+    let b = b.trim_end_matches("/**");
+    a == b || a.starts_with(&format!("{b}/")) || b.starts_with(&format!("{a}/"))
+}
+
 fn p95(mut values: Vec<u64>) -> u64 {
     if values.is_empty() {
         return 0;
@@ -72,6 +81,7 @@ fn p95(mut values: Vec<u64>) -> u64 {
 struct RepMetrics {
     claims: usize,
     double_claims: usize,
+    rejected: usize,
     overlaps: usize,
     lost_markers: usize,
     commits_outside: usize,
@@ -83,14 +93,33 @@ struct RepMetrics {
 fn one_rep(rep: usize, data_root: &Path) -> RepMetrics {
     let dir = tempfile::tempdir_in(data_root).unwrap();
     let repo = init_repo(dir.path());
+    // Pre-crea los directorios con un .keep rastreado: si no, `git status`
+    // colapsa un directorio nuevo como "?? gXX/" y commit_paths no ve el
+    // fichero del reclamo (bug real de F9-1 detectado por este arnés).
+    for g in 0..20 {
+        for i in 0..10 {
+            let sub = if i == 0 {
+                format!("g{g:02}")
+            } else {
+                format!("g{g:02}/s{i}")
+            };
+            std::fs::create_dir_all(repo.join(&sub)).unwrap();
+            std::fs::write(repo.join(&sub).join(".keep"), "keep\n").unwrap();
+        }
+    }
+    run_git(&repo, &["add", "-A"]);
+    run_git(&repo, &["commit", "-q", "-m", "dirs"]);
     let store = Arc::new(WorkspaceStore::open(dir.path().join("workspace.db")).unwrap());
     let now = chrono::Utc::now().timestamp_millis();
     for g in 0..20 {
         for i in 0..10 {
             let task = format!("g{g:02}t{i:02}");
-            store
-                .create_task(now, &TaskSpec::new(&task, format!("g{g:02}/**")))
-                .unwrap();
+            let glob = if i == 0 {
+                format!("g{g:02}/**")
+            } else {
+                format!("g{g:02}/s{i}/**")
+            };
+            store.create_task(now, &TaskSpec::new(&task, glob)).unwrap();
         }
     }
 
@@ -128,18 +157,24 @@ fn one_rep(rep: usize, data_root: &Path) -> RepMetrics {
                     return;
                 }
                 let group = idx / 10;
-                let task = format!("g{group:02}t{:02}", idx % 10);
-                let glob = format!("g{group:02}/**");
+                let sub = idx % 10;
+                let task = format!("g{group:02}t{sub:02}");
+                let glob = if sub == 0 {
+                    format!("g{group:02}/**")
+                } else {
+                    format!("g{group:02}/s{sub}/**")
+                };
                 // Reintenta hasta que su grupo quede libre: un rechazo por solape no
                 // puede consumir la tarea (si no, solo se reclamarian 20 de 200).
                 // El p95 mide el INTENTO que concede (no la espera de contencion).
                 let (claim, elapsed) = loop {
                     let attempt_started = Instant::now();
-                    match store.claim(&agent, &task, &glob, now) {
+                    match store.claim(&agent, &task, &glob, chrono::Utc::now().timestamp_millis()) {
                         Ok(ClaimOutcome::Claimed(c)) => {
                             break (c, attempt_started.elapsed().as_millis() as u64);
                         }
                         Ok(ClaimOutcome::Rejected(_)) => {
+                            metrics.lock().unwrap().rejected += 1;
                             if Instant::now() > deadline {
                                 panic!("F9-3 rep={rep}: sin poder reclamar {task} en 900 s");
                             }
@@ -155,7 +190,7 @@ fn one_rep(rep: usize, data_root: &Path) -> RepMetrics {
                     m.claim_ms.push(elapsed);
                     for (i, a) in active.iter().enumerate() {
                         for b in active.iter().skip(i + 1) {
-                            if tylluan_kernel::workspace::globs_overlap(&a.path_glob, &b.path_glob) {
+                            if test_overlap(&a.path_glob, &b.path_glob) {
                                 m.overlaps += 1;
                             }
                         }
@@ -175,7 +210,7 @@ fn one_rep(rep: usize, data_root: &Path) -> RepMetrics {
                 if dies && dead_done.fetch_add(1, Ordering::SeqCst) == 0 {
                     // Muere a mitad de edición: caduca su arriendo y guarda el
                     // parche de recuperación (no commitea).
-                    let _ = store.expire_agent_leases(&agent, now + 121_000);
+                    let _ = store.expire_agent_leases(&agent, chrono::Utc::now().timestamp_millis() + 121_000);
                     {
                         let _g = git_lock.lock().unwrap();
                         let _ = recovery_patch(&store, &repo, &claim);
@@ -207,6 +242,7 @@ fn one_rep(rep: usize, data_root: &Path) -> RepMetrics {
                         if e.to_string().contains("index.lock") {
                             metrics.lock().unwrap().index_lock_errors += 1;
                         } else {
+                            eprintln!("F93 commit_error task={} glob={} err={e}", claim.task_id, glob);
                             metrics.lock().unwrap().commit_errors += 1;
                         }
                     }
@@ -249,6 +285,7 @@ fn one_rep(rep: usize, data_root: &Path) -> RepMetrics {
     RepMetrics {
         claims: m.claims,
         double_claims: m.double_claims,
+        rejected: m.rejected,
         overlaps: m.overlaps,
         lost_markers: m.lost_markers,
         commits_outside: m.commits_outside,
@@ -272,6 +309,7 @@ fn f9_acceptance_4_agents_200_tasks_overlapping() {
     unsafe { std::env::set_var("TYLLUAN_DATA_DIR", &data_root) };
     let mut total_claims = 0usize;
     let mut double_claims = 0usize;
+    let mut rejected = 0usize;
     let mut overlaps = 0usize;
     let mut lost = 0usize;
     let mut outside = 0usize;
@@ -282,6 +320,7 @@ fn f9_acceptance_4_agents_200_tasks_overlapping() {
         let m = one_rep(rep, &data_root);
         total_claims += m.claims;
         double_claims += m.double_claims;
+        rejected += m.rejected;
         overlaps += m.overlaps;
         lost += m.lost_markers;
         outside += m.commits_outside;
@@ -293,9 +332,10 @@ fn f9_acceptance_4_agents_200_tasks_overlapping() {
     println!(
         "F9-3: reps={reps} claims={total_claims} p95={p95_ms}ms dobles={double_claims} \
          solapes={overlaps} perdidos={lost} fuera_de_ruta={outside} index_lock={locks} \
-         commit_errors={commit_errors}"
+         commit_errors={commit_errors} rechazos_guarda={rejected}"
     );
     assert_eq!(double_claims, 0, "tareas reclamadas dos veces");
+    assert!(rejected > 0, "la guarda de solape nunca rechazo: el arnes no muerde");
     assert_eq!(overlaps, 0, "solapes de reclamos activos");
     assert_eq!(lost, 0, "escrituras perdidas");
     assert_eq!(outside, 0, "commits con ficheros fuera de la ruta");

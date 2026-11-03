@@ -13,6 +13,11 @@
 # sandbox, feeds it fabricated gate outputs, and asserts the exit-code
 # semantics hold:
 #
+#   T0  parallel-harness self-test (added 2026-11-03, TL go-ahead T2610):
+#       planted fake jobs run through the SAME background/out+rc-file/wait
+#       collect layer that carries T1-T4; exactly one planted failing verdict
+#       MUST come back named. If the aggregator can swallow a verdict, exit 2
+#       before any real test runs -- every green below would be meaningless.
 #   T1  every gate green                      -> --docs exits 0
 #   T2  a REPORT-ONLY gate fails (exit 1)     -> --docs STILL exits 0
 #   T3  a BLOCKING gate fails (exit 1)        -> --docs exits 1
@@ -25,10 +30,28 @@
 #   T7  negative control for gate coverage: an uninvoked gate in sandbox
 #       MUST cause the coverage test to fail (proves T6 is load-bearing)
 #
-# Hermetic by design: T1-T4 never touch git or cargo (all gates stubbed);
+# Hermetic by design: T0-T4 never touch git or cargo (all gates stubbed);
 # T5 runs inside a disposable git worktree that is removed afterwards. The
 # real checkout, its refs and its working tree are never modified; T6-T7 inspect
 # file trees and sandbox copies.
+#
+# Concurrency (2026-11-03, TL go-ahead T2610): PS4 traces measured the 14
+# sequential sandbox runs of verify.sh at 278 s of 391 s total (71%) --
+# dominated by the bash fork/exec tax on Windows (~1.4 s per stub spawn).
+# T1-T4 cases now LAUNCH concurrently (bounded by META_MAX_JOBS, default 8)
+# and are JUDGED sequentially afterwards: verdicts, messages and check order
+# are identical to the serial version. T6 used to spawn one grep per
+# candidate per source (~75 processes); it is now ONE awk pass over the same
+# inputs with identical semantics (exemptions, self-file exclusion,
+# verify/CI/caller wiring).
+#
+# T5 Windows root cause, fixed not masked (the "vacuous" flake, T2606):
+# native git resolves a /tmp/... argument against the CURRENT DRIVE root
+# (D:\tmp\...), while MSYS bash reads /tmp as %LOCALAPPDATA%\Temp -- so
+# `git worktree add` returned 0 and materialized the tree where the script
+# never looked. Green on Linux/CI (both agree), red here. When cygpath
+# exists the worktree path goes to git as C:/... which git AND bash resolve
+# to the same directory; elsewhere the raw path is used unchanged.
 #
 # Gate discovery is dynamic: whatever check_*.sh scripts verify.sh invokes
 # are stubbed, and the report-only set is declared ONCE here
@@ -41,13 +64,16 @@
 #
 # Usage:  scripts/test_verify_semantics.sh          (run all tests)
 #         scripts/test_verify_semantics.sh --list   (show discovered gates)
-# Exit 0 if all tests pass; exit 1 with a summary otherwise.
+#         META_MAX_JOBS=<n> scripts/test_verify_semantics.sh   (cap, default 8)
+# Exit 0 if all tests pass; exit 1 with a summary otherwise; exit 2 if a
+# precondition (gate discovery or the T0 parallel harness) is broken.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 REPO_ROOT="$PWD"
 VERIFY_SRC="$REPO_ROOT/scripts/verify.sh"
+META_MAX_JOBS="${META_MAX_JOBS:-8}"
 
 if [ ! -f "$VERIFY_SRC" ]; then
     echo "❌ $VERIFY_SRC not found -- run from the repo root."
@@ -79,60 +105,55 @@ fi
 # verify_restart.sh: operator tool run by hand after a kernel restart (T-DSH-60); not a gate.
 EXEMPT_GATE_HELPERS="verify_portable_guild.py verify_restart.sh"
 
+# ONE awk pass over every wiring source (verify.sh + CI workflows + scripts/*.sh)
+# replacing the old grep-per-candidate-per-source loop (~75 spawns). Semantics
+# preserved exactly: same candidate globs and exclusions, same exempt list, and
+# the old self-file exclusion reproduced by tracking the current source's
+# basename at FNR==1 -- a candidate is NEVER considered wired by its own file.
 find_orphan_gates() {
     local root="$1"
-    local verify_file="$root/scripts/verify.sh"
-    local ci_dir="$root/.github/workflows"
-    local orphans=()
-
-    # Discover candidate gate scripts on disk
-    local candidates=()
+    local candidates=() f bname
     for f in "$root"/scripts/check_*.sh "$root"/scripts/check_*.py \
              "$root"/scripts/verify_*.py "$root"/scripts/verify_*.sh \
              "$root"/scripts/no-absolute-paths.sh; do
         [ -e "$f" ] || continue
-        local bname
         bname="$(basename "$f")"
         [ "$bname" = "verify.sh" ] && continue
         [ "$bname" = "test_verify_semantics.sh" ] && continue
         candidates+=("$bname")
     done
 
-    for gf in "${candidates[@]}"; do
-        # 1. Is it explicitly exempt?
-        if echo " $EXEMPT_GATE_HELPERS " | grep -q " $gf "; then
-            continue
-        fi
-        # 2. Is it wired in verify.sh?
-        if [ -f "$verify_file" ] && grep -q "$gf" "$verify_file" 2>/dev/null; then
-            continue
-        fi
-        # 3. Is it wired in .github/workflows/*.yml?
-        if [ -d "$ci_dir" ] && grep -rq "$gf" "$ci_dir" 2>/dev/null; then
-            continue
-        fi
-        # 4. Is it invoked as a helper by another script in scripts/*.sh?
-        local found_caller=0
-        for other_sh in "$root"/scripts/*.sh; do
-            [ -f "$other_sh" ] || continue
-            [ "$(basename "$other_sh")" = "$gf" ] && continue
-            if grep -q "$gf" "$other_sh" 2>/dev/null; then
-                found_caller=1
-                break
-            fi
-        done
-        if [ "$found_caller" -eq 1 ]; then
-            continue
-        fi
-
-        orphans+=("$gf")
+    local inputs=()
+    [ -f "$root/scripts/verify.sh" ] && inputs+=("$root/scripts/verify.sh")
+    for f in "$root"/.github/workflows/*.yml "$root"/.github/workflows/*.yaml; do
+        [ -f "$f" ] && inputs+=("$f")
     done
+    for f in "$root"/scripts/*.sh; do
+        [ -f "$f" ] && inputs+=("$f")
+    done
+    [ "${#inputs[@]}" -gt 0 ] || return 0
 
-    if [ "${#orphans[@]}" -gt 0 ]; then
-        echo "${orphans[*]}"
-        return 1
-    fi
-    return 0
+    awk -v cands="${candidates[*]}" -v exempt=" $EXEMPT_GATE_HELPERS " '
+        BEGIN {
+            n = split(cands, C, " ")
+            for (i = 1; i <= n; i++) { need[C[i]] = 1; hit[C[i]] = 0 }
+        }
+        FNR == 1 { src = FILENAME; sub(/.*[\/\\]/, "", src) }
+        {
+            for (c in need)
+                if (src != c && hit[c] == 0 && index($0, c) > 0) hit[c] = 1
+        }
+        END {
+            out = ""; miss = 0
+            for (i = 1; i <= n; i++) {
+                c = C[i]
+                if (index(exempt, " " c " ") > 0) continue
+                if (hit[c] == 0) { out = out (out == "" ? "" : " ") c; miss = 1 }
+            }
+            print out
+            exit miss
+        }
+    ' "${inputs[@]}"
 }
 
 is_report_only() {
@@ -210,14 +231,6 @@ make_sandbox() {
     printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_doc_links.py"
 }
 
-# run_case <sandbox> <case-tag> -> sets RUN_OUT and RUN_RC
-run_case() {
-    local sbx="$1" case_tag="$2"
-    build_gate_stubs "$sbx" "$case_tag"
-    RUN_OUT=$(cd "$sbx" && bash scripts/verify.sh --docs 2>&1)
-    RUN_RC=$?
-}
-
 # splice_broken_wiring <verify.sh copy> <gate>
 # Rewrites the gate's wiring into the exact pre-49950c2 pattern: the
 # report-only else-branch becomes fail(). Pure bash + one awk; leaves a
@@ -235,89 +248,174 @@ splice_broken_wiring() {
     grep -q "wired-blocking (T4 negative control)" "$vf"
 }
 
+# ── Parallel launch / sequential judge (T2610) ────────────────────────────
+# Every T1-T4 case: sandbox prepared synchronously (cheap cp), then its
+# stub-build + verify.sh run in the background writing $RES/<id>.out and
+# $RES/<id>.rc. Judging happens SEQUENTIALLY afterwards with the exact same
+# conditions and messages as the serial version. META_MAX_JOBS bounds
+# concurrency so ~15 sandboxes x ~12 stubs don't stampede the OS into
+# inflating every number (the fork tax is the whole reason for parallelism).
 SBASHOME="$(mktemp -d)"
+RES="$SBASHOME/res"
+mkdir -p "$RES"
+OPEN_JOBS=0
 
-# ── T1: all green -> exit 0 ───────────────────────────────────────────────
-t "T1: all gates green -> --docs exits 0"
-sbx="$SBASHOME/t1"; make_sandbox "$sbx"; run_case "$sbx" clean
-if [ "$RUN_RC" -eq 0 ]; then
-    okt "exit 0"
+launch_case() {
+    local id="$1" sbx="$2" tag="$3"
+    {
+        build_gate_stubs "$sbx" "$tag"
+        ( cd "$sbx" && exec bash scripts/verify.sh --docs ) > "$RES/$id.out" 2>&1
+        echo $? > "$RES/$id.rc"
+    } &
+    OPEN_JOBS=$((OPEN_JOBS + 1))
+    if [ "$OPEN_JOBS" -ge "$META_MAX_JOBS" ]; then
+        wait -n 2>/dev/null || true
+        OPEN_JOBS=$((OPEN_JOBS - 1))
+    fi
+}
+
+get_rc()  { cat "$RES/$1.rc"  2>/dev/null || echo 99; }
+get_out() { cat "$RES/$1.out" 2>/dev/null || true; }
+
+# ── T0: parallel-harness self-test (hermetic proof the collector is honest) ──
+# Three planted jobs through the SAME collect layer (backgrounded braces +
+# out/rc files + wait + get_rc/get_out): two passing, one failing hidden in
+# the middle. All three verdicts must come back intact; a swallowed failure
+# makes every green T1-T7 below meaningless, so exit 2 instead.
+t "T0: parallel-harness self-test -- planted failure MUST survive the wait/collect layer"
+launch_fake() {
+    local id="$1" should_fail="$2"
+    {
+        ( if [ "$should_fail" = "1" ]; then echo "planted-boom"; exit 1; else echo "planted-ok"; exit 0; fi ) > "$RES/$id.out" 2>&1
+        echo $? > "$RES/$id.rc"
+    } &
+}
+launch_fake st_pass_a 0
+launch_fake st_fail_b 1
+launch_fake st_pass_c 0
+wait
+rc_a=$(get_rc st_pass_a); rc_b=$(get_rc st_fail_b); rc_c=$(get_rc st_pass_c)
+out_b=$(get_out st_fail_b)
+if [ "$rc_a" = "0" ] && [ "$rc_b" = "1" ] && [ "$rc_c" = "0" ] && echo "$out_b" | grep -q "planted-boom"; then
+    okt "3/3 planted verdicts collected exactly (the one failure surfaced, none swallowed)"
 else
-    badt "expected 0, got $RUN_RC"; echo "$RUN_OUT" | tail -5
+    badt "aggregator lost a verdict: rc_a=$rc_a rc_b=$rc_b rc_c=$rc_c out_b=[$out_b]"
+    echo "❌ parallel harness itself is broken -- refusing to trust T1-T7."
+    rm -rf "$SBASHOME"
+    exit 2
 fi
 
-# ── T2: EVERY report-only gate failing must NOT flip the exit code ───────
+# ── Spec collection (T1-T4): prepare sandboxes, launch concurrently, judge ──
+# spec entries: "id|kind|gate"
+SPECS=()
+SPECS+=("t1|T1|")
 for g in $REPORT_ONLY_GATES; do
     if ! is_wired "$g"; then
         badt "REPORT_ONLY_GATES lists '$g' but verify.sh does not wire it"
         continue
     fi
-    t "T2: report-only gate '$g' fails (exit 1) -> --docs STILL exits 0"
-    sbx="$SBASHOME/t2_$g"; make_sandbox "$sbx"; run_case "$sbx" "$g-fails"
-    if [ "$RUN_RC" -eq 0 ] && echo "$RUN_OUT" | grep -q "$g"; then
-        okt "exit 0, finding printed (report-only honored)"
-    else
-        badt "exit $RUN_RC -- report-only semantics broken (the 49950c2 bug class)"
-        echo "$RUN_OUT" | tail -8
-    fi
+    SPECS+=("t2_$g|T2|$g")
 done
-
-# ── T3: a blocking gate failing MUST flip the exit code ──────────────────
 blocking_found=0
 for g in "${all_gates[@]}"; do
     if is_report_only "$g"; then continue; fi
     blocking_found=1
-    t "T3: blocking gate '$g' fails (exit 1) -> --docs exits 1"
-    sbx="$SBASHOME/t3_$g"; make_sandbox "$sbx"; run_case "$sbx" "$g-fails"
-    if [ "$RUN_RC" -eq 1 ]; then
-        okt "exit 1 (real drift still blocks)"
-    else
-        badt "expected 1, got $RUN_RC"
-        echo "$RUN_OUT" | tail -5
-    fi
+    SPECS+=("t3_$g|T3|$g")
 done
 if [ "$blocking_found" -eq 0 ]; then
     badt "no blocking gates found -- REPORT_ONLY_GATES may be over-broad"
 fi
-
-# ── T4: negative control -- the exact pre-49950c2 wiring must be detectable ──
-# Splice fail() back into the report-only gate's branch, then a FAILING run of
-# that gate MUST flip --docs to 1. If it doesn't, T2 is not testing anything.
-t "T4: negative control -- report-only gate re-wired through fail() flips the exit"
-g="${REPORT_ONLY_GATES%% *}"
-if is_wired "$g"; then
-    sbx="$SBASHOME/t4"; make_sandbox "$sbx"
-    if splice_broken_wiring "$sbx/scripts/verify.sh" "$g"; then
-        run_case "$sbx" "$g-fails"
-        if [ "$RUN_RC" -eq 1 ]; then
-            okt "broken wiring flips exit to 1 -> T2's criterion is load-bearing"
-        else
-            badt "broken wiring did NOT flip exit -- T2 would pass even against the 49950c2 bug"
-            echo "$RUN_OUT" | tail -8
-        fi
-    else
-        badt "could not splice the broken wiring -- T4 control is inconclusive"
-    fi
+g4="${REPORT_ONLY_GATES%% *}"
+prep_t4=0
+if is_wired "$g4"; then
+    SPECS+=("t4|T4|$g4")
 else
     badt "no wired report-only gate to use for T4"
 fi
+
+for spec in "${SPECS[@]}"; do
+    id="${spec%%|*}"; rest="${spec#*|}"; kind="${rest%%|*}"
+    sbx="$SBASHOME/$id"
+    make_sandbox "$sbx"
+    if [ "$kind" = "T4" ] && ! splice_broken_wiring "$sbx/scripts/verify.sh" "$g4"; then
+        prep_t4=1
+    fi
+done
+
+OPEN_JOBS=0
+for spec in "${SPECS[@]}"; do
+    id="${spec%%|*}"; rest="${spec#*|}"; kind="${rest%%|*}"; gate="${rest#*|}"
+    tag="clean"; [ "$kind" != "T1" ] && tag="$gate-fails"
+    launch_case "$id" "$SBASHOME/$id" "$tag"
+done
+wait
+
+for spec in "${SPECS[@]}"; do
+    id="${spec%%|*}"; rest="${spec#*|}"; kind="${rest%%|*}"; gate="${rest#*|}"
+    RUN_RC=$(get_rc "$id"); RUN_OUT=$(get_out "$id")
+    case "$kind" in
+        T1)
+            t "T1: all gates green -> --docs exits 0"
+            if [ "$RUN_RC" -eq 0 ]; then
+                okt "exit 0"
+            else
+                badt "expected 0, got $RUN_RC"; echo "$RUN_OUT" | tail -5
+            fi
+            ;;
+        T2)
+            t "T2: report-only gate '$gate' fails (exit 1) -> --docs STILL exits 0"
+            if [ "$RUN_RC" -eq 0 ] && echo "$RUN_OUT" | grep -q "$gate"; then
+                okt "exit 0, finding printed (report-only honored)"
+            else
+                badt "exit $RUN_RC -- report-only semantics broken (the 49950c2 bug class)"
+                echo "$RUN_OUT" | tail -8
+            fi
+            ;;
+        T3)
+            t "T3: blocking gate '$gate' fails (exit 1) -> --docs exits 1"
+            if [ "$RUN_RC" -eq 1 ]; then
+                okt "exit 1 (real drift still blocks)"
+            else
+                badt "expected 1, got $RUN_RC"
+                echo "$RUN_OUT" | tail -5
+            fi
+            ;;
+        T4)
+            t "T4: negative control -- report-only gate re-wired through fail() flips the exit"
+            if [ "$prep_t4" -ne 0 ]; then
+                badt "could not splice the broken wiring -- T4 control is inconclusive"
+            elif [ "$RUN_RC" -eq 1 ]; then
+                okt "broken wiring flips exit to 1 -> T2's criterion is load-bearing"
+            else
+                badt "broken wiring did NOT flip exit -- T2 would pass even against the 49950c2 bug"
+                echo "$RUN_OUT" | tail -8
+            fi
+            ;;
+    esac
+done
 
 # ── T5: REAL doc drift must still block ──────────────────────────────────
 # Runs the REAL check_head_sync.sh against a corrupted STATUS.md, inside a
 # disposable git worktree (shares objects; refs and the real checkout are
 # untouched). The heavy/unrelated gates are stubbed so the only variable is
-# the drift itself.
+# the drift itself. Sequential (touches git); unaffected by META_MAX_JOBS.
+# GITWT: the C:/... form of WT when cygpath exists (Windows) so native git
+# and MSYS bash materialize and READ THE SAME DIRECTORY -- T2606 flake fix.
 t "T5: real doc drift (bogus HEAD citation, real check_head_sync.sh) -> --docs exits 1"
 WT="$(mktemp -d)/wt5"
-if git worktree add --detach "$WT" HEAD >/dev/null 2>&1; then
-    cp "$REPO_ROOT/STATUS.md" "$WT/STATUS.md"
-    sed -i -E 's/`[0-9a-f]{7,40}`/`deadbee`/g' "$WT/STATUS.md"
-    if grep -q 'deadbee' "$WT/STATUS.md"; then
+GITWT="$WT"
+if command -v cygpath >/dev/null 2>&1; then
+    GITWT="$(cygpath -m "$WT")"
+fi
+if git worktree add --detach "$GITWT" HEAD >/dev/null 2>&1 && [ -d "$GITWT/scripts" ]; then
+    cp "$REPO_ROOT/STATUS.md" "$GITWT/STATUS.md"
+    sed -i -E 's/`[0-9a-f]{7,40}`/`deadbee`/g' "$GITWT/STATUS.md"
+    if grep -q 'deadbee' "$GITWT/STATUS.md"; then
         # Stub the cargo-heavy gate and the report-only gate; keep the real
         # check_head_sync.sh so the drift is caught by production code.
-        printf '#!/usr/bin/env bash\nexit 0\n' > "$WT/scripts/check_test_count.sh"
-        printf '#!/usr/bin/env bash\nexit 0\n' > "$WT/scripts/check_no_predation.sh"
-        RUN_OUT=$(cd "$WT" && bash scripts/verify.sh --docs 2>&1); RUN_RC=$?
+        printf '#!/usr/bin/env bash\nexit 0\n' > "$GITWT/scripts/check_test_count.sh"
+        printf '#!/usr/bin/env bash\nexit 0\n' > "$GITWT/scripts/check_no_predation.sh"
+        RUN_OUT=$(cd "$GITWT" && bash scripts/verify.sh --docs 2>&1); RUN_RC=$?
         if [ "$RUN_RC" -eq 1 ] && echo "$RUN_OUT" | grep -qi "head"; then
             okt "exit 1, caught by the real gate (drift still blocks)"
         else
@@ -327,7 +425,7 @@ if git worktree add --detach "$WT" HEAD >/dev/null 2>&1; then
     else
         badt "sandbox STATUS.md had no HEAD citation to corrupt -- T5 is vacuous"
     fi
-    git worktree remove --force "$WT" >/dev/null 2>&1
+    git worktree remove --force "$GITWT" >/dev/null 2>&1
     git worktree prune >/dev/null 2>&1
 else
     badt "could not create a disposable worktree -- T5 skipped as failed"

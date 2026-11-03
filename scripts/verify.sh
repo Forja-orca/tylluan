@@ -119,6 +119,14 @@ if [ "$RUN_RUST" = "1" ]; then
     # profiling T2589): before this, NOTHING ran contracts_test.rs — neither
     # verify.sh (only --lib/--lib --tests) nor CI's security-audit job. It is
     # the deterministic coverage that the live probe below can never guarantee.
+    # F9 workspace broker: deterministic overlap-guard test (fails if globs_overlap is
+    # disabled). Wired 2026-11-03: integration tests under tests/ run in NO chain unless named.
+    if $RUST_CARGO test -p tylluan-kernel --test workspace_overlap_guard; then
+        ok "cargo test -p tylluan-kernel --test workspace_overlap_guard"
+    else
+        fail "cargo test -p tylluan-kernel --test workspace_overlap_guard -- the F9 overlap guard no longer rejects overlapping claims"
+    fi
+
     if $RUST_CARGO test -p tylluan-kernel --test contracts_test; then
         ok "cargo test -p tylluan-kernel --test contracts_test"
     else

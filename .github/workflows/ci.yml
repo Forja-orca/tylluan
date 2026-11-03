@@ -32,6 +32,7 @@ jobs:
       # in NO job and NO local chain, while the live endpoint probe could only
       # observe availability. Pairs with the same gate in scripts/verify.sh.
       - run: cargo test -p tylluan-kernel --test contracts_test
+      - run: cargo test -p tylluan-kernel --test workspace_overlap_guard
       - run: cargo test -p tylluan-cli
       # Optional features get no --features anywhere else in CI, so tylluan-link's
       # mainline-dht code never compiled: it was written against the mainline 0.x
