@@ -26,6 +26,25 @@ pub fn judge_spawn_count() -> u64 {
     JUDGE_SPAWNS.load(Ordering::Relaxed)
 }
 
+/// D-17 / d17_layer1_write_paths: cuántas veces el juez de la capa 2 se invocó
+/// pero **no respondió** (backend efímero no configurado, timeout, error). Sin
+/// este contador un test sólo puede afirmar "se lanzó", que es exactamente la
+/// cobertura vacua que el TL mandó cerrar (`judge_unavailable == false`).
+static JUDGE_UNAVAILABLE: AtomicU64 = AtomicU64::new(0);
+
+pub fn judge_unavailable_count() -> u64 {
+    JUDGE_UNAVAILABLE.load(Ordering::Relaxed)
+}
+
+/// Cuántas veces el juez respondió (con veredicto, sea SAFE o SUSPICIOUS).
+/// `spawns == answered + unavailable + en_vuelo`; el test usa esto para esperar
+/// a que los `tokio::spawn` terminen antes de juzgar los contadores.
+static JUDGE_ANSWERED: AtomicU64 = AtomicU64::new(0);
+
+pub fn judge_answered_count() -> u64 {
+    JUDGE_ANSWERED.load(Ordering::Relaxed)
+}
+
 pub(crate) const WRITE_GATE_GRAMMAR: &str = "root ::= verdict\nverdict ::= \"SAFE\" | \"SUSPICIOUS\"";
 
 pub(crate) const WRITE_GATE_PROMPT_PREFIX: &str = "\
@@ -201,8 +220,12 @@ pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: Str
         // Si no esta configurado/arrancado, la capa 2 se omite (fail-open: la
         // capa 1 determinista ya corrio antes de escribir).
         let verdict = match crate::security::grammar_judge::judge_grammar(&content).await {
-            Ok(v) => v,
+            Ok(v) => {
+                JUDGE_ANSWERED.fetch_add(1, Ordering::Relaxed);
+                v
+            }
             Err(e) => {
+                JUDGE_UNAVAILABLE.fetch_add(1, Ordering::Relaxed);
                 tracing::debug!("write_gate: juez de gramatica efimero no disponible para {node_id}: {e} (no bloquea)");
                 return;
             }

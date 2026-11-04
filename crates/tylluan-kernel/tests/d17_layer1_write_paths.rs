@@ -49,9 +49,13 @@ const BENIGN_CORPUS: &str = concat!(
 /// empezó a detectar D-31 (`inj_13`..`inj_16`). Si el corpus o los patrones
 /// cambian, este test avisa: la lista de capa 1 detectada es parte del contrato
 /// medido.
-const B9_FLAGGED: [&str; 12] = [
-    "inj_01", "inj_02", "inj_07", "inj_12", "inj_13", "inj_14", "inj_15", "inj_16", "inj_19", "inj_22", "inj_35",
-    "inj_36",
+const B9_FLAGGED: [&str; 13] = [
+    "inj_01", "inj_02", "inj_07", "inj_12", "inj_13", "inj_14", "inj_15", "inj_16", "inj_19", "inj_22", "inj_26",
+    "inj_35", "inj_36",
+    // D-105/T2654: inj_26 es el base64 de "Ignore all previous instructions". La capa 1
+    // lo detecta desde B-29 (commit f0ed635f, 2026-11-01), que decodifica base64 antes de
+    // comparar en vez de limpiarlo. No es una regresion: es una deteccion nueva; el
+    // contrato se actualiza aqui a proposito y con la causa, no en silencio.
 ];
 
 fn samples(path: &str) -> Vec<(String, String)> {
@@ -129,6 +133,12 @@ async fn d17_layer1_and_judge_cover_memory_write_and_ingest() {
     // solo test, así que no hay otro hilo leyendo el entorno mientras se fija
     // antes de la primera escritura.
     unsafe { std::env::set_var("TYLLUAN_KERNEL_URL", "http://127.0.0.1:9") };
+    // TL T2679/#1: el guild de Python sólo arranca si `guilds` está en PYTHONPATH.
+    // Sin esto el test pasaba mientras el guild fallaba 13 veces (ModuleNotFoundError),
+    // o sea cubría la capa 1 y se saltaba lo que dice cubrir.
+    if let Some(root) = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()) {
+        unsafe { std::env::set_var("PYTHONPATH", root) };
+    }
 
     let state = support::test_state_custom("d17l1", Some(MASTER.to_string()), false).await;
     let app = build_router(state.clone());
@@ -200,6 +210,29 @@ async fn d17_layer1_and_judge_cover_memory_write_and_ingest() {
         spawns_before + B9_FLAGGED.len() as u64,
         "ingest must launch the judge once per stored document"
     );
+
+    // TL T2679/#1 — juez EXPLÍCITO: "se lanzó" no es "contestó". Esperamos a que
+    // terminen los spawns y exigimos 0 no-disponibles: si el backend del juez no
+    // está, este test falla y lo dice, en vez de pasar por el camino fail-open.
+    {
+        use tylluan_kernel::security::write_gate::{judge_answered_count, judge_unavailable_count};
+        let wanted = spawns_before + B9_FLAGGED.len() as u64;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while judge_answered_count() + judge_unavailable_count() < wanted
+            && std::time::Instant::now() < deadline
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(
+            judge_unavailable_count(),
+            0,
+            "el juez de la capa 2 no respondió en {} de {} invocaciones: \
+             el test no puede afirmar nada sobre la cuarentena sin backend de juez \
+             (configura el juez efímero o saca este binario del job)",
+            judge_unavailable_count(),
+            wanted
+        );
+    }
 
     // (4) Benigno: pasa las dos rutas sin rechazo ni marca (0 falsos positivos)
     // y cada escritura lanza su juicio.
