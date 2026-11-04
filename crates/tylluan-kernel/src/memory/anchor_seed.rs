@@ -58,7 +58,19 @@ pub fn anchor_seed_corpus_in(data_dir: &std::path::Path) -> (String, &'static st
     let override_path = data_dir.join("routing_anchors_seed.jsonl");
     match std::fs::read_to_string(&override_path) {
         Ok(content) => (content, "data-override"),
-        Err(_) => (EMBEDDED_SEED.to_string(), "embedded-asset"),
+        // Sin override: caso normal, el corpus embebido.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            (EMBEDDED_SEED.to_string(), "embedded-asset")
+        }
+        // Hay un fichero (o algo) en la ruta del override pero no se puede leer: caer al
+        // embebido en silencio haria creer al operador que su corpus esta activo.
+        Err(e) => {
+            tracing::warn!(
+                "anchor seed: el override {} existe pero no se puede leer ({e}); uso el corpus embebido",
+                override_path.display()
+            );
+            (EMBEDDED_SEED.to_string(), "embedded-asset-override-unreadable")
+        }
     }
 }
 
@@ -96,5 +108,16 @@ mod tests {
         let entries = parse_anchors(&content);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].source, "seed");
+    }
+
+    /// Buffy H3 (2026-11-04): un override presente pero ilegible no puede pasar por
+    /// "embebido normal". Un directorio con ese nombre falla al leerse con un error que no es NotFound.
+    #[test]
+    fn unreadable_override_is_reported_not_silently_embedded() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("routing_anchors_seed.jsonl")).unwrap();
+        let (content, origin) = anchor_seed_corpus_in(dir.path());
+        assert_eq!(origin, "embedded-asset-override-unreadable");
+        assert_eq!(parse_anchors(&content).len(), parse_anchors(EMBEDDED_SEED).len());
     }
 }
