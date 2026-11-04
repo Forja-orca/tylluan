@@ -43,3 +43,6 @@ logs/
 .vscode/
 .idea/
 *.swp
+
+# The embedded routing-anchor seed ships inside the binary (include_str!), keep it in the build context
+!assets/routing_anchors_seed.jsonl
