@@ -2114,6 +2114,13 @@ fn dbus_is_available() -> bool {
     false
 }
 
+/// D-104: clave de la base en hex, para que la boveda de secretos derive su propia
+/// clave de contenido con separacion de dominio. Misma resolucion que `open_db`
+/// (TYLLUAN_DB_KEY > keychain > fichero), sin duplicar la logica.
+pub fn db_key_hex(data_dir: &Path) -> anyhow::Result<String> {
+    ensure_db_key(data_dir)
+}
+
 fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
     if let Ok(key_hex) = std::env::var("TYLLUAN_DB_KEY") {
         if key_hex.chars().all(|c| c.is_ascii_hexdigit()) && key_hex.len() == 64 {

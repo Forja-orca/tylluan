@@ -617,6 +617,48 @@ command = "opencode"
         .to_string()
     }
 
+    /// D-104 criterio 2: una referencia a la bóveda (`vault:nombre`) y un valor
+    /// en claro de `[[external_mcp]]` no pueden salir NUNCA por `GET /api/v1/config`.
+    #[test]
+    fn d104_vault_ref_and_plain_secret_never_reach_the_safe_config() {
+        let raw = r#"
+[[external_mcp]]
+name = "github"
+url = "https://example.invalid/sse"
+headers = { Authorization = "vault:github", X-Plain = "ghp_EN_CLARO_D104" }
+env = { API_TOKEN = "vault:github-env" }
+"#;
+        let config: crate::config::TylluanConfig = toml::from_str(raw).expect("config");
+        let text = redacted_config_json(&config).to_string();
+
+        assert!(
+            !text.contains("ghp_EN_CLARO_D104"),
+            "el valor en claro no puede aparecer: {text}"
+        );
+        // D-97 §3.2 decía que las referencias se muestran "tal cual" (`vault:github`).
+        // La implementación real enmascara TODO valor. Se fija aquí lo que hace hoy
+        // para que cualquier cambio de criterio sea deliberado y visible.
+        assert!(
+            !text.contains("vault:github"),
+            "hoy la referencia también se enmascara: {text}"
+        );
+        assert!(text.contains("Authorization"), "las claves sí se ven: {text}");
+        assert!(text.contains("API_TOKEN"), "las claves sí se ven: {text}");
+    }
+
+    /// La misma garantía en el endpoint de conectores (`GET /api/v1/mcp/external`).
+    #[test]
+    fn d104_redacted_map_masks_vault_refs_too() {
+        let mut headers = std::collections::HashMap::new();
+        headers.insert("Authorization".to_string(), "vault:github".to_string());
+        headers.insert("X-Plain".to_string(), "ghp_EN_CLARO_D104".to_string());
+
+        let out = redacted_map(&Some(headers)).expect("mapa");
+        assert_eq!(out["Authorization"], REDACTED);
+        assert_eq!(out["X-Plain"], REDACTED);
+        assert_eq!(out.len(), 2, "las claves se conservan");
+    }
+
     #[test]
     fn redaction_hides_secret_values_but_keeps_key_names() {
         let config: crate::config::TylluanConfig = toml::from_str(&sample_raw()).expect("config");

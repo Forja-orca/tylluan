@@ -1209,18 +1209,38 @@ async fn main() -> anyhow::Result<()> {
         info!("📦 [V2] Legacy fallback path: {}", legacy_path);
     }
 
+    // D-104: referencia `vault:<nombre>` en `headers`/`env` de servidores MCP externos.
+    // El valor se resuelve SOLO en memoria: no se reescribe la config ni se loguea.
+    // Fail-closed: si el secreto no existe, el servidor NO se registra (nunca con
+    // una cabecera vacía) y queda un warn con el nombre del secreto.
+    let vault_ctx = prepare_vault_for_external_mcp(&config);
+
     for ext in config.external_mcp.iter() {
         if !ext.active {
             info!("⏭️ [external_mcp] '{}' skipped (active=false)", ext.name);
             continue;
         }
+        let headers = match resolve_vault_map(&vault_ctx, &ext.name, &ext.headers) {
+            Ok(h) => h,
+            Err(e) => {
+                warn!("⛔ [external_mcp] '{}' no arranca: {}", ext.name, e);
+                continue;
+            }
+        };
+        let env = match resolve_vault_map(&vault_ctx, &ext.name, &ext.env) {
+            Ok(e2) => e2,
+            Err(e) => {
+                warn!("⛔ [external_mcp] '{}' no arranca: {}", ext.name, e);
+                continue;
+            }
+        };
         if ext.command.is_none()
             && let Some(url) = &ext.url {
                 // URL-only entry → remote HTTP/SSE MCP server
                 registry_raw.register_http_mcp(
                     &ext.name,
                     url,
-                    ext.headers.clone().unwrap_or_default(),
+                    headers.clone().unwrap_or_default(),
                     ext.timeout_ms,
                 );
                 continue;
@@ -1231,7 +1251,7 @@ async fn main() -> anyhow::Result<()> {
             ext.command.as_deref().unwrap_or(""),
             ext.args.clone().unwrap_or_default(),
             ext.cwd.clone().map(PathBuf::from),
-            ext.env.clone(),
+            env.clone(),
             ext.timeout_ms,
         );
     }
@@ -2772,4 +2792,80 @@ mod ort_entry_contract_tests {
             violations.join("\n")
         );
     }
+}
+
+// ===== D-104: bóveda de secretos (`vault:<nombre>`) para servidores MCP externos =====
+
+/// Contexto de la bóveda: conexión a la base + clave de contenido derivada.
+/// `None` = bóveda no disponible; quien use `vault:` NO arranca (fail-closed).
+type VaultCtx = Option<(rusqlite::Connection, [u8; 32])>;
+
+fn prepare_vault_for_external_mcp(config: &TylluanConfig) -> VaultCtx {
+    use tylluan_kernel::security::secret_vault;
+
+    let uses_vault = |m: &Option<std::collections::HashMap<String, String>>| {
+        m.as_ref()
+            .is_some_and(|h| h.values().any(|v| secret_vault::is_vault_ref(v)))
+    };
+    // Si nadie referencia la bóveda no se abre la base ni se toca el keychain.
+    if !config
+        .external_mcp
+        .iter()
+        .any(|e| uses_vault(&e.headers) || uses_vault(&e.env))
+    {
+        return None;
+    }
+
+    if let Err(e) = secret_vault::vault_available() {
+        warn!("[vault] no disponible: {}", e);
+        return None;
+    }
+
+    let silva_path = Path::new(&config.silva.db_path);
+    let dir = silva_path.parent().unwrap_or_else(|| Path::new("."));
+    let key_hex = match tylluan_kernel::config::db_key_hex(dir) {
+        Ok(k) => k,
+        Err(e) => {
+            warn!("[vault] sin clave de base: {}", e);
+            return None;
+        }
+    };
+    let key = match secret_vault::derive_key(&key_hex) {
+        Ok(k) => k,
+        Err(e) => {
+            warn!("[vault] clave inválida: {}", e);
+            return None;
+        }
+    };
+    match tylluan_kernel::config::open_db(silva_path) {
+        Ok(conn) => Some((conn, key)),
+        Err(e) => {
+            warn!("[vault] no se pudo abrir {}: {}", silva_path.display(), e);
+            None
+        }
+    }
+}
+
+/// Resuelve `headers`/`env` de un servidor externo. Sin referencias devuelve el
+/// mapa tal cual (compatibilidad); con referencias exige bóveda y secreto.
+fn resolve_vault_map(
+    ctx: &VaultCtx,
+    server: &str,
+    map: &Option<std::collections::HashMap<String, String>>,
+) -> anyhow::Result<Option<std::collections::HashMap<String, String>>> {
+    use tylluan_kernel::security::secret_vault;
+
+    let Some(m) = map else { return Ok(None) };
+    if !m.values().any(|v| secret_vault::is_vault_ref(v)) {
+        return Ok(Some(m.clone()));
+    }
+    let (conn, key) = ctx.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "usa `vault:` pero la bóveda no está disponible \
+             (¿binario sin --features encryption o [security] encrypt_at_rest = false?)"
+        )
+    })?;
+    let resolved = secret_vault::resolve_map(m, |name| secret_vault::get_secret(conn, key, name))
+        .map_err(|e| anyhow::anyhow!("servidor {server}: {e}"))?;
+    Ok(Some(resolved))
 }

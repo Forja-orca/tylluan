@@ -25,6 +25,7 @@ pub mod grammar_judge;
 pub mod judge_telemetry;
 pub mod trust;
 pub mod guild_credential;
+pub mod secret_vault;
 
 #[cfg(test)]
 mod integration_tests;
