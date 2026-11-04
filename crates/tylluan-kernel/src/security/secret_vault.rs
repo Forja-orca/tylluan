@@ -193,6 +193,53 @@ pub(crate) fn set_secret_unchecked(
     Ok(())
 }
 
+/// D-104 fase 2: resuelve un mapa (`headers`/`env`) usando la bóveda de la base
+/// configurada. Pensado para las rutas HTTP que registran servidores externos en
+/// caliente (`api_mcp.rs`), donde no hay contexto de arranque.
+///
+/// - Sin referencias `vault:` devuelve el mapa tal cual (no abre nada).
+/// - Con referencias exige bóveda disponible y secreto existente (fail-closed).
+/// - Registra los valores como secretos para la redacción de previews (D-107).
+pub fn resolve_with_vault(
+    map: &std::collections::HashMap<String, String>,
+) -> Result<std::collections::HashMap<String, String>, VaultRefError> {
+    // Los valores en claro también son credenciales: se registran para la redacción de
+    // previews (D-107) ANTES de decidir si hace falta la bóveda.
+    for value in map.values() {
+        crate::security::redaction::register_secret_value(value);
+    }
+    if !map.values().any(|v| is_vault_ref(v)) {
+        return Ok(map.clone());
+    }
+    let prepared = prepare_vault_ctx().map_err(|e| VaultRefError::Missing {
+        name: format!("<bóveda no disponible: {e}>"),
+    })?;
+    let (conn, key) = prepared;
+    let resolved = resolve_map(map, |name| get_secret(&conn, &key, name))?;
+    for value in resolved.values().chain(map.values()) {
+        crate::security::redaction::register_secret_value(value);
+    }
+    Ok(resolved)
+}
+
+/// Abre la bóveda siguiendo el mismo camino que el arranque: config cacheada,
+/// `silva.db_path`, `config::open_db` y `db_key_hex` + `derive_key`.
+fn prepare_vault_ctx() -> anyhow::Result<(Connection, [u8; 32])> {
+    vault_available()?;
+    let cfg = crate::config::TylluanConfig::load_cached()
+        .map_err(|e| anyhow::anyhow!("config: {e}"))?;
+    let silva_path = {
+        let guard = cfg
+            .try_read()
+            .map_err(|_| anyhow::anyhow!("config en escritura"))?;
+        std::path::PathBuf::from(&guard.silva.db_path)
+    };
+    let dir = silva_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let key = derive_key(&crate::config::db_key_hex(dir)?)?;
+    let conn = crate::config::open_db(&silva_path)?;
+    Ok((conn, key))
+}
+
 /// Devuelve el valor en claro si existe.
 pub fn get_secret(conn: &Connection, key: &[u8; 32], name: &str) -> Result<Option<String>> {
     ensure_schema(conn)?;
@@ -253,17 +300,22 @@ mod tests {
         let key = derive_key(KEY_HEX).unwrap();
         let marker = "MARCADOR_SECRETO_D104_XYZ";
         set_secret_unchecked(&conn, &key, "api", marker).unwrap();
-        let raw: Vec<u8> = conn
+        // D-104/TL: si no se puede leer la columna, el test debe FALLAR, no pasar
+        // con un vector vacío (eso convertía el guardián en decoración).
+        let blob: String = conn
             .query_row(
-                "SELECT group_concat(ciphertext) FROM external_secrets",
+                "SELECT COALESCE(group_concat(hex(ciphertext)), '') FROM external_secrets",
                 [],
-                |r| r.get::<_, String>(0),
+                |r| r.get(0),
             )
-            .map(|s| s.into_bytes())
-            .unwrap_or_default();
+            .expect("la columna ciphertext debe poder leerse");
+        assert!(!blob.is_empty(), "no hay ciphertext que inspeccionar");
+        let raw: Vec<u8> = blob.into_bytes();
+        let marker_hex: String = marker.bytes().map(|b| format!("{b:02x}")).collect();
+        let raw_hex = String::from_utf8_lossy(&raw).to_string();
         assert!(
-            !raw.windows(marker.len()).any(|w| w == marker.as_bytes()),
-            "el texto en claro no puede estar en la columna cifrada"
+            !raw_hex.contains(&marker_hex),
+            "el texto en claro no puede estar en la columna cifrada (hex del marcador presente)"
         );
     }
 
@@ -308,6 +360,18 @@ mod tests {
         assert!(set_secret_unchecked(&conn, &key, "", "x").is_err());
         assert!(set_secret_unchecked(&conn, &key, "con espacio", "x").is_err());
         assert!(set_secret_unchecked(&conn, &key, "ok-1.2_3", "x").is_ok());
+    }
+
+    /// D-107/TL (2026-11-04): sin ninguna referencia `vault:` los valores en claro de
+    /// headers/env deben quedar igualmente registrados para la redacción de previews.
+    #[test]
+    fn resolve_with_vault_registra_los_valores_en_claro_aunque_no_haya_referencias() {
+        let mut m = std::collections::HashMap::new();
+        m.insert("X-Api-Key".to_string(), "ClaroSinReferenciaTL2026".to_string());
+        let out = resolve_with_vault(&m).expect("sin referencias no abre la bóveda");
+        assert_eq!(out, m, "sin referencias el mapa sale intacto");
+        let masked = crate::security::redaction::scrub_registered("hola ClaroSinReferenciaTL2026 fin");
+        assert!(!masked.contains("ClaroSinReferenciaTL2026"), "debe quedar registrado y enmascarado: {masked}");
     }
 
     #[test]

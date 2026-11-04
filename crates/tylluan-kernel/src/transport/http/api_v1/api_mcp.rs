@@ -32,6 +32,31 @@ pub struct AddMcpServerRequest {
     timeout_ms: Option<u64>,
 }
 
+/// D-104 fase 2: resuelve `vault:<nombre>` en un mapa de `headers`/`env` para las
+/// rutas que registran servidores externos en caliente. Fail-closed: si la bóveda
+/// no está o el secreto falta, la petición responde 400 con el motivo en vez de
+/// registrar el servidor con una credencial vacía.
+fn resolve_vault_or_400(
+    map: &Option<std::collections::HashMap<String, String>>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let Some(map) = map else {
+        return Ok(std::collections::HashMap::new());
+    };
+    crate::security::secret_vault::resolve_with_vault(map).map_err(|e| e.to_string())
+}
+
+/// Respuesta 400 uniforme cuando la bóveda no puede resolver una credencial.
+fn vault_unresolved_response(detail: String) -> axum::response::Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({
+            "error": "VAULT_UNRESOLVED",
+            "detail": detail,
+        })),
+    )
+        .into_response()
+}
+
 pub async fn list_mcp_servers_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let config = state.config.read().await;
     let reg_arc = state.registry.arc();
@@ -114,17 +139,24 @@ pub async fn add_mcp_server_handler(State(state): State<Arc<HttpState>>, Json(re
             if sse_url.is_empty() || post_url.is_empty() {
                 return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "sse_url and post_url required for SSE MCP"}))).into_response();
             }
-            reg.register_sse_mcp(
-                &entry.name,
-                sse_url,
-                post_url,
-                entry.headers.clone().unwrap_or_default(),
-                entry.timeout_ms,
-            );
+            // D-104 fase 2: misma resolución `vault:` que en el arranque; fail-closed.
+            let headers = match resolve_vault_or_400(&entry.headers) {
+                Ok(h) => h,
+                Err(e) => return vault_unresolved_response(e),
+            };
+            reg.register_sse_mcp(&entry.name, sse_url, post_url, headers, entry.timeout_ms);
         } else if let Some(url) = &entry.url {
-            reg.register_http_mcp(&entry.name, url, entry.headers.clone().unwrap_or_default(), entry.timeout_ms);
+            let headers = match resolve_vault_or_400(&entry.headers) {
+                Ok(v) => v,
+                Err(e) => return vault_unresolved_response(e),
+            };
+            reg.register_http_mcp(&entry.name, url, headers, entry.timeout_ms);
         } else if let Some(command) = &entry.command {
-            reg.register_external(&entry.name, command, entry.args.clone().unwrap_or_default(), entry.cwd.clone().map(std::path::PathBuf::from), entry.env.clone(), entry.timeout_ms);
+            let env = match resolve_vault_or_400(&entry.env) {
+                Ok(v) => v,
+                Err(e) => return vault_unresolved_response(e),
+            };
+            reg.register_external(&entry.name, command, entry.args.clone().unwrap_or_default(), entry.cwd.clone().map(std::path::PathBuf::from), Some(env), entry.timeout_ms);
         }
     }
 
@@ -566,18 +598,20 @@ pub async fn update_mcp_server_handler(
             let reg_arc = state.registry.arc();
             let mut reg = reg_arc.write().await;
             if let Some(ext) = config.external_mcp.iter().find(|e| e.name == name) {
+                let headers = match resolve_vault_or_400(&ext.headers) {
+                    Ok(h) => h,
+                    Err(e) => return vault_unresolved_response(e),
+                };
                 if let (Some(sse_url), Some(post_url)) = (&ext.sse_url, &ext.post_url) {
-                    reg.register_sse_mcp(
-                        &name,
-                        sse_url,
-                        post_url,
-                        ext.headers.clone().unwrap_or_default(),
-                        ext.timeout_ms,
-                    );
+                    reg.register_sse_mcp(&name, sse_url, post_url, headers, ext.timeout_ms);
                 } else if let Some(url) = &ext.url {
-                    reg.register_http_mcp(&name, url, ext.headers.clone().unwrap_or_default(), ext.timeout_ms);
+                    reg.register_http_mcp(&name, url, headers, ext.timeout_ms);
                 } else if let Some(command) = &ext.command {
-                    reg.register_external(&name, command, ext.args.clone().unwrap_or_default(), ext.cwd.clone().map(std::path::PathBuf::from), ext.env.clone(), ext.timeout_ms);
+                    let env = match resolve_vault_or_400(&ext.env) {
+                        Ok(v) => v,
+                        Err(e) => return vault_unresolved_response(e),
+                    };
+                    reg.register_external(&name, command, ext.args.clone().unwrap_or_default(), ext.cwd.clone().map(std::path::PathBuf::from), Some(env), ext.timeout_ms);
                 }
             }
         }

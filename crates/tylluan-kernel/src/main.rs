@@ -2856,6 +2856,13 @@ fn resolve_vault_map(
     use tylluan_kernel::security::secret_vault;
 
     let Some(m) = map else { return Ok(None) };
+    // D-107: los valores en claro de headers/env son credenciales aunque no haya ninguna
+    // referencia `vault:`; se registran ANTES de decidir si hace falta la bóveda. Sin esto,
+    // en un binario sin cifrado (el caso de producción) la redacción de previews no tenía
+    // nada que ocultar.
+    for value in m.values() {
+        tylluan_kernel::security::redaction::register_secret_value(value);
+    }
     if !m.values().any(|v| secret_vault::is_vault_ref(v)) {
         return Ok(Some(m.clone()));
     }
@@ -2867,5 +2874,14 @@ fn resolve_vault_map(
     })?;
     let resolved = secret_vault::resolve_map(m, |name| secret_vault::get_secret(conn, key, name))
         .map_err(|e| anyhow::anyhow!("servidor {server}: {e}"))?;
+    // D-107 (TL T2689-b): aquí es donde D-104 ya tiene los valores en la mano, así
+    // que aquí se registran como "nunca deben aparecer en un preview de auditoría".
+    // Se registran TAMBIÉN los que vienen en claro: son credenciales igual.
+    for value in resolved.values() {
+        tylluan_kernel::security::redaction::register_secret_value(value);
+    }
+    for value in m.values() {
+        tylluan_kernel::security::redaction::register_secret_value(value);
+    }
     Ok(Some(resolved))
 }

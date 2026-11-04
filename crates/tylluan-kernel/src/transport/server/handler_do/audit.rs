@@ -334,6 +334,11 @@ fn log_audit_entry_at(path: &std::path::Path, intent: &str, guild: &str, tool: &
     let snapshot_json = crate::router::system_snapshot::global()
         .and_then(|s| serde_json::to_string(s).ok());
 
+    // D-107: puerta ÚNICA de redacción de previews. Los llamadores pasan el texto
+    // crudo (salida de tool incluida); aquí se limpia antes de tocar disco, así un
+    // cuarto llamador futuro hereda la redacción sin que nadie se acuerde.
+    let preview = &crate::security::redaction::scrub_result_preview(preview);
+
     tx.execute(
         "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash, latency_ms, human_intervention, system_snapshot)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -550,6 +555,48 @@ pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::verify_audit_chain_at;
+
+    /// D-107 de punta a punta por la PUERTA ÚNICA: se registra un valor como
+    /// secreto, se escribe una fila de auditoría con ese valor en el preview y se
+    /// lee la fila de la base. Si la redacción se cae, este test se pone rojo.
+    /// Complementa los unitarios de `security::redaction` (que prueban la función)
+    /// probando el sitio real donde se escribe: `log_audit_entry_at`.
+    #[test]
+    fn d107_el_preview_no_llega_a_la_base_con_el_secreto() {
+        use super::log_audit_entry_at;
+
+        const SECRETO: &str = "ValorSecretoD107E2E";
+        crate::security::redaction::register_secret_value(SECRETO);
+
+        let db = std::env::temp_dir().join(format!(
+            "d107_audit_e2e_{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&db);
+
+        let preview = format!("salida de la tool: ok valor {SECRETO} fin");
+        log_audit_entry_at(&db, "d107 e2e", "guild_x", "tool_y", "agent-z", true, &preview, 1, false)
+            .expect("la fila de auditoría debe escribirse");
+
+        let conn = crate::config::open_db(&db).expect("abrir la base de auditoría");
+        let guardado: String = conn
+            .query_row(
+                "SELECT result_preview FROM guild_audit_log ORDER BY id DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .expect("la fila debe poder leerse");
+        assert!(
+            !guardado.contains(SECRETO),
+            "el secreto llegó tal cual a guild_audit_log.result_preview: {guardado}"
+        );
+        assert!(
+            guardado.contains("***"),
+            "debe quedar la marca de redacción en el preview: {guardado}"
+        );
+
+        let _ = std::fs::remove_file(&db);
+    }
 
     #[test]
     fn guild_audit_retention_prunes_old_prefix_and_preserves_anchor() {

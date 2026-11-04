@@ -18,7 +18,12 @@ use crate::transport::server::utils::extract_path_from_intent;
 /// Parses common error patterns and logs them to the friction tracking system.
 fn capture_friction_from_result(intent: &str, guild: &str, tool: &str, result_text: &str) {
     let lower = result_text.to_lowercase();
-    let preview: String = result_text.chars().take(100).collect();
+    // D-107: la fricción es el mismo dato que la auditoría con otro destino; pasa
+    // por la misma redacción y luego se recorta a 100.
+    let preview: String = crate::security::redaction::scrub_result_preview(result_text)
+        .chars()
+        .take(100)
+        .collect();
 
     if result_text.contains("BLOCKED:") {
         // Extract the quoted command, e.g. "BLOCKED: 'list' is not in..." -> "list"
