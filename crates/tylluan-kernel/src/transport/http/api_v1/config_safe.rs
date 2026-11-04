@@ -42,6 +42,23 @@ pub struct SchemaField {
     pub reason: &'static str,
 }
 
+/// T-DSH-178 (hallazgo H1 de Buffy, 2026-11-04): claves cuyo valor el kernel
+/// captura SOLO al arrancar — appender rotativo de logging (main.rs:50-59),
+/// supervisor de mantenimiento (main.rs:1455-1456) y bucle reindexador
+/// (main.rs:1960-1961 copia + set_interval). Son la fuente única: el test
+/// `t_dsh_178_boot_only_tabla_ata_el_esquema` las contrasta con SCHEMA en
+/// ambos sentidos, de modo que quitar una entrada de aquí (o su marca en el
+/// esquema) pone el test ROJO. `memory.reindex_node_delay_ms` NO está: se
+/// lee fresco en cada pasada (api_memory.rs:134), es en caliente.
+pub const BOOT_ONLY_KEYS: &[&str] = &[
+    "logging.max_file_size_mb",
+    "logging.max_files",
+    "memory.background_concurrency",
+    "memory.background_max_wait_secs",
+    "memory.reindex_nodes_per_tick",
+    "memory.reindex_tick_secs",
+];
+
 pub const SCHEMA: &[SchemaField] = &[
     // General
     SchemaField { key: "low_memory_mode", section: "general", kind: "boolean", editable: true, requires_restart: false, sensitive: false, min: None, max: None, options: &[], reason: "" },
@@ -56,13 +73,13 @@ pub const SCHEMA: &[SchemaField] = &[
     SchemaField { key: "inference.primary_model", section: "inference", kind: "string", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], reason: "" },
     SchemaField { key: "silva.reranker_enabled", section: "inference", kind: "boolean", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], reason: "" },
     // Mantenimiento
-    SchemaField { key: "memory.background_concurrency", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(1.0), max: Some(32.0), options: &[], reason: "" },
-    SchemaField { key: "memory.background_max_wait_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(3600.0), options: &[], reason: "" },
-    SchemaField { key: "memory.reindex_node_delay_ms", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(10000.0), options: &[], reason: "" },
-    SchemaField { key: "memory.reindex_nodes_per_tick", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(1.0), max: Some(10000.0), options: &[], reason: "" },
-    SchemaField { key: "memory.reindex_tick_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(1.0), max: Some(86400.0), options: &[], reason: "" },
-    SchemaField { key: "logging.max_file_size_mb", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(1.0), max: Some(10240.0), options: &[], reason: "" },
-    SchemaField { key: "logging.max_files", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(1.0), max: Some(100.0), options: &[], reason: "" },
+    SchemaField { key: "memory.background_concurrency", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(32.0), options: &[], reason: "el supervisor se crea al arrancar (H1)" },
+    SchemaField { key: "memory.background_max_wait_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(0.0), max: Some(3600.0), options: &[], reason: "el supervisor se crea al arrancar (H1)" },
+    SchemaField { key: "memory.reindex_node_delay_ms", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(10000.0), options: &[], reason: "en caliente: se lee en cada pasada" },
+    SchemaField { key: "memory.reindex_nodes_per_tick", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(10000.0), options: &[], reason: "el bucle lo captura al arrancar (H1)" },
+    SchemaField { key: "memory.reindex_tick_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(86400.0), options: &[], reason: "el intervalo se fija al arrancar (H1)" },
+    SchemaField { key: "logging.max_file_size_mb", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(10240.0), options: &[], reason: "el appender rotativo se abre al arrancar (H1)" },
+    SchemaField { key: "logging.max_files", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(100.0), options: &[], reason: "el appender rotativo se abre al arrancar (H1)" },
     // Seguridad (solo lectura en A0; A3 añade acciones con código de operador)
     SchemaField { key: "security.intent_filter", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], reason: "sensible: solo lectura en A0 (A3: código de operador)" },
     SchemaField { key: "security.coherence_gate_hybrid_enabled", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], reason: "sensible: solo lectura en A0" },
@@ -688,6 +705,35 @@ env = { API_TOKEN = "vault:github-env" }
         assert_eq!(model["requires_restart"], true);
         let dims = fields.iter().find(|f| f["key"] == "memory.vector_dimensions").expect("dims");
         assert_eq!(dims["editable_via_api"], false);
+    }
+
+    #[test]
+    fn t_dsh_178_boot_only_tabla_ata_el_esquema_en_ambos_sentidos() {
+        // Sentido 1: toda clave de la tabla existe en el esquema, es editable y
+        // está marcada requires_restart=true. Quitar la marca en SCHEMA -> ROJO.
+        for key in BOOT_ONLY_KEYS {
+            let f = schema_field(key).unwrap_or_else(|| panic!("BOOT_ONLY_KEYS registra {key}, ausente del esquema"));
+            assert!(f.requires_restart, "{key} debe marcarse requires_restart=true (H1)");
+            assert!(f.editable, "{key} debe seguir editable via A0");
+        }
+        // Sentido 2: el conjunto de claves de la seccion maintenance marcadas
+        // true en SCHEMA es EXACTAMENTE la tabla. Quitar una entrada de
+        // BOOT_ONLY_KEYS (mutacion) o anadir una clave true sin registrarla
+        // aqui -> ROJO. Es el lazo que pide el TL: la proteccion no puede
+        // retirarse sin romper el test.
+        let mut marcadas: Vec<&str> = SCHEMA
+            .iter()
+            .filter(|f| f.section == "maintenance" && f.requires_restart)
+            .map(|f| f.key)
+            .collect();
+        marcadas.sort_unstable();
+        let mut tabla: Vec<&str> = BOOT_ONLY_KEYS.to_vec();
+        tabla.sort_unstable();
+        assert_eq!(marcadas, tabla, "esquema(maintenance, requires_restart) != BOOT_ONLY_KEYS");
+        // Y la clave caliente sigue caliente: si alguien la marca true sin
+        // justification, este assert lo pilla.
+        let delay = schema_field("memory.reindex_node_delay_ms").expect("delay_ms");
+        assert!(!delay.requires_restart, "reindex_node_delay_ms se lee en cada pasada (api_memory.rs:134), es en caliente");
     }
 
     #[test]
