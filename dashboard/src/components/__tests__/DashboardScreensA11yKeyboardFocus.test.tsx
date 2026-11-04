@@ -3,7 +3,8 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { VisualControlRoom } from '../VisualControlRoom';
 import { MemoryConsolidated } from '../MemoryConsolidated';
-import { ModelsTab } from '../ModelsTab';
+import { InferenceSettingsPanel } from '../settings/InferenceSettingsPanel';
+import type { NexusBridge } from '../../lib/nexus-bridge';
 import { SettingsTab } from '../SettingsTab';
 import { IngestPanel } from '../IngestPanel';
 
@@ -59,21 +60,6 @@ vi.mock('../hooks/usePolling', () => ({
   usePolling: () => undefined,
 }));
 
-vi.mock('../ModelsLocalInference', () => ({
-  ModelsLocalInference: () => <div data-testid="mock-models-local-inference">Inferencia Local Content</div>,
-}));
-
-vi.mock('../ModelsRoleAssignment', () => ({
-  ModelsRoleAssignment: () => <div data-testid="mock-models-role-assignment">Asignacion Roles Content</div>,
-}));
-
-vi.mock('../ModelsExternalProviders', () => ({
-  ModelsExternalProviders: () => <div data-testid="mock-models-external-providers">Proveedores Externos Content</div>,
-}));
-
-vi.mock('../ModelsEmbeddingsDisk', () => ({
-  ModelsEmbeddingsDisk: () => <div data-testid="mock-models-embeddings-disk">Embeddings Content</div>,
-}));
 
 describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
   describe('VisualControlRoom Tablist Keyboard Navigation', () => {
@@ -160,36 +146,28 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
     });
   });
 
-  describe('ModelsTab Keyboard Navigation & Alertdialog Focus', () => {
-    it('supports Arrow key navigation between model section tabs', () => {
-      render(<ModelsTab bridge={null} />);
+  describe('InferenceSettingsPanel Accessibility & Presets', () => {
+    it('supports selecting generation presets and accessible controls', async () => {
+      const mockBridge = {
+        fetchRaw: vi.fn().mockImplementation((url: string) => {
+          if (url === '/api/v1/config') return Promise.resolve({ inference: { device: 'cpu' } });
+          if (url === '/api/v1/config/schema') return Promise.resolve({ fields: [] });
+          if (url === '/api/v1/models') return Promise.resolve({ detected_local_models: [] });
+          if (url === '/api/v1/inference/points') return Promise.resolve({ points: {} });
+          if (url === '/api/v1/external-providers') return Promise.resolve([]);
+          return Promise.resolve({});
+        }),
+      };
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={vi.fn()} />);
 
-      const tablist = screen.getByRole('tablist', { name: /secciones de modelos/i });
-      expect(tablist).toBeInTheDocument();
+      const heading = await screen.findByRole('heading', { name: /Capa 1 — Motor de Inferencia/i });
+      expect(heading).toBeInTheDocument();
 
-      const inferenceTab = screen.getByRole('tab', { name: /inferencia local/i });
-      const rolesTab = screen.getByRole('tab', { name: /asignación de roles/i });
-      const externalTab = screen.getByRole('tab', { name: /proveedores externos/i });
-      const embeddingsTab = screen.getByRole('tab', { name: /embeddings y disco/i });
-
-      expect(inferenceTab).toHaveAttribute('aria-selected', 'true');
-      expect(inferenceTab).toHaveAttribute('tabIndex', '0');
-
-      // ArrowRight: inference -> roles
-      inferenceTab.focus();
-      fireEvent.keyDown(inferenceTab, { key: 'ArrowRight' });
-      expect(rolesTab).toHaveAttribute('aria-selected', 'true');
-      expect(document.activeElement).toBe(rolesTab);
-
-      // ArrowRight: roles -> external
-      fireEvent.keyDown(rolesTab, { key: 'ArrowRight' });
-      expect(externalTab).toHaveAttribute('aria-selected', 'true');
-      expect(document.activeElement).toBe(externalTab);
-
-      // End: jump to embeddings
-      fireEvent.keyDown(externalTab, { key: 'End' });
-      expect(embeddingsTab).toHaveAttribute('aria-selected', 'true');
-      expect(document.activeElement).toBe(embeddingsTab);
+      const fastPreset = screen.getByRole('button', { name: /Rápido \(Baja Latencia\)/i });
+      fastPreset.focus();
+      expect(document.activeElement).toBe(fastPreset);
+      fireEvent.click(fastPreset);
+      expect(fastPreset.className).toContain('bg-primary/10');
     });
   });
 

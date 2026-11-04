@@ -12,7 +12,6 @@ describe('LOTE AG — Rendimiento de Carga y Optimización de Bundles', () => {
         'ColoquioTab',
         'ApprovalsAndSecurityTab',
         'MemoryConsolidated',
-        'ModelsTab',
         'SettingsTab',
         'DiagnosticTab',
       ];

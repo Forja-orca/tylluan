@@ -157,7 +157,7 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
   });
 
   describe('InferenceSettingsPanel', () => {
-    it('absorbe Model Hub: renderiza Capa 1 (Motor/Hardware), Capa 2 (Puntos cognitivos T-DSH-116) y Capa 3 (Soberanía)', async () => {
+    it('absorbe Model Hub: renderiza Capa 1 (Motor/Hardware), Capa 2 (Inventario en disco), Capa 3 (Puntos cognitivos T-DSH-116), Capa 4 (Proveedores externos con ping de latencia) y Capa 5 (Soberanía)', async () => {
       mockBridge.fetchRaw.mockImplementation((url: string) => {
         if (url === '/api/v1/config') {
           return Promise.resolve({
@@ -176,8 +176,11 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
         }
         if (url === '/api/v1/models') {
           return Promise.resolve({
-            active: { embedding: 'mxbai-embed-large', vector_dimensions: 1024 },
-            detected_local_models: [{ id: 'qwen2.5-1.5b', name: 'Local Qwen 1.5B', size_mb: 2944 }],
+            active: { embedding: 'mxbai-embed-large', vector_dimensions: 1024, inference: 'qwen2.5-1.5b' },
+            detected_local_models: [
+              { id: 'qwen2.5-1.5b', name: 'Local Qwen 1.5B', size_mb: 2944, model_type: 'generative' },
+              { id: 'smollm2-360m', name: 'Local SmolLM2', size_mb: 720, model_type: 'generative' },
+            ],
           });
         }
         if (url === '/api/v1/inference/points') {
@@ -191,6 +194,18 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
             },
           });
         }
+        if (url === '/api/v1/external-providers') {
+          return Promise.resolve([
+            {
+              name: 'openrouter',
+              type: 'openai_compatible',
+              base_url: 'https://openrouter.ai/api/v1',
+              api_key_env: 'OPENROUTER_API_KEY',
+              models: ['gpt-4o-mini', 'claude-3-haiku'],
+              api_key_set: true,
+            },
+          ]);
+        }
         return Promise.resolve({});
       });
 
@@ -198,8 +213,10 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
 
       await waitFor(() => {
         expect(screen.getByText(/Capa 1 — Motor de Inferencia y Aceleración Local/i)).toBeInTheDocument();
-        expect(screen.getByText(/Capa 2 — Matriz de Enrutamiento Cognitivo/i)).toBeInTheDocument();
-        expect(screen.getByText(/Capa 3 — Política de Resiliencia y Fallback Soberano/i)).toBeInTheDocument();
+        expect(screen.getByText(/Capa 2 — Inventario Físico de Modelos en Disco/i)).toBeInTheDocument();
+        expect(screen.getByText(/Capa 3 — Matriz de Enrutamiento Cognitivo/i)).toBeInTheDocument();
+        expect(screen.getByText(/Capa 4 — Proveedores Externos y Telemetría de Latencia/i)).toBeInTheDocument();
+        expect(screen.getByText(/Capa 5 — Política de Resiliencia y Fallback Soberano/i)).toBeInTheDocument();
       });
 
       // Verificamos los 4 puntos canónicos T-DSH-116
@@ -211,14 +228,46 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
       // Invariante de arquitectura
       expect(screen.getByText(/1024 dimensiones/i)).toBeInTheDocument();
 
-      // Guardar un punto cognitivo invoca POST /api/v1/inference/points/{point} con persist: true
+      // Capa 2: Verificamos inventario en disco
+      expect(screen.getAllByText(/Local Qwen 1.5B/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/2944 MB/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/Modelo Primario Activo/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Local SmolLM2/i).length).toBeGreaterThanOrEqual(1);
+
+      // Capa 4: Verificamos proveedor externo y prueba de latencia (ping)
+      expect(screen.getByRole('heading', { name: /openrouter/i })).toBeInTheDocument();
+      expect(screen.getByText(/OPENROUTER_API_KEY/i)).toBeInTheDocument();
+
       mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url.startsWith('/api/v1/external-providers/openrouter/test')) {
+          return Promise.resolve({
+            ok: true,
+            status: 'online',
+            provider: 'openrouter',
+            type: 'openai_compatible',
+            base_url: 'https://openrouter.ai/api/v1',
+            http_status: 200,
+            latency_ms: 142,
+          });
+        }
         if (url.startsWith('/api/v1/inference/points/chat')) {
           return Promise.resolve({ ok: true });
         }
         return Promise.resolve({});
       });
 
+      const pingBtn = screen.getByRole('button', { name: /comprobar latencia/i });
+      fireEvent.click(pingBtn);
+
+      await waitFor(() => {
+        expect(mockBridge.fetchRaw).toHaveBeenCalledWith(
+          '/api/v1/external-providers/openrouter/test',
+          expect.objectContaining({ method: 'POST' })
+        );
+        expect(screen.getByText(/142 ms/i)).toBeInTheDocument();
+      });
+
+      // Guardar un punto cognitivo invoca POST /api/v1/inference/points/{point} con persist: true
       const saveChatBtn = screen.getByRole('button', { name: /guardar chat/i });
       fireEvent.click(saveChatBtn);
 

@@ -4,7 +4,6 @@ import {
   MessageSquare,
   ShieldCheck,
   Database,
-  Cpu,
   Settings,
   Beaker,
   Activity,
@@ -37,11 +36,10 @@ import { OverviewConsolidated } from './components/OverviewConsolidated'
 import { TylluanLogo } from './components/TylluanLogo'
 import DeviceStatusBadge from './components/DeviceStatusBadge'
 
-// Lazy-loaded Views (6 Sovereign Views + Optional Diagnostic)
+// Lazy-loaded Views (Sovereign Views + Optional Diagnostic)
 const ColoquioTab = lazy(() => import('./components/ColoquioTab').then(m => ({ default: m.ColoquioTab })))
 const ApprovalsAndSecurityTab = lazy(() => import('./components/ApprovalsAndSecurityTab').then(m => ({ default: m.ApprovalsAndSecurityTab })))
 const MemoryConsolidated = lazy(() => import('./components/MemoryConsolidated'))
-const ModelsTab = lazy(() => import('./components/ModelsTab').then(m => ({ default: m.ModelsTab })))
 const SettingsTab = lazy(() => import('./components/SettingsTab').then(m => ({ default: m.SettingsTab })))
 const DiagnosticTab = lazy(() => import('./components/DiagnosticTab').then(m => ({ default: m.DiagnosticTab })))
 const VisualControlRoom = lazy(() => import('./components/VisualControlRoom').then(m => ({ default: m.VisualControlRoom })))
@@ -89,10 +87,10 @@ function App() {
     const onSwitchTab = (event: Event) => {
       const id = (event as CustomEvent<string>).detail;
       if (id) {
-        // Map legacy tab names to the 6 official tabs if triggered by old code
+        // Map legacy tab names to the official tabs if triggered by old code
         if (id === 'team') handleTabChange('coloquio');
         else if (id === 'audit') handleTabChange('approvals');
-        else if (id === 'guilds') handleTabChange('models');
+        else if (id === 'guilds' || id === 'models') handleTabChange('settings');
         else if (id === 'lab') handleTabChange('diagnostic');
         else handleTabChange(id);
       }
@@ -103,7 +101,11 @@ function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const queryTab = urlParams.get('tab');
     if (queryTab) {
-      handleTabChange(queryTab);
+      if (queryTab === 'models' || queryTab === 'guilds') {
+        handleTabChange('settings');
+      } else {
+        handleTabChange(queryTab);
+      }
     }
 
     return () => window.removeEventListener('nexus_switch_tab', onSwitchTab);
@@ -212,7 +214,6 @@ function App() {
       { id: 'coloquio', name: 'Coloquio', icon: MessageSquare, badge: coloquioUnread > 0 ? coloquioUnread : null },
       { id: 'approvals', name: 'Aprobaciones', icon: ShieldCheck, badge: approvals.length > 0 ? approvals.length : null },
       { id: 'memory', name: 'Memoria', icon: Database },
-      { id: 'models', name: 'Modelos', icon: Cpu },
       { id: 'settings', name: 'Ajustes', icon: Settings },
     ];
 
@@ -523,7 +524,7 @@ function App() {
 
           {/* Consolidated View Panels */}
           <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-400">Cargando vista...</div>}>
-            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'control-room' || activeTab === 'approvals' || activeTab === 'audit' || activeTab === 'models' || activeTab === 'settings' || activeTab === 'diagnostic') ? "overflow-y-auto p-3 sm:p-6" : "p-3 sm:p-6")}>
+            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'control-room' || activeTab === 'approvals' || activeTab === 'audit' || activeTab === 'settings' || activeTab === 'diagnostic') ? "overflow-y-auto p-3 sm:p-6" : "p-3 sm:p-6")}>
               {/* 1. Estado y Salud */}
               {activeTab === 'overview' && (
                 <ErrorBoundary>
@@ -583,12 +584,6 @@ function App() {
                 </ErrorBoundary>
               )}
 
-              {/* 5. Modelos y Servidor */}
-              {activeTab === 'models' && (
-                <ErrorBoundary>
-                  <ModelsTab bridge={bridge} />
-                </ErrorBoundary>
-              )}
 
               {/* 6. Ajustes y Conexión */}
               {activeTab === 'settings' && (
