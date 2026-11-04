@@ -31,19 +31,6 @@ interface ProbeResult {
   detected_dialect?: string;
 }
 
-interface SchemaFieldMeta {
-  key: string;
-  section: string;
-  type: string;
-  editable_via_api: boolean;
-  requires_restart: boolean;
-  sensitive: boolean;
-  reason?: string;
-  options?: string[];
-  min?: number;
-  max?: number;
-}
-
 export function MaintenanceTab({ bridge, notify }: Props) {
   const { sysStatus } = useNexus();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -52,8 +39,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
   const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [metricsHistory, setMetricsHistory] = useState<MetricsHistory | null>(null);
 
-  // Maintenance configurable parameters (schema section 'maintenance')
-  const [_schemaFields, setSchemaFields] = useState<Record<string, SchemaFieldMeta>>({});
+  // Maintenance configurable parameters (schema section 'maintenance' / 'memory' / 'logging')
   const [backgroundConcurrency, setBackgroundConcurrency] = useState<number>(2);
   const [backgroundMaxWaitSecs, setBackgroundMaxWaitSecs] = useState<number>(60);
   const [reindexNodeDelayMs, setReindexNodeDelayMs] = useState<number>(200);
@@ -67,6 +53,8 @@ export function MaintenanceTab({ bridge, notify }: Props) {
   const [savingConfig, setSavingConfig] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [requiresRestart, setRequiresRestart] = useState<boolean>(false);
+  const [showRestartAlert, setShowRestartAlert] = useState<boolean>(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -80,12 +68,11 @@ export function MaintenanceTab({ bridge, notify }: Props) {
     abortControllerRef.current = controller;
 
     try {
-      const [statusRes, probeRes, metricsRes, cfgRes, schemaRes] = await Promise.allSettled([
+      const [statusRes, probeRes, metricsRes, cfgRes] = await Promise.allSettled([
         bridge.maintenance_status(),
         bridge.probe(),
         bridge.getMetricsHistory(),
         bridge.fetchRaw('/api/v1/config', { signal: controller.signal }) as Promise<Record<string, unknown>>,
-        bridge.fetchRaw('/api/v1/config/schema', { signal: controller.signal }) as Promise<{ fields?: SchemaFieldMeta[] }>,
       ]);
 
       if (statusRes.status === 'fulfilled' && statusRes.value) {
@@ -121,14 +108,6 @@ export function MaintenanceTab({ bridge, notify }: Props) {
 
         setInitialParams({ bc, bmw, rnd, rnt, rts, mfs, mf });
         setHasChanges(false);
-      }
-
-      if (schemaRes.status === 'fulfilled' && schemaRes.value?.fields) {
-        const map: Record<string, SchemaFieldMeta> = {};
-        for (const f of schemaRes.value.fields) {
-          map[f.key] = f;
-        }
-        setSchemaFields(map);
       }
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') return;
@@ -201,6 +180,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
         etag?: string;
         diff?: Array<{ key: string; old: unknown; new: unknown }>;
         errors?: string[];
+        requires_restart?: boolean;
       };
 
       if (!valRes?.ok || (valRes.errors && valRes.errors.length > 0)) {
@@ -223,13 +203,24 @@ export function MaintenanceTab({ bridge, notify }: Props) {
         backup?: string;
         error?: string;
         reason?: string;
+        requires_restart?: boolean;
       };
 
       if (!editRes?.ok) {
         throw new Error(editRes?.reason || editRes?.error || 'Error al persistir cambios');
       }
 
-      notify(`Parámetros de mantenimiento actualizados (Backup: ${editRes.backup ?? 'creado'})`, 'info');
+      const needsRestart = Boolean(valRes.requires_restart || editRes.requires_restart);
+      setRequiresRestart(needsRestart);
+      if (needsRestart) {
+        setShowRestartAlert(true);
+      }
+
+      const successMsg = needsRestart
+        ? 'Guardado, aplica al reiniciar'
+        : `Parámetros de mantenimiento actualizados (Backup: ${editRes.backup ?? 'creado'})`;
+
+      notify(successMsg, 'info');
       setSaveSuccess(true);
       setHasChanges(false);
       setInitialParams({
@@ -313,6 +304,35 @@ export function MaintenanceTab({ bridge, notify }: Props) {
 
   return (
     <div className="space-y-4 font-sans">
+      {/* Alerta de reinicio requerido (H2) */}
+      {showRestartAlert && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-3 text-amber-600 dark:text-amber-400 text-xs"
+        >
+          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden="true" />
+          <div className="flex-1 space-y-1">
+            <h4 className="font-bold text-sm text-foreground">Reinicio del Kernel Requerido</h4>
+            <p className="text-muted-foreground">
+              Se han modificado parámetros de mantenimiento o memoria que requieren reiniciar el daemon para aplicar la nueva configuración.
+            </p>
+            <div className="pt-2 flex items-center gap-2">
+              <span className="font-mono text-[11px] bg-card px-2 py-1 rounded border border-border text-foreground">
+                tylluan-cli start
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowRestartAlert(false)}
+                className="px-2.5 py-1 text-[11px] font-semibold bg-muted hover:bg-muted/80 text-foreground rounded border border-border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header Banner */}
       <fieldset className="border border-border p-4 bg-card rounded-lg shadow-sm">
         <legend className="text-xs font-bold text-primary px-1">Mantenimiento del Sustrato Soberano</legend>
@@ -519,8 +539,13 @@ export function MaintenanceTab({ bridge, notify }: Props) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border">
           <div className="text-xs">
             {saveSuccess && (
-              <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" /> Parámetros guardados y respaldados en tylluan.toml
+              <span
+                role="status"
+                aria-live="polite"
+                className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                <span>{requiresRestart ? 'Guardado, aplica al reiniciar' : 'Parámetros guardados y respaldados en tylluan.toml'}</span>
               </span>
             )}
             {saveError && (

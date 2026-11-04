@@ -30,7 +30,15 @@ const TABS: TabItem[] = [
 ];
 
 export function SettingsTab({ bridge, notify, onOpenAuthModal }: SettingsTabProps) {
-  const [section, setSection] = useState<SubSection>('general');
+  const [section, setSection] = useState<SubSection>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('section');
+      if (p === 'general' || p === 'inference' || p === 'security' || p === 'connectors' || p === 'maintenance') {
+        return p;
+      }
+    }
+    return 'general';
+  });
   const tabRefs = useRef<Record<SubSection, HTMLButtonElement | null>>({
     general: null,
     inference: null,

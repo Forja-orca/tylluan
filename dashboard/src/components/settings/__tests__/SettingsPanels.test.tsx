@@ -560,5 +560,107 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
         );
       });
     });
+
+    it('lee requires_restart del backend y avisa "Guardado, aplica al reiniciar" con banner accesible (H2 / AG-23)', async () => {
+      const fullBridge = {
+        ...mockBridge,
+        maintenance_status: vi.fn().mockResolvedValue({
+          status: 'ok',
+          brain_size_bytes: 1048576,
+          brain_size_human: '1.00 MB',
+          last_export: '2026-11-03 10:00:00',
+          storage_mode: 'SQLite WAL',
+          node_count: 42,
+          edge_count: 84,
+          orphan_node_count: 0,
+        }),
+        probe: vi.fn().mockResolvedValue({
+          kernel_version: '0.17.2',
+          port: 47004,
+          detected_dialect: 'standard',
+        }),
+        getMetricsHistory: vi.fn().mockResolvedValue({
+          snapshots: [{ timestamp: 1, cpu: 12, mem: 45 }],
+        }),
+      };
+
+      mockUseNexusState.bridge = fullBridge as unknown as NexusBridge;
+
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') {
+          return Promise.resolve({
+            memory: {
+              background_concurrency: 2,
+              background_max_wait_secs: 60,
+              reindex_node_delay_ms: 200,
+              reindex_nodes_per_tick: 100,
+              reindex_tick_secs: 600,
+            },
+            logging: {
+              max_file_size_mb: 50,
+              max_files: 5,
+            },
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<MaintenanceTab bridge={fullBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/hilos de fondo/i)).toHaveValue(2);
+      });
+
+      const concurrencyInput = screen.getByLabelText(/hilos de fondo/i);
+      fireEvent.change(concurrencyInput, { target: { value: '6' } });
+      expect(concurrencyInput).toHaveValue(6);
+
+      // Simular respuesta del backend donde requires_restart = true
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config/validate') {
+          return Promise.resolve({
+            ok: true,
+            dry_run: true,
+            etag: 'etag-restart-789',
+            requires_restart: true,
+            diff: [{ key: 'memory.background_concurrency', old: 2, new: 6 }],
+          });
+        }
+        if (url === '/api/v1/config/edit') {
+          return Promise.resolve({
+            ok: true,
+            status: 'applied',
+            requires_restart: true,
+            backup: 'backup_restart.toml',
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      const saveBtn = screen.getByRole('button', { name: /guardar parámetros/i });
+      fireEvent.click(saveBtn);
+
+      await waitFor(() => {
+        // Verifica el aviso textual exigido por el TL: 'Guardado, aplica al reiniciar'
+        expect(screen.getByText(/Guardado, aplica al reiniciar/i)).toBeInTheDocument();
+        // Verifica que se notifique al usuario
+        expect(mockNotify).toHaveBeenCalledWith('Guardado, aplica al reiniciar', 'info');
+      });
+
+      // Verifica el banner de alerta accesible con role="status" y aria-live="polite"
+      const banners = screen.getAllByRole('status');
+      const restartBanner = banners.find((b) => b.textContent?.includes('Reinicio del Kernel Requerido'));
+      expect(restartBanner).toBeDefined();
+      expect(restartBanner).toHaveAttribute('aria-live', 'polite');
+      expect(restartBanner).toHaveTextContent(/Reinicio del Kernel Requerido/i);
+
+      // El botón 'Entendido' para cerrar el banner tiene focus-visible
+      const dismissBtn = screen.getByRole('button', { name: /entendido/i });
+      expect(dismissBtn.className).toContain('focus-visible:ring-2');
+      fireEvent.click(dismissBtn);
+
+      // El banner se cierra tras confirmación
+      expect(screen.queryByText(/Reinicio del Kernel Requerido/i)).not.toBeInTheDocument();
+    });
   });
 });

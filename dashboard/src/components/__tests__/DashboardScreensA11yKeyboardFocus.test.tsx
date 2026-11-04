@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { VisualControlRoom } from '../VisualControlRoom';
 import { MemoryConsolidated } from '../MemoryConsolidated';
 import { InferenceSettingsPanel } from '../settings/InferenceSettingsPanel';
+import { MaintenanceTab } from '../MaintenanceTab';
 import type { NexusBridge } from '../../lib/nexus-bridge';
 import { SettingsTab } from '../SettingsTab';
 import { IngestPanel } from '../IngestPanel';
@@ -279,6 +280,56 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
       const dropzone = screen.getByRole('button', { name: /cargar archivo para ingesta/i });
       expect(dropzone).toHaveAttribute('tabIndex', '0');
       expect(dropzone.className).toContain('focus-visible:ring-2');
+    });
+  });
+
+  describe('MaintenanceTab Keyboard & Focus Accessibility (AG-23)', () => {
+    it('garantiza anillos de foco visible en botones de acción y campos numéricos', async () => {
+      const mockBridge = {
+        fetchRaw: vi.fn().mockImplementation((url: string) => {
+          if (url === '/api/v1/config') {
+            return Promise.resolve({
+              memory: { background_concurrency: 2, background_max_wait_secs: 60 },
+              logging: { max_file_size_mb: 50, max_files: 5 },
+            });
+          }
+          return Promise.resolve({});
+        }),
+        maintenance_status: vi.fn().mockResolvedValue({
+          status: 'ok',
+          brain_size_bytes: 1048576,
+          brain_size_human: '1.00 MB',
+          last_export: '2026-11-03 10:00:00',
+          storage_mode: 'SQLite WAL',
+          node_count: 10,
+          edge_count: 20,
+        }),
+        probe: vi.fn().mockResolvedValue({ kernel_version: '0.17.2', port: 47004, detected_dialect: 'standard' }),
+        getMetricsHistory: vi.fn().mockResolvedValue({ snapshots: [] }),
+      };
+
+      render(<MaintenanceTab bridge={mockBridge as unknown as NexusBridge} notify={vi.fn()} />);
+
+      // Botón Actualizar Estado
+      const refreshBtn = screen.getByRole('button', { name: /actualizar estado/i });
+      expect(refreshBtn.className).toContain('focus-visible:ring-2');
+      refreshBtn.focus();
+      expect(document.activeElement).toBe(refreshBtn);
+
+      // Botones de acciones soberanas (Checkpoint, Decaimiento FSRS)
+      const syncBtn = screen.getByRole('button', { name: /ejecutar checkpoint/i });
+      expect(syncBtn.className).toContain('focus-visible:ring-2');
+      syncBtn.focus();
+      expect(document.activeElement).toBe(syncBtn);
+
+      const fsrsBtn = screen.getByRole('button', { name: /aplicar fsrs/i });
+      expect(fsrsBtn.className).toContain('focus-visible:ring-2');
+
+      // Campos numéricos de configuración
+      const bgConcurrencyInput = screen.getByLabelText(/hilos de fondo/i);
+      expect(bgConcurrencyInput.className).toContain('focus:ring-2');
+      bgConcurrencyInput.focus();
+      expect(document.activeElement).toBe(bgConcurrencyInput);
     });
   });
 });
