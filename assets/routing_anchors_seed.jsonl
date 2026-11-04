@@ -1,0 +1,180 @@
+{"guild":"bash","intent":"run a shell command","source":"seed"}
+{"guild":"bash","intent":"execute bash script","source":"seed"}
+{"guild":"bash","intent":"run terminal command","source":"seed"}
+{"guild":"bash","intent":"execute command in the terminal","source":"seed"}
+{"guild":"bash","intent":"run shell script file","source":"seed"}
+{"guild":"bash","intent":"list files in directory","source":"seed"}
+{"guild":"bash","intent":"check disk space","source":"seed"}
+{"guild":"bash","intent":"find files matching pattern","source":"seed"}
+{"guild":"bash","intent":"check running processes","source":"seed"}
+{"guild":"bash","intent":"compress folder into zip","source":"seed"}
+{"guild":"filesystem","intent":"read file contents","source":"seed"}
+{"guild":"filesystem","intent":"write content to file","source":"seed"}
+{"guild":"filesystem","intent":"create new file","source":"seed"}
+{"guild":"filesystem","intent":"delete file","source":"seed"}
+{"guild":"filesystem","intent":"list directory contents","source":"seed"}
+{"guild":"filesystem","intent":"copy file to another location","source":"seed"}
+{"guild":"filesystem","intent":"move or rename file","source":"seed"}
+{"guild":"filesystem","intent":"check if file exists","source":"seed"}
+{"guild":"filesystem","intent":"read lines from a text file","source":"seed"}
+{"guild":"filesystem","intent":"search inside files for text","source":"seed"}
+{"guild":"git","intent":"git commit changes","source":"seed"}
+{"guild":"git","intent":"show git status","source":"seed"}
+{"guild":"git","intent":"git diff staged changes","source":"seed"}
+{"guild":"git","intent":"create new git branch","source":"seed"}
+{"guild":"git","intent":"push to remote repository","source":"seed"}
+{"guild":"git","intent":"pull latest changes from remote","source":"seed"}
+{"guild":"git","intent":"show git log history","source":"seed"}
+{"guild":"git","intent":"stash uncommitted changes","source":"seed"}
+{"guild":"git","intent":"merge branch into main","source":"seed"}
+{"guild":"git","intent":"rebase onto main branch","source":"seed"}
+{"guild":"knowledge","intent":"search knowledge base","source":"seed"}
+{"guild":"knowledge","intent":"what do I know about topic","source":"seed"}
+{"guild":"knowledge","intent":"find information about concept","source":"seed"}
+{"guild":"knowledge","intent":"store new knowledge","source":"seed"}
+{"guild":"knowledge","intent":"remember this fact","source":"seed"}
+{"guild":"knowledge","intent":"recall information about subject","source":"seed"}
+{"guild":"knowledge","intent":"lookup definition of term","source":"seed"}
+{"guild":"knowledge","intent":"search memory for related topics","source":"seed"}
+{"guild":"knowledge","intent":"what is stored about this","source":"seed"}
+{"guild":"knowledge","intent":"retrieve notes on subject","source":"seed"}
+{"guild":"audit","intent":"audit system security","source":"seed"}
+{"guild":"audit","intent":"check permissions on files","source":"seed"}
+{"guild":"audit","intent":"review access logs","source":"seed"}
+{"guild":"audit","intent":"scan for vulnerabilities","source":"seed"}
+{"guild":"audit","intent":"compliance check","source":"seed"}
+{"guild":"audit","intent":"verify system integrity","source":"seed"}
+{"guild":"audit","intent":"review security configuration","source":"seed"}
+{"guild":"audit","intent":"check for suspicious activity","source":"seed"}
+{"guild":"monitor","intent":"monitor system resources","source":"seed"}
+{"guild":"monitor","intent":"watch CPU and memory usage","source":"seed"}
+{"guild":"monitor","intent":"check process health","source":"seed"}
+{"guild":"monitor","intent":"tail log file in real time","source":"seed"}
+{"guild":"monitor","intent":"alert when disk is full","source":"seed"}
+{"guild":"monitor","intent":"watch for file changes","source":"seed"}
+{"guild":"monitor","intent":"monitor network traffic","source":"seed"}
+{"guild":"monitor","intent":"observe system metrics","source":"seed"}
+{"guild":"ingest","intent":"ingest document into knowledge base","source":"seed"}
+{"guild":"ingest","intent":"process and index new file","source":"seed"}
+{"guild":"ingest","intent":"import data from source","source":"seed"}
+{"guild":"ingest","intent":"add document to memory","source":"seed"}
+{"guild":"ingest","intent":"parse and store new content","source":"seed"}
+{"guild":"ingest","intent":"load data file into system","source":"seed"}
+{"guild":"ingest","intent":"extract and index knowledge from document","source":"seed"}
+{"guild":"sequential_thinking","intent":"think step by step","source":"seed"}
+{"guild":"sequential_thinking","intent":"reason through this problem carefully","source":"seed"}
+{"guild":"sequential_thinking","intent":"analyze this logically","source":"seed"}
+{"guild":"sequential_thinking","intent":"break down the problem into steps","source":"seed"}
+{"guild":"sequential_thinking","intent":"think deeply about this question","source":"seed"}
+{"guild":"sequential_thinking","intent":"chain of thought reasoning","source":"seed"}
+{"guild":"sequential_thinking","intent":"structured analysis of the issue","source":"seed"}
+{"guild":"code","intent":"write code to implement feature","source":"seed"}
+{"guild":"code","intent":"generate Python function","source":"seed"}
+{"guild":"code","intent":"create REST API endpoint","source":"seed"}
+{"guild":"code","intent":"implement algorithm in Rust","source":"seed"}
+{"guild":"code","intent":"write unit tests for this function","source":"seed"}
+{"guild":"code","intent":"refactor this code snippet","source":"seed"}
+{"guild":"code","intent":"convert this pseudocode to Python","source":"seed"}
+{"guild":"code","intent":"generate boilerplate for new module","source":"seed"}
+{"guild":"code","intent":"generate a Python function that sorts a list","source":"seed"}
+{"guild":"code","intent":"write a function in Python","source":"seed"}
+{"guild":"code","intent":"implement a sorting algorithm","source":"seed"}
+{"guild":"code","intent":"create a script that processes data","source":"seed"}
+{"guild":"code","intent":"write code that reads a file and parses it","source":"seed"}
+{"guild":"code_reviewer","intent":"review this code for bugs","source":"seed"}
+{"guild":"code_reviewer","intent":"check code quality and style","source":"seed"}
+{"guild":"code_reviewer","intent":"find security issues in code","source":"seed"}
+{"guild":"code_reviewer","intent":"code review pull request","source":"seed"}
+{"guild":"code_reviewer","intent":"suggest improvements to this function","source":"seed"}
+{"guild":"code_reviewer","intent":"check for memory leaks","source":"seed"}
+{"guild":"code_reviewer","intent":"analyze code complexity","source":"seed"}
+{"guild":"docker","intent":"run docker container","source":"seed"}
+{"guild":"docker","intent":"build docker image","source":"seed"}
+{"guild":"docker","intent":"list running containers","source":"seed"}
+{"guild":"docker","intent":"stop docker container","source":"seed"}
+{"guild":"docker","intent":"push image to registry","source":"seed"}
+{"guild":"docker","intent":"check docker logs","source":"seed"}
+{"guild":"docker","intent":"docker compose up","source":"seed"}
+{"guild":"docker","intent":"inspect container environment","source":"seed"}
+{"guild":"vision","intent":"analyze image content","source":"seed"}
+{"guild":"vision","intent":"describe what is in this picture","source":"seed"}
+{"guild":"vision","intent":"extract text from image OCR","source":"seed"}
+{"guild":"vision","intent":"detect objects in image","source":"seed"}
+{"guild":"vision","intent":"classify image category","source":"seed"}
+{"guild":"vision","intent":"read screenshot text","source":"seed"}
+{"guild":"vision","intent":"analyze diagram or chart","source":"seed"}
+{"guild":"data_tools","intent":"parse CSV file","source":"seed"}
+{"guild":"data_tools","intent":"analyze dataset statistics","source":"seed"}
+{"guild":"data_tools","intent":"filter and transform data","source":"seed"}
+{"guild":"data_tools","intent":"aggregate data by column","source":"seed"}
+{"guild":"data_tools","intent":"plot chart from data","source":"seed"}
+{"guild":"data_tools","intent":"join two tables","source":"seed"}
+{"guild":"data_tools","intent":"clean and normalize data","source":"seed"}
+{"guild":"database","intent":"run SQL query","source":"seed"}
+{"guild":"database","intent":"query the database","source":"seed"}
+{"guild":"database","intent":"insert record into table","source":"seed"}
+{"guild":"database","intent":"update database entry","source":"seed"}
+{"guild":"database","intent":"create database schema","source":"seed"}
+{"guild":"database","intent":"backup database","source":"seed"}
+{"guild":"database","intent":"find records matching condition","source":"seed"}
+{"guild":"search","intent":"search the web","source":"seed"}
+{"guild":"search","intent":"find information online","source":"seed"}
+{"guild":"search","intent":"google this query","source":"seed"}
+{"guild":"search","intent":"look up this topic on the internet","source":"seed"}
+{"guild":"search","intent":"web search for current information","source":"seed"}
+{"guild":"search","intent":"find recent news about topic","source":"seed"}
+{"guild":"deep_analysis","intent":"perform deep analysis","source":"seed"}
+{"guild":"deep_analysis","intent":"thoroughly investigate this problem","source":"seed"}
+{"guild":"deep_analysis","intent":"comprehensive research report","source":"seed"}
+{"guild":"deep_analysis","intent":"in-depth analysis of subject","source":"seed"}
+{"guild":"deep_analysis","intent":"exhaustive investigation with findings","source":"seed"}
+{"guild":"formatter","intent":"format this text","source":"seed"}
+{"guild":"formatter","intent":"convert markdown to HTML","source":"seed"}
+{"guild":"formatter","intent":"clean up document formatting","source":"seed"}
+{"guild":"formatter","intent":"prettify JSON output","source":"seed"}
+{"guild":"formatter","intent":"convert between formats","source":"seed"}
+{"guild":"pdf","intent":"extract text from PDF","source":"seed"}
+{"guild":"pdf","intent":"read PDF document","source":"seed"}
+{"guild":"pdf","intent":"parse PDF file content","source":"seed"}
+{"guild":"pdf","intent":"convert PDF to text","source":"seed"}
+{"guild":"pdf","intent":"search inside PDF document","source":"seed"}
+{"guild":"browser","intent":"open webpage in browser","source":"seed"}
+{"guild":"browser","intent":"navigate to URL","source":"seed"}
+{"guild":"browser","intent":"click button on webpage","source":"seed"}
+{"guild":"browser","intent":"fill form on website","source":"seed"}
+{"guild":"browser","intent":"take screenshot of page","source":"seed"}
+{"guild":"browser","intent":"scrape content from webpage","source":"seed"}
+{"guild":"deep_web_research","intent":"deep web research on topic","source":"seed"}
+{"guild":"deep_web_research","intent":"exhaustive online investigation","source":"seed"}
+{"guild":"deep_web_research","intent":"research multiple sources on subject","source":"seed"}
+{"guild":"deep_web_research","intent":"comprehensive web research report","source":"seed"}
+{"guild":"code_analysis","intent":"analyze codebase structure","source":"seed"}
+{"guild":"code_analysis","intent":"understand how this code works","source":"seed"}
+{"guild":"code_analysis","intent":"find dependencies between modules","source":"seed"}
+{"guild":"code_analysis","intent":"trace execution path","source":"seed"}
+{"guild":"code_analysis","intent":"explain this code","source":"seed"}
+{"guild":"system_metrics","intent":"show system CPU usage","source":"seed"}
+{"guild":"system_metrics","intent":"check memory consumption","source":"seed"}
+{"guild":"system_metrics","intent":"report system performance metrics","source":"seed"}
+{"guild":"system_metrics","intent":"get hardware statistics","source":"seed"}
+{"guild":"n8n_bridge","intent":"trigger n8n workflow","source":"seed"}
+{"guild":"n8n_bridge","intent":"run automation workflow","source":"seed"}
+{"guild":"n8n_bridge","intent":"execute n8n scenario","source":"seed"}
+{"guild":"mcp_bridge","intent":"call external MCP tool","source":"seed"}
+{"guild":"mcp_bridge","intent":"use registered MCP server","source":"seed"}
+{"guild":"mcp_bridge","intent":"invoke MCP protocol tool","source":"seed"}
+{"guild":"comfy_ui","intent":"generate image with stable diffusion","source":"seed"}
+{"guild":"comfy_ui","intent":"create image from text prompt","source":"seed"}
+{"guild":"comfy_ui","intent":"run comfyui workflow","source":"seed"}
+{"guild":"comfy_ui","intent":"image generation with AI","source":"seed"}
+{"guild":"knowledge","intent":"search the knowledge base for","source":"seed"}
+{"guild":"knowledge","intent":"search local memory for","source":"seed"}
+{"guild":"knowledge","intent":"find in my knowledge base","source":"seed"}
+{"guild":"knowledge","intent":"look up in memory","source":"seed"}
+{"guild":"knowledge","intent":"what do I have stored about","source":"seed"}
+{"guild":"knowledge","intent":"search silva for","source":"seed"}
+{"guild":"knowledge","intent":"check memory for","source":"seed"}
+{"guild":"knowledge","intent":"retrieve from knowledge graph","source":"seed"}
+{"guild":"search","intent":"search the internet for","source":"seed"}
+{"guild":"search","intent":"search online for current","source":"seed"}
+{"guild":"search","intent":"find on the web","source":"seed"}

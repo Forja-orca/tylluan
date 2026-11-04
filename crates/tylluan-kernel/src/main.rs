@@ -1748,35 +1748,26 @@ async fn main() -> anyhow::Result<()> {
     {
         let silva_warmup = silva.clone();
         let matcher_warmup = matcher.clone();
-        let workspace_for_seed = workspace_root.clone();
         let embedding_model = config.memory.embedding_model.clone();
         let warm_start_enabled = config.silva.embed_warm_start;
         let budget_warm = background_budget.clone();
         bg_spawn!(background_tasks,  "seed-corpus", "Memoria", tylluan_kernel::runtime::shutdown::WaitPolicy::Skip, async move {
-            // ── Phase 1: upsert seed corpus (no engine needed) ────────
-            let seed_path = workspace_for_seed.join("data").join("routing_anchors_seed.jsonl");
-            if seed_path.exists() {
-                match std::fs::read_to_string(&seed_path) {
-                    Ok(content) => {
-                        let mut upserted = 0usize;
-                        for line in content.lines().filter(|l| !l.trim().is_empty()) {
-                            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-                                let guild  = entry.get("guild").and_then(|v| v.as_str()).unwrap_or_default();
-                                let intent = entry.get("intent").and_then(|v| v.as_str()).unwrap_or_default();
-                                let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("seed");
-                                if !guild.is_empty() && !intent.is_empty() {
-                                    let _ = silva_warmup.upsert_routing_anchor(guild, intent, source, None).await;
-                                    upserted += 1;
-                                }
-                            }
-                        }
-                        info!("🌱 Anchor seed: {} entries synced from corpus", upserted);
-                    }
-                    Err(e) => warn!("⚠️ Could not read anchor seed file: {}", e),
-                }
-            } else {
-                info!("🌱 Anchor seed: no seed file at {} — skipping", seed_path.display());
+            // T-DSH-176: corpus embebido desde assets/ (tracked) con
+            // data/routing_anchors_seed.jsonl como sobrescritura opcional.
+            let (seed_content, seed_source) =
+                tylluan_kernel::memory::anchor_seed::anchor_seed_corpus();
+            let entries = tylluan_kernel::memory::anchor_seed::parse_anchors(&seed_content);
+            let mut upserted = 0usize;
+            for entry in &entries {
+                let _ = silva_warmup
+                    .upsert_routing_anchor(&entry.guild, &entry.intent, &entry.source, None)
+                    .await;
+                upserted += 1;
             }
+            info!(
+                "Anchor seed: {} entries synced (source: {})",
+                upserted, seed_source
+            );
 
             // ── Phase 2: wait for BGE-M3, then reembed missing nodes ──
             let no_embedding = embedding_model == "none"

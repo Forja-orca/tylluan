@@ -12,6 +12,7 @@
 //!
 //! All backed by SQLite (rusqlite bundled) — zero external dependencies, cross-platform.
 
+pub mod anchor_seed;
 pub mod backup;
 pub mod hybrid;
 pub mod hybrid_migration;
