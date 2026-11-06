@@ -16,6 +16,18 @@ const SUPERVISOR_MAX_ATTEMPTS: u32 = 3;
 /// D-115: techo del backoff del supervisor.
 const SUPERVISOR_MAX_BACKOFF_SECS: u64 = 600;
 
+/// D-140 (decisión de José, 06-nov-2026): tras `Degraded`, un reintento lento en
+/// vez de quedarse mudo para siempre. Un guild que falla tres restauraciones
+/// seguidas puede haberse caído por algo transitorio (presión de memoria); con
+/// esto se recupera solo en una hora.
+///
+/// Precisión sobre el coste, para no venderlo mejor de lo que es: no es "un
+/// intento por hora" sino **un ciclo de reintentos por hora** — al rearmarse el
+/// contador, el backoff normal vuelve a permitir hasta `SUPERVISOR_MAX_ATTEMPTS`
+/// respawns (2 s, 4 s) antes de volver a `Degraded`. Lo que queda acotado es el
+/// goteo permanente, no el número absoluto de intentos.
+const SUPERVISOR_SLOW_RETRY_SECS: u64 = 3_600;
+
 /// D-115: ventana mínima de estabilidad. Si un guild restaurado sigue en pie
 /// pasado este tiempo, se le perdona el historial de fallos.
 const SUPERVISOR_MIN_STABILITY_SECS: u64 = 5;
@@ -38,6 +50,8 @@ struct BackoffState {
     /// Si **esta** llamada a `decide()` cruza a `Degraded`. El bucle loguea solo
     /// cuando esto es `true`.
     degraded_just_now: bool,
+    /// D-140: cuándo se cruzó a `Degraded`. Marca el reloj del reintento lento.
+    degraded_since: Option<Instant>,
 }
 
 impl BackoffState {
@@ -51,6 +65,7 @@ impl BackoffState {
             restored_at: None,
             degraded_logged: false,
             degraded_just_now: false,
+            degraded_since: None,
         }
     }
 }
@@ -98,6 +113,7 @@ fn decide(
             state.attempts = 0;
             state.degraded_logged = false;
             state.degraded_just_now = false;
+            state.degraded_since = None;
         }
         return SupervisorDecision::Healthy;
     }
@@ -110,10 +126,29 @@ fn decide(
     }
 
     if state.attempts >= SUPERVISOR_MAX_ATTEMPTS {
-        // D-138: avisar SOLO al cruzar, no en cada tick.
-        state.degraded_just_now = !state.degraded_logged;
-        state.degraded_logged = true;
-        return SupervisorDecision::Degraded;
+        // D-140: en vez de quedarse en Degraded para siempre, un reintento por
+        // hora. El aviso sigue saliendo UNA sola vez (D-138).
+        match state.degraded_since {
+            None => {
+                state.degraded_since = Some(now);
+                state.degraded_just_now = !state.degraded_logged;
+                state.degraded_logged = true;
+                return SupervisorDecision::Degraded;
+            }
+            Some(desde) => {
+                if now.duration_since(desde) >= Duration::from_secs(SUPERVISOR_SLOW_RETRY_SECS) {
+                    // Toca el intento lento: se rearma el contador y se reintenta una vez.
+                    state.attempts = 0;
+                    state.degraded_since = None;
+                    state.degraded_logged = false;
+                    state.degraded_just_now = false;
+                    state.last_attempt = now;
+                    return SupervisorDecision::Respawn;
+                }
+                state.degraded_just_now = false;
+                return SupervisorDecision::Degraded;
+            }
+        }
     }
 
     let backoff_secs = 2u64
@@ -378,5 +413,110 @@ mod tests_d138 {
         state.attempts = SUPERVISOR_MAX_ATTEMPTS;
         let _ = decide(&mut state, false, now, Duration::from_secs(30));
         assert!(state.degraded_just_now, "tras recuperarse, el aviso vuelve");
+    }
+}
+
+#[cfg(test)]
+mod tests_d140 {
+    use super::*;
+
+    fn pasado(segundos: u64) -> Instant {
+        Instant::now()
+            .checked_sub(Duration::from_secs(segundos))
+            .expect("instante pasado")
+    }
+
+    /// D-140: dentro de la hora sigue en `Degraded` y **no** repite el aviso.
+    #[test]
+    fn d140_degraded_espera_la_hora() {
+        let now = Instant::now();
+        let mut state = BackoffState::new(pasado(3600));
+        state.attempts = SUPERVISOR_MAX_ATTEMPTS;
+
+        // Primer tick: cruza a Degraded y avisa.
+        assert_eq!(
+            decide(&mut state, false, now, Duration::from_secs(30)),
+            SupervisorDecision::Degraded
+        );
+        assert!(state.degraded_just_now);
+        assert!(state.degraded_since.is_some());
+
+        // A los 59 minutos: sigue Degraded y ya no avisa.
+        let casi = now + Duration::from_secs(SUPERVISOR_SLOW_RETRY_SECS - 60);
+        assert_eq!(
+            decide(&mut state, false, casi, Duration::from_secs(30)),
+            SupervisorDecision::Degraded
+        );
+        assert!(!state.degraded_just_now);
+    }
+
+    /// D-140: cumplida la hora, reintenta y rearma el contador.
+    #[test]
+    fn d140_pasada_la_hora_reintenta_una_vez() {
+        let now = Instant::now();
+        let mut state = BackoffState::new(pasado(3600));
+        state.attempts = SUPERVISOR_MAX_ATTEMPTS;
+        let _ = decide(&mut state, false, now, Duration::from_secs(30));
+
+        let despues = now + Duration::from_secs(SUPERVISOR_SLOW_RETRY_SECS);
+        assert_eq!(
+            decide(&mut state, false, despues, Duration::from_secs(30)),
+            SupervisorDecision::Respawn,
+            "pasada la hora tiene que reintentar, no quedarse mudo"
+        );
+        assert_eq!(state.attempts, 0, "el contador se rearma para el ciclo lento");
+        assert!(state.degraded_since.is_none());
+        assert!(!state.degraded_logged, "si vuelve a caer, avisará otra vez");
+    }
+
+    /// D-140: recuperarse rearma **también** el reloj del reintento lento. Sin
+    /// esto, un guild que se degradó hace más de una hora volvería a reintentar
+    /// al instante en su siguiente caída, saltándose la espera.
+    #[test]
+    fn d140_la_recuperacion_rearma_el_reloj() {
+        let now = Instant::now();
+        let mut state = BackoffState::new(pasado(3600));
+        state.attempts = SUPERVISOR_MAX_ATTEMPTS;
+        let _ = decide(&mut state, false, now, Duration::from_secs(30));
+        assert!(state.degraded_since.is_some());
+
+        // Vivo y con la ventana de estabilidad cumplida: se perdona el historial.
+        state.restored_at = Some(pasado(60));
+        assert_eq!(
+            decide(&mut state, true, now, Duration::from_secs(30)),
+            SupervisorDecision::Healthy
+        );
+        assert!(
+            state.degraded_since.is_none(),
+            "al recuperarse, el reloj del reintento lento tiene que rearmarse"
+        );
+
+        // Y si vuelve a caer hasta el tope, la hora se cuenta desde AHORA: a los
+        // 59 minutos sigue esperando, no reintenta por el reloj viejo.
+        state.attempts = SUPERVISOR_MAX_ATTEMPTS;
+        let ahora2 = now + Duration::from_secs(1);
+        assert_eq!(
+            decide(&mut state, false, ahora2, Duration::from_secs(30)),
+            SupervisorDecision::Degraded
+        );
+        let casi = ahora2 + Duration::from_secs(SUPERVISOR_SLOW_RETRY_SECS - 60);
+        assert_eq!(
+            decide(&mut state, false, casi, Duration::from_secs(30)),
+            SupervisorDecision::Degraded,
+            "el reloj viejo no puede servir para reintentar ya"
+        );
+    }
+
+    /// Y el comportamiento normal no cambia: con intentos por debajo del tope, backoff.
+    #[test]
+    fn d140_el_backoff_normal_sigue_igual() {
+        let now = Instant::now();
+        let mut state = BackoffState::new(now);
+        state.attempts = 1;
+        state.last_attempt = pasado(1);
+        assert_eq!(
+            decide(&mut state, false, now, Duration::from_secs(30)),
+            SupervisorDecision::InBackoff
+        );
     }
 }
