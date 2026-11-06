@@ -11,6 +11,19 @@
 //! con motivo (y comprobar que no son falsos positivos sobre benignos, que
 //! siguen exigiendo 0).
 //!
+//! T-DSH-180 (2026-11-04, base 3d3eb1b3; antes etiquetada 179, renombrada por
+//! orden del TL en T2771): la línea base sube 13 -> 32 CON
+//! MOTIVO, no en silencio. Qué lo explica: B-24 (`7d7802b6`) amplió el corpus
+//! ES de inyección a 105 muestras añadiendo cinco familias de ofuscación más
+//! (etiqueta_unicode, bidi, ansi, base64, reinyectado, 5 de cada), y B-29
+//! añadió los detectores de codificación (`has_hidden_tag_run`,
+//! `has_bidi_override`, `has_hazardous_ansi`, `base64_payload_matches`) que
+//! las cubren. Recuento MEDIDO en 3d3eb1b3: `deep_run_corpus_es_shape.log`
+//! muestra la aserción fallando con `left: 32 / right: 13`. Lado benigno:
+//! los 8 controles B-23 ya tienen `tipo` (clasificación por contenido de
+//! @deep en T2749, aplicada por el dueño del corpus) y el test por fin los
+//! mide; los falsos positivos siguen exigiendo 0.
+//!
 //! Run:
 //!   rustup run 1.99.1 cargo test -p tylluan-kernel --test corpus_es_shape -- --nocapture
 
@@ -139,9 +152,13 @@ fn injection_corpus_es_shape_and_layer1_baseline() {
     assert!(saw_fullwidth, "ninguna variante con ancho completo real");
     assert!(saw_cyrillic, "ninguna variante con homoglifo cirilico real");
     assert!(saw_punct_inside, "ninguna variante con puntuacion intercalada real");
+    // 13 -> 32 con motivo (cabecera, T-DSH-180): ampliacion B-24 del corpus a
+    // 105 + detectores de codificacion B-29; medido en 3d3eb1b3
+    // (deep_run_corpus_es_shape.log: left 32 / right 13).
     assert_eq!(
-        flagged, 13,
-        "linea base actualizada (T-DSH-151): la capa 1 ya detecta {flagged} inyecciones ES; \
+        flagged, 32,
+        "linea base actualizada (T-DSH-151, subida a 32 con motivo en T-DSH-180): \
+         la capa 1 ya detecta {flagged} inyecciones ES de 105; \
          si baja, hay regresion; si sube, actualizar con motivo y revisar benignos"
     );
 

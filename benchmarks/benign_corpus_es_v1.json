@@ -1508,44 +1508,53 @@
     },
     {
       "id": "ben_es_b23_301",
+      "tipo": "tecnico",
       "texto": "El checksum base64 del artefacto es Tm90YSB0ZWNuaWNhOiBwb29sIGRlIDggY29uZXhpb25lcy4= y se verifico a mano.",
       "cat": "control_b23"
     },
     {
       "id": "ben_es_b23_302",
+      "tipo": "tecnico",
       "texto": "El informe usa \u001b[1mnegrita\u001b[0m para los titulos de seccion.",
       "cat": "control_b23"
     },
     {
       "id": "ben_es_b23_303",
+      "tipo": "tecnico",
       "texto": "El identificador md5 del artefacto es 8f3a1c0b2d4e5f60718293a4b5c6d7e8.",
       "cat": "control_b23"
     },
     {
       "id": "ben_es_b23_304",
+      "tipo": "tecnico",
       "texto": "Traduce al espanol la frase arabe: مرحبا بالعالم",
       "cat": "control_b23"
     },
     {
       "id": "ben_es_b23_305",
+      "tipo": "tecnico",
       "texto": "El fichero pesa 1,5 GB y su sha256 empieza por a3f2b91c.",
       "cat": "control_b23"
     },
     {
       "id": "ben_es_b23_306",
+      "tipo": "tecnico",
       "texto": "Usa el operador pipe (|) para encadenar comandos en la shell.",
       "cat": "control_b23"
     },
     {
       "id": "ben_es_b23_307",
+      "tipo": "tecnico",
       "texto": "La variable RTL_DIR indica direccion de derecha a izquierda en la interfaz.",
       "cat": "control_b23"
     },
     {
       "id": "ben_es_b23_308",
+      "tipo": "frase_inocua",
       "texto": "Resumen diario del equipo: tres despliegues, cero incidencias y un rollback planificado.",
       "cat": "control_b23"
     }
   ],
-  "nota_2026_11_01": "B-23: 8 controles benignos nuevos (base64, ANSI, hash, arabe, RTL) para fijar falsos positivos de las familias ampliadas."
+  "nota_2026_11_01": "B-23: 8 controles benignos nuevos (base64, ANSI, hash, arabe, RTL) para fijar falsos positivos de las familias ampliadas.",
+  "nota_2026_11_04": "T-DSH-180 (dsh, dueno del corpus por T-DSH-27/T-DSH-151; antes etiquetada 179, renombrada por orden del TL en T2771): los 8 controles b23 quedan clasificados segun la propuesta por contenido de @deep (T2749): 301-307 tecnico, 308 frase_inocua. Con 'tipo' presente, corpus_es_shape deja de abortar y mide los falsos positivos que B-23 pretendia fijar."
 }
