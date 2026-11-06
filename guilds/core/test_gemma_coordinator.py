@@ -22,7 +22,7 @@ candidates = json.dumps([
 from guilds.core.night_reasoner import route_intent
 result = route_intent("list all python files in the current directory", candidates)
 t4 = time.time()
-print(f"\nTest 1: 'list all python files'")
+print("\nTest 1: 'list all python files'")
 print(f"  Result: {result}")
 print(f"  Latency: {t4-t3:.2f}s")
 parsed = json.loads(result)
@@ -35,7 +35,7 @@ result2 = route_intent("what's my ip address", json.dumps([
     {"guild": "bash", "score": 0.55, "description": "Run shell commands and scripts"},
 ]))
 t6 = time.time()
-print(f"\nTest 2: 'what's my ip address'")
+print("\nTest 2: 'what's my ip address'")
 print(f"  Result: {result2}")
 print(f"  Latency: {t5-t5:.2f}s")
 

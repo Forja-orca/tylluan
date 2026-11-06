@@ -61,7 +61,12 @@ select = ["E", "F"]
 ignore = ["E501", "F401"]
 
 [tool.ruff.lint.per-file-ignores]
-"guilds/**" = ["E", "F"]
+# D-143: pyflakes (F) SÍ se aplica a los guilds. Antes era ["E", "F"], que apagaba
+# también los nombres indefinidos: así vivió meses un `asyncio.sleep` sin import
+# (H2 de la auditoría del 2026-11-06). Queda apagado E (624 de E501 y estilo) hasta
+# que se aborde aparte; y de F se ignoran por nombre las deudas ya censadas, para
+# que cualquier regla NUEVA de pyflakes entre por defecto en vez de por olvido.
+"guilds/**" = ["E", "F401", "F841"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

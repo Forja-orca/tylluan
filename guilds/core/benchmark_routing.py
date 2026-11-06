@@ -282,11 +282,11 @@ def benchmark():
     # Baseline 2: Keyword router (naive simulation)
     kw_correct = sum(1 for intent, actual in intents if keyword_router(intent)[0] == actual)
     kw_acc = kw_correct / len(intents)
-    print(f"\n--- Baseline 2: Current keyword router (naive sim) ---")
+    print("\n--- Baseline 2: Current keyword router (naive sim) ---")
     print(f"  Accuracy: {kw_acc*100:.2f}% ({kw_correct}/{len(intents)})")
 
     # Warmup guild embeddings
-    print(f"\n--- Warmup: guild description embeddings ---")
+    print("\n--- Warmup: guild description embeddings ---")
     warmup()
 
     sample_size = min(len(intents), 100)
@@ -369,13 +369,13 @@ def benchmark():
     print(f"  4. Keyword+embedding tiebreaker:  {kw2_acc*100:6.2f}%  ({kw2_avg_lat:.2f}s/intent)")
     print(f"  5. Production hybrid (matcher.rs):{hyb_acc*100:6.2f}%  ({hyb_avg_lat:.2f}s/intent, {hyb_errors} errors)")
     if hyb_acc > kw_acc and hyb_acc > emb_acc:
-        print(f"  [OK] Production hybrid beats both pure approaches")
+        print("  [OK] Production hybrid beats both pure approaches")
     elif hyb_acc > kw_acc:
-        print(f"  [OK] Hybrid beats keyword, loses to embedding")
+        print("  [OK] Hybrid beats keyword, loses to embedding")
     elif hyb_acc > emb_acc:
-        print(f"  [OK] Hybrid beats embedding, loses to keyword")
+        print("  [OK] Hybrid beats embedding, loses to keyword")
     else:
-        print(f"  [X] Hybrid does NOT beat either pure baseline")
+        print("  [X] Hybrid does NOT beat either pure baseline")
     print(f"{'='*72}")
 
 if __name__ == "__main__":

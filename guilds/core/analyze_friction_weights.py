@@ -52,15 +52,15 @@ N = len(sessions)
 N_nonzero = sum(1 for s in sessions if s["score"] > 0)
 
 print(f"=== {N} SYNTHETIC SESSIONS ({N_nonzero} with events) ===")
-print(f"\nTop 10 by friction score:")
+print("\nTop 10 by friction score:")
 for i, s in enumerate(sessions[:10]):
     print(f"  #{i+1:2d} {s['label']:20s} score={s['score']:5.1f} wf={s['workflows']:2d} events={s['events']}")
 
-print(f"\nBottom 5 by friction score:")
+print("\nBottom 5 by friction score:")
 for i, s in enumerate(sessions[-5:]):
     print(f"  #{N-4+i:2d} {s['label']:20s} score={s['score']:5.1f} wf={s['workflows']:2d} events={s['events']}")
 
-print(f"\n=== SENSITIVITY ANALYSIS (±50% per weight, excl. zero-event sessions) ===")
+print("\n=== SENSITIVITY ANALYSIS (±50% per weight, excl. zero-event sessions) ===")
 print(f"{'Weight':25s} {'×0.50':>12s} {'×1.50':>12s} {'Verdict':>12s}")
 print("-" * 61)
 
@@ -97,7 +97,7 @@ for event_type in WEIGHTS:
     print(f"{event_type:25s} {findings[0]:8.2f}   {findings[1]:8.2f}   {verdict:>12s}")
 
 # Co-occurrence analysis
-print(f"\n=== EVENT CO-OCCURRENCE ===")
+print("\n=== EVENT CO-OCCURRENCE ===")
 co = Counter()
 for s in sessions:
     for k in s["events"]:
@@ -106,7 +106,7 @@ for k, v in co.most_common():
     print(f"  {k:25s}: present in {v:2d}/{N:2d} sessions ({100*v/N:3.0f}%)")
 
 # Score distribution by profile
-print(f"\n=== SCORE BY PROFILE ===")
+print("\n=== SCORE BY PROFILE ===")
 profile_scores = {}
 for s in sessions:
     profile_scores.setdefault(s["label"], []).append(s["score"])
@@ -114,7 +114,7 @@ for label, scores in sorted(profile_scores.items()):
     avg = sum(scores)/len(scores)
     print(f"  {label:20s}: avg_score={avg:5.1f}  n={len(scores)}")
 
-print(f"\n=== VERDICT ===")
+print("\n=== VERDICT ===")
 print(f"N={N} synthetic sessions ({N_nonzero} with events), 6 agent profiles.")
 print(f"Rank separation: high_friction {active_sessions[0]['score']:.0f} vs smooth_operator {sessions[-1]['score']:.0f}")
 print()

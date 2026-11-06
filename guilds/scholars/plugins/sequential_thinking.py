@@ -145,9 +145,9 @@ def decompose_problem(problem: str) -> List[str]:
     
     # What, Why, How, What if
     questions.append(f"What is the core of '{problem}'?")
-    questions.append(f"Why is this important?")
-    questions.append(f"How would we solve this?")
-    questions.append(f"What could go wrong?")
+    questions.append("Why is this important?")
+    questions.append("How would we solve this?")
+    questions.append("What could go wrong?")
     
     return questions[:4]
 

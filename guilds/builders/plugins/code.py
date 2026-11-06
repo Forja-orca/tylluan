@@ -134,7 +134,7 @@ def parse_python(content: str, detail_level: str) -> str:
     except SyntaxError as e:
         return f"❌ Python syntax error: {e}"
     
-    result = [f"🐍 Python file parsed successfully"]
+    result = ["🐍 Python file parsed successfully"]
     
     # Count nodes
     functions = []
@@ -180,7 +180,7 @@ def parse_python(content: str, detail_level: str) -> str:
 
 def parse_js_ts(content: str, detail_level: str) -> str:
     """Basic JavaScript/TypeScript parsing (regex-based for now)."""
-    result = [f"📜 JavaScript/TypeScript file"]
+    result = ["📜 JavaScript/TypeScript file"]
     
     # Find functions
     fn_pattern = r"(?:function\s+(\w+)|const\s+(\w+)\s*=\s*(?:async\s+)?\(|(\w+)\s*\([^)]*\)\s*\{)"

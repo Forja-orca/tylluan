@@ -169,7 +169,7 @@ async def execute_workflow(
                 return f"❌ No workflow found matching '{q}'.\nAvailable: {', '.join(names)}"
             if len(matches) > 1:
                 opts = [f"• **{w['name']}** (ID: {w['id']})" for w in matches[:5]]
-                return f"⚠️ Multiple matches — be more specific:\n" + "\n".join(opts)
+                return "⚠️ Multiple matches — be more specific:\n" + "\n".join(opts)
             workflow_id = str(matches[0]["id"])
 
         if not workflow_id:

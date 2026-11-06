@@ -297,7 +297,7 @@ def _run_reasoning_background(node_ids: list[str], depth: int):
             print(f"[auto_reason_cycle] ✅ Stored synthesis from {len(node_ids)} nodes", file=sys.stderr)
         else:
             import sys
-            print(f"[auto_reason_cycle] ⚠ deep_analysis returned no output", file=sys.stderr)
+            print("[auto_reason_cycle] ⚠ deep_analysis returned no output", file=sys.stderr)
     except Exception as e:
         import sys
         print(f"[auto_reason_cycle] ❌ Background reasoning failed: {e}", file=sys.stderr)

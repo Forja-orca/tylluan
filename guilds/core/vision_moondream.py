@@ -41,7 +41,7 @@ def _load_model():
         print(f"[moondream] model cached at {model_path}", file=sys.stderr)
         _model = md.vl(model="moondream-2-latest")
         _loaded = True
-        print(f"[moondream] model loaded successfully", file=sys.stderr)
+        print("[moondream] model loaded successfully", file=sys.stderr)
     except Exception as e:
         print(f"[moondream] FATAL: {e}", file=sys.stderr)
         raise

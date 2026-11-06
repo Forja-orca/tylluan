@@ -101,10 +101,10 @@ async def sovereign_structural_mapper(refresh: bool = False) -> str:
     hotspots = sorted(_project_graph.items(), key=lambda x: len(x[1]["dependents"]), reverse=True)
     
     summary = [
-        f"📊 Project Map Complete",
+        "📊 Project Map Complete",
         f"Files indexed: {len(code_files)}",
         f"Relationships found: {sum(len(v['imports']) for v in _project_graph.values())}",
-        f"\n🔥 Top Hotspots (Most depended upon):"
+        "\n🔥 Top Hotspots (Most depended upon):"
     ]
     
     for path, data in hotspots[:10]:

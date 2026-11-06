@@ -256,7 +256,6 @@ def analyze_feedback(min_age_secs: int = 300) -> str:
     Args:
         min_age_secs: Minimum age of feedback rows to consider (default 5min).
     """
-    import sqlite3
     data_dir = Path("data")
     silva = sqlite3.connect(str(data_dir / "silva.db"))
     audit = sqlite3.connect(str(data_dir / "audit.db"))

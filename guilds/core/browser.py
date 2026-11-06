@@ -191,7 +191,7 @@ async def browser_screenshot(path: str = "screenshot.png") -> str:
     
     # Basic screenshot using mss or PIL would be needed
     # For now, return placeholder with guidance
-    return f"Screenshot feature requires remote debugging. Use browser_navigate first to open browser with debugging enabled."
+    return "Screenshot feature requires remote debugging. Use browser_navigate first to open browser with debugging enabled."
 
 
 @mcp.tool()

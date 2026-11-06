@@ -713,7 +713,7 @@ def whats_new(agent_id: str = "", query: str = "", intent: str = "",
             if ch.get("unread_count", 0) <= 0:
                 continue
             if shown_channels >= 5:
-                lines.append(f"…y más canales con mensajes sin leer. Vuelve a llamar whats_new.")
+                lines.append("…y más canales con mensajes sin leer. Vuelve a llamar whats_new.")
                 break
             shown_channels += 1
             cid = ch["channel_id"]
