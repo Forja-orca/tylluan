@@ -295,7 +295,15 @@ fn log_audit_entry_at(path: &std::path::Path, intent: &str, guild: &str, tool: &
     // row is self-identifying (commit/config/catalog of the system that
     // produced it). NOT part of the chain hash — legacy rows (NULL) must stay
     // verifiable and the chain covers tamper-evidence, not identity.
-    for col in ["latency_ms INTEGER", "human_intervention INTEGER NOT NULL DEFAULT 0", "system_snapshot TEXT"] {
+    for col in [
+        "latency_ms INTEGER",
+        "human_intervention INTEGER NOT NULL DEFAULT 0",
+        "system_snapshot TEXT",
+        // D-114 (H23): version de la cadena. 1 = formula historica (solo
+        // metadatos). 2 = encadena tambien el contenido de la fila. Las filas
+        // viejas se quedan en 1 y siguen verificando con su formula.
+        "chain_version INTEGER NOT NULL DEFAULT 1",
+    ] {
         let _ = conn.execute_batch(&format!("ALTER TABLE guild_audit_log ADD COLUMN {col}"));
     }
 
@@ -326,26 +334,102 @@ fn log_audit_entry_at(path: &std::path::Path, intent: &str, guild: &str, tool: &
         })
         .unwrap_or_default();
 
-    // Chain hash: SHA-256 of (prev_hash || timestamp || guild || tool || agent_id || status)
-    let chain_input = format!("{prev_hash}|{now}|{guild}|{tool}|{agent_id}|{status}");
-    use sha2::Digest;
-    let hash = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
+    // D-107: puerta ÚNICA de redacción de previews. Los llamadores pasan el texto
+    // crudo (salida de tool incluida); aquí se limpia antes de tocar disco, así un
+    // cuarto llamador futuro hereda la redacción sin que nadie se acuerde.
+    // Se limpia ANTES del hash porque D-114 encadena el preview YA redactado: es
+    // el valor que queda en disco, y es ese el que hay que proteger de reescritura.
+    let preview = crate::security::redaction::scrub_result_preview(preview);
 
     let snapshot_json = crate::router::system_snapshot::global()
         .and_then(|s| serde_json::to_string(s).ok());
 
-    // D-107: puerta ÚNICA de redacción de previews. Los llamadores pasan el texto
-    // crudo (salida de tool incluida); aquí se limpia antes de tocar disco, así un
-    // cuarto llamador futuro hereda la redacción sin que nadie se acuerde.
-    let preview = &crate::security::redaction::scrub_result_preview(preview);
+    // D-114 (H23): cadena v2 — encadena el contenido, no solo los metadatos.
+    let chain_input = chain_input_v2(
+        &prev_hash,
+        &now,
+        guild,
+        tool,
+        agent_id,
+        status,
+        intent,
+        &preview,
+        latency_ms,
+        human_intervention,
+    );
+    let hash = hash_hex(&chain_input);
 
     tx.execute(
-        "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash, latency_ms, human_intervention, system_snapshot)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-        rusqlite::params![now, guild, tool, agent_id, intent, status, preview, prev_hash, hash, latency_ms as i64, if human_intervention { 1 } else { 0 }, snapshot_json],
+        "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash, latency_ms, human_intervention, system_snapshot, chain_version)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        rusqlite::params![now, guild, tool, agent_id, intent, status, preview, prev_hash, hash, latency_ms as i64, if human_intervention { 1 } else { 0 }, snapshot_json, CHAIN_VERSION_CONTENT],
     ).map_err(|e| format!("audit insert: {e}"))?;
     tx.commit().map_err(|e| format!("audit commit: {e}"))?;
     Ok(())
+}
+
+/// D-114: versión de la cadena que encadena también el contenido de la fila.
+const CHAIN_VERSION_CONTENT: i64 = 2;
+
+/// SHA-256 en hexadecimal de una entrada de la cadena.
+fn hash_hex(input: &str) -> String {
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(input.as_bytes()))
+}
+
+/// D-114 (H23): fórmula **v1** de la cadena, la que usaron las filas históricas:
+/// SHA-256 de `prev|timestamp|guild|tool|agent|status`.
+///
+/// Deja FUERA `intent` y `result_preview`, que son el contenido real de la fila.
+/// Ese es el agujero que arregla v2: reescribir el contenido con SQL directo
+/// dejaba la cadena "limpia" (reproducido sobre `guild_audit.db` de producción:
+/// 9.256 filas, id 9255 con `intent` y `result_preview` sustituidos por texto
+/// falso → 0 hashes descubiertos; cambiando `status` en la misma fila → 1).
+fn chain_input_v1(
+    prev: &str,
+    ts: &str,
+    guild: &str,
+    tool: &str,
+    agent: &str,
+    status: &str,
+) -> String {
+    format!("{prev}|{ts}|{guild}|{tool}|{agent}|{status}")
+}
+
+/// D-114 (H23): fórmula **v2**. Encadena además `intent`, `result_preview`,
+/// `latency_ms` y `human_intervention`.
+///
+/// Cada campo va precedido de su longitud en bytes (`|len:valor`) en vez de un
+/// `|` suelto como separador: con el separador a pelo, un `guild` que contuviera
+/// `|` podía mover la frontera con `tool_name` y producir la misma entrada para
+/// dos filas distintas.
+#[allow(clippy::too_many_arguments)]
+fn chain_input_v2(
+    prev: &str,
+    ts: &str,
+    guild: &str,
+    tool: &str,
+    agent: &str,
+    status: &str,
+    intent: &str,
+    preview: &str,
+    latency_ms: u64,
+    human_intervention: bool,
+) -> String {
+    let mut out = String::from("v2");
+    for field in [prev, ts, guild, tool, agent, status, intent, preview] {
+        out.push('|');
+        out.push_str(&field.len().to_string());
+        out.push(':');
+        out.push_str(field);
+    }
+    for num in [latency_ms.to_string(), human_intervention.to_string()] {
+        out.push('|');
+        out.push_str(&num.len().to_string());
+        out.push(':');
+        out.push_str(&num);
+    }
+    out
 }
 
 /// Intervalo mínimo entre warns por fallo de auditoría (proceso-wide).
@@ -437,6 +521,25 @@ impl AuditChainReport {
     }
 }
 
+/// D-114: una fila de la cadena tal como la necesita el verificador. Existe para
+/// no devolver una tupla de 13 elementos desde el `query_map` (clippy
+/// `type_complexity`) y para que la versión y el contenido tengan nombre.
+struct ChainRow {
+    id: i64,
+    ts: String,
+    guild: String,
+    tool: String,
+    agent: String,
+    status: String,
+    stored_prev: String,
+    stored_hash: String,
+    version: i64,
+    intent: String,
+    preview: String,
+    latency_ms: u64,
+    human: bool,
+}
+
 /// Verify the integrity of the audit chain from oldest to newest.
 pub fn verify_audit_chain() -> Result<AuditChainReport, String> {
     verify_audit_chain_at(&guild_audit_db_path())
@@ -460,44 +563,106 @@ pub(crate) fn verify_audit_chain_at(path: &std::path::Path) -> Result<AuditChain
             prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL
         );"
     );
-    let mut stmt = conn.prepare(
-        "SELECT id, timestamp, guild, tool_name, agent_id, status, prev_hash, hash \
-         FROM guild_audit_log ORDER BY id ASC"
-    ).map_err(|e| format!("audit prepare: {e}"))?;
+    // D-117: se pregunta qué columnas HAY y las que faltan se sustituyen por un
+    // literal en el SELECT. Antes (D-114) esto hacía tres `ALTER TABLE` desde el
+    // verificador: sobre una base o un fichero de solo lectura el ALTER falla en
+    // silencio y el SELECT siguiente revienta ("no such column"), así que el
+    // endpoint devolvía error en vez de informe. Verificar no debe escribir.
+    let columnas: std::collections::HashSet<String> = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(guild_audit_log)")
+            .map_err(|e| format!("audit pragma: {e}"))?;
+        let iter = stmt
+            .query_map([], |r| r.get::<_, String>(1))
+            .map_err(|e| format!("audit pragma query: {e}"))?;
+        iter.filter_map(Result::ok).collect()
+    };
+    // Una fila sin `chain_version` es una fila v1 (fórmula histórica).
+    let col = |nombre: &str, por_defecto: &str| -> String {
+        if columnas.contains(nombre) {
+            nombre.to_string()
+        } else {
+            por_defecto.to_string()
+        }
+    };
+    let sql = format!(
+        "SELECT id, timestamp, guild, tool_name, agent_id, status, prev_hash, hash, \
+                {}, {}, {}, {}, {} \
+         FROM guild_audit_log ORDER BY id ASC",
+        col("chain_version", "1"),
+        col("intent", "''"),
+        col("result_preview", "''"),
+        col("latency_ms", "0"),
+        col("human_intervention", "0"),
+    );
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("audit prepare: {e}"))?;
     ensure_chain_meta(&conn)?;
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, String>(4)?,
-            row.get::<_, String>(5)?,
-            row.get::<_, String>(6)?,
-            row.get::<_, String>(7)?,
-        ))
-    }).map_err(|e| format!("audit query: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ChainRow {
+                id: row.get(0)?,
+                ts: row.get(1)?,
+                guild: row.get(2)?,
+                tool: row.get(3)?,
+                agent: row.get(4)?,
+                status: row.get(5)?,
+                stored_prev: row.get(6)?,
+                stored_hash: row.get(7)?,
+                // Sin la columna (base anterior) o con ella, una fila sin versión
+                // es una fila v1 y se verifica con la fórmula histórica.
+                version: row.get::<_, Option<i64>>(8)?.unwrap_or(1),
+                intent: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                preview: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                latency_ms: row.get::<_, Option<i64>>(11)?.unwrap_or(0).max(0) as u64,
+                human: row.get::<_, Option<i64>>(12)?.unwrap_or(0) != 0,
+            })
+        })
+        .map_err(|e| format!("audit query: {e}"))?;
 
     let mut prev = chain_anchor(&conn);
     let mut report = AuditChainReport::default();
     for row_res in rows {
-        let row = row_res.map_err(|e| format!("audit row: {e}"))?;
-        let (id, ts, guild, tool_name, agent_id, status, stored_prev, stored_hash) = row;
-        let chain_input = format!("{stored_prev}|{ts}|{guild}|{tool_name}|{agent_id}|{status}");
-        use sha2::Digest;
-        let computed = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
+        let r = row_res.map_err(|e| format!("audit row: {e}"))?;
+        // D-114: la versión viaja EN LA FILA. Así una base con historia v1
+        // (9.256 filas en producción) se verifica entera y solo las filas nuevas
+        // exigen la cobertura de contenido.
+        let computed = if r.version >= CHAIN_VERSION_CONTENT {
+            hash_hex(&chain_input_v2(
+                &r.stored_prev,
+                &r.ts,
+                &r.guild,
+                &r.tool,
+                &r.agent,
+                &r.status,
+                &r.intent,
+                &r.preview,
+                r.latency_ms,
+                r.human,
+            ))
+        } else {
+            hash_hex(&chain_input_v1(
+                &r.stored_prev,
+                &r.ts,
+                &r.guild,
+                &r.tool,
+                &r.agent,
+                &r.status,
+            ))
+        };
 
-        if computed != stored_hash {
-            report.hash_inconsistent.push(id);
-        } else if stored_prev != prev {
-            report.link_breaks.push(id);
+        if computed != r.stored_hash {
+            report.hash_inconsistent.push(r.id);
+        } else if r.stored_prev != prev {
+            report.link_breaks.push(r.id);
         } else {
             report.ok += 1;
         }
 
         // Resynchronize: the chain continues from what is actually stored, so a
         // single bad row is reported once instead of poisoning the rest.
-        prev = stored_hash;
+        prev = r.stored_hash;
     }
     Ok(report)
 }
@@ -554,7 +719,7 @@ pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::verify_audit_chain_at;
+    use super::{chain_input_v1, hash_hex, log_audit_entry_at, verify_audit_chain_at};
 
     /// D-107 de punta a punta por la PUERTA ÚNICA: se registra un valor como
     /// secreto, se escribe una fila de auditoría con ese valor en el preview y se
@@ -1086,6 +1251,229 @@ mod tests {
         assert_eq!(report.hash_inconsistent, vec![ids[1]]);
         assert!(report.link_breaks.is_empty(), "an edited row is not a broken link");
         assert_eq!(report.ok, 3, "the rows after the edited one stay valid");
+        let _ = std::fs::remove_file(&db);
+    }
+
+    /// D-117: **verificar no escribe**. El verificador hacía tres `ALTER TABLE`
+    /// para añadir `chain_version`/`latency_ms`/`human_intervention`; en una base
+    /// (o un fichero) de solo lectura esos ALTER fallan en silencio y el SELECT
+    /// siguiente revienta, así que el endpoint de auditoría devolvía error en vez
+    /// de informe. Este test compara el esquema antes y después de verificar.
+    #[test]
+    fn d117_verificar_no_altera_el_esquema() {
+        fn columnas(db: &std::path::Path) -> Vec<String> {
+            let conn = crate::config::open_db(db).expect("open");
+            let mut stmt = conn.prepare("PRAGMA table_info(guild_audit_log)").expect("pragma");
+            let mut out: Vec<String> = stmt
+                .query_map([], |r| r.get::<_, String>(1))
+                .expect("query")
+                .filter_map(Result::ok)
+                .collect();
+            out.sort();
+            out
+        }
+
+        let db = std::env::temp_dir().join(format!("audit_d117_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        let conn = crate::config::open_db(&db).expect("open");
+        // Tabla deliberadamente vieja: sin chain_version, latency_ms ni human_intervention.
+        conn.execute_batch(
+            "CREATE TABLE guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL, guild TEXT NOT NULL, tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '', intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok', result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL
+            );",
+        )
+        .expect("schema");
+        let ts = "2026-01-01T00:00:00+00:00";
+        let h1 = hash_hex(&chain_input_v1("", ts, "g1", "t1", "a1", "ok"));
+        conn.execute(
+            "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, \
+             status, result_preview, prev_hash, hash) VALUES (?1,'g1','t1','a1','vieja','ok','p','',?2)",
+            rusqlite::params![ts, h1],
+        )
+        .expect("fila v1");
+        drop(conn);
+
+        let antes = columnas(&db);
+        let report = verify_audit_chain_at(&db).expect("verify");
+        let despues = columnas(&db);
+
+        assert!(report.is_clean(), "la fila v1 debe verificar: {report:?}");
+        assert_eq!(
+            antes, despues,
+            "verificar ha cambiado el esquema (antes {antes:?}, después {despues:?})"
+        );
+        let _ = std::fs::remove_file(&db);
+    }
+
+    /// D-116 (H25): guardián estructural de la puerta de redacción.
+    ///
+    /// H25 decía que "nada impide un tercer `INSERT` con `result_preview` fuera de
+    /// la puerta". Al ir a buscarlo resultó que había un **cuarto**, y en otro
+    /// fichero: `api_journal::log_guild_call` escribía en una tabla llamada
+    /// `guild_audit_log` los argumentos crudos del tool, con su propia cadena y
+    /// sin redactar. Se corrigió ahí; este test es lo que impide que vuelva.
+    ///
+    /// Regla: **todo** `INSERT INTO guild_audit_log` en código de producción tiene
+    /// que vivir en un fichero que use la puerta única (`scrub_result_preview`), y
+    /// en este fichero la redacción tiene que ir ANTES del INSERT.
+    #[test]
+    fn h25_toda_escritura_de_auditoria_pasa_por_la_puerta() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut pila = vec![root.clone()];
+        let mut escrituras: Vec<(String, usize)> = Vec::new();
+        let mut sin_puerta: Vec<String> = Vec::new();
+
+        while let Some(dir) = pila.pop() {
+            for entry in std::fs::read_dir(&dir).expect("leer src/") {
+                let path = entry.expect("entrada de directorio").path();
+                if path.is_dir() {
+                    pila.push(path);
+                    continue;
+                }
+                if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                    continue;
+                }
+                let src = std::fs::read_to_string(&path).expect("leer fuente");
+                // Todo lo anterior al módulo `mod tests` es código de producción.
+                // Se corta por `mod tests` y no por `#[cfg(test)]` porque dentro del
+                // módulo puede haber atributos anidados, y cortar por el último se
+                // llevaba trozos de tests a la parte "de producción". Tampoco se
+                // ata a los saltos de línea: hay ficheros con CRLF y el marcador
+                // `\n#[cfg(test)]\n` no casa (falso positivo que saltó al escribirlo).
+                let produccion = match src.rfind("\nmod tests") {
+                    Some(i) => &src[..i],
+                    None => src.as_str(),
+                };
+                let n = produccion.matches("INSERT INTO guild_audit_log").count();
+                if n == 0 {
+                    continue;
+                }
+                let nombre = path
+                    .strip_prefix(&root)
+                    .unwrap_or(path.as_path())
+                    .display()
+                    .to_string();
+                escrituras.push((nombre.clone(), n));
+                if !produccion.contains("scrub_result_preview") {
+                    sin_puerta.push(nombre);
+                }
+            }
+        }
+
+        assert!(
+            !escrituras.is_empty(),
+            "el guardián no ha encontrado NI UNA escritura de auditoría: la búsqueda está rota \
+             (¿cambió el nombre de la tabla o la ruta de src/?)"
+        );
+        assert!(
+            sin_puerta.is_empty(),
+            "escrituras de auditoría que NO pasan por la puerta de redacción: {sin_puerta:?} \
+             (detalle: {escrituras:?})"
+        );
+    }
+
+    /// D-116: en la cadena principal la redacción va **antes** del INSERT. Si alguien
+    /// la mueve detrás, el hash encadenaría el texto crudo y el preview saldría sin
+    /// limpiar.
+    #[test]
+    fn h25_la_redaccion_va_antes_del_insert() {
+        let src = include_str!("audit.rs");
+        let produccion = match src.rfind("\nmod tests") {
+            Some(i) => &src[..i],
+            None => src,
+        };
+        let puerta = produccion
+            .find("scrub_result_preview(")
+            .expect("la cadena principal tiene que usar la puerta única");
+        let insert = produccion
+            .find("INSERT INTO guild_audit_log")
+            .expect("la cadena principal tiene que insertar");
+        assert!(
+            puerta < insert,
+            "la redacción debe ocurrir ANTES del INSERT (puerta en {puerta}, INSERT en {insert})"
+        );
+    }
+
+    /// D-114 (H23): el test que faltaba. Los de D-95 reescribían `status`, que SÍ
+    /// va en el hash, así que pasaban sin tocar el contenido. Aquí se reescribe lo
+    /// que de verdad importa — qué se pidió (`intent`) y qué se devolvió
+    /// (`result_preview`) — y la cadena DEBE marcarlo.
+    ///
+    /// Contra el código de antes del arreglo este test falla: el informe salía
+    /// limpio con el contenido falsificado.
+    #[test]
+    fn d114_reescribir_el_contenido_rompe_la_cadena() {
+        let db = std::env::temp_dir().join(format!("audit_d114_content_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        log_audit_entry_at(
+            &db, "intencion original", "g1", "t1", "a1", true, "resultado original", 12, false,
+        )
+        .expect("fila 1");
+        log_audit_entry_at(
+            &db, "segunda intencion", "g1", "t1", "a1", true, "segundo resultado", 13, false,
+        )
+        .expect("fila 2");
+
+        let clean = verify_audit_chain_at(&db).expect("verify");
+        assert!(clean.is_clean(), "lo recien escrito debe verificar: {clean:?}");
+        assert_eq!(clean.ok, 2);
+
+        let conn = crate::config::open_db(&db).expect("open");
+        conn.execute(
+            "UPDATE guild_audit_log SET intent = 'INTENCION FALSA', \
+             result_preview = 'RESULTADO FALSO' WHERE id = 1",
+            [],
+        )
+        .expect("tamper");
+        drop(conn);
+
+        let report = verify_audit_chain_at(&db).expect("verify");
+        assert_eq!(
+            report.hash_inconsistent,
+            vec![1],
+            "el contenido reescrito debe salir como hash_inconsistent: {report:?}"
+        );
+        let _ = std::fs::remove_file(&db);
+    }
+
+    /// D-114: las filas de la cadena histórica (9.256 en producción) siguen
+    /// verificando. La versión viaja EN LA FILA, no en el código, así que el
+    /// cambio no invalida la historia.
+    #[test]
+    fn d114_las_filas_de_la_cadena_v1_siguen_verificando() {
+        let db = std::env::temp_dir().join(format!("audit_d114_legacy_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        let conn = crate::config::open_db(&db).expect("open");
+        conn.execute_batch(
+            "CREATE TABLE guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL, guild TEXT NOT NULL, tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '', intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok', result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL,
+                latency_ms INTEGER, human_intervention INTEGER NOT NULL DEFAULT 0,
+                system_snapshot TEXT, chain_version INTEGER NOT NULL DEFAULT 1
+            );",
+        )
+        .expect("schema");
+        let ts = "2026-01-01T00:00:00+00:00";
+        let h1 = hash_hex(&chain_input_v1("", ts, "g1", "t1", "a1", "ok"));
+        conn.execute(
+            "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, \
+             status, result_preview, prev_hash, hash, chain_version) \
+             VALUES (?1,'g1','t1','a1','vieja','ok','preview viejo','',?2,1)",
+            rusqlite::params![ts, h1],
+        )
+        .expect("fila v1");
+        drop(conn);
+
+        let report = verify_audit_chain_at(&db).expect("verify");
+        assert!(report.is_clean(), "una fila v1 debe seguir verificando: {report:?}");
+        assert_eq!(report.ok, 1);
         let _ = std::fs::remove_file(&db);
     }
 

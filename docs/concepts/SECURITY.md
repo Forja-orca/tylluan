@@ -65,15 +65,15 @@ Tylluan's posture against [OWASP ASI 2026](https://genai.owasp.org/resource/owas
 
 | Code | Risk | Tylluan Status |
 |------|------|----------------|
-| ASI01 | Agent Goal Hijack | ⚠️ No prompt injection filtering |
+| ASI01 | Agent Goal Hijack | ⚠️ **Partial**: the Coherence Gate eliminates known injection patterns in `tylluan_recall` (layer 1, `security/coherence_gate.rs`), `poison_patterns` also screens tool descriptions at registry time (`registry/tool_integrity.rs`), and external content is marked untrusted before it reaches a model (`guilds/core/utils.py:307`, used by `websearch` and `deep_web_research`). **Missing**: an L0 filter on the input of `tylluan_do`, and the Qwen3Guard judge is not loaded — it is skipped whenever CPU is above `max_cpu_pct`, which is most of the day on a build box |
 | ASI02 | Tool Misuse | ✅ Opt-in Docker sandbox for bash/code guilds |
 | ASI03 | Identity Abuse | ⚠️ agent_id is self-reported |
-| ASI04 | Supply Chain | ✅ Guilds loaded from local disk only |
+| ASI04 | Supply Chain | ⚠️ **Partial**: Python guilds are loaded from local disk only, but the registry also accepts **external MCP servers over HTTP/SSE** (`GuildLauncher::Http` / `GuildLauncher::Sse`, persisted as `is_remote` in `registry/guild_process.rs`), configured by the operator. An external guild is a remote code and data surface, not a local one |
 | ASI05 | Code Execution | ✅ Optional Docker sandbox for bash/code guilds |
-| ASI06 | Memory Poisoning | ✅ Closed (2026-08-13/14) — both directions covered: `tylluan_recall` passes through the ADR-011 Coherence Gate (below), and `tylluan_remember` now has a real 2-layer ingestion-time gate (see below) |
-| ASI07 | Insecure Inter-Agent | ✅ Localhost-only mitigates |
+| ASI06 | Memory Poisoning | ⚠️ **Partial**: both directions are wired — `tylluan_recall` goes through the Coherence Gate (`handler_recall.rs`, `filter_with_scope`) and `tylluan_remember` has a **2-layer** write gate: layer 1 is deterministic and synchronous (hard reject, always runs) and layer 2 is an ephemeral grammar judge that runs *after* the write and quarantines the node on rejection (`security/write_gate.rs`). **But layer 2 fails open**: when the judge is unavailable it bumps `judge_unavailable_count` and returns without blocking. On a box where that judge never loads (see ASI01), only layer 1 is in force |
+| ASI07 | Insecure Inter-Agent | ⚠️ **Partial**: the HTTP surface binds `127.0.0.1` by default (`config.rs`, `default_host`), and `host = "0.0.0.0"` together with `dev_mode` is forbidden by the project rules — but that is a **default, not a guarantee**. Federation (SQLite peers), the P2P TCP dispatch listener (`[p2p]`, off by default) and mDNS (opt-in) are separate network surfaces with their own trust model |
 | ASI08 | Cascading Failures | ✅ Supervisor with crash loop detection |
-| ASI09 | Trust Exploitation | ⚠️ No confidence warnings on tylluan_think |
+| ASI09 | Trust Exploitation | ⚠️ **Partial**: the synthesis from `tylluan_think` carries **no confidence estimate** — `handler_think` returns a single text block and nothing else. It does, however, **banner-mark untrusted content** before it reaches the model: every memory node that was flagged as untrusted goes through `security/trust::mark_text` (`handler_think.rs::trust_text`, T-DSH-11), the same contract used by recall and bootstrap |
 | ASI10 | Rogue Agents | ✅ Emergency kill switch (POST /api/v1/admin/emergency-kill) and per-guild kill |
 
 See [DISCLAIMER.md](../../DISCLAIMER.md) for operator responsibilities.

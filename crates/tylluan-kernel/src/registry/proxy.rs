@@ -48,6 +48,120 @@ pub struct McpProxy {
     tool_call_timeout: u64,
 }
 
+/// D-109: el stderr de un guild ya no se hereda (eso abría una consola visible en
+/// Windows y, cuando el kernel no tiene consola, el error se perdía). Se escribe en
+/// `data/logs/guilds/<guild>.err`, con **techo de tamaño**: un guild que muere y se
+/// relanza en bucle no puede llenar el disco (review par de @hermes, T2830-b).
+fn guild_stderr_sink(guild_name: &str) -> std::process::Stdio {
+    const MAX_BYTES: u64 = 5 * 1024 * 1024;
+    let dir = crate::config::data_dir().join("logs").join("guilds");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return std::process::Stdio::null();
+    }
+    let safe: String = guild_name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let path = dir.join(format!("{safe}.err"));
+    // Techo: al pasar de 5 MiB se rota a `.err.1` (una sola generación; el detalle
+    // interesa para el diagnóstico inmediato, no como histórico).
+    if std::fs::metadata(&path).map(|m| m.len() > MAX_BYTES).unwrap_or(false) {
+        let _ = std::fs::rename(&path, dir.join(format!("{safe}.err.1")));
+    }
+    match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        Ok(f) => std::process::Stdio::from(f),
+        Err(_) => std::process::Stdio::null(),
+    }
+}
+
+/// Extrae los **módulos de guild** que aparecen en una línea de comandos.
+///
+/// Soporta las dos formas que produce el spawn real:
+/// - `python -m guilds.core.vision`  → `guilds.core.vision`
+/// - una ruta `.../guilds/core/vision.py` → `guilds/core/vision.py`
+///
+/// Devuelve el módulo tal cual (sin normalizar), para que el llamador compare
+/// segmentos completos.
+fn modulos_de_guild(cmd: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    // Forma `-m guilds.a.b`
+    for (i, _) in cmd.match_indices("guilds.") {
+        let resto = &cmd[i + "guilds.".len()..];
+        let modulo: String = resto
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '.')
+            .collect();
+        if !modulo.is_empty() {
+            out.push(format!("guilds.{modulo}"));
+        }
+    }
+    // Forma de ruta `guilds/a/b.py` (con `\` o `/`)
+    let norm = cmd.replace('\\', "/");
+    for (i, _) in norm.match_indices("guilds/") {
+        let resto = &norm[i + "guilds/".len()..];
+        let ruta: String = resto
+            .chars()
+            .take_while(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/')
+            })
+            .collect();
+        if !ruta.is_empty() {
+            out.push(format!("guilds/{ruta}"));
+        }
+    }
+    out
+}
+
+/// ¿La línea de comandos corresponde a **este** guild, por nombre **exacto**?
+///
+/// Antes se decidía con `cmd_lower.contains(nombre)`, una **subcadena** sobre toda
+/// la línea. Con `kill_abandoned_child` ejecutándose **al arrancar cada guild** y
+/// con la `cmd()` ya legible (D-119), eso mataba guilds sanos por colisión de
+/// subcadena: `code` ⊂ `code_analysis`/`code_graph`/`codebase_memory`/
+/// `gmp-code-assist`, `search` ⊂ `websearch`/`deep_web_research`, `memory` ⊂
+/// `codebase_memory`, `scheduler` ⊂ `cron_scheduler`, `git` ⊂ `GitKraken`,
+/// `coloquio` ⊂ `coloquio_digest`. **11 pares reales**, señalados por el TL.
+///
+/// Ahora se compara el **último segmento del módulo** con el nombre del guild (o con
+/// su variante con guiones bajos), nunca una subcadena.
+pub(crate) fn cmd_matches_guild_exact(cmd: &str, guild_name: &str) -> bool {
+    let objetivo = guild_name.to_lowercase();
+    let objetivo_guion_bajo = objetivo.replace('-', "_");
+    // Alias histórico: el módulo real es `guilds.core.scrapling_web` y el guild se
+    // llama `scrapling`. Es una equivalencia declarada, no una coincidencia.
+    let alias = if guild_name.eq_ignore_ascii_case("scrapling") {
+        Some("scrapling_web".to_string())
+    } else {
+        None
+    };
+
+    for modulo in modulos_de_guild(cmd) {
+        let normalizado = modulo.replace('\\', "/");
+        // OJO: `rsplit` sobre '.' Y '/' a la vez devolvía `"py"` en la forma de ruta
+        // (`guilds/core/vision.py`). Hay que quedarse con la hoja del camino y
+        // quitarle la extensión ANTES de mirar puntos.
+        let hoja = if normalizado.contains('/') {
+            normalizado
+                .rsplit('/')
+                .next()
+                .unwrap_or("")
+                .trim_end_matches(".py")
+        } else {
+            normalizado.rsplit('.').next().unwrap_or("")
+        };
+        let ultimo = hoja.to_lowercase();
+        if ultimo == objetivo || ultimo == objetivo_guion_bajo {
+            return true;
+        }
+        if let Some(ref a) = alias
+            && &ultimo == a
+        {
+            return true;
+        }
+    }
+    false
+}
+
 impl McpProxy {
     /// Spawn a generic MCP process and establish MCP connection.
     ///
@@ -80,7 +194,19 @@ impl McpProxy {
         command
             .stdout(std::process::Stdio::piped())
             .stdin(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::inherit());
+            .stderr(guild_stderr_sink(guild_name));
+
+        // Windows: sin este flag cada spawn de un guild abre una CONSOLA VISIBLE.
+        // Medido en vivo el 2026-11-05: dos guilds muriendo y relanzándose en cada
+        // llamada (~30 s) inundaban la pantalla de terminales Python. Con
+        // CREATE_NO_WINDOW el proceso corre igual pero sin ventana; el error se
+        // conserva porque stderr va a un fichero (ver `guild_stderr_sink`).
+        #[cfg(windows)]
+        {
+            // tokio::process::Command expone creation_flags de forma inherente.
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
 
         // Create TokioChildProcess - this internally MUST handle spawning
         let child_process = TokioChildProcess::new(&mut command)
@@ -151,17 +277,16 @@ impl McpProxy {
         cmd: &str,
         exe_name: &str,
         parent_is_self: bool,
+        // D-120: ¿sigue vivo el padre de este proceso?
+        parent_alive: bool,
         memory_kb: u64,
         guild_name: &str,
     ) -> bool {
         let cmd_lower = cmd.to_lowercase();
-        let name_lower = guild_name.to_lowercase();
         let pattern_lower = guild_name.replace('-', "_").to_lowercase();
-        let is_guild_cmd = cmd.contains("guilds.") || cmd.contains("guilds/") || cmd.contains("guilds\\");
-        let matches_name = cmd_lower.contains(&name_lower)
-            || cmd_lower.contains(&pattern_lower)
-            || (guild_name == "scrapling" && cmd_lower.contains("scrapling_web"));
-        if !(is_guild_cmd && matches_name) {
+        // TL (revisión clase A, T2922): comparación EXACTA del módulo, no subcadena.
+        // Se aplica a las DOS estrategias de abajo, no solo a la 2.
+        if !cmd_matches_guild_exact(cmd, guild_name) {
             return false;
         }
         // Strategy 1: direct child of this kernel — any memory size.
@@ -176,6 +301,15 @@ impl McpProxy {
             let exact_module = cmd_lower.contains(&format!("guilds.core.{pattern_lower}"))
                 || cmd_lower.contains(&format!("guilds.{pattern_lower}"))
                 || cmd_lower.contains(&format!("guilds.{pattern_lower}."));
+            // D-120 (riesgo que señaló dsh en T2863 antes de que esto despierte):
+            // el patrón medido de un guild sano es kernel -> python padre -> python
+            // hijo con la MISMA línea de comandos. Sin esta guarda, `exact_module`
+            // convertía a ese nieto sano en "huérfano" y el matador se lo llevaba.
+            // La estrategia 2 es para procesos de una sesión anterior: si el padre
+            // está vivo, no es de una sesión anterior.
+            if parent_alive {
+                return false;
+            }
             return memory_kb < 10_000 || exact_module;
         }
         false
@@ -186,7 +320,13 @@ impl McpProxy {
     /// Enhanced to also clean stale processes from previous sessions.
     pub(crate) fn kill_abandoned_child(guild_name: &str) {
         let mut sys = sysinfo::System::new();
-        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        // D-119: sin `ProcessRefreshKind::everything()` la `cmd()` llega vacía y
+        // este anti-huérfano no mataba nada nunca (mismo fallo que el aislamiento).
+        sys.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::everything(),
+        );
         
         let self_pid = std::process::id();
         let mut killed_count = 0;
@@ -202,7 +342,11 @@ impl McpProxy {
                 .map(|parent_pid| parent_pid.as_u32() == self_pid)
                 .unwrap_or(false);
             let memory_kb = process.memory() / 1024;
-            if Self::is_guild_orphan(&cmd, &exe_name, parent_is_self, memory_kb, guild_name) {
+            let parent_alive = process
+                .parent()
+                .map(|parent_pid| sys.process(parent_pid).is_some())
+                .unwrap_or(false);
+            if Self::is_guild_orphan(&cmd, &exe_name, parent_is_self, parent_alive, memory_kb, guild_name) {
                 info!(
                     "🧹 [P0] Anti-Orphan: Killing PID {} (parent_is_kernel={}, {} KB) for '{}'",
                     pid, parent_is_self, memory_kb, guild_name
@@ -1161,7 +1305,7 @@ mod tests {
     fn t_dsh_106_orphan_llama_backend_high_memory_is_reaped_even_if_reparented() {
         let cmd = r#""<raiz-repo>\.venv\Scripts\python.exe" -m guilds.core.llama_backend"#;
         assert!(
-            McpProxy::is_guild_orphan(cmd, "python.exe", false, 80_000, "llama_backend"),
+            McpProxy::is_guild_orphan(cmd, "python.exe", false, false, 80_000, "llama_backend"),
             "un proceso del módulo exacto guilds.core.llama_backend debe ser huérfano aunque tenga 80 MB"
         );
     }
@@ -1169,19 +1313,99 @@ mod tests {
     #[test]
     fn t_dsh_106_direct_child_still_reaped_regardless_of_memory() {
         let cmd = r#""<raiz-repo>\.venv\Scripts\python.exe" -m guilds.core.llama_backend"#;
-        assert!(McpProxy::is_guild_orphan(cmd, "python.exe", true, 80_000, "llama_backend"));
+        assert!(McpProxy::is_guild_orphan(cmd, "python.exe", true, false, 80_000, "llama_backend"));
     }
 
     #[test]
     fn t_dsh_106_other_guild_process_is_not_reaped() {
         let cmd = r#""<raiz-repo>\.venv\Scripts\python.exe" -m guilds.core.bash"#;
-        assert!(!McpProxy::is_guild_orphan(cmd, "python.exe", false, 80_000, "llama_backend"));
-        assert!(!McpProxy::is_guild_orphan(cmd, "python.exe", true, 80_000, "llama_backend"));
+        assert!(!McpProxy::is_guild_orphan(cmd, "python.exe", false, false, 80_000, "llama_backend"));
+        assert!(!McpProxy::is_guild_orphan(cmd, "python.exe", true, false, 80_000, "llama_backend"));
+    }
+
+    /// **TL, revisión clase A (T2922).** El matcher viejo decidía con una
+    /// **subcadena** sobre toda la línea de comandos, y `kill_abandoned_child` se
+    /// ejecuta **al arrancar cada guild**. Con la `cmd()` ya legible (D-119) eso
+    /// mataba guilds sanos por colisión de nombre: **11 pares reales**.
+    ///
+    /// Este test recorre los 11 y exige que el nombre CORTO **no** case con la
+    /// línea de comandos del guild LARGO.
+    #[test]
+    fn t2922_los_11_pares_reales_no_se_confunden_por_subcadena() {
+        // (línea de comandos del guild que NO queremos matar, nombre corto que antes colisionaba)
+        let pares: [(&str, &str); 11] = [
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.code_analysis"#, "code"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.code_graph"#, "code"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.code_reviewer"#, "code"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.scholars.plugins.codebase_memory"#, "code"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.builders.plugins.gmp_code_assist"#, "code"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.coloquio_digest"#, "coloquio"),
+            (r#""C:\Program Files\GitKraken\GitKraken.exe""#, "git"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.scholars.plugins.codebase_memory"#, "memory"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.cron_scheduler"#, "scheduler"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.deep_web_research"#, "search"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.websearch"#, "search"),
+        ];
+
+        // Se llama a `is_guild_orphan`, NO al helper: lo que importa es la ruta real
+        // (estrategia 1 = hijo directo del kernel, que es la que mata al arrancar).
+        for (cmd, corto) in pares {
+            assert!(
+                !McpProxy::is_guild_orphan(cmd, "python.exe", true, true, 80_000, corto),
+                "«{corto}» NO puede casar con la cmdline de otro guild: {cmd}"
+            );
+        }
+    }
+
+    /// Y el lado positivo: cada guild **sí** casa con su propia línea de comandos,
+    /// con las formas reales (módulo `-m`, ruta con `.py`, guiones ↔ guiones bajos
+    /// y el alias declarado de `scrapling`).
+    #[test]
+    fn t2922_cada_guild_casa_con_lo_suyo() {
+        let casos: [(&str, &str); 7] = [
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.vision"#, "vision"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.code_graph"#, "code_graph"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.coloquio_digest"#, "coloquio_digest"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.watchers.plugins.system_metrics"#, "system_metrics"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.core.scrapling_web"#, "scrapling"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" -m guilds.builders.plugins.gmp_code_assist"#, "gmp-code-assist"),
+            (r#""E:\tylluan\.venv\Scripts\python.exe" "E:\tylluan\guilds\core\vision.py""#, "vision"),
+        ];
+        for (cmd, guild) in casos {
+            assert!(
+                McpProxy::is_guild_orphan(cmd, "python.exe", true, true, 80_000, guild),
+                "«{guild}» tiene que casar con su propia cmdline: {cmd}"
+            );
+        }
+    }
+
+    /// D-120 (riesgo que señaló dsh en T2863): el nieto NORMAL de un guild sano
+    /// tiene la misma línea de comandos que su padre. Con la cmd ya cargada
+    /// (D-119) y sin esta guarda, `exact_module` lo declaraba huérfano y el matador
+    /// de huérfanos se lo llevaba por delante, matando un árbol sano.
+    #[test]
+    fn d120_el_nieto_sano_con_padre_vivo_no_es_huerfano() {
+        let cmd = r#""<raiz-repo>\.venv\Scripts\python.exe" -m guilds.core.vision"#;
+        // nieto con el padre VIVO: es el patrón normal, no un huérfano
+        assert!(
+            !McpProxy::is_guild_orphan(cmd, "python.exe", false, true, 80_000, "vision"),
+            "un nieto con el padre vivo no puede ser huérfano"
+        );
+        // el mismo proceso con el padre muerto: ahí sí
+        assert!(
+            McpProxy::is_guild_orphan(cmd, "python.exe", false, false, 80_000, "vision"),
+            "con el padre muerto sí debe recogerse"
+        );
+        // el hijo directo del kernel se sigue recogiendo siempre (estrategia 1)
+        assert!(
+            McpProxy::is_guild_orphan(cmd, "python.exe", true, true, 80_000, "vision"),
+            "el hijo directo se recoge aunque su padre (el kernel) esté vivo"
+        );
     }
 
     #[test]
     fn t_dsh_106_low_memory_stale_stub_still_reaped() {
         let cmd = r#""python" -m guilds.scholars.plugins.memory"#;
-        assert!(McpProxy::is_guild_orphan(cmd, "python.exe", false, 2_000, "memory"));
+        assert!(McpProxy::is_guild_orphan(cmd, "python.exe", false, false, 2_000, "memory"));
     }
 }

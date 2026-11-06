@@ -119,7 +119,15 @@ impl JournalDb {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
-        let preview: String = args.chars().take(200).collect();
+        // D-116 (H25): esta escritura también va a una tabla llamada
+        // `guild_audit_log`, así que pasa por la MISMA puerta única de redacción
+        // que la cadena principal. Hoy no tiene llamadores (verificado con `rg`),
+        // pero es justo el camino que un día se cablea y mete argumentos crudos de
+        // tool en disco. El tope de 200 caracteres se mantiene.
+        let preview: String = crate::security::redaction::scrub_result_preview(args)
+            .chars()
+            .take(200)
+            .collect();
         let conn = self.conn.lock().expect("journal mutex poisoned");
 
         // Get previous hash for chaining

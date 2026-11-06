@@ -7,7 +7,13 @@ pub fn cleanup_orphan_guilds(stale_kernel_pid: u32) {
     use sysinfo::{System, Pid};
 
     let mut sys = System::new();
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    // D-119: con el refresh normal `cmd()` llega vacía y esta limpieza de huérfanos
+    // no encontraba NUNCA un huérfano (el `cmd.contains("guilds.")` era siempre falso).
+    sys.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::everything(),
+    );
 
     let stale_pid = Pid::from_u32(stale_kernel_pid);
     let stale_is_kernel = sys.process(stale_pid)

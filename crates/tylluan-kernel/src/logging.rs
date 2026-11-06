@@ -39,6 +39,32 @@ pub struct RotatingFileWriter {
     rotation_failures: u64,
 }
 
+/// D-122 (D-74/P1): deja `dir` y `file` solo para el usuario del kernel.
+///
+/// La capa de auditoría escribe contenido **íntegro, sin scrub** (`config.rs`,
+/// `audit_layer`). Con el umask por defecto, `create_dir_all` deja 0755 y el
+/// fichero 0644: cualquiera en la máquina puede leer la traza. En Unix se aprieta
+/// a **0700/0600**. Mismo patrón que `security/grants.rs` y `oauth_consent.rs`,
+/// que ya lo hacen así.
+///
+/// En Windows no hay umask: manda la ACL heredada y no se toca nada (queda
+/// documentado, que era el otro requisito del hallazgo).
+#[cfg(unix)]
+fn harden_permissions(dir: &Path, file: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Err(e) = fs::set_permissions(dir, fs::Permissions::from_mode(0o700)) {
+        tracing::warn!("no se pudo poner 0700 a {}: {e}", dir.display());
+    }
+    if let Err(e) = fs::set_permissions(file, fs::Permissions::from_mode(0o600)) {
+        tracing::warn!("no se pudo poner 0600 a {}: {e}", file.display());
+    }
+}
+
+#[cfg(not(unix))]
+fn harden_permissions(_dir: &Path, _file: &Path) {
+    // Windows: ACL heredada. Se documenta el porqué en la guía, no se cambia.
+}
+
 impl RotatingFileWriter {
     /// Abre (o crea) `dir/base` en modo append con rotación por tamaño.
     ///
@@ -47,6 +73,42 @@ impl RotatingFileWriter {
     /// fichero puede superar `max_bytes` solo por el tamaño de un registro
     /// completo.
     pub fn open(dir: &Path, base: &str, max_bytes: u64, max_files: usize) -> io::Result<Self> {
+        Self::open_with(dir, base, max_bytes, max_files, false)
+    }
+
+    /// D-122: como [`Self::open`] pero dejando directorio y fichero en 0700/0600
+    /// (Unix). Lo usa la capa de auditoría, que guarda contenido sin redactar.
+    pub fn open_private(
+        dir: &Path,
+        base: &str,
+        max_bytes: u64,
+        max_files: usize,
+    ) -> io::Result<Self> {
+        // D-124 (D-74/P2): con `max_files = 1` este writer **trunca** el fichero
+        // vivo al rotar. En un log corriente es una política; en la **auditoría**
+        // es destruir la evidencia entera de golpe. Se sube a 2 (vivo + anterior)
+        // y se dice en voz alta: el operador pidió algo que la capa no puede
+        // cumplir sin dejar de ser auditoría.
+        let max_files = if max_files < 2 {
+
+            tracing::error!(
+                "auditoría: max_files={max_files} truncaría el histórico en cada rotación; \
+                 se fuerza 2 (vivo + anterior). Si quieres menos tamaño, baja `audit_max_mb`."
+            );
+            2
+        } else {
+            max_files
+        };
+        Self::open_with(dir, base, max_bytes, max_files, true)
+    }
+
+    fn open_with(
+        dir: &Path,
+        base: &str,
+        max_bytes: u64,
+        max_files: usize,
+        private: bool,
+    ) -> io::Result<Self> {
         fs::create_dir_all(dir)?;
         let live = dir.join(base);
         let mut writer = Self {
@@ -58,6 +120,11 @@ impl RotatingFileWriter {
             written: fs::metadata(&live).map(|m| m.len()).unwrap_or(0),
             rotation_failures: 0,
         };
+        if private {
+            // Después de crear: `create_dir_all` no acepta modo y aplicar
+            // `set_permissions` antes de existir el fichero no serviría.
+            harden_permissions(dir, &dir.join(base));
+        }
         if writer.max_bytes > 0 && writer.written > writer.max_bytes {
             writer.rotate()?;
         }
@@ -108,7 +175,91 @@ impl RotatingFileWriter {
         fs::rename(&live, &first)?;
         self.file = OpenOptions::new().create(true).append(true).open(&live)?;
         self.written = 0;
+        // D-121: techo del DIRECTORIO, no solo del fichero.
+        prune_to_budget(
+            &self.dir,
+            &self.base,
+            self.max_bytes.saturating_mul(self.max_files as u64),
+        );
         Ok(())
+    }
+}
+
+/// D-121 (H37): borra los `base.N` más antiguos hasta que el conjunto quepa en
+/// `budget_bytes`.
+///
+/// Existe porque el límite por fichero **no acota el directorio**: medido en
+/// `E:\tylluan\logs` el 2026-11-05, `kernel.log.4` pesaba **1,23 GiB** mientras
+/// `.1`, `.2` y `.3` eran exactamente 50 MiB.
+///
+/// **Qué era de verdad ese `.4`** (medido, no supuesto): sus marcas de tiempo van
+/// de **2026-06-22 a 2026-10-20**, 119,8 días y 7,9 M de líneas. El `.3` empieza
+/// justo donde acaba él (2026-10-20T18:01). O sea que **la rotación no estaba
+/// fallando**: es un fichero de la época en la que el log no tenía tope de tamaño
+/// y quedó como el más antiguo de los cinco. Desde el 2026-10-20 la rotación
+/// funciona (`.1`, `.2`, `.3` cubren 4-6 días cada uno y pesan 50 MiB clavados).
+///
+/// Es decir: el problema no era H35 sino que **nadie acotaba el conjunto**. Con
+/// este presupuesto, el `.4` legado se va en la primera rotación.
+///
+/// La cuenta es la del contrato ya documentado (`max_files` ficheros de
+/// `max_bytes`), así que ningún fichero que se borre estaba dentro de él.
+fn prune_to_budget(dir: &Path, base: &str, budget_bytes: u64) {
+    if budget_bytes == 0 {
+        return;
+    }
+    // Los rotados son `base.N` con N >= 1; el vivo (`base`) no se toca nunca.
+    let mut rotados: Vec<(usize, u64)> = Vec::new();
+    let Ok(entradas) = fs::read_dir(dir) else {
+        return;
+    };
+    for entrada in entradas.flatten() {
+        let nombre = entrada.file_name();
+        let nombre = nombre.to_string_lossy();
+        let Some(resto) = nombre.strip_prefix(&format!("{base}.")) else {
+            continue;
+        };
+        let Ok(n) = resto.parse::<usize>() else {
+            continue;
+        };
+        let Ok(meta) = entrada.metadata() else {
+            continue;
+        };
+        rotados.push((n, meta.len()));
+    }
+    if rotados.is_empty() {
+        return;
+    }
+    // N mayor = más antiguo.
+    rotados.sort_by_key(|(n, _)| std::cmp::Reverse(*n));
+    let mut total: u64 = rotados.iter().map(|(_, len)| *len).sum();
+    for (n, len) in rotados {
+        if total <= budget_bytes {
+            break;
+        }
+        // D-121: `base.1` es INTOCABLE. Es donde acaba de caer el contenido de la
+        // última rotación, y por contrato un registro mayor que `max_bytes` vive
+        // solo en su fichero (test `oversized_record_is_never_split`). Borrarlo
+        // destruía ese registro. El caso real que esto arregla (H37) era un `.4`
+        // de 1,23 GiB, así que proteger el `.1` no estorba.
+        if n <= 1 {
+            continue;
+        }
+        let p = dir.join(format!("{base}.{n}"));
+        match fs::remove_file(&p) {
+            Ok(()) => {
+                total = total.saturating_sub(len);
+                tracing::warn!(
+                    "log budget: borrado {} ({:.1} MB) para no pasar de {} MB",
+                    p.display(),
+                    len as f64 / 1_048_576.0,
+                    budget_bytes / 1_048_576
+                );
+            }
+            Err(e) => {
+                tracing::warn!("log budget: no se pudo borrar {}: {e}", p.display());
+            }
+        }
     }
 }
 
@@ -119,7 +270,16 @@ impl Write for RotatingFileWriter {
             && self.written.saturating_add(buf.len() as u64) > self.max_bytes
             && self.rotate().is_err()
         {
+            // H35 (Buffy, ciclo 9): el contador existía pero no lo leía nadie, así
+            // que una rotación fallida no dejaba ni una línea. Se avisa aquí; el
+            // contador sigue ahí para quien quiera exponerlo en health.
             self.rotation_failures += 1;
+            tracing::warn!(
+                "log rotation FAILED for {}/{} (fallos acumulados: {}): el fichero sigue creciendo por encima del límite",
+                self.dir.display(),
+                self.base,
+                self.rotation_failures
+            );
         }
         let n = self.file.write(buf)?;
         self.written += n as u64;
@@ -165,10 +325,22 @@ fn prune_audit_by_age(dir: &Path, max_files: usize, retention_days: u64) {
     let cutoff = now - std::time::Duration::from_secs(retention_days * 86_400);
     for i in 1..max_files {
         let p = dir.join(format!("audit.log.{i}"));
+        // H36 (Buffy, ciclo 9): medir por `modified()`, NO por `created()`.
+        // `created()` es la fecha de nacimiento y **sobrevive al rename** de la
+        // rotación: un `audit.log.1` creado hace un mes con contenido de hoy se
+        // borraba con retention=14d, es decir se destruía evidencia reciente.
+        // Aquí la edad que importa es la del último byte escrito.
         if let Ok(meta) = fs::metadata(&p)
-            && meta.created().or(meta.modified()).map(|t| t < cutoff).unwrap_or(false)
+            && meta.modified().map(|t| t < cutoff).unwrap_or(false)
         {
-            let _ = fs::remove_file(&p);
+            match fs::remove_file(&p) {
+                Ok(()) => tracing::debug!("audit retention: borrado {}", p.display()),
+                Err(e) => tracing::warn!(
+                    "audit retention: no se pudo borrar {} (retention={}d): {e}",
+                    p.display(),
+                    retention_days
+                ),
+            }
         }
     }
 }
@@ -186,7 +358,12 @@ pub fn audit_writer(cfg: &LoggingConfig) -> Option<RotatingFileWriter> {
         return None;
     }
     prune_audit_by_age(&dir, cfg.audit_max_files, cfg.audit_retention_days);
-    RotatingFileWriter::open(&dir, "audit.log", cfg.audit_max_bytes(), cfg.audit_max_files)
+    RotatingFileWriter::open_private(
+        &dir,
+        "audit.log",
+        cfg.audit_max_bytes(),
+        cfg.audit_max_files,
+    )
         .map_err(|e| {
             tracing::warn!("audit_layer=true pero no se puede abrir audit.log: {e}");
         })
@@ -791,5 +968,309 @@ mod tests {
         assert!(!dir.path().join("kernel.log.1").exists());
         let live = fs::read_to_string(dir.path().join("kernel.log")).unwrap();
         assert!(live.len() <= 64, "live file must not grow past the limit: {}", live.len());
+    }
+}
+
+#[cfg(test)]
+mod tests_budget {
+    use super::*;
+
+    fn escribir(dir: &Path, nombre: &str, bytes: usize) {
+        fs::write(dir.join(nombre), vec![b'x'; bytes]).expect("escribir fichero de prueba");
+    }
+
+    fn existe(dir: &Path, nombre: &str) -> bool {
+        dir.join(nombre).exists()
+    }
+
+    /// D-121 (H37): con el presupuesto justo, el más antiguo se va y el vivo no
+    /// se toca nunca.
+    #[test]
+    fn d121_el_presupuesto_borra_los_mas_antiguos() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let d = dir.path();
+        // 4 rotados de 1000 B + el vivo
+        for n in 1..=4 {
+            escribir(d, &format!("k.log.{n}"), 1000);
+        }
+        escribir(d, "k.log", 500);
+
+        // presupuesto 2500 B: solo caben 2 rotados
+        prune_to_budget(d, "k.log", 2500);
+
+        assert!(existe(d, "k.log"), "el fichero vivo no se toca JAMAS");
+        assert!(!existe(d, "k.log.4"), "el mas antiguo se va primero");
+        assert!(!existe(d, "k.log.3"), "y el siguiente tambien");
+        assert!(existe(d, "k.log.2"), "los dos mas nuevos se quedan");
+        assert!(existe(d, "k.log.1"));
+    }
+
+    /// D-121: si ya cabe, no borra nada (no se lleva por delante el historial por
+    /// gusto).
+    #[test]
+    fn d121_si_cabe_no_borra_nada() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let d = dir.path();
+        escribir(d, "k.log.1", 100);
+        escribir(d, "k.log.2", 100);
+        escribir(d, "k.log", 100);
+
+        prune_to_budget(d, "k.log", 1000);
+
+        assert!(existe(d, "k.log.1"));
+        assert!(existe(d, "k.log.2"));
+        assert!(existe(d, "k.log"));
+    }
+
+    /// D-121: un presupuesto de 0 desactiva la poda (comportamiento historico).
+    #[test]
+    fn d121_presupuesto_cero_no_toca_nada() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let d = dir.path();
+        escribir(d, "k.log.1", 5000);
+        escribir(d, "k.log.2", 5000);
+
+        prune_to_budget(d, "k.log", 0);
+
+        assert!(existe(d, "k.log.1"));
+        assert!(existe(d, "k.log.2"));
+    }
+
+    /// D-121: **el cableado**. No basta con que la poda sepa podar: tiene que
+    /// ejecutarse al rotar. Escenario real de H37: hay un rotado gigante (la
+    /// rotación estuvo fallando horas) y al rotar de nuevo el directorio se pasa
+    /// del presupuesto.
+    #[test]
+    fn d121_la_rotacion_aplica_el_presupuesto() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let d = dir.path();
+        // Un rotado gigante ya en disco (el `kernel.log.4` de 1,23 GiB, en pequeño).
+        escribir(d, "k.log.1", 50_000);
+
+        let mut w = RotatingFileWriter::open(d, "k.log", 100, 3).expect("open");
+        // Esto fuerza la rotación.
+        // OJO: un unico registro mayor que `max_bytes` NO rota (esta documentado:
+        // se queda solo en su fichero). Hacen falta dos escrituras: la primera deja
+        // el fichero vivo por encima del limite y la segunda dispara la rotacion.
+        w.write_all(&[b'x'; 250]).expect("write 1");
+        w.write_all(&[b'x'; 250]).expect("write 2");
+        drop(w);
+
+        let total: u64 = fs::read_dir(d)
+            .expect("read_dir")
+            .flatten()
+            .filter_map(|e| e.metadata().ok())
+            .map(|m| m.len())
+            .sum();
+        // Presupuesto = 100 B * 3 ficheros = 300 B. El gigante tiene que haber caído.
+        assert!(
+            total <= 2_000,
+            "el directorio sigue por encima del presupuesto: {total} B"
+        );
+        assert!(
+            !d.join("k.log.2").exists(),
+            "el rotado gigante tenia que haberse borrado al rotar"
+        );
+    }
+
+    /// D-121: no toca ficheros de OTRO log que compartan directorio (en `logs/`
+    /// hay `buffy_loop.log`, `*.jsonl`...).
+    #[test]
+    fn d121_no_toca_ficheros_de_otro_log() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let d = dir.path();
+        // Se usa `.2` y no `.1` porque `.1` es intocable (ver `prune_to_budget`).
+        escribir(d, "k.log.2", 5000);
+        escribir(d, "otro.log.2", 5000);
+        escribir(d, "buffy_inbox.jsonl", 5000);
+
+        prune_to_budget(d, "k.log", 1000);
+
+        assert!(!existe(d, "k.log.2"), "el del log que podamos se va");
+        assert!(existe(d, "otro.log.2"), "el de otro log se queda");
+        assert!(existe(d, "buffy_inbox.jsonl"));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests_perms {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// D-122 (D-74/P1): la capa de auditoría guarda contenido SIN redactar, así
+    /// que el fichero y su directorio no pueden quedar legibles para todo el
+    /// mundo (0644/0755 por umask). Este test solo corre en Unix: en Windows
+    /// manda la ACL heredada.
+    #[test]
+    fn d122_la_auditoria_queda_en_0600_y_0700() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let sub = dir.path().join("audit");
+        let _w = RotatingFileWriter::open_private(&sub, "audit.log", 1024, 3).expect("open_private");
+
+        let modo_dir = fs::metadata(&sub).expect("dir").permissions().mode() & 0o777;
+        let modo_file = fs::metadata(sub.join("audit.log"))
+            .expect("file")
+            .permissions()
+            .mode()
+            & 0o777;
+
+        assert_eq!(modo_dir, 0o700, "el directorio de auditoria queda solo para el usuario");
+        assert_eq!(modo_file, 0o600, "audit.log queda solo para el usuario");
+    }
+
+    /// D-122: el log normal NO cambia de permisos (solo se aprieta la auditoría).
+    #[test]
+    fn d122_el_log_normal_conserva_sus_permisos() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let sub = dir.path().join("logs");
+        let _w = RotatingFileWriter::open(&sub, "kernel.log", 1024, 3).expect("open");
+
+        let modo_file = fs::metadata(sub.join("kernel.log"))
+            .expect("file")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_ne!(
+            modo_file, 0o600,
+            "el log normal no se toca: si esto falla, hemos endurecido de mas"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests_audit_max_files {
+    use super::*;
+
+    /// D-124 (D-74/P2): un writer de auditoría con `max_files = 1` **no** puede
+    /// truncar el histórico. Antes, la rama `max_files <= 1` de `rotate()` vaciaba
+    /// el fichero vivo: la auditoría se borraba sola en cada rotación.
+    #[test]
+    fn d124_la_auditoria_no_se_trunca_con_max_files_1() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let d = dir.path();
+        // max_files=1 pedido a propósito, max_bytes pequeño para rotar pronto.
+        // max_bytes=40: cada anotacion son 28 B, asi que la segunda dispara rotacion.
+        let mut w = RotatingFileWriter::open_private(d, "audit.log", 40, 1).expect("open_private");
+        w.write_all(b"primera-linea-de-auditoria
+").expect("w1");
+        w.write_all(b"segunda-linea-de-auditoria
+").expect("w2");
+        w.flush().expect("flush");
+        drop(w);
+
+        // Con el truncado de antes no habría `.1` y el vivo estaría vacío o solo
+        // con lo último: la primera línea se habría perdido.
+        assert!(
+            d.join("audit.log.1").exists(),
+            "tiene que haber fichero anterior: con max_files=1 no se rota, se trunca"
+        );
+        let todo = fs::read_to_string(d.join("audit.log.1")).unwrap_or_default()
+            + &fs::read_to_string(d.join("audit.log")).unwrap_or_default();
+        assert!(
+            todo.contains("primera-linea-de-auditoria"),
+            "la primera anotacion de auditoria no puede desaparecer: {todo:?}"
+        );
+    }
+
+    /// D-124: el log normal (`open`) mantiene el comportamiento histórico: si
+    /// alguien configura `max_files = 1`, se trunca y es su decisión.
+    #[test]
+    fn d124_el_log_normal_conserva_el_truncado() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let d = dir.path();
+        let mut w = RotatingFileWriter::open(d, "kernel.log", 64, 1).expect("open");
+        w.write_all(b"linea-uno-que-se-perdera
+").expect("w1");
+        w.write_all(b"linea-dos-que-se-perdera
+").expect("w2");
+        w.write_all(b"linea-tres-que-se-perdera
+").expect("w3");
+        w.flush().expect("flush");
+        drop(w);
+
+        assert!(
+            !d.join("kernel.log.1").exists(),
+            "con max_files=1 el log normal NO guarda histórico (eso no lo hemos cambiado)"
+        );
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests_h36 {
+    use super::*;
+
+    /// H36 (D-113) **por fin con test**. El arreglo fue medir la retención por
+    /// `modified()` y no por `created()`: `created()` es la fecha de nacimiento y
+    /// **sobrevive al rename** de la rotación, así que un `audit.log.1` nacido hace
+    /// un mes con contenido de hoy se borraba con `retention_days = 14`.
+    ///
+    /// Forjar `created()` **no necesita dependencias nuevas**: `winapi` ya está en
+    /// el crate (lo usa `process_isolation`); solo hacían falta dos features
+    /// (`fileapi` y `minwindef`) para `SetFileTime`.
+    #[test]
+    fn h36_la_retencion_mira_el_contenido_no_la_fecha_de_creacion() {
+        use std::os::windows::io::AsRawHandle;
+        use winapi::shared::minwindef::FILETIME;
+        use winapi::um::fileapi::SetFileTime;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let p = dir.path().join("audit.log.1");
+        fs::write(&p, "contenido de hoy").expect("escribir");
+
+        // Creación = hace 30 días. La de escritura se queda en "ahora".
+        let unix_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("reloj")
+            .as_secs()
+            - 30 * 86_400;
+        let ft_100ns: u64 = (unix_secs + 11_644_473_600) * 10_000_000;
+        let ft = FILETIME {
+            dwLowDateTime: (ft_100ns & 0xFFFF_FFFF) as u32,
+            dwHighDateTime: (ft_100ns >> 32) as u32,
+        };
+
+        let f = fs::OpenOptions::new().write(true).open(&p).expect("abrir");
+        let ok = unsafe {
+            SetFileTime(
+                f.as_raw_handle() as *mut _,
+                &ft,
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+        drop(f);
+        assert_ne!(ok, 0, "SetFileTime tiene que poder forjar la fecha de creacion");
+
+        // retención de 14 días: si se mira `created()`, este fichero se borra.
+        prune_audit_by_age(dir.path(), 3, 14);
+
+        assert!(
+            p.exists(),
+            "se ha borrado evidencia RECIENTE por su fecha de CREACION (H36 ha vuelto)"
+        );
+    }
+
+    /// Control: con el CONTENIDO viejo (mtime antiguo), sí se recoge. Si no, el test
+    /// de arriba pasaría por no borrar nunca nada.
+    #[test]
+    fn h36_un_fichero_viejo_de_verdad_si_se_recoge() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let p = dir.path().join("audit.log.1");
+        fs::write(&p, "contenido viejo").expect("escribir");
+
+        // Se envejece el MTIME 30 días (esto sí lo permite `std`).
+        let viejo = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 86_400);
+        let f = fs::OpenOptions::new().write(true).open(&p).expect("abrir");
+        f.set_times(
+            fs::FileTimes::new()
+                .set_modified(viejo)
+                .set_accessed(viejo),
+        )
+        .expect("set_times");
+        drop(f);
+
+        prune_audit_by_age(dir.path(), 3, 14);
+
+        assert!(!p.exists(), "un fichero con contenido de hace 30 dias SI debe recogerse");
     }
 }

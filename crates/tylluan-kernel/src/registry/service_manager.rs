@@ -82,6 +82,16 @@ impl ServiceManager {
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
 
+        // D-109 (mismo motivo que en proxy.rs): sin CREATE_NO_WINDOW cada spawn de
+        // servicio abre una consola visible en Windows.
+        #[cfg(windows)]
+        {
+            // tokio::process::Command expone `creation_flags` de forma inherente en
+            // Windows: no hace falta el trait de std (y el import sobraba).
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+
         // Apply explicit timeout (default 25s if not configured)
         let timeout_ms = config.timeout_ms.unwrap_or(25000);
         let timeout_dur = Duration::from_millis(timeout_ms);

@@ -310,7 +310,7 @@ impl RegistryActor {
                                     );
                                     {
                                         let mut reg = registry.write().await;
-                                        if let GuardedKill::InFlight = reg.kill_guild_if_idle(&guild_name).await {
+                                        if let GuardedKill::InFlight = reg.kill_guild_after_transport_failure(&guild_name).await {
                                             tracing::warn!(
                                                 "⚠️ [Actor] Guild '{}' has a call in flight — kill skipped this attempt",
                                                 guild_name

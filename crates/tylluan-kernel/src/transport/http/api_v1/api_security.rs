@@ -144,7 +144,35 @@ mod tests {
 
 /// `GET /api/v1/security/sentinel` — estado del centinela (sin tokens ni rutas).
 pub async fn sentinel_status_handler() -> impl axum::response::IntoResponse {
-    axum::Json(sentinel::health_json())
+    let mut body = sentinel::health_json();
+    // D-134: los contadores de la capa 2 del write-gate existian y **no los leia
+    // nadie** (ni tests, ni `/health`, ni ningun endpoint). Eso es lo que permitio
+    // que la fila ASI06 dijera "Closed" mientras la capa 2 no corria: no habia
+    // forma de verlo. Se exponen aqui, junto al componente que los provoca.
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("write_gate".to_string(), write_gate_stats_json());
+    }
+    axum::Json(body)
+}
+
+/// D-134: contadores de la **capa 2** del write-gate (juez de gramatica efimero).
+///
+/// La capa 2 es **fail-open**: si el juez no esta disponible, el nodo se escribe
+/// igual y solo la capa 1 (determinista) ha actuado. Estos numeros son la unica
+/// prueba observable de que la capa 2 esta viva o muerta.
+///
+/// Funcion aparte para poder probarla sin montar el handler.
+pub fn write_gate_stats_json() -> serde_json::Value {
+    use crate::security::write_gate::{
+        judge_answered_count, judge_spawn_count, judge_unavailable_count,
+    };
+    serde_json::json!({
+        "layer2_spawned": judge_spawn_count(),
+        "layer2_answered": judge_answered_count(),
+        "layer2_unavailable": judge_unavailable_count(),
+        "layer2_fails_open": true,
+        "note": "layer 2 is fail-open: when the ephemeral grammar judge is unavailable the node is written anyway and only layer 1 (deterministic) applied. layer2_unavailable > 0 means layer 2 has NOT been guarding.",
+    })
 }
 
 #[derive(serde::Deserialize)]
@@ -182,4 +210,24 @@ pub async fn set_sentinel_mode_handler(
             "state": sentinel::health_json(),
         })),
     )
+}
+
+#[cfg(test)]
+mod tests_write_gate_stats {
+    use super::*;
+
+    /// D-134: el JSON tiene las cuatro claves y la nota dice lo unico que importa:
+    /// que la capa 2 falla abierto. Sin esto, `judge_unavailable_count` seguia sin
+    /// leerse en ningun sitio (era un contador decorativo).
+    #[test]
+    fn d134_el_json_del_write_gate_lleva_los_contadores_y_avisa() {
+        let v = write_gate_stats_json();
+        for clave in ["layer2_spawned", "layer2_answered", "layer2_unavailable"] {
+            assert!(v.get(clave).is_some(), "falta {clave} en {v}");
+        }
+        assert_eq!(v.get("layer2_fails_open"), Some(&serde_json::json!(true)));
+        let nota = v.get("note").and_then(|n| n.as_str()).unwrap_or_default();
+        assert!(nota.contains("fail-open"), "{nota}");
+        assert!(nota.contains("layer 1"), "{nota}");
+    }
 }

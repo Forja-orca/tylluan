@@ -44,6 +44,36 @@ Tylluan is experimental research software. Key security gaps are documented in [
 2. The master bearer token is operator-class; every other credential falls back to the fail-closed `[security.acl] default_role = "guest"` (no guilds) unless explicitly mapped to a role/token. Configure `[security.acl.roles]`/`tokens` for agents.
 3. No automatic detection of rogue agents; a manual local kill switch exists (`POST /api/v1/admin/emergency-kill`)
 
+### The raw audit layer (`audit_layer`), and who can read it
+
+When `[logging] audit_layer = true`, the kernel writes a second, parallel audit trail
+to `<audit_dir>/audit.log` (default `data/audit/`) containing the **unredacted**
+text of each audited operation. This is deliberate: the redacted store is for
+retrieval, the raw one is the forensic record. It is **off by default**.
+
+If you turn it on, note what that means:
+
+- **The file is sensitive.** Anyone who can read it can read whatever the guilds saw.
+  On Unix the kernel creates it as `0700` (directory) / `0600` (file) — see
+  `RotatingFileWriter::open_private` in `crates/tylluan-kernel/src/logging.rs` — and
+  the audit writer refuses `audit_max_files = 1` because that would truncate the
+  trail on every rotation instead of keeping it.
+- **It is also reachable over HTTP**, by design, at
+  `GET /api/v1/admin/audit/file?file=audit.log[.N]`. Three independent guards apply,
+  all verified in the code:
+  1. bearer authentication (`transport/http/mod.rs`, `bearer_auth_middleware`);
+  2. operator class — `/api/v1/admin/` is in `operator_class_required`
+     (`transport/http/auth.rs`), so OAuth-JWT and peer credentials are refused;
+  3. loopback-only `Host` header (`transport/http/api_v1/api_audit.rs`,
+     `loopback_host_refusal`), plus a strict filename regex
+     `^audit\.log(\.[0-9]{1,4})?$` (`logging.rs::valid_audit_name`), so no path
+     traversal and no other file can be named.
+
+The consequence is worth stating plainly: **a filesystem permission of 0600 does not
+protect this content from a local caller who holds the operator token** — the endpoint
+will serve it. If you need the raw trail to be unreadable even by the operator token,
+keep `audit_layer` off.
+
 ### OAuth clients after the fail-closed ACL default (D-71)
 
 New installations default to `[security.acl] default_role = "guest"`, so an OAuth JWT without a mapping has no guild access. To grant a **read-only** OAuth client:

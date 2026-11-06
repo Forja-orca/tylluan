@@ -31,9 +31,13 @@ pub fn register_secret_value(value: &str) {
     if value.chars().count() < MIN_SECRET_LEN {
         return;
     }
-    if let Ok(mut set) = registry().write() {
-        set.insert(value.to_string());
-    }
+    // D-111 (H26 de Buffy): si el lock se envenena, NO se descarta el registro —
+    // un secreto no registrado es un secreto que sale sin redactar.
+    let mut set = match registry().write() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    set.insert(value.to_string());
 }
 
 /// Cuántas cadenas hay registradas (diagnóstico y tests).
@@ -43,8 +47,13 @@ pub fn registered_secret_count() -> usize {
 
 /// Sustituye por `***` cualquier cadena registrada que aparezca en `text`.
 pub fn scrub_registered(text: &str) -> String {
-    let Ok(set) = registry().read() else {
-        return text.to_string();
+    // D-111 (H26 de Buffy): un guardián de seguridad no puede fallar ABIERTO. Si el
+    // RwLock se envenenó (pánico mientras alguien tenía el write), recuperamos el
+    // registro con `into_inner()` y redactamos igual. Devolver el texto intacto era
+    // la peor elección posible: el preview salía sin limpiar y nadie se enteraba.
+    let set = match registry().read() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
     };
     let mut out = text.to_string();
     // De más larga a más corta: si una contiene a otra, la larga debe ganar.
@@ -81,6 +90,29 @@ mod tests {
         let out = scrub_result_preview("resultado: ok valor SecretoSinPatronD107 fin");
         assert!(!out.contains("SecretoSinPatronD107"), "no debe quedar el valor: {out}");
         assert!(out.contains("***"), "debe quedar la marca de la capa 2: {out}");
+    }
+
+    /// D-111 (H26 de Buffy): si el registro se ENVENENA (pánico mientras alguien
+    /// tenía el write), la redacción NO puede fallar abierta. Antes devolvía el
+    /// texto intacto; este test se pone rojo con ese comportamiento.
+    #[test]
+    fn d111_lock_envenenado_sigue_redactando() {
+        const SECRETO: &str = "SecretoPoisonD111";
+        register_secret_value(SECRETO);
+
+        // Envenenar a propósito: el hilo toma el write y panica dentro.
+        let h = std::thread::spawn(|| {
+            let _guard = registry().write().expect("write");
+            panic!("envenenando el registro a proposito");
+        });
+        assert!(h.join().is_err(), "el hilo debe haber paniqueado");
+
+        // El lock queda envenenado para el resto del proceso; el registro sigue ahí.
+        let out = scrub_result_preview(&format!("salida: ok valor {SECRETO} fin"));
+        assert!(
+            !out.contains(SECRETO),
+            "fail-open con el lock envenenado: el secreto salió intacto: {out}"
+        );
     }
 
     /// D-107 (2): los patrones que ya conoce el proyecto siguen aplicándose.

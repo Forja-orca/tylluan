@@ -142,11 +142,72 @@ pub fn mode_applies_action(mode: SentinelMode) -> bool {
 
 /// T-DSH-114: ¿hay que saltarse el centinela por carga de CPU? Devuelve true
 /// si la CPU global supera `max_cpu_pct` (fail-open, sin lanzar llama-server).
+/// D-123 (hallazgo de hermes en T2873): cada salto del juez por CPU deja un
+/// `tracing::debug!` — invisible en la traza normal — o **ningún rastro**. Medido
+/// en producción el 2026-11-05: 13 h con `mode=enforce` y `verdicts safe=0`,
+/// `unavailable = fallbacks = cpu_skips = 57`; el aviso no aparecía en
+/// `kernel.log` porque era `debug!`. La única señal era el contador de `/health`.
+///
+/// Aquí el salto se avisa con `warn!`, como mucho uno cada
+/// `CPU_SKIP_WARN_INTERVAL_SECS`, diciendo cuántos se callaron entre medias. Mismo
+/// patrón que `AUDIT_WARN_INTERVAL_SECS` en `handler_do/audit.rs`.
+const CPU_SKIP_WARN_INTERVAL_SECS: u64 = 300;
+
+/// ¿Toca avisar? Separado para poder probarlo sin dormir.
+fn toca_avisar_cpu_skip(ultimo_aviso: u64, ahora: u64) -> bool {
+    ahora.saturating_sub(ultimo_aviso) >= CPU_SKIP_WARN_INTERVAL_SECS
+}
+
+/// Texto del aviso. Separado para poder comprobarlo sin tocar estado global.
+fn formato_aviso_cpu_skip(
+    punto: &str,
+    cpu_pct: Option<f32>,
+    max_cpu_pct: u8,
+    saltos_callados: u64,
+) -> String {
+    let cpu = cpu_pct
+        .map(|p| format!("{p:.0}%"))
+        .unwrap_or_else(|| "desconocida".to_string());
+    format!(
+        "centinela ({punto}): CPU {cpu} > {max_cpu_pct}% — se SALTA el juez (fail-open). \
+         Saltos sin avisar desde el último aviso: {saltos_callados}"
+    )
+}
+
 pub fn should_skip_for_cpu(cpu_pct: Option<f32>, max_cpu_pct: u8) -> bool {
     cpu_pct.map(|p| p > f32::from(max_cpu_pct)).unwrap_or(false)
 }
 
 /// CPU global del sistema, cacheada 2 s (sysinfo es caro para llamarla por nota).
+/// Milisegundos de reloj de pared, para el rate-limit del aviso.
+fn ahora_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+static CPU_SKIP_LAST_WARN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static CPU_SKIP_SILENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Avisa (con rate-limit) de que se salta el juez por CPU. `punto` dice cuál de
+/// los dos caminos fue: `judge` o `write_gate`.
+fn avisar_cpu_skip(punto: &str, cpu_pct: Option<f32>, max_cpu_pct: u8) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let ahora = ahora_unix_secs();
+    let ultimo = CPU_SKIP_LAST_WARN.load(Relaxed);
+    if toca_avisar_cpu_skip(ultimo, ahora) {
+        CPU_SKIP_LAST_WARN.store(ahora, Relaxed);
+        let callados = CPU_SKIP_SILENT.swap(0, Relaxed);
+        tracing::warn!(
+            "{}",
+            formato_aviso_cpu_skip(punto, cpu_pct, max_cpu_pct, callados)
+        );
+    } else {
+        CPU_SKIP_SILENT.fetch_add(1, Relaxed);
+    }
+}
+
 fn system_cpu_pct_cached() -> Option<f32> {
     use std::sync::Mutex;
     use std::time::Instant;
@@ -359,6 +420,14 @@ impl SentinelJudge {
         };
         let threads = self.cfg.threads.clamp(1, 4);
         let mut cmd = Command::new(&bin);
+        // D-109: sin CREATE_NO_WINDOW, cada arranque del centinela abre una consola
+        // visible en Windows (y el centinela se arranca bajo demanda).
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
         cmd.arg("-m")
             .arg(model)
             .arg("--host")
@@ -416,14 +485,13 @@ impl SentinelJudge {
             return SentinelVerdict::Unavailable;
         }
         // T-DSH-114: salto por carga de CPU (fail-open, sin lanzar llama-server).
-        if should_skip_for_cpu(system_cpu_pct_cached(), self.cfg.max_cpu_pct) {
+        let cpu = system_cpu_pct_cached();
+        if should_skip_for_cpu(cpu, self.cfg.max_cpu_pct) {
             self.cpu_skips
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             self.note_verdict(SentinelVerdict::Unavailable);
-            tracing::debug!(
-                "[T-DSH-114] centinela: CPU > {}% — se salta el juez (fail-open)",
-                self.cfg.max_cpu_pct
-            );
+            // D-123: era `debug!` y no se veía en la traza normal.
+            avisar_cpu_skip("judge", cpu, self.cfg.max_cpu_pct);
             return SentinelVerdict::Unavailable;
         }
         let _in_flight = InFlightGuard::new(&self.in_flight);
@@ -513,9 +581,12 @@ impl SentinelJudge {
         if !self.mode().judges() {
             return Err("write_gate_judge: modo off".to_string());
         }
-        if should_skip_for_cpu(system_cpu_pct_cached(), self.cfg.max_cpu_pct) {
+        let cpu = system_cpu_pct_cached();
+        if should_skip_for_cpu(cpu, self.cfg.max_cpu_pct) {
             self.cpu_skips
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            // D-123: este camino no dejaba NINGÚN rastro.
+            avisar_cpu_skip("write_gate", cpu, self.cfg.max_cpu_pct);
             return Err(format!(
                 "write_gate_judge: CPU > {}% (fail-open)",
                 self.cfg.max_cpu_pct
@@ -1008,5 +1079,39 @@ mod tests {
             assert_eq!(judge.stats().cpu_skips, 1);
             assert_eq!(judge.stats().unsafe_verdicts, 0);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_cpu_skip_aviso {
+    use super::*;
+
+    /// D-123: el rate-limit deja pasar el primero y calla el siguiente.
+    #[test]
+    fn d123_el_aviso_se_limita() {
+        assert!(toca_avisar_cpu_skip(0, 1000), "el primero siempre avisa");
+        assert!(
+            !toca_avisar_cpu_skip(1000, 1000 + CPU_SKIP_WARN_INTERVAL_SECS - 1),
+            "justo antes del intervalo no avisa"
+        );
+        assert!(
+            toca_avisar_cpu_skip(1000, 1000 + CPU_SKIP_WARN_INTERVAL_SECS),
+            "al cumplir el intervalo avisa"
+        );
+    }
+
+    /// D-123: el texto dice el punto, la CPU, el umbral y cuántos se callaron — que
+    /// es lo que faltaba para poder diagnosticarlo desde el log.
+    #[test]
+    fn d123_el_texto_lleva_lo_necesario() {
+        let s = formato_aviso_cpu_skip("write_gate", Some(97.4), 85, 12);
+        assert!(s.contains("write_gate"), "{s}");
+        assert!(s.contains("CPU 97%"), "{s}");
+        assert!(s.contains("> 85%"), "{s}");
+        assert!(s.contains("12"), "{s}");
+        assert!(s.contains("SALTA el juez"), "{s}");
+
+        let sin = formato_aviso_cpu_skip("judge", None, 85, 0);
+        assert!(sin.contains("desconocida"), "{sin}");
     }
 }

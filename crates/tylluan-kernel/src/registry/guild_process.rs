@@ -210,6 +210,17 @@ pub fn cpu_inference_guilds() -> &'static [&'static str] {
     CPU_INFERENCE_GUILDS
 }
 
+/// D-112 (H24 de Buffy): `registry.json` es una CACHÉ de runtime, no la fuente de
+/// verdad — la fuente es `tylluan.toml`. Pero `save()` serializaba el launcher tal
+/// cual, y con `vault:` el launcher lleva la credencial **ya resuelta**: el secreto
+/// que la bóveda mantiene fuera del `.toml` acababa escrito en `registry.json`.
+///
+/// La copia redactada sustituye los VALORES por `***` conservando las CLAVES, para
+/// que al leer el fichero se vea qué credencial falta (y no un mapa vacío que
+/// parezca "sin credenciales"). Los valores reales se reponen desde la config al
+/// arrancar el guild.
+const REDACTED_VALUE: &str = "***";
+
 /// Possible ways to launch a guild.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GuildLauncher {
@@ -238,6 +249,58 @@ pub enum GuildLauncher {
         headers: HashMap<String, String>,
         timeout_ms: Option<u64>,
     },
+}
+
+impl GuildLauncher {
+    /// ¿Lleva este launcher algún valor **enmascarado** (`***`)?
+    ///
+    /// D-112 enmascara `headers`/`env` al persistir, y `load()` no puede distinguir
+    /// "credencial real" de "máscara". Un guild registrado **en caliente** por API
+    /// (`api_mcp.rs`) con `vault:` no está en `tylluan.toml`, así que `main.rs` no lo
+    /// re-registra: volvería con `Authorization: ***` y fallaría **en silencio** en
+    /// la primera llamada. Mejor no resucitarlo y decirlo.
+    pub fn tiene_valores_redactados(&self) -> bool {
+        let enmascarado = |m: &HashMap<String, String>| {
+            m.values().any(|v| v == REDACTED_VALUE)
+        };
+        match self {
+            GuildLauncher::Python { .. } => false,
+            GuildLauncher::External { env, .. } => env.as_ref().map(enmascarado).unwrap_or(false),
+            GuildLauncher::Http { headers, .. } => enmascarado(headers),
+            GuildLauncher::Sse { headers, .. } => enmascarado(headers),
+        }
+    }
+
+    /// Copia con las credenciales enmascaradas, para persistir (D-112 / H24).
+    pub fn redacted(&self) -> Self {
+        let mask = |m: &HashMap<String, String>| {
+            m.keys()
+                .map(|k| (k.clone(), REDACTED_VALUE.to_string()))
+                .collect::<HashMap<_, _>>()
+        };
+        match self {
+            GuildLauncher::Python { module_path } => GuildLauncher::Python {
+                module_path: module_path.clone(),
+            },
+            GuildLauncher::External { command, args, cwd, env } => GuildLauncher::External {
+                command: command.clone(),
+                args: args.clone(),
+                cwd: cwd.clone(),
+                env: env.as_ref().map(mask),
+            },
+            GuildLauncher::Http { url, headers, timeout_ms } => GuildLauncher::Http {
+                url: url.clone(),
+                headers: mask(headers),
+                timeout_ms: *timeout_ms,
+            },
+            GuildLauncher::Sse { sse_url, post_url, headers, timeout_ms } => GuildLauncher::Sse {
+                sse_url: sse_url.clone(),
+                post_url: post_url.clone(),
+                headers: mask(headers),
+                timeout_ms: *timeout_ms,
+            },
+        }
+    }
 }
 
 /// Represents a guild (local or external) with an MCP proxy connection.
@@ -1281,6 +1344,28 @@ impl GuildRegistry {
     /// New callers arriving during the kill block on the permits held here
     /// and wake against a fresh (or absent) proxy — a state the retry loop
     /// already recovers from.
+    /// D-110: una caída de transporte es una MUERTE del proceso, no un crash de
+    /// arranque — pero tratarla como "no es crash" (porque `kill()` resetea el
+    /// backoff T13) es justo lo que permite que un guild muera y renazca en cada
+    /// llamada, para siempre. Medido en vivo el 2026-11-05: 4 `Pre-Spawn` en 90 s
+    /// sobre `coloquio`/`vision`, cada uno con un handshake de ~4 s y su consola.
+    ///
+    /// Este kill **cuenta la muerte** en lugar de borrarla: el backoff 2^n de T13
+    /// se activa y espacia los relanzamientos en vez de permitir uno por llamada.
+    pub async fn kill_guild_after_transport_failure(&mut self, name: &str) -> GuardedKill {
+        // OJO: `kill()` interno resetea el contador de crashes. Hay que leerlo ANTES
+        // para no perder el historial: si un guild lleva 3 muertes seguidas, la
+        // cuarta debe ir a 4 (y al backoff 2^4), no volver a 1.
+        let prev = self.guilds.get(name).map(|g| g.crash_count).unwrap_or(0);
+        let killed = self.kill_guild_if_idle(name).await;
+        if matches!(killed, GuardedKill::Killed)
+            && let Some(guild) = self.guilds.get_mut(name) {
+                guild.crash_count = prev.saturating_add(1);
+                guild.last_crash_at = Some(Instant::now());
+            }
+        killed
+    }
+
     pub async fn kill_guild_if_idle(&mut self, name: &str) -> GuardedKill {
         let Some(semaphore) = self.guilds.get(name).map(|g| g.get_semaphore()) else {
             return GuardedKill::Missing;
@@ -2215,6 +2300,193 @@ pub async fn find_python() -> Result<String> {
 mod tests {
     use super::*;
 
+    /// D-110: una caída de transporte debe CONTAR en el backoff (antes se
+    /// reseteaba, y eso permitía morir y renacer en cada llamada sin freno).
+    ///
+    /// Antes del arreglo este test se pone rojo: `kill()` resetea `crash_count`
+    /// porque asume "no fue un crash de arranque", así que la segunda muerte
+    /// volvía a 1 en vez de ir a 2.
+    #[test]
+    fn d110_transport_failure_cuenta_y_no_resetea() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut registry = GuildRegistry::new(
+            dir.path().to_path_buf(),
+            30,
+            TimeoutsConfig { handshake_secs: 5, tool_call_secs: 30 },
+            3,
+        );
+        registry.guilds.insert(
+            "guild_que_muere".to_string(),
+            GuildProcess::new(
+                "guild_que_muere",
+                GuildLauncher::Python { module_path: "guilds.core.coloquio".to_string() },
+                false,
+                None,
+                3,
+            ),
+        );
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let first = registry.kill_guild_after_transport_failure("guild_que_muere").await;
+            assert!(matches!(first, GuardedKill::Killed), "sin llamadas en vuelo debe matar");
+            assert_eq!(
+                registry.guilds.get("guild_que_muere").unwrap().crash_count, 1,
+                "la primera caída debe contar 1"
+            );
+
+            let second = registry.kill_guild_after_transport_failure("guild_que_muere").await;
+            assert!(matches!(second, GuardedKill::Killed));
+            assert_eq!(
+                registry.guilds.get("guild_que_muere").unwrap().crash_count, 2,
+                "la segunda debe contar 2 (no reiniciar a 1)"
+            );
+        });
+    }
+
+    /// D-112 (H24 de Buffy): `registry.json` no puede contener credenciales.
+    /// Registra un guild HTTP con un secreto en las cabeceras, guarda, y lee el
+    /// fichero del disco: el valor NO debe estar y la clave SÍ, con `***`.
+    ///
+    /// **D-137 (petición del TL en T2929, punto b).** Un guild registrado **en
+    /// caliente** por API con credenciales se persiste **enmascarado** (D-112), y
+    /// como no está en `tylluan.toml`, `main.rs` no lo re-registra: al cargar volvía
+    /// con `Authorization: ***` y fallaba **en silencio** en la primera llamada.
+    ///
+    /// El test pasa por `save()` y `load()` **reales**, no por `redacted()` suelto,
+    /// que es lo que pidió el TL.
+    #[test]
+    fn d137_al_cargar_no_resucita_un_launcher_con_credenciales_enmascaradas() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut registry = GuildRegistry::new(
+            dir.path().to_path_buf(),
+            30,
+            TimeoutsConfig { handshake_secs: 5, tool_call_secs: 30 },
+            3,
+        );
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), "Bearer sk-REAL-D137".to_string());
+        registry.guilds.insert(
+            "externo_caliente".to_string(),
+            GuildProcess::new(
+                "externo_caliente",
+                GuildLauncher::Http {
+                    url: "https://example.invalid/mcp".to_string(),
+                    headers,
+                    timeout_ms: None,
+                },
+                false,
+                None,
+                3,
+            ),
+        );
+        // 1) save() enmascara (D-112) — y lo comprobamos en el fichero, no de palabra.
+        registry.save().expect("save");
+        let crudo = std::fs::read_to_string(dir.path().join("registry.json")).expect("leer");
+        assert!(crudo.contains("***"), "save() tiene que enmascarar: {crudo}");
+        assert!(!crudo.contains("sk-REAL-D137"), "el secreto no puede estar en disco");
+
+        // 2) load() en un registro NUEVO (como tras un reinicio) NO debe resucitarlo.
+        let mut nuevo = GuildRegistry::new(
+            dir.path().to_path_buf(),
+            30,
+            TimeoutsConfig { handshake_secs: 5, tool_call_secs: 30 },
+            3,
+        );
+        nuevo.load().expect("load");
+        assert!(
+            !nuevo.guilds.contains_key("externo_caliente"),
+            "un launcher con credenciales enmascaradas NO puede volver: arrancaría con *** como token"
+        );
+    }
+
+    /// Y el lado sano: un guild **sin** credenciales sí vuelve tras el reinicio, para
+    /// que el filtro no se lleve por delante lo que funciona.
+    ///
+    /// Se usa un launcher `Http` con `headers` **vacío** y no un `Python`: `load()`
+    /// descarta los guilds Python cuyo módulo no existe en disco ("ghosts"), y en un
+    /// tempdir no existe ninguno — ese filtro es otro y aquí estorbaría.
+    #[test]
+    fn d137_un_launcher_sin_credenciales_si_vuelve() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut registry = GuildRegistry::new(
+            dir.path().to_path_buf(),
+            30,
+            TimeoutsConfig { handshake_secs: 5, tool_call_secs: 30 },
+            3,
+        );
+        registry.guilds.insert(
+            "sin_secretos".to_string(),
+            GuildProcess::new(
+                "sin_secretos",
+                GuildLauncher::Http {
+                    url: "https://example.invalid/mcp".to_string(),
+                    headers: HashMap::new(),
+                    timeout_ms: None,
+                },
+                false,
+                None,
+                3,
+            ),
+        );
+        registry.save().expect("save");
+
+        let mut nuevo = GuildRegistry::new(
+            dir.path().to_path_buf(),
+            30,
+            TimeoutsConfig { handshake_secs: 5, tool_call_secs: 30 },
+            3,
+        );
+        nuevo.load().expect("load");
+        assert!(
+            nuevo.guilds.contains_key("sin_secretos"),
+            "sin credenciales no hay nada que filtrar: el guild debe volver"
+        );
+    }
+
+    /// Antes del arreglo este test se pone rojo: `save()` serializaba el launcher
+    /// con los headers ya resueltos.
+    #[test]
+    fn d112_registry_json_no_guarda_credenciales() {
+        const SECRETO: &str = "SecretoEnRegistryD112";
+        let dir = tempfile::tempdir().unwrap();
+        let mut registry = GuildRegistry::new(
+            dir.path().to_path_buf(),
+            30,
+            TimeoutsConfig { handshake_secs: 5, tool_call_secs: 30 },
+            3,
+        );
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), SECRETO.to_string());
+        registry.guilds.insert(
+            "externo_de_prueba".to_string(),
+            GuildProcess::new(
+                "externo_de_prueba",
+                GuildLauncher::Http {
+                    url: "https://example.invalid/mcp".to_string(),
+                    headers,
+                    timeout_ms: None,
+                },
+                false,
+                None,
+                3,
+            ),
+        );
+
+        registry.save().expect("save debe escribir registry.json");
+
+        let raw = std::fs::read_to_string(dir.path().join("registry.json"))
+            .expect("registry.json debe existir");
+        assert!(
+            !raw.contains(SECRETO),
+            "el secreto quedó escrito en registry.json: {raw}"
+        );
+        assert!(
+            raw.contains("Authorization"),
+            "la CLAVE debe conservarse para que se vea qué credencial falta: {raw}"
+        );
+    }
+
     #[test]
     fn unlimited_patience_guilds_keep_flat_timeout_not_heavy_category() {
         // Real regression caught before shipping (2026-08-23): deep_analysis
@@ -3108,7 +3380,8 @@ impl GuildRegistry {
             }
             Some(PersistedGuild {
                 name: g.name.clone(),
-                launcher: g.launcher.clone(),
+                // D-112 (H24): nunca el launcher con credenciales resueltas.
+                launcher: g.launcher.redacted(),
                 always_on: g.always_on,
                 tool_timeout_ms: g.tool_timeout.map(|d| d.as_millis() as u64),
                 crash_count: g.crash_count,
@@ -3168,6 +3441,20 @@ impl GuildRegistry {
                     ghosts.push(pg.name.clone());
                     continue;
                 }
+            }
+
+            // D-137: un launcher persistido con las credenciales enmascaradas (`***`)
+            // no puede arrancar — mandaría `***` como token. Solo pasa con guilds
+            // registrados en caliente por API (no están en `tylluan.toml`, así que
+            // `main.rs` no los re-registra). Se descarta y se dice en voz alta.
+            if pg.launcher.tiene_valores_redactados() {
+                error!(
+                    "[D-137] Guild '{}' descartado al cargar: su launcher tiene credenciales \
+                     enmascaradas (***) porque se registró en caliente y D-112 no persiste \
+                     secretos. Re-regístralo por API o decláralo en tylluan.toml.",
+                    pg.name
+                );
+                continue;
             }
 
             let _tool_timeout = pg.tool_timeout_ms.map(std::time::Duration::from_millis);

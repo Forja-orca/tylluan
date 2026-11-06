@@ -122,7 +122,7 @@ bincode = "1"
 lru = "0.12"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3.9", features = ["jobapi2", "winnt", "processthreadsapi"] }
+winapi = { version = "0.3.9", features = ["jobapi2", "winnt", "processthreadsapi", "fileapi", "minwindef"] }
 
 [features]
 # Build configurations for different deployment scenarios
