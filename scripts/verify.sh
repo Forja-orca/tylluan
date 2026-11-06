@@ -264,6 +264,18 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "agent read-route drift -- see scripts/check_read_routes.sh output above"
     fi
 
+    # Build-inputs gate (2026-11-04, TL T2673 T-HER-NEW-1, hermes): every
+    # include_str!/include_bytes! leaving its crate must resolve to a git-tracked
+    # file that is present in the Docker build context and COPYed by the
+    # Dockerfile when production code needs it. Push 266's red Docker Smoke
+    # (Dockerfile never copied assets/ behind an include_str!) is the incident
+    # this closes; verify.sh never builds the image, so this static gate does.
+    if bash scripts/check_build_inputs.sh; then
+        ok "build inputs resolvable in clean clones and Docker (check_build_inputs.sh)"
+    else
+        fail "include_str!/include_bytes! input drift -- see scripts/check_build_inputs.sh output above"
+    fi
+
     # Markdown link gate (2026-10-14 documentation audit): 20 relative links
     # were broken or pointed at one machine's absolute paths (file:///E:/...);
     # check_docs_reality.sh only judges backtick-cited paths.

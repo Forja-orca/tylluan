@@ -480,21 +480,24 @@ jobs:
       # literal output shows it green in 0.03 s with the real 348-injection
       # corpus -- inside the "los que salgan verdes" clause of T2626-(2).
       - name: Run deep-measured green integration binaries
+        # M7 (TL T2682): ONE cargo invocation, many --test filters -- fourteen
+        # separate calls paid the same compile/link work up to fourteen times.
         run: |
-          cargo test -p tylluan-kernel --test b20_auth_route_matrix
-          cargo test -p tylluan-kernel --test b22_admin_host_guard
-          cargo test -p tylluan-kernel --test b28_admin_surface_host_guard
-          cargo test -p tylluan-kernel --test capabilities_enforce_matrix
-          cargo test -p tylluan-kernel --test asi06_layer1_ofuscacion_regresion
-          cargo test -p tylluan-kernel --test oauth_f2_consent_adversarial
-          cargo test -p tylluan-kernel --test untrusted_writers_integration
-          cargo test -p tylluan-kernel --test approve_action_intent_route
-          cargo test -p tylluan-kernel --test d18_untrusted_visibility
-          cargo test -p tylluan-kernel --test asi06_redteam_memory_poisoning
-          cargo test -p tylluan-kernel --test asi06_redteam_vias3_6
-          cargo test -p tylluan-kernel --test approve_audit_matrix
-          cargo test -p tylluan-kernel --test layer1_corpus_acceptance
-          cargo test -p tylluan-kernel --test asi06_layer1_ingest_memory_write
+          cargo test -p tylluan-kernel \
+            --test b20_auth_route_matrix \
+            --test b22_admin_host_guard \
+            --test b28_admin_surface_host_guard \
+            --test capabilities_enforce_matrix \
+            --test asi06_layer1_ofuscacion_regresion \
+            --test oauth_f2_consent_adversarial \
+            --test untrusted_writers_integration \
+            --test approve_action_intent_route \
+            --test d18_untrusted_visibility \
+            --test asi06_redteam_memory_poisoning \
+            --test asi06_redteam_vias3_6 \
+            --test approve_audit_matrix \
+            --test layer1_corpus_acceptance \
+            --test asi06_layer1_ingest_memory_write
 
   desktop-tauri-check:
     name: Desktop — Tauri shell check

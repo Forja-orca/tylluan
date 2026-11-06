@@ -29,17 +29,28 @@
 #       and portability scripts on disk must be wired in verify.sh, CI, or caller gates
 #   T7  negative control for gate coverage: an uninvoked gate in sandbox
 #       MUST cause the coverage test to fail (proves T6 is load-bearing)
-#   T8  integration test coverage (MD-10, TL decision T2620-C, claimed T2629):
-#       every binary tests/*.rs under the kernel must be wired (stem cited in
-#       verify.sh or a CI workflow), marked manual (contains #[ignore] -- the
-#       TL's literal criterion; a file mixing ignored and live tests is a
-#       known loophole flagged in the delivery report), or grandfathered in
-#       scripts/integration_tests_baseline.txt (the 98 known-orphans at base
-#       2016fa85, which belong to the (B) wiring project, not to new drift).
+#   T8  integration test coverage (MD-10, TL decision T2620-C, claimed T2629;
+#       H4/M4/M8 addendum per TL T2682): every binary tests/*.rs under the
+#       kernel must be wired (an EXACT stem token after --test/--test= in
+#       verify.sh or a CI chain -- substring citations and comment lines do
+#       NOT count, and schedule-gated jobs like the M9 weekly ignore runner
+#       do NOT count as chain wiring), marked manual via a REASONED ignore
+#       (#[ignore = "..."] or #[ignore] // why -- M8: a bare #[ignore] hides
+#       a test for no stated cause and no longer qualifies new files), or
+#       grandfathered in scripts/integration_tests_baseline.txt (the known
+#       orphans at base 2016fa85, debt owned by the (B) wiring project).
+#       M4 reverses the check on the manifest: every entry must still exist
+#       as a file and must still be an orphan -- wired entries leave stale
+#       lines that MUST be deleted (the manifest may only shrink).
 #       A NEW file satisfying none of those is red.
 #   T9  negative control for T8: a planted unwired binary MUST fire the rule;
-#       planted #[ignore] and baseline-grandfathered variants MUST NOT --
-#       proves T8 load-bearing without becoming a hair trigger.
+#       planted #[ignore]-with-reason and baseline-grandfathered variants MUST
+#       NOT; a planted PREFIX citation (--test t9_prefix, no such binary) MUST
+#       NOT silence the real t9_prefix_child -- proves H4 load-bearing.
+#   T10 build-inputs gate (T-HER-NEW-1, TL T2673): scripts/check_build_inputs.sh
+#       is green on the real tree, and mutations (Dockerfile COPY line dropped,
+#       .dockerignore excluding an embedded asset) flip it red -- the mechanism
+#       that push 266's Docker Smoke proved was missing.
 #
 # Hermetic by design: T0-T4 never touch git or cargo (all gates stubbed);
 # T5 runs inside a disposable git worktree that is removed afterwards. The
@@ -199,26 +210,57 @@ find_orphan_integration_tests() {
     done
 
     local bl=""
-    [ -f "$root/$INTEGRATION_BASELINE_REL" ] && bl="$(grep -v '^#' "$root/$INTEGRATION_BASELINE_REL" | tr '\n' ' ')"
+    # one entry per LINE now: "<stem>  <verde|vacuo|rojo>  <evidence>" --
+    # the parser takes the FIRST token as the stem and requires a status
+    # token (T2734-3: the manifest may never again be a mute exemption list).
+    [ -f "$root/$INTEGRATION_BASELINE_REL" ] && bl="$(grep -v '^#' "$root/$INTEGRATION_BASELINE_REL")"
 
     awk -v cands="${stems[*]}" -v baseline="$bl" '
         BEGIN {
             n = split(cands, C, " ")
             for (i = 1; i <= n; i++) { need[C[i]] = 1; wired[C[i]] = 0; ign[C[i]] = 0 }
-            m = split(baseline, B, " ")
-            for (i = 1; i <= m; i++) inbase[B[i]] = 1
+            m = split(baseline, B, "\n")
+            for (i = 1; i <= m; i++) {
+                split(B[i], P, /[ \t]+/)
+                if (P[1] == "") continue
+                inbase[P[1]] = 1
+                bstat[P[1]] = P[2]
+                bs[i] = P[1]
+            }
         }
         FNR == 1 {
             src = FILENAME; sub(/.*[\/\\]/, "", src)
             stem = src; sub(/\.rs$/, "", stem)
             is_testsrc = (src ~ /\.rs$/)
+            sched_job = 0
         }
         {
             if (is_testsrc) {
-                if ((stem in need) && ign[stem] == 0 && index($0, "#[ignore") > 0) ign[stem] = 1
+                # M8 (TL T2682): only a REASONED ignore counts as manual:
+                #   #[ignore = "..."]  or  #[ignore] // reason
+                # A bare #[ignore] is hiding a test with no stated cause and
+                # buys no coverage (grandfathered baseline entries are still
+                # tolerated as debt; new bare ignores are red until explained).
+                if ((stem in need) && ign[stem] == 0 &&
+                    ($0 ~ /#\[ignore[ \t]*=/ || $0 ~ /#\[ignore\][ \t]*\/\//)) ign[stem] = 1
             } else {
-                for (c in need)
-                    if (wired[c] == 0 && index($0, c) > 0) wired[c] = 1
+                # Schedule-gated CI jobs (the M9 weekly ignore runner) are NOT
+                # chain wiring: they exercise only the ignored half of a file
+                # and only once a week. Track job boundaries to turn this off.
+                if ($0 ~ /^  [A-Za-z0-9_-]+:[ \t]*$/) sched_job = 0
+                if ($0 ~ /if:[ \t]*github\.event_name[ \t]*==[ \t]*.schedule./) sched_job = 1
+                if (sched_job) next
+                # H4 (Buffy proved b20_auth silenced every b20_auth_* stem):
+                # wiring is an EXACT token after --test/--test=, never a
+                # substring, and comment lines never wire anything.
+                if ($0 ~ /^[ \t]*#/) next
+                line = $0
+                while (match(line, /--test[= ]+[A-Za-z0-9_]+/)) {
+                    tok = substr(line, RSTART, RLENGTH)
+                    sub(/--test[= ]+/, "", tok)
+                    if (tok in need) wired[tok] = 1
+                    line = substr(line, RSTART + RLENGTH)
+                }
             }
         }
         END {
@@ -227,6 +269,16 @@ find_orphan_integration_tests() {
                 c = C[i]
                 if (wired[c] == 1 || ign[c] == 1 || (c in inbase)) continue
                 out = out (out == "" ? "" : " ") c; miss = 1
+            }
+            # M4 (TL T2682): manifest hygiene, both directions.
+            for (i = 1; i <= m; i++) {
+                c = bs[i]
+                if (c == "") continue
+                if (!(c in need)) { out = out (out == "" ? "" : " ") "[stale-no-file]" c; miss = 1 }
+                else if (wired[c] == 1) { out = out (out == "" ? "" : " ") "[paid-off-remove-line]" c; miss = 1 }
+                else if (bstat[c] != "verde" && bstat[c] != "vacuo" && bstat[c] != "rojo") {
+                    out = out (out == "" ? "" : " ") "[no-status]" c; miss = 1
+                }
             }
             print out
             exit miss
@@ -550,31 +602,68 @@ else
 fi
 
 # ── T9: negative control for T8 ─────────────────────────────────────────
-# Three planted binaries: unwired (MUST fire), #[ignore] (must NOT), baseline
-# (must NOT). Proves T8 is load-bearing without being a hair trigger.
-t "T9: negative control -- planted unwired test binary MUST fire; ignored/grandfathered MUST NOT"
+# Four planted binaries: unwired (MUST fire), reasoned-#[ignore] (must NOT),
+# baseline (must NOT), and a PREFIX pair (M3/H4): a fake --test t9_prefix
+# citation of a NONEXISTENT binary must NOT silence the real t9_prefix_child.
+# Proves T8 is load-bearing without being a hair trigger.
+t "T9: negative control -- planted unwired + prefix-child MUST fire; ignored/grandfathered MUST NOT"
 SBX_T9="$SBASHOME/t9_neg"
 mkdir -p "$SBX_T9/scripts" "$SBX_T9/.github/workflows" "$SBX_T9/crates/tylluan-kernel/tests"
 cp "$VERIFY_SRC" "$SBX_T9/scripts/verify.sh"
 cp "$REPO_ROOT/.github/workflows/ci.yml" "$SBX_T9/.github/workflows/ci.yml"
 printf '#[test]\nfn t_unwired() { assert!(false); }\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_planted_unwired.rs"
-printf '#[ignore]\n#[test]\nfn t_manual() {}\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_planted_ignored.rs"
+printf '#[ignore = "meta-test fixture: manual by design"]\n#[test]\nfn t_manual() {}\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_planted_ignored.rs"
 printf '#[test]\nfn t_manifested() {}\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_planted_manifested.rs"
-printf '# grandfather fixture for T9\nt9_planted_manifested\n' > "$SBX_T9/$INTEGRATION_BASELINE_REL"
+printf '#[test]\nfn t_child() {}\n' > "$SBX_T9/crates/tylluan-kernel/tests/t9_prefix_child.rs"
+printf '          cargo test -p tylluan-kernel --test t9_prefix\n' >> "$SBX_T9/.github/workflows/ci.yml"
+printf '# grandfather fixture for T9\nt9_planted_manifested  vacuo  0/0\n' > "$SBX_T9/$INTEGRATION_BASELINE_REL"
 if uninvoked_it_neg=$(find_orphan_integration_tests "$SBX_T9"); then
     badt "planted unwired test binary was NOT detected -- T8 rule is vacuous"
 else
     fired_ok=0
-    echo "$uninvoked_it_neg" | grep -q "t9_planted_unwired" && fired_ok=1
+    echo "$uninvoked_it_neg" | grep -q "t9_planted_unwired" && \
+    echo "$uninvoked_it_neg" | grep -q "t9_prefix_child" && fired_ok=1
     false_hits=""
     for unexpected in t9_planted_ignored t9_planted_manifested; do
         if echo "$uninvoked_it_neg" | grep -q "$unexpected"; then false_hits="$false_hits $unexpected"; fi
     done
     if [ "$fired_ok" -eq 1 ] && [ -z "$false_hits" ]; then
-        okt "unwired planted fired; ignored and grandfathered silent -> T8 load-bearing, not hair-trigger"
+        okt "unwired + prefix-child fired; ignored/grandfathered/silent-prefix-token behaved -> T8 load-bearing, H4 closes the prefix loophole"
     else
-        badt "T9 mismatch: fired=[$uninvoked_it_neg] expected only t9_planted_unwired (false_positives=[$false_hits])"
+        badt "T9 mismatch: fired=[$uninvoked_it_neg] expected t9_planted_unwired+t9_prefix_child (false_positives=[$false_hits])"
     fi
+fi
+
+# ── T10: build-inputs gate (T-HER-NEW-1, TL T2673) ──────────────────────
+# The gate is green on the real tree; dropping the Dockerfile's COPY assets
+# line, or letting .dockerignore exclude the embedded anchor seed, MUST flip
+# it red -- exactly the push-266 Docker Smoke failure class, now caught before
+# any push instead of inside the image build.
+t "T10: check_build_inputs green on real tree; COPY/dockerignore mutations MUST flip it red"
+if bash scripts/check_build_inputs.sh >/dev/null 2>&1; then
+    okt "check_build_inputs.sh: every escaping include_str!/include_bytes! resolves to a tracked, docker-context, COPYed file"
+else
+    badt "check_build_inputs.sh is RED on the real tree -- run it and fix the inputs it names"
+fi
+T10_DIR="$SBASHOME/t10"
+mkdir -p "$T10_DIR"
+if grep -q '^COPY assets/' Dockerfile; then
+    grep -v '^COPY assets/' Dockerfile > "$T10_DIR/Dockerfile.drop_copy"
+    out_mut=$(bash scripts/check_build_inputs.sh --dockerfile "$T10_DIR/Dockerfile.drop_copy" 2>&1); rc_mut=$?
+    if [ "$rc_mut" -eq 0 ] || ! echo "$out_mut" | grep -q 'routing_anchors_seed.jsonl'; then
+        badt "mutation 'DROP COPY assets/' did NOT flip the gate on the anchor seed -- T10 is vacuous"
+    else
+        okt "dropping the Dockerfile COPY line flips the gate red on the exact file (assets/routing_anchors_seed.jsonl)"
+    fi
+else
+    badt "Dockerfile no longer has a 'COPY assets/' line -- T10 mutation fixture stale, update this test"
+fi
+printf 'assets/\n' > "$T10_DIR/dockerignore.excludes"
+out_mut2=$(bash scripts/check_build_inputs.sh --dockerignore "$T10_DIR/dockerignore.excludes" 2>&1); rc_mut2=$?
+if [ "$rc_mut2" -eq 0 ] || ! echo "$out_mut2" | grep -q 'EXCLUDED'; then
+    badt "mutation '.dockerignore excludes assets/' did NOT flip the gate -- T10 dockerignore arm vacuous"
+else
+    okt "excluding assets in .dockerignore flips the gate red (EXCLUDED)"
 fi
 
 rm -rf "$SBASHOME"
