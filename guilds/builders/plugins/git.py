@@ -75,21 +75,37 @@ async def _run_git(args: list[str], cwd: str | None = None, use_fallback: bool =
             result = await _run_git(args, cwd, use_fallback=True)
             if not result.startswith("⏱️"):
                 return result
-            # Final fallback: shell=True bypasses AV child-process interception
-            return await _run_git_shell(args, cwd)
-        return await _run_git_shell(args, cwd)
+            # Final fallback: último intento con entorno reducido y timeout corto.
+            return await _run_git_ultimo_intento(args, cwd)
+        return await _run_git_ultimo_intento(args, cwd)
     except Exception as e:
         return f"❌ Error: {e}"
 
 
-async def _run_git_shell(args: list[str], cwd: str | None = None) -> str:
-    """Fallback using shell=True to avoid AV intercepting child process."""
-    import shlex
+async def _run_git_ultimo_intento(args: list[str], cwd: str | None = None) -> str:
+    """Tercer intento tras dos timeouts. **Nunca construye una línea de comandos.**
 
+    Antes se llamaba `_run_git_shell` y hacía lo contrario: unía los argumentos
+    con `shlex.quote` (quoting POSIX) y los ejecutaba con
+    `asyncio.create_subprocess_shell`, que en Windows es `cmd.exe` — y `cmd.exe`
+    no entiende las comillas simples. Resultado: un `&` dentro de un mensaje de
+    commit o de una ruta se ejecutaba como comando aparte. Está demostrado en
+    esta máquina con el payload `a & echo MARCADOR` (H3 de la auditoría del
+    2026-11-06).
+
+    Aquí los argumentos viajan como **lista** a `create_subprocess_exec`: no hay
+    intérprete de por medio, así que no hay nada que entrecomillar y nada que
+    inyectar. Los tests `test_d142_*` de `tests/python/test_git_sin_shell.py`
+    vigilan las dos cosas: que el payload no se ejecuta y que no vuelve a
+    aparecer una API de shell en este módulo.
+    """
     work_dir = cwd or os.getcwd()
 
-    quoted_args = " ".join(shlex.quote(a) for a in args)
-    cmd_str = f"git -c core.fsmonitor=false -c core.untrackedcache=false {quoted_args}"
+    cmd = [
+        "git",
+        "-c", "core.fsmonitor=false",
+        "-c", "core.untrackedcache=false",
+    ] + args
 
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
@@ -98,8 +114,8 @@ async def _run_git_shell(args: list[str], cwd: str | None = None) -> str:
     env["GIT_OPTIONAL_LOCKS"] = "0"
 
     try:
-        process = await asyncio.create_subprocess_shell(
-            cmd_str,
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
             cwd=work_dir,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
@@ -145,8 +161,8 @@ async def git_status_quick(cwd: str | None = None) -> str:
 
 @mcp.tool()
 async def git_status_shell(cwd: str | None = None) -> str:
-    """Ultra-light git status using shell=True to bypass AV interception."""
-    return await _run_git_shell(["status"], cwd)
+    """Ultra-light git status: último intento directo, sin intérprete (bypass de AV sin línea de comandos)."""
+    return await _run_git_ultimo_intento(["status"], cwd)
 
 
 @mcp.tool()

@@ -221,7 +221,10 @@ pub static TOOL_METADATA: LazyLock<HashMap<String, ToolMetadata>> = LazyLock::ne
     m.insert("git_status_shell".to_string(), ToolMetadata {
         category: "vcs".to_string(),
         risk_level: RiskLevel::Low,
-        enriched_description: "Git status via shell. Read-only.".to_string(),
+        // D-142 (H3): ya NO va por shell — el plugin deja de construir líneas de
+        // comandos (era una inyección en Windows vía cmd.exe). El nombre del tool
+        // se mantiene por compatibilidad con los clientes.
+        enriched_description: "Git status, último intento directo (sin intérprete). Read-only.".to_string(),
     });
     m.insert("git_diff".to_string(), ToolMetadata {
         category: "vcs".to_string(),
