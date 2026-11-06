@@ -9,6 +9,9 @@
 /// `sysinfo` no pueda leer la línea de comandos de esos procesos. Esto añade los
 /// contadores al error para que la próxima vez el log lo diga solo, sin tener que
 /// instrumentar a mano.
+// Solo la usa la rama de Windows (y su test): sin este cfg, en Linux/ARM64 el CI
+// con `-D warnings` falla por `dead_code`.
+#[cfg(any(target_os = "windows", test))]
 pub(crate) fn resumen_sonda(
     procesos: usize,
     cmd_vacias: usize,
