@@ -158,7 +158,9 @@ impl TylluanServer {
                 // tools, so drop the stale entries from the shared tool index.
                 // ensure_guild_running rebuilds it again on the next respawn.
                 self.registry.write().await.rebuild_tool_index();
-                self.notify("notifications/tool/list_changed", serde_json::Value::Null);
+                // MCP 2025-06-18 (server/tools, "List Changed Notification"): the method is
+                // `notifications/tools/list_changed`, plural. The singular form was ignored by clients.
+                self.notify("notifications/tools/list_changed", serde_json::Value::Null);
                 Ok(CallToolResult { content: vec![Content::text(format!("✅ Guild '{name}' unloaded."))], is_error: Some(false) })
             }
             "doctor_diagnose" => {
