@@ -237,6 +237,23 @@ impl CpuSampler {
     const TTL: Duration = Duration::from_secs(2);
 
     fn sample(&mut self, now: Instant) -> Option<f32> {
+        self.sample_with(now, |sys| {
+            sys.refresh_cpu_usage();
+            sys.global_cpu_usage()
+        })
+    }
+
+    /// El mismo muestreo con la LECTURA inyectable (D-146).
+    ///
+    /// Existe para que el test no dependa de la CPU real de la máquina: con la suite en
+    /// paralelo, un 100 % es una medida legítima, y el test de D-139 exigía `< 100` para
+    /// distinguir el artefacto. Aquí se le da una secuencia de lecturas conocida y se
+    /// comprueba la DECISIÓN (primera muestra = `None`, segunda = la lectura), que es lo
+    /// que de verdad se está protegiendo. En producción la lectura es la de `sysinfo`.
+    fn sample_with<F>(&mut self, now: Instant, mut leer: F) -> Option<f32>
+    where
+        F: FnMut(&mut sysinfo::System) -> f32,
+    {
         if let Some((ts, pct)) = self.last
             && now.duration_since(ts) < Self::TTL
         {
@@ -245,16 +262,16 @@ impl CpuSampler {
         let mut sys = match self.sys.take() {
             Some(sys) => sys,
             None => {
-                // Cebado: la primera muestra solo fija el punto de partida de PDH.
+                // Cebado: la primera muestra solo fija el punto de partida de PDH; su
+                // valor se descarta a propósito.
                 let mut fresh = sysinfo::System::new();
-                fresh.refresh_cpu_usage();
+                let _ = leer(&mut fresh);
                 self.sys = Some(fresh);
                 self.last = Some((now, None));
                 return None;
             }
         };
-        sys.refresh_cpu_usage();
-        let pct = sys.global_cpu_usage();
+        let pct = leer(&mut sys);
         self.sys = Some(sys);
         self.last = Some((now, Some(pct)));
         Some(pct)
@@ -1192,66 +1209,86 @@ mod tests_d139 {
         CpuSampler { sys: None, last: None }
     }
 
-    /// D-139: sin muestra previa **no hay medida**. Antes se devolvía la "lectura"
-    /// del primer refresco, que en Windows vale 100,00 % siempre (PDH no tiene
-    /// muestra previa) y hacía saltar el juez por "CPU alta" en el 100 % de las
-    /// llamadas: `/health` lo enseñaba como 151 de 151 saltos.
+    /// D-139 + D-146: sin muestra previa **no hay medida**, aunque la lectura cruda
+    /// sea exactamente el artefacto.
+    ///
+    /// D-146: el test ya NO mide la CPU de la máquina (con la suite en paralelo, un
+    /// 100 % es una medida legítima y el test se ponía rojo sin bug). Se inyecta la
+    /// lectura: el artefacto es 100,00 %, y aun así el primer muestreo debe ser `None`.
     #[test]
     fn d139_sin_muestra_previa_no_hay_medida() {
         let now = Instant::now();
         let mut sampler = sampler_nuevo();
+        // Lectura cruda = el artefacto de PDH sin muestra previa.
+        let mut leer = |_sys: &mut sysinfo::System| 100.0_f32;
+
         assert_eq!(
-            sampler.sample(now),
+            sampler.sample_with(now, &mut leer),
             None,
-            "el primer muestreo solo ceba el contador: no es una medida y no puede \
-             devolver un número con el que decidir"
+            "el primer muestreo solo ceba el contador: aunque la lectura sea 100,00 % \
+             no es una medida y no puede devolver un número con el que decidir"
         );
         assert!(
-            !should_skip_for_cpu(sampler.sample(now), 85),
+            !should_skip_for_cpu(sampler.sample_with(now, &mut leer), 85),
             "sin medida, `should_skip_for_cpu` no puede saltar el juez"
         );
     }
 
-    /// La segunda muestra (fuera del TTL) sí es una medida: plausible, en rango y
-    /// **distinta del artefacto** 100,00 %.
+    /// D-139 + D-146: la segunda muestra (fuera del TTL) es **la lectura**, no el
+    /// artefacto. Secuencia inyectada: 100,0 (cebado, se descarta) y 37,5 (medida).
     #[test]
     fn d139_la_segunda_muestra_si_es_una_medida() {
         let now = Instant::now();
         let mut sampler = sampler_nuevo();
-        assert_eq!(sampler.sample(now), None);
+        let mut lecturas = [100.0_f32, 37.5].into_iter();
+        let mut leer = |_sys: &mut sysinfo::System| lecturas.next().expect("lectura");
 
-        // PDH necesita un intervalo real entre collects para poder dar una tasa.
-        std::thread::sleep(Duration::from_millis(300));
-
+        assert_eq!(sampler.sample_with(now, &mut leer), None, "cebado");
         let pct = sampler
-            .sample(now + CpuSampler::TTL + Duration::from_millis(1))
+            .sample_with(now + CpuSampler::TTL + Duration::from_millis(1), &mut leer)
             .expect("la segunda muestra tiene que ser una medida");
-        assert!((0.0..=100.0).contains(&pct), "porcentaje imposible: {pct}");
-        assert!(
-            pct < 100.0,
-            "100,00 % es exactamente el artefacto de una sola muestra (PDH sin muestra \
-             previa). Si esta máquina está de verdad saturada el test es inocente, pero \
-             no debe pasar desapercibido: {pct}"
+        assert_eq!(
+            pct, 37.5,
+            "la segunda muestra es la lectura (37,5), no el 100,0 del cebado: si el              muestreador fabrica un valor, este test tiene que caer"
         );
+        assert!((0.0..=100.0).contains(&pct), "porcentaje imposible: {pct}");
     }
 
-    /// Dentro del TTL se reusa la medida en vez de volver a preguntar a PDH.
+    /// D-146: la lectura real sigue devolviendo un porcentaje plausible. Aquí sí se
+    /// usa `sysinfo`, pero **sin exigir un valor concreto**: un 100 % puede ser real.
+    #[test]
+    fn d139_la_lectura_real_devuelve_un_porcentaje_plausible() {
+        let now = Instant::now();
+        let mut sampler = sampler_nuevo();
+        assert_eq!(sampler.sample(now), None, "el primero es cebado");
+        std::thread::sleep(Duration::from_millis(300));
+        if let Some(pct) = sampler.sample(now + CpuSampler::TTL + Duration::from_millis(1)) {
+            assert!((0.0..=100.0).contains(&pct), "porcentaje imposible: {pct}");
+        }
+    }
+
+    /// Dentro del TTL se reusa la medida sin volver a leer.
     #[test]
     fn d139_la_cache_reusa_la_medida_dentro_del_ttl() {
         let now = Instant::now();
         let mut sampler = sampler_nuevo();
-        assert_eq!(sampler.sample(now), None);
-        std::thread::sleep(Duration::from_millis(300));
+        let mut llamadas = 0usize;
+        let mut leer = |_sys: &mut sysinfo::System| {
+            llamadas += 1;
+            40.0 + llamadas as f32 // valor distinto en cada lectura
+        };
 
+        assert_eq!(sampler.sample_with(now, &mut leer), None, "cebado");
         let primera = sampler
-            .sample(now + CpuSampler::TTL + Duration::from_millis(1))
+            .sample_with(now + CpuSampler::TTL + Duration::from_millis(1), &mut leer)
             .expect("medida");
         let segunda = sampler
-            .sample(now + CpuSampler::TTL + Duration::from_millis(500))
+            .sample_with(now + CpuSampler::TTL + Duration::from_millis(500), &mut leer)
             .expect("dentro del TTL sigue habiendo medida cacheada");
         assert_eq!(
             primera, segunda,
             "dentro del TTL tiene que devolver lo cacheado, no volver a muestrear"
         );
+        assert_eq!(llamadas, 2, "dos lecturas: el cebado y la medida (la tercera se cachea)");
     }
 }
