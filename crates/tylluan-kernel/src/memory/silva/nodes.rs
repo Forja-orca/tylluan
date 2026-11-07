@@ -4,7 +4,7 @@
 //! use allow_drift=true to bypass.
 
 use anyhow::Result;
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use tracing::{info, warn};
 use chrono::Utc;
 use std::collections::HashMap;
@@ -211,6 +211,25 @@ impl super::SilvaDB {
                 } else { None }
             } else { None }
         } else { None };
+        // MEM-3 v2 (T3031): una nota de estado sin `topic` tambien tiene identidad:
+        // `state:<space>`. Se guarda en la misma columna indexada `topic_key` para
+        // que la sustitucion se resuelva por clave exacta y no por parecido.
+        let topic_key = topic_key.or_else(|| {
+            let v = parsed_meta.as_ref()?;
+            let es_estado = v
+                .get("kind")
+                .and_then(|k| k.as_str())
+                .map(|k| k.eq_ignore_ascii_case("state"))
+                .unwrap_or(false);
+            if !es_estado {
+                return None;
+            }
+            let space = v.get("space").and_then(|s| s.as_str())?.trim();
+            if space.is_empty() {
+                return None;
+            }
+            Some(format!("state:{}", self.normalize_topic_key(space)))
+        });
         // Extract federation_source from metadata to store in the proper SQL column (M11-C)
         let federation_source: Option<String> = parsed_meta
             .as_ref()
@@ -1531,6 +1550,44 @@ impl super::SilvaDB {
         Ok(changed > 0)
     }
 
+    /// MEM-3 v2: caduca la version viva de una nota de estado con esta clave.
+    ///
+    /// NO borra: marca `valid_until = ahora`, asi que el texto anterior sigue en la
+    /// base (auditable, recuperable) pero deja de ser la version vigente de la clave.
+    /// Devuelve el id caducado, si habia uno vivo.
+    ///
+    /// v4 (T3038): solo caduca nodos que **sean** de estado
+    /// (`json_extract(metadata,'$.kind') = 'state'`). Sin ese filtro, un nodo normal
+    /// cuyo `metadata.topic` coincidiera con la clave de un estado se caducaria por
+    /// error. Y excluye el nodo recien escrito (`nuevo_id`), que es la version nueva.
+    pub async fn expire_live_state_by_key_excluding(
+        &self,
+        topic_key: &str,
+        now: i64,
+        nuevo_id: &str,
+    ) -> Result<Option<String>> {
+        let conn = self.conn.lock().await;
+        let previo: Option<String> = conn
+            .query_row(
+                "SELECT id FROM nodes
+                 WHERE topic_key = ?1
+                   AND lower(coalesce(json_extract(metadata, '$.kind'), '')) = 'state'
+                   AND id <> ?3
+                   AND (valid_until IS NULL OR valid_until > ?2)
+                 ORDER BY updated_at DESC LIMIT 1",
+                params![topic_key, now, nuevo_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(ref id) = previo {
+            conn.execute(
+                "UPDATE nodes SET valid_until = ?2 WHERE id = ?1",
+                params![id, now],
+            )?;
+        }
+        Ok(previo)
+    }
+
     /// Get node access traces (stigmergy).
     pub async fn get_node_traces(&self, node_id: &str, limit: usize) -> Result<Vec<NodeTrace>> {
         tokio::task::block_in_place(|| {
@@ -2092,6 +2149,60 @@ pub fn build_contextual_text(metadata_json: &str, content: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// MEM-3 v2 (T3031): sustituir una nota de estado NO puede destruir la anterior.
+    ///
+    /// La clave `state:<space>` se guarda en `topic_key`; al escribir una nueva, la
+    /// viva se caduca (`valid_until = ahora`) y **sigue en la base** con su texto.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem3_expirar_estado_conserva_la_version_anterior() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        let meta = r#"{"kind":"state","space":"tl-global-map"}"#;
+
+        // Un nodo NORMAL cuyo topic coincide con la clave de estado: NO debe caducarse.
+        db.upsert_node(
+            "no-es-estado",
+            "agent_memory",
+            "nota normal, no es estado",
+            r#"{"topic":"state:tl-global-map"}"#,
+        )
+        .await
+        .unwrap();
+
+        db.upsert_node("estado-v1", "agent_memory", "estado: paso 1", meta).await.unwrap();
+        let v1 = db.get_node("estado-v1").await.unwrap().unwrap();
+        assert_eq!(v1.topic_key.as_deref(), Some("state:tl-global-map"), "la clave se guarda en topic_key");
+        assert!(v1.valid_until.is_none(), "recien escrita: viva");
+
+        // Llega la version nueva: se caduca la viva ANTES de escribir la nueva.
+        let ahora = chrono::Utc::now().timestamp();
+        let previo = db
+            .expire_live_state_by_key_excluding("state:tl-global-map", ahora, "estado-v2")
+            .await
+            .unwrap();
+        assert_eq!(previo.as_deref(), Some("estado-v1"), "devuelve la version caducada");
+
+        let v1_despues = db.get_node("estado-v1").await.unwrap().unwrap();
+        assert_eq!(v1_despues.content, "estado: paso 1", "el texto anterior NO se borra");
+        assert_eq!(v1_despues.valid_until, Some(ahora), "pero queda caducada");
+
+        // El nodo normal con el mismo topic sigue VIVO: no era una nota de estado.
+        let normal = db.get_node("no-es-estado").await.unwrap().unwrap();
+        assert!(normal.valid_until.is_none(), "un nodo normal no se caduca por parecerse en topic");
+        assert_eq!(normal.content, "nota normal, no es estado");
+
+        // Y la version NUEVA (excluida) seguiria viva.
+        db.upsert_node("estado-v2", "agent_memory", "estado: paso 2", meta).await.unwrap();
+        let v2 = db.get_node("estado-v2").await.unwrap().unwrap();
+        assert!(v2.valid_until.is_none(), "la version nueva no se caduca a si misma");
+
+        // Una segunda llamada ya no encuentra version viva: no hay nada que caducar.
+        let otra_vez = db
+            .expire_live_state_by_key_excluding("state:tl-global-map", ahora, "estado-v3")
+            .await
+            .unwrap();
+        assert_eq!(otra_vez, Some("estado-v2".to_string()), "caduca la viva que queda (estado-v2)");
+    }
 
     // Regression test for the CPU-runaway incident found live 2026-09-26:
     // flag_contradiction_nodes() flagged every GraphRAG summary node and

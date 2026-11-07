@@ -86,7 +86,11 @@ pub fn permissions_to_json(p: &PeerPermissions) -> String {
 pub fn resolve_space(topic_key: Option<&str>, metadata: &str) -> String {
     if let Some(tk) = topic_key {
         let tk = tk.trim();
-        if !tk.is_empty() {
+        // MEM-3 v2: `state:<space>` es la clave interna de identidad de una nota de
+        // estado, NO un nombre de espacio. Si se devolviera tal cual, la nota caeria
+        // en un espacio distinto del que declara su metadata y cambiaria a quien se
+        // comparte en federacion. Se ignora y manda `metadata.space`.
+        if !tk.is_empty() && !tk.starts_with("state:") {
             return tk.to_string();
         }
     }
@@ -281,6 +285,13 @@ mod tests {
         assert_eq!(resolve_space(Some("  "), r#"{"space":"meta"}"#), "meta");
         assert_eq!(resolve_space(None, r#"{"space":"meta"}"#), "meta");
         assert_eq!(resolve_space(None, r#"{"space":"   "}"#), "default");
+        // MEM-3 v2: la clave interna de una nota de estado no es un espacio.
+        assert_eq!(
+            resolve_space(Some("state:tl-global-map"), r#"{"space":"tl-global-map"}"#),
+            "tl-global-map",
+            "state:<space> es identidad interna, no un espacio de federacion"
+        );
+        assert_eq!(resolve_space(Some("state:otro"), "{}"), "default");
         assert_eq!(resolve_space(None, "{}"), "default");
         assert_eq!(resolve_space(None, "not json"), "default");
     }

@@ -40,17 +40,52 @@ pub(crate) enum DcrAction {
     Skip,
 }
 
-/// T-DSH-154: decisión pura y testeable de la política DCR.
+/// Decisión pura y testeable de la política DCR.
 ///
-/// - `legacy` (default): fusiona con similitud >= 0.87, como siempre.
-/// - `strict`: fusiona solo con MISMO agent_id, MISMO tipo y similitud >= 0.95;
-///   si hay parecido >= 0.87 pero no cumple, se enlaza sin fusionar.
-pub(crate) fn dcr_action(policy: &str, sim: f32, same_agent: bool, same_type: bool) -> DcrAction {
+/// **Regla dura de MEM-3 (por delante de cualquier política):** nunca se fusiona
+/// ni se sustituye entre `type` distinto ni entre `metadata.space` distinto. Esas
+/// dos cosas son identidad, no configuración: el DCR legacy fusionaba por
+/// similitud a secas y metió una nota de estado dentro de un nodo ajeno.
+///
+/// Después, una nota de estado (`kind=state` explícito) **nunca** se decide por
+/// similitud: se enlaza. El reemplazo va por clave exacta y no destructivo, antes
+/// de esta función (ver `dcr_state_key`).
+/// - `legacy` (default): fusiona con similitud >= 0.87.
+/// - `strict`: fusiona solo con MISMO agent_id y similitud >= 0.95; si hay
+///   parecido >= 0.87 sin cumplir, se enlaza sin fusionar.
+pub(crate) fn dcr_action(
+    policy: &str,
+    sim: f32,
+    same_agent: bool,
+    same_type: bool,
+    same_space: bool,
+    is_state_note: bool,
+) -> DcrAction {
     const LEGACY_THRESHOLD: f32 = 0.87;
     const STRICT_MERGE_THRESHOLD: f32 = 0.95;
+
+    // MEM-3 (1): identidad primero. Ni fusionar ni sustituir fuera de su tipo/espacio.
+    if !same_type || !same_space {
+        return if sim >= LEGACY_THRESHOLD {
+            DcrAction::Link
+        } else {
+            DcrAction::Skip
+        };
+    }
+    // MEM-3 v2 (T3031): una nota de estado NUNCA se decide por similitud. El
+    // reemplazo va por clave exacta antes de llegar aquí (ver `dcr_state_key`);
+    // si el parecido llega a este punto, se enlaza y se conservan las dos.
+    if is_state_note {
+        return if sim >= LEGACY_THRESHOLD {
+            DcrAction::Link
+        } else {
+            DcrAction::Skip
+        };
+    }
+
     match policy {
         "strict" => {
-            if sim >= STRICT_MERGE_THRESHOLD && same_agent && same_type {
+            if sim >= STRICT_MERGE_THRESHOLD && same_agent {
                 DcrAction::Merge
             } else if sim >= LEGACY_THRESHOLD {
                 DcrAction::Link
@@ -81,6 +116,55 @@ pub(crate) fn dcr_same_agent(existing_metadata: &str, aid: &str) -> bool {
         Some(existing_aid) => existing_aid == aid,
         None => aid == "anonymous",
     }
+}
+
+/// MEM-3: `space` declarado en la metadata del nodo (`metadata.space`).
+///
+/// Es lo que separa "mi mapa global" de "mi estado del turno": dos notas con el
+/// mismo texto pero espacios distintos NO son la misma memoria.
+pub(crate) fn dcr_space(metadata: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(metadata)
+        .ok()
+        .as_ref()
+        .and_then(|m| m.get("space"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// MEM-3 v2 (T3031): una nota es de estado **solo** si lo dice explícitamente
+/// (`kind = "state"`). Llevar `space` NO basta: con `space` y sin `kind`, una nota
+/// normal que se parezca a otra del mismo espacio se enlaza, no se reemplaza.
+pub(crate) fn dcr_is_state_note(metadata: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(metadata)
+        .ok()
+        .as_ref()
+        .and_then(|v| v.get("kind"))
+        .and_then(|v| v.as_str())
+        .map(|k| k.eq_ignore_ascii_case("state"))
+        .unwrap_or(false)
+}
+
+/// MEM-3 v2: clave de identidad de una nota de estado.
+///
+/// `topic_key` explícito (`metadata.topic`) si lo hay; si no, `state:<space>`.
+/// Es la MISMA clave que `upsert_node` guarda en la columna `topic_key`, así que
+/// la sustitución se resuelve por clave exacta e índice, no por parecido.
+pub(crate) fn dcr_state_key(metadata: &str) -> Option<String> {
+    if !dcr_is_state_note(metadata) {
+        return None;
+    }
+    let valor: serde_json::Value = serde_json::from_str(metadata).ok()?;
+    if let Some(topic) = valor.get("topic").and_then(|v| v.as_str())
+        && !topic.trim().is_empty()
+    {
+        return Some(topic.trim().replace('"', "").replace("\\\"", ""));
+    }
+    let space = valor.get("space").and_then(|v| v.as_str())?.trim();
+    if space.is_empty() {
+        return None;
+    }
+    Some(format!("state:{}", space.replace('"', "")))
 }
 
 /// T-DSH-94: contador visible de embeddings que no se pudieron persistir.
@@ -264,6 +348,13 @@ pub async fn handle_tylluan_remember(
         }
     }
 
+    // MEM-3 v2 (T3031): la identidad de una nota de estado es una CLAVE, no la
+    // similitud: aqui solo se CALCULA. La caducidad de la version anterior se hace
+    // despues de escribir la nueva (v4, T3038): si se hiciera antes, un fallo de
+    // escritura dejaria el estado sin version viva.
+    let clave_estado: Option<String> = dcr_state_key(&metadata);
+    let mut estado_anterior: Option<String> = None;
+
     // DCR — Dedup Check Remember (R21-3)
     // T-DSH-154: política configurable `[silva] dcr_policy = legacy|strict`.
     // legacy (default): fusiona con sim >= 0.87 (comportamiento histórico).
@@ -289,7 +380,11 @@ pub async fn handle_tylluan_remember(
             "memory"
         };
         let same_type = existing_node.node_type == new_type;
-        match dcr_action(&dcr_policy, sim, same_agent, same_type) {
+        // MEM-3: el espacio forma parte de la identidad del recuerdo; y las notas
+        // de estado se sustituyen en vez de acumularse.
+        let same_space = dcr_space(&existing_node.metadata) == dcr_space(&metadata);
+        let is_state_note = dcr_is_state_note(&metadata);
+        match dcr_action(&dcr_policy, sim, same_agent, same_type, same_space, is_state_note) {
             DcrAction::Merge => {
                 // T-DSH-95: si el texto entrante aporta información nueva, se
                 // fusiona en el nodo existente en vez de descartarlo (bug: el
@@ -528,6 +623,24 @@ pub async fn handle_tylluan_remember(
         }
         nid
     };
+    // MEM-3 v4 (T3038): ahora que la nota nueva existe, se caduca la version viva
+    // anterior de la MISMA clave (se conserva: `valid_until`, no se borra). Solo se
+    // hace si el nodo nuevo se llego a escribir: si la escritura fallo, el estado
+    // anterior sigue vivo y no se pierde nada.
+    if let Some(clave) = clave_estado.as_deref()
+        && server.silva.get_node(&node_id).await.ok().flatten().is_some()
+        && let Ok(Some(previo)) = server
+            .silva
+            .expire_live_state_by_key_excluding(clave, chrono::Utc::now().timestamp(), &node_id)
+            .await
+    {
+        tracing::info!(
+            "DCR: nota de estado '{}' sustituye a {} (caducada y conservada)",
+            clave, previo
+        );
+        estado_anterior = Some(previo);
+    }
+
     // T-DSH-154 (strict): si el DCR no fusionó por política pero había un
     // parecido >= 0.87, el nodo nuevo queda enlazado al existente para no
     // perder la relación semántica (el texto entrante se conserva íntegro).
@@ -656,8 +769,14 @@ pub async fn handle_tylluan_remember(
         let now = chrono::Utc::now().timestamp();
         let _ = server.silva.record_agent_access(&node_id, now).await;
     }
+    let supersesion = match estado_anterior {
+        Some(previo) => format!(
+            " [state key: previous version {previo} expired (kept, not deleted)]"
+        ),
+        None => String::new(),
+    };
     Ok(CallToolResult {
-        content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\""))],
+        content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\"{supersesion}"))],
         is_error: Some(false),
     })
 }
@@ -722,29 +841,188 @@ mod embedding_failure_tests {
         assert!(merge_near_duplicate_content("vieja", "   ").is_none());
     }
 
-    /// T-DSH-154: `legacy` fusiona con >= 0.87 sin mirar agente ni tipo;
-    /// cualquier valor desconocido se comporta como legacy (fail-safe).
+    /// T-DSH-154 + MEM-3: `legacy` fusiona con >= 0.87 **pero ya no "sin mirar
+    /// tipo ni espacio"** — esa parte era el fallo. El agente sigue sin importar
+    /// en legacy; la identidad (tipo y espacio) sí, en todas las políticas.
     #[test]
-    fn dcr_policy_legacy_merges_similar_regardless_of_agent_and_type() {
-        assert_eq!(dcr_action("legacy", 0.87, false, false), DcrAction::Merge);
-        assert_eq!(dcr_action("legacy", 0.99, true, true), DcrAction::Merge);
-        assert_eq!(dcr_action("legacy", 0.86, true, true), DcrAction::Skip);
-        assert_eq!(dcr_action("desconocida", 0.90, false, false), DcrAction::Merge);
+    fn dcr_policy_legacy_merges_similar_only_inside_the_same_identity() {
+        // Mismo tipo y mismo espacio (sin space en ninguno de los dos).
+        assert_eq!(
+            dcr_action("legacy", 0.87, false, true, true, false),
+            DcrAction::Merge
+        );
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, true, true, false),
+            DcrAction::Merge
+        );
+        // Por debajo del umbral: flujo normal.
+        assert_eq!(
+            dcr_action("legacy", 0.86, true, true, true, false),
+            DcrAction::Skip
+        );
+        // Politica desconocida = legacy (fail-safe).
+        assert_eq!(
+            dcr_action("desconocida", 0.90, false, true, true, false),
+            DcrAction::Merge
+        );
+        // MEM-3: fuera de su tipo o de su espacio NO se fusiona, ni en legacy.
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, false, true, false),
+            DcrAction::Link,
+            "distinto type: se enlaza, no se fusiona"
+        );
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, true, false, false),
+            DcrAction::Link,
+            "distinto space: se enlaza, no se fusiona"
+        );
     }
 
     /// T-DSH-154: `strict` solo fusiona con MISMO agente, MISMO tipo y >= 0.95;
     /// con parecido >= 0.87 pero sin cumplir, enlaza sin fusionar.
     #[test]
     fn dcr_policy_strict_merges_only_exact_context() {
-        assert_eq!(dcr_action("strict", 0.95, true, true), DcrAction::Merge);
-        assert_eq!(dcr_action("strict", 0.99, true, true), DcrAction::Merge);
+        assert_eq!(
+            dcr_action("strict", 0.95, true, true, true, false),
+            DcrAction::Merge
+        );
+        assert_eq!(
+            dcr_action("strict", 0.99, true, true, true, false),
+            DcrAction::Merge
+        );
         // mismo agente/tipo pero por debajo de 0.95 -> enlaza
-        assert_eq!(dcr_action("strict", 0.94, true, true), DcrAction::Link);
+        assert_eq!(
+            dcr_action("strict", 0.94, true, true, true, false),
+            DcrAction::Link
+        );
         // >= 0.95 pero otro agente o tipo -> enlaza
-        assert_eq!(dcr_action("strict", 0.99, false, true), DcrAction::Link);
-        assert_eq!(dcr_action("strict", 0.99, true, false), DcrAction::Link);
+        assert_eq!(
+            dcr_action("strict", 0.99, false, true, true, false),
+            DcrAction::Link
+        );
+        assert_eq!(
+            dcr_action("strict", 0.99, true, false, true, false),
+            DcrAction::Link
+        );
         // por debajo del umbral legacy -> flujo normal
-        assert_eq!(dcr_action("strict", 0.86, true, true), DcrAction::Skip);
+        assert_eq!(
+            dcr_action("strict", 0.86, true, true, true, false),
+            DcrAction::Skip
+        );
+    }
+
+    /// MEM-3 (1) — el caso del TL: una nota de estado NO puede acabar fusionada en
+    /// un nodo ajeno. Mismo texto, similitud altisima, pero distinto tipo o espacio.
+    #[test]
+    fn mem3_no_fusiona_entre_types_ni_entre_spaces() {
+        // Distinto tipo: enlaza (para no perder el texto), nunca fusiona.
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, false, true, true),
+            DcrAction::Link,
+            "una nota de estado no puede fusionarse en otro type"
+        );
+        // Distinto espacio: idem. Es el caso real (space=tl-global-map vs sin space).
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, true, false, true),
+            DcrAction::Link,
+            "una nota de estado no puede fusionarse en otro space"
+        );
+        // Las dos diferencias a la vez.
+        assert_eq!(
+            dcr_action("strict", 0.99, true, false, false, true),
+            DcrAction::Link
+        );
+        // Y por debajo del umbral, ni enlace: flujo normal.
+        assert_eq!(
+            dcr_action("legacy", 0.50, true, false, false, true),
+            DcrAction::Skip
+        );
+        // Estos cuatro son los que discriminan de verdad: una nota NORMAL (sin
+        // kind=state) tampoco puede cruzar tipo ni espacio. Sin estos casos, la
+        // rama de estado pondria todo en Link y la regla de identidad quedaria sin
+        // cubrir (lo destapo la mutacion).
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, true, false, false),
+            DcrAction::Link,
+            "nota normal en distinto space: enlaza, no fusiona"
+        );
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, false, true, false),
+            DcrAction::Link,
+            "nota normal en distinto type: enlaza, no fusiona"
+        );
+        assert_eq!(
+            dcr_action("strict", 0.99, true, true, false, false),
+            DcrAction::Link
+        );
+        assert_eq!(
+            dcr_action("desconocida", 0.99, true, false, false, false),
+            DcrAction::Link,
+            "la politica desconocida (fail-safe legacy) tampoco cruza identidad"
+        );
+    }
+
+    /// MEM-3 v2 (T3031): la similitud NUNCA decide un reemplazo. Una nota de estado
+    /// en su mismo tipo y espacio se ENLAZA; quien sustituye es la clave exacta.
+    #[test]
+    fn mem3_la_similitud_no_decide_un_reemplazo() {
+        // legacy y strict: con parecido alto, una nota de estado se enlaza igual.
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, true, true, true),
+            DcrAction::Link,
+            "una nota de estado no puede fusionarse ni reemplazarse por parecido"
+        );
+        assert_eq!(
+            dcr_action("strict", 0.99, false, true, true, true),
+            DcrAction::Link
+        );
+        // Y sin llegar al umbral, ni enlace.
+        assert_eq!(
+            dcr_action("legacy", 0.50, true, true, true, true),
+            DcrAction::Skip
+        );
+        // Una nota normal sigue el camino de siempre (fusion en legacy).
+        assert_eq!(
+            dcr_action("legacy", 0.99, true, true, true, false),
+            DcrAction::Merge,
+            "una nota normal (sin kind=state) sigue fusionando en legacy"
+        );
+    }
+
+    /// MEM-3 v2: `space` y `kind` de la metadata, y la clave de identidad.
+    #[test]
+    fn mem3_space_kind_y_clave_de_estado() {
+        assert_eq!(dcr_space(r#"{"space":"tl-global-map"}"#).as_deref(), Some("tl-global-map"));
+        assert_eq!(dcr_space(r#"{"space":""}"#), None, "space vacio no es espacio");
+        assert_eq!(dcr_space(r#"{"agent_id":"deep"}"#), None);
+        assert_eq!(dcr_space("no-es-json"), None);
+
+        assert!(dcr_is_state_note(r#"{"kind":"state"}"#));
+        assert!(dcr_is_state_note(r#"{"kind":"STATE"}"#));
+        // T3031 (a): un `space` suelto NO convierte una nota en nota de estado.
+        assert!(
+            !dcr_is_state_note(r#"{"space":"tl-global-map"}"#),
+            "con space y SIN kind=state no es una nota de estado"
+        );
+        assert!(!dcr_is_state_note(r#"{"kind":"note"}"#));
+        assert!(!dcr_is_state_note(r#"{}"#));
+        assert!(!dcr_is_state_note("no-es-json"));
+
+        // T3031 (b): la clave. `topic` manda; si no hay, `state:<space>`.
+        assert_eq!(
+            dcr_state_key(r#"{"kind":"state","topic":"mapa global"}"#).as_deref(),
+            Some("mapa global")
+        );
+        assert_eq!(
+            dcr_state_key(r#"{"kind":"state","space":"tl-global-map"}"#).as_deref(),
+            Some("state:tl-global-map")
+        );
+        assert_eq!(
+            dcr_state_key(r#"{"space":"tl-global-map"}"#),
+            None,
+            "sin kind=state no hay clave de estado"
+        );
+        assert_eq!(dcr_state_key(r#"{"kind":"state"}"#), None, "sin topic ni space, sin clave");
     }
 
     /// T-DSH-154: `same_agent` sale de `metadata.agent_id`; los anónimos no
@@ -781,6 +1059,213 @@ mod embedding_failure_tests {
         let node = silva.get_node("n-dcr").await.unwrap().expect("el nodo debe existir");
         assert!(node.content.contains("y=2"), "el contenido fusionado debe persistir");
         assert_ne!(node.content_hash, "", "el hash debe recalcularse");
+    }
+
+    /// MEM-3 v4 (T3038): punta a punta por `handle_tylluan_remember`, no solo unitarios.
+    ///
+    /// Dos notas `kind=state, space=tl-global-map` seguidas: la primera queda
+    /// **caducada y conservada**, la segunda **viva y recuperable**. Y un nodo normal
+    /// cuyo `metadata.topic` coincide con la clave del estado **no** se caduca.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem3_e2e_dos_notas_de_estado_seguidas() {
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use crate::memory::mailbox::Mailbox;
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let matcher = GuildMatcher::new(builtin_catalog());
+        let (tx, _) = broadcast::channel(16);
+        let node_router = AgentNodeRouter::new(tx);
+        let silva = Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap());
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(
+                crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap(),
+            )),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(matcher),
+            silva.clone(),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            node_router,
+        );
+
+        // Un nodo NORMAL con el mismo `topic` que la clave del estado: no debe caducarse.
+        silva
+            .upsert_node(
+                "normal-con-mismo-topic",
+                "memory",
+                "nota normal",
+                r#"{"topic":"state:tl-global-map"}"#,
+            )
+            .await
+            .unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado: fase 1 del mapa".to_string()),
+        );
+        args.insert(
+            "metadata".to_string(),
+            serde_json::json!({"kind": "state", "space": "tl-global-map"}),
+        );
+        let r1 = handle_tylluan_remember(&server, Some(args.clone()))
+            .await
+            .expect("primera nota");
+        assert!(!r1.is_error.unwrap_or(false));
+        let t1 = r1.content[0].as_text().unwrap().text.clone();
+        let id1 = t1
+            .split("Stored node ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .expect("id de la primera nota")
+            .to_string();
+
+        // Que no caigan en el mismo milisegundo (el id anonimo es memory:<millis>).
+        tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+
+        let mut args2 = args.clone();
+        args2.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado: fase 2 del mapa".to_string()),
+        );
+        let r2 = handle_tylluan_remember(&server, Some(args2))
+            .await
+            .expect("segunda nota");
+        assert!(!r2.is_error.unwrap_or(false));
+        let t2 = r2.content[0].as_text().unwrap().text.clone();
+        let id2 = t2
+            .split("Stored node ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .expect("id de la segunda nota")
+            .to_string();
+        assert_ne!(id1, id2, "las dos notas son nodos distintos");
+
+        // La primera: caducada y conservada (el texto sigue ahi).
+        let n1 = silva.get_node(&id1).await.unwrap().expect("la 1a sigue existiendo");
+        assert!(n1.valid_until.is_some(), "la 1a queda caducada: {n1:?}");
+        assert_eq!(n1.content, "estado: fase 1 del mapa", "el texto anterior NO se borra");
+
+        // La segunda: viva, con la clave de estado en topic_key.
+        let n2 = silva.get_node(&id2).await.unwrap().expect("la 2a existe");
+        assert!(n2.valid_until.is_none(), "la 2a es la version viva");
+        assert_eq!(
+            n2.topic_key.as_deref(),
+            Some("state:tl-global-map"),
+            "la clave de estado se guarda en topic_key"
+        );
+        assert!(
+            t2.contains("expired (kept, not deleted)"),
+            "la respuesta debe decir que la anterior se conserva: {t2}"
+        );
+
+        // Y el nodo normal con el mismo topic sigue vivo.
+        let normal = silva
+            .get_node("normal-con-mismo-topic")
+            .await
+            .unwrap()
+            .expect("el normal sigue");
+        assert!(
+            normal.valid_until.is_none(),
+            "un nodo normal no se caduca por tener el mismo topic"
+        );
+    }
+
+    /// MEM-3 v4 (T3038, punto 2): si la escritura de la nota nueva FALLA, el estado
+    /// anterior no puede quedarse caducado. La caducidad va despues de comprobar que
+    /// el nodo nuevo existe de verdad.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem3_e2e_si_la_escritura_falla_el_estado_anterior_sigue_vivo() {
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use crate::memory::mailbox::Mailbox;
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let (tx, _) = broadcast::channel(16);
+        let silva = Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap());
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(
+                crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap(),
+            )),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(GuildMatcher::new(builtin_catalog())),
+            silva.clone(),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            AgentNodeRouter::new(tx),
+        );
+
+        // 1) Estado v1, escrito sin trucos.
+        let mut args = serde_json::Map::new();
+        args.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado: v1 intacto".to_string()),
+        );
+        args.insert(
+            "metadata".to_string(),
+            serde_json::json!({"kind": "state", "space": "tl-global-map"}),
+        );
+        let r1 = handle_tylluan_remember(&server, Some(args.clone())).await.expect("v1");
+        let t1 = r1.content[0].as_text().unwrap().text.clone();
+        let id1 = t1
+            .split("Stored node ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .expect("id v1")
+            .to_string();
+
+        // 2) La escritura de la v2 va a fallar: la conexion pasa a solo lectura.
+        {
+            let conn = silva.conn.lock().await;
+            conn.execute_batch("PRAGMA query_only=ON;").unwrap();
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+        let mut args2 = args.clone();
+        args2.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado: v2 que no se llega a escribir".to_string()),
+        );
+        // El handler no propaga el error de escritura (solo avisa); lo que importa es
+        // que NO caduque la v1.
+        let _ = handle_tylluan_remember(&server, Some(args2)).await;
+
+        // 3) La v1 sigue viva: no se caduco nada porque no hubo escritura.
+        let n1 = silva.get_node(&id1).await.unwrap().expect("la v1 sigue existiendo");
+        assert!(
+            n1.valid_until.is_none(),
+            "si la escritura falla, el estado anterior NO puede quedar caducado: {n1:?}"
+        );
+        assert_eq!(n1.content, "estado: v1 intacto");
+
+        // Y deja la conexion como estaba, para no contaminar el resto de tests.
+        {
+            let conn = silva.conn.lock().await;
+            conn.execute_batch("PRAGMA query_only=OFF;").unwrap();
+        }
     }
 
     /// AG-6: tylluan_remember accepts 'intent' as an ergonomic fallback alias when 'content' is omitted.
