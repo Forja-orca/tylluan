@@ -276,6 +276,25 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "include_str!/include_bytes! input drift -- see scripts/check_build_inputs.sh output above"
     fi
 
+    # Cross-platform dead_code gate (2026-11-06, TL T2944 T-HER-3, hermes): a
+    # top-level fn defined WITHOUT a cfg guard whose only uses live inside
+    # regions impossible on Linux non-test (cfg(windows)/cfg(test)) compiles on
+    # Windows but is dead_code on Linux -- with RUSTFLAGS="-D warnings" that is
+    # exactly how push 271 went red in 6 CI jobs (resumen_sonda, one line, six
+    # red jobs). No local Windows box can ever see it; this static gate does,
+    # before the push. Blocking by design: it predicts a CI build failure.
+    CFG_DEAD_PY=""
+    for cand in python3 python; do
+        if command -v "$cand" >/dev/null 2>&1; then CFG_DEAD_PY="$cand"; break; fi
+    done
+    if [ -z "$CFG_DEAD_PY" ]; then
+        fail "cfg dead-code gate needs python (python3 or python) on PATH"
+    elif "$CFG_DEAD_PY" scripts/check_cfg_deadcode.py; then
+        ok "no unguarded fn used only under dead cfg regions (check_cfg_deadcode.py)"
+    else
+        fail "potential cross-platform dead_code -- check_cfg_deadcode.py output above names the fn; guard it with #[cfg(any(..., test))] or widen its use"
+    fi
+
     # Markdown link gate (2026-10-14 documentation audit): 20 relative links
     # were broken or pointed at one machine's absolute paths (file:///E:/...);
     # check_docs_reality.sh only judges backtick-cited paths.

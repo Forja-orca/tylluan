@@ -238,6 +238,13 @@ jobs:
       # looked at real Markdown links. Standard library only.
       - name: Verify Markdown relative links resolve to tracked paths
         run: python3 scripts/check_doc_links.py
+      # T-HER-3 (TL T2944, hermes, 2026-11-06): push 271 tumbo 6 jobs por una
+      # sola linea -- una fn definida sin guarda y llamada solo desde cuerpos
+      # #[cfg(windows)]: viva en Windows, dead_code en Linux, rojo con
+      # -D warnings. Ningun portable Windows la ve nunca; este gate estatico
+      # la predice sin toolchain cruzada. Estandar library solo.
+      - name: Verify no unguarded fn is used only under dead cfg regions
+        run: python3 scripts/check_cfg_deadcode.py
       # Cross-document claims guardian (H-24/H-25) moved here from the local
       # pre-push chain 2026-11-03 (T2590 punto 3, TL): ~146 s per push for a
       # report that never blocked anything. Advisory by design (continue-on-

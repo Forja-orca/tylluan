@@ -359,6 +359,11 @@ make_sandbox() {
     # that the "check_*.sh" discovery never stubs; without this T1-T5 fail
     # because the sandbox has no such file. Neutral pass stub, same reason.
     printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_doc_links.py"
+    # And again for check_cfg_deadcode.py (T-HER-3, TL T2944, 2026-11-06):
+    # blocking .py gate in the pre-push chain; the sandbox has no crates/ tree
+    # for it to scan, so it gets the same neutral pass stub. Its own semantics
+    # are tested by T11 below against real fixtures.
+    printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_cfg_deadcode.py"
 }
 
 # splice_broken_wiring <verify.sh copy> <gate>
@@ -664,6 +669,150 @@ if [ "$rc_mut2" -eq 0 ] || ! echo "$out_mut2" | grep -q 'EXCLUDED'; then
     badt "mutation '.dockerignore excludes assets/' did NOT flip the gate -- T10 dockerignore arm vacuous"
 else
     okt "excluding assets in .dockerignore flips the gate red (EXCLUDED)"
+fi
+
+# --- T11: check_cfg_deadcode.py semantics (TL T2944, T-HER-3, hermes 2026-11-06) ---
+# The gate must flag EXACTLY the push-271 class: a top-level fn with no cfg guard
+# whose only uses sit in regions impossible on Linux non-test. It must NOT flag
+# guarded fns, zero-use fns (compiler's own dead_code arm, deliberate limitation),
+# or impl methods like `fn new` (Deep's false positive, T2944).
+T11_DIR="$SBASHOME/t11"
+mkdir -p "$T11_DIR/crates/fixture/src"
+T11_PY=""
+for cand in python3 python; do
+    if command -v "$cand" >/dev/null 2>&1; then T11_PY="$cand"; break; fi
+done
+# Windows python no entiende rutas MSYS (/tmp/...); en git-bash local hay cygpath,
+# en los runners ubuntu no existe y la ruta POSIX ya es nativa. Medido 2026-11-06:
+# sin esta conversión el fixture se creaba pero el script veia "no hay crates/" (rc=0)
+# y el brazo rojo del criterio salia falsamente verde-por-ausencia.
+T11_ROOT="$T11_DIR"
+if command -v cygpath >/dev/null 2>&1; then T11_ROOT="$(cygpath -w "$T11_DIR")"; fi
+if [ -z "$T11_PY" ]; then
+    badt "T11 needs python (python3 or python) on PATH -- gate untestable"
+else
+    cat > "$T11_DIR/crates/fixture/src/lib.rs" <<'FIXTURE'
+pub(crate) fn solo_bajo_windows() -> u32 {
+    7
+}
+
+/// ver solo_bajo_windows en doc: NO debe contar como uso fuera (trampa T2944)
+#[cfg(target_os = "windows")]
+pub fn usa_aqui() {
+    let _ = solo_bajo_windows();
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn usa_en_test() {
+        let _ = super::solo_bajo_windows();
+    }
+}
+
+pub struct Tunel;
+impl Tunel {
+    pub fn new() -> Tunel { Tunel }
+}
+FIXTURE
+    out11=$( "$T11_PY" scripts/check_cfg_deadcode.py "$T11_ROOT" 2>&1 ); rc11=$?
+    if [ "$rc11" -ne 1 ] || ! echo "$out11" | grep -q 'fn solo_bajo_windows'; then
+        badt "T11 fixture: unguarded fn used only under cfg(windows)/cfg(test) was NOT flagged (rc=$rc11)"
+    elif echo "$out11" | grep -q 'fn new'; then
+        badt "T11 fixture: impl method 'fn new' leaked into findings -- the exact T2944 false positive"
+    elif [ "$(echo "$out11" | grep -c '^CFG-DEADCODE crates/')" -ne 1 ]; then
+        badt "T11 fixture: expected exactly 1 finding, got $(echo "$out11" | grep -c '^CFG-DEADCODE crates/')"
+    else
+        okt "T11: the push-271 class is flagged, exactly once, without the 'fn new' false positive"
+    fi
+    # mutacion inversa exigida por el TL: la misma fn CON guarda -> verde
+    cat > "$T11_DIR/crates/fixture/src/lib.rs" <<'FIXTURE2'
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn solo_bajo_windows() -> u32 {
+    7
+}
+
+#[cfg(target_os = "windows")]
+pub fn usa_aqui() {
+    let _ = solo_bajo_windows();
+}
+FIXTURE2
+    out11b=$( "$T11_PY" scripts/check_cfg_deadcode.py "$T11_ROOT" 2>&1 ); rc11b=$?
+    if [ "$rc11b" -ne 0 ]; then
+        badt "T11 mutation arm: guarded fn still flagged (rc=$rc11b) -- the fix for resumen_sonda would not clear the gate"
+    else
+        okt "T11: adding #[cfg(any(target_os = \"windows\", test))] clears the gate (mirrors 6daa3906)"
+    fi
+    # zero-use queda fuera por diseno (lo cubre el compilador): fijar la limitacion
+    cat > "$T11_DIR/crates/fixture/src/lib.rs" <<'FIXTURE3'
+pub(crate) fn nadie_la_usa_nunca() -> u32 {
+    7
+}
+FIXTURE3
+    out11c=$( "$T11_PY" scripts/check_cfg_deadcode.py "$T11_ROOT" 2>&1 ); rc11c=$?
+    if [ "$rc11c" -ne 0 ]; then
+        badt "T11 zero-use arm: fn with NO occurrences was flagged -- documented limitation violated (that arm belongs to rustc dead_code)"
+    else
+        okt "T11: zero-use fns stay out of the gate by design (rustc owns that arm)"
+    fi
+    # brazo 4: fichero declarada bajo `#[cfg(windows)] mod iso;` -> sus fns sin
+    # guarda NO son aviso en Linux (el fichero entero no existe ahi)
+    cat > "$T11_DIR/crates/fixture/src/lib.rs" <<'FIXTURE4'
+#[cfg(target_os = "windows")]
+mod iso;
+FIXTURE4
+    cat > "$T11_DIR/crates/fixture/src/iso.rs" <<'FIXTURE4B'
+pub(crate) fn helper_solo_windows() -> u32 {
+    7
+}
+
+pub fn usa_helper() {
+    let _ = helper_solo_windows();
+}
+FIXTURE4B
+    out11d=$( "$T11_PY" scripts/check_cfg_deadcode.py "$T11_ROOT" 2>&1 ); rc11d=$?
+    if [ "$rc11d" -ne 0 ]; then
+        badt "T11 windows-only-file arm: fn inside a cfg(windows) 'mod iso;' was flagged (false positive -- the file never compiles on Linux)"
+    else
+        okt "T11: fns in a file declared under a dead cfg(windows) mod stay out of the gate"
+    fi
+    rm -f "$T11_DIR/crates/fixture/src/iso.rs"
+    # --- T11e/T11f (TL T3076, 2026-11-07): falso negativo del wrapper de UNA LINEA ---
+    # Causa: la clasificacion usaba 's2 < li <= e2'; para un item de una sola linea
+    # s2 == li == e2 y el llamador nunca se consideraba dentro de su propia region.
+    # Es la forma mas comun de wrapper en Rust ('pub fn usa() -> u32 { solo() }').
+    # Fix: 's2 <= li <= e2'. T11e fija el rojo; T11f que la guarda propia siga verde.
+    cat > "$T11_DIR/crates/fixture/src/lib.rs" <<'FIXTURE5'
+pub(crate) fn solo_bajo_windows() -> u32 {
+    7
+}
+
+#[cfg(target_os = "windows")]
+pub fn usa_una_linea() -> u32 { solo_bajo_windows() }
+FIXTURE5
+    out11e=$( "$T11_PY" scripts/check_cfg_deadcode.py "$T11_ROOT" 2>&1 ); rc11e=$?
+    if [ "$rc11e" -ne 1 ] || ! echo "$out11e" | grep -q 'fn solo_bajo_windows'; then
+        badt "T11e single-line-caller arm: unguarded fn used ONLY by a one-line cfg(windows) caller was NOT flagged (rc=$rc11e) -- the s2<li<=e2 false negative is back"
+    elif [ "$(echo "$out11e" | grep -c '^CFG-DEADCODE crates/')" -ne 1 ]; then
+        badt "T11e single-line-caller arm: expected exactly 1 finding, got $(echo "$out11e" | grep -c '^CFG-DEADCODE crates/')"
+    else
+        okt "T11e: a one-line cfg(windows) caller counts as a real use (wrapper class flagged)"
+    fi
+    cat > "$T11_DIR/crates/fixture/src/lib.rs" <<'FIXTURE6'
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn solo_bajo_windows() -> u32 {
+    7
+}
+
+#[cfg(target_os = "windows")]
+pub fn usa_una_linea() -> u32 { solo_bajo_windows() }
+FIXTURE6
+    out11f=$( "$T11_PY" scripts/check_cfg_deadcode.py "$T11_ROOT" 2>&1 ); rc11f=$?
+    if [ "$rc11f" -ne 0 ]; then
+        badt "T11f guarded single-line arm: fn with its own cfg guard still flagged despite one-line caller (rc=$rc11f) -- guarded fns must stay out"
+    else
+        okt "T11f: fn with its own cfg guard stays clean with a one-line caller"
+    fi
 fi
 
 rm -rf "$SBASHOME"
