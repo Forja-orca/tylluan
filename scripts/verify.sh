@@ -333,6 +333,18 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "Pilar 2 contract gate — see scripts/check_contracts.sh output above"
     fi
 
+    # Build-lock PARE window gate (T2977 v2, deep, 2026-11-07): while PARE.flag exists
+    # `build_lock.sh take|force` must refuse (exit 5), `release|status` must keep working,
+    # and ad-hoc locks with owner.txt must be readable and releasable by their real owner.
+    # Pure bash on a temp dir (TYLLUAN_BUILD_LOCK / TYLLUAN_PARE_FLAG), never touches the
+    # real lock. Blocking: a regression here lets automation compile during a production
+    # restart window, which is exactly what the flag exists to prevent.
+    if bash scripts/check_build_lock_pare.sh >/dev/null; then
+        ok "build-lock PARE window gate (check_build_lock_pare.sh, 8 cases)"
+    else
+        fail "build-lock PARE window gate -- run: bash scripts/check_build_lock_pare.sh"
+    fi
+
     # Dead-code/stale-test heuristic (G3, name-based grep, not type-aware).
     # Report-only by its own design until the suspect list is triaged and
     # stable (see the script's own header) -- do NOT pass --strict here.
