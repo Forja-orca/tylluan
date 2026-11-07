@@ -205,7 +205,7 @@ if _MCP_AVAILABLE:
                                     })
                                     count += 1
                                     if count >= 10: break
-                    except: continue
+                    except OSError: continue  # fichero ilegible/sin permiso: seguir al siguiente (D-145)
             
             return json.dumps(results, indent=2)
         except Exception as e:
@@ -245,7 +245,7 @@ if _MCP_AVAILABLE:
                     proc = subprocess.run(["rg", "-rn", "#\\[allow\\(dead_code\\)\\]", directory], capture_output=True, text=True)
                     for line in proc.stdout.splitlines():
                         results["findings"].append(f"Explicit dead_code allow: {line}")
-                except: pass
+                except (OSError, subprocess.SubprocessError): pass  # rg ausente o fallo: sin hallazgos rg, seguir (D-145)
                 
                 # Heuristic: pub fn that isn't mentioned in other files
                 # (Very simple, might have false positives)
@@ -263,7 +263,7 @@ if _MCP_AVAILABLE:
                                         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                                             if not node.name.startswith("_"):
                                                 all_funcs[node.name] = fpath
-                            except: continue
+                            except (OSError, SyntaxError, ValueError): continue  # fichero no parseable (SyntaxError/ValueError) o ilegible (OSError) (D-145)
                 
                 # Check if each function is mentioned elsewhere
                 for func, path in all_funcs.items():
@@ -279,7 +279,7 @@ if _MCP_AVAILABLE:
                                         if func in f.read():
                                             mentioned = True
                                             break
-                                except: continue
+                                except (OSError, UnicodeDecodeError): continue  # fichero ilegible o no decodificable (D-145)
                     if not mentioned:
                         results["findings"].append(f"Function likely unused: {func} in {path}")
             

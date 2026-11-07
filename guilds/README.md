@@ -83,6 +83,18 @@ TylluanNexus analiza el intent, selecciona el gremio `builders` y el agente `bac
 tylluan_do("@builders necesito revisar esta arquitectura")
 ```
 
+### Activación real de los procesos de gremio (LAZY_GUILDS, always_on, warm_pool) — verificada sobre `abe6ebf9`
+
+Un gremio puede estar en el catálogo (enrutable) y aun así responder `Unknown guild: X` si nadie lo **registra**. El registro nace de dos listas y un extra opcional:
+
+| Mecanismo | Qué hace hoy | Dónde está el código |
+|---|---|---|
+| `LAZY_GUILDS` | Lista canónica de gremios **perezosos**: quedan registrados (`always_on=false`) y su proceso se lanza **solo al primer uso** vía `tylluan_do`. 21 entradas `(nombre, módulo_python, cpu_bound)`. | `crates/tylluan-kernel/src/registry/guild_list.rs:27-50`; loop de registro en `crates/tylluan-kernel/src/main.rs:1119-1138` (el `module_path` se resuelve desde el catálogo derivado del disco real — hallazgo MD-3 — con fallback a la ruta hardcodeada) |
+| `[guilds.core] always_on` (tylluan.toml) | Gremios que se **levantan en el arranque** y los mantiene vivos el watchdog. Default si no tocas el TOML: `bash`, `memory`, `filesystem`. | Campo en `crates/tylluan-kernel/src/config.rs:916-917`; default en `config.rs:2585`; volteado a `always_on=true` en `main.rs:1140-1154`; arranque de procesos en la tarea `always-on-guilds` (`main.rs:1519-1534`) — `/health` pasa a `ok` cuando terminan |
+| `[guilds.core] warm_pool` | Se lanzan en el arranque (primera llamada rápida) pero **sí pueden ser matados** por idle timeout, a diferencia de `always_on`. Default: vacío. | `config.rs:920-923` y `:933`; tarea `warm-pool` en `main.rs:1538-1551` |
+
+Detalles que importan: los gremios de inferencia por CPU (`registry::guild_process::cpu_inference_guilds()`) se registran con `tool_timeout=None` — paciencia infinita porque matar una corrida ONNX desperdicia todo lo calculado (`main.rs:1113-1118` y `:1145-1147`); el watchdog de perezosos mata por inactividad con `kill_guild_if_idle` (`crates/tylluan-kernel/src/registry/guild_process.rs:1384`). Y hay dos tests estructurales que impiden el olvido: `test_every_guild_file_is_in_catalog` y `test_lazy_or_always_on_guilds_are_registered` — si un `.py` nuevo no está en `LAZY_GUILDS` o en `always_on`, rompen ellos; el historial del bug (docker, night_reasoner, llama_backend) está contado en el doc-comment de `crates/tylluan-kernel/src/router/catalog.rs:1186-1194` y en `registry/guild_list.rs:1-25`.
+
 ---
 
 ## Cómo Funciona la Memoria Compartida
@@ -129,7 +141,7 @@ El Blackboard es el sistema de mensajería entre gremios. No se hablan directame
 3. (Opcional) crear agentes en `agents/` y al menos 1 workflow en `workflows/`
 4. (Opcional) crear `sandbox/README.md`
 6. Registrar el gremio en este README
-7. (Opcional) Actualizar `catalog.rs` si el gremio tiene plugins Python propios
+7. **OBLIGATORIO, no opcional**: si el gremio tiene plugins Python, añadir su descriptor a `crates/tylluan-kernel/src/router/catalog.rs` Y registrarlo — o en `LAZY_GUILDS` (`crates/tylluan-kernel/src/registry/guild_list.rs:27`) o en `[guilds.core] always_on` de `tylluan.toml`. Sin ese registro, el `.py` existe, el catálogo lo conoce y los tests viejos pasan, pero en runtime `tylluan_do` responde `Unknown guild: X`. Los tests `test_every_guild_file_is_in_catalog` y `test_lazy_or_always_on_guilds_are_registered` son los que hoy lo vigilan.
 
 ---
 
