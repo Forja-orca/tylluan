@@ -56,6 +56,7 @@ async fn call(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rejects_hostile_origin_and_host_in_dev_mode() {
+    let _guard = config_test_lock().await;
     let state = support::test_state_custom("t86dev", None, true).await;
     let app = tylluan_kernel::transport::http::build_router(state);
 
@@ -116,6 +117,7 @@ async fn rejects_hostile_origin_and_host_in_dev_mode() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn accepts_local_clients_and_loopback_origins() {
+    let _guard = config_test_lock().await;
     let state = support::test_state_custom("t86devok", None, true).await;
     let app = tylluan_kernel::transport::http::build_router(state);
 
@@ -145,6 +147,7 @@ async fn accepts_local_clients_and_loopback_origins() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rejects_hostile_origin_even_with_valid_bearer() {
+    let _guard = config_test_lock().await;
     let token = "t86-master-token".to_string();
     let state = support::test_state_custom("t86prod", Some(token.clone()), false).await;
     let app = tylluan_kernel::transport::http::build_router(state);
@@ -168,34 +171,37 @@ async fn rejects_hostile_origin_even_with_valid_bearer() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn configurable_allow_lists_work() {
+    let _guard = config_test_lock().await;
     let state = support::test_state_custom("t86lists", None, true).await;
+    let snapshot = snapshot_nexus(&state).await;
     {
         let mut config = state.config.write().await;
         config.nexus.allowed_origins = vec!["http://app.example".to_string()];
         config.nexus.allowed_hosts = vec!["tunnel.example".to_string()];
     }
-    let app = tylluan_kernel::transport::http::build_router(state);
+    let app = tylluan_kernel::transport::http::build_router(state.clone());
 
     // Explicitly allowed origin + allowed host => 200.
-    assert_eq!(
-        call(&app, "POST", "/messages", Some("http://app.example"), Some("tunnel.example:47004"), None, Some(RPC_LIST)).await,
-        StatusCode::OK
-    );
+    let allowed_both =
+        call(&app, "POST", "/messages", Some("http://app.example"), Some("tunnel.example:47004"), None, Some(RPC_LIST)).await;
     // Allowed origin but hostile host => still 403.
-    assert_eq!(
-        call(&app, "POST", "/messages", Some("http://app.example"), Some("evil.example"), None, Some(RPC_LIST)).await,
-        StatusCode::FORBIDDEN
-    );
+    let hostile_host =
+        call(&app, "POST", "/messages", Some("http://app.example"), Some("evil.example"), None, Some(RPC_LIST)).await;
     // Unlisted origin => 403.
-    assert_eq!(
-        call(&app, "POST", "/messages", Some("http://other.example"), Some("127.0.0.1:47004"), None, Some(RPC_LIST)).await,
-        StatusCode::FORBIDDEN
-    );
+    let unlisted_origin =
+        call(&app, "POST", "/messages", Some("http://other.example"), Some("127.0.0.1:47004"), None, Some(RPC_LIST)).await;
+
+    restore_nexus(&state, &snapshot).await;
+
+    assert_eq!(allowed_both, StatusCode::OK);
+    assert_eq!(hostile_host, StatusCode::FORBIDDEN);
+    assert_eq!(unlisted_origin, StatusCode::FORBIDDEN);
 }
 
 // T-DSH-87: the mutating REST surface is guarded too.
 #[tokio::test(flavor = "multi_thread")]
 async fn rest_mutating_routes_reject_hostile_origin() {
+    let _guard = config_test_lock().await;
     for dev_mode in [true, false] {
         let state = support::test_state_custom("t87rest", None, dev_mode).await;
         let app = tylluan_kernel::transport::http::build_router(state);
@@ -219,4 +225,159 @@ async fn rest_mutating_routes_reject_hostile_origin() {
         let dash = call(&app, "POST", "/api/v1/maintenance/vacuum", Some("http://127.0.0.1:47004"), None, None, None).await;
         assert_ne!(dash, StatusCode::FORBIDDEN, "loopback Origin must pass (dev_mode={dev_mode})");
     }
+}
+
+// D-147: `support::test_state_custom` comparte UNA config por proceso
+// (`TylluanConfig::load_cached`), asi que mutarla en un test se la cambia a los
+// demas que corren en paralelo. Todo test de este fichero toma este candado, y el
+// que muta la deja como estaba antes de soltarlo.
+static CONFIG_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+async fn config_test_lock() -> tokio::sync::MutexGuard<'static, ()> {
+    CONFIG_TEST_LOCK.lock().await
+}
+
+struct NexusSnapshot {
+    host: String,
+    allowed_hosts: Vec<String>,
+    allowed_origins: Vec<String>,
+    enforce: bool,
+}
+
+async fn snapshot_nexus(state: &std::sync::Arc<tylluan_kernel::transport::http::HttpState>) -> NexusSnapshot {
+    let config = state.config.read().await;
+    NexusSnapshot {
+        host: config.nexus.host.clone(),
+        allowed_hosts: config.nexus.allowed_hosts.clone(),
+        allowed_origins: config.nexus.allowed_origins.clone(),
+        enforce: config.nexus.enforce_host_guard_nonloopback,
+    }
+}
+
+async fn restore_nexus(
+    state: &std::sync::Arc<tylluan_kernel::transport::http::HttpState>,
+    snapshot: &NexusSnapshot,
+) {
+    let mut config = state.config.write().await;
+    config.nexus.host = snapshot.host.clone();
+    config.nexus.allowed_hosts = snapshot.allowed_hosts.clone();
+    config.nexus.allowed_origins = snapshot.allowed_origins.clone();
+    config.nexus.enforce_host_guard_nonloopback = snapshot.enforce;
+}
+
+// D-147: el guard de `Host` no desaparece con un binding NO loopback: pasa a
+// MODO AVISO (deja pasar, escribe el intento y lo cuenta) y solo rechaza si el
+// operador activa `enforce_host_guard_nonloopback`. En loopback no cambia nada.
+#[tokio::test(flavor = "multi_thread")]
+async fn d147_nonloopback_binding_observes_by_default_and_enforces_on_demand() {
+    let _guard = config_test_lock().await;
+    let state = support::test_state_custom("d147bind", None, true).await;
+    let snapshot = snapshot_nexus(&state).await;
+    let app = tylluan_kernel::transport::http::build_router(state.clone());
+
+    // (binding, enforce, Host, esperado)
+    let cases: [(&str, bool, &str, StatusCode); 6] = [
+        ("127.0.0.1", false, "evil.example", StatusCode::FORBIDDEN),
+        ("127.0.0.1", true, "evil.example", StatusCode::FORBIDDEN),
+        ("0.0.0.0", false, "evil.example", StatusCode::OK),
+        ("0.0.0.0", true, "evil.example", StatusCode::FORBIDDEN),
+        ("0.0.0.0", true, "tunnel.example:47004", StatusCode::OK),
+        ("0.0.0.0", true, "127.0.0.1:47004", StatusCode::OK),
+    ];
+    let mut measured = Vec::new();
+    for (binding, enforce, host, expected) in cases {
+        {
+            let mut config = state.config.write().await;
+            config.nexus.host = binding.to_string();
+            config.nexus.allowed_hosts = vec!["tunnel.example".to_string()];
+            config.nexus.enforce_host_guard_nonloopback = enforce;
+        }
+        let got = call(&app, "GET", "/api/v1/metrics", None, Some(host), None, None).await;
+        measured.push((binding, enforce, host, expected, got));
+    }
+    restore_nexus(&state, &snapshot).await;
+
+    for (binding, enforce, host, expected, got) in measured {
+        assert_eq!(
+            got, expected,
+            "binding={binding} enforce={enforce} Host={host}: el contrato D-147 cambio"
+        );
+    }
+}
+
+async fn body_of(app: &axum::Router, method: &str, uri: &str) -> Vec<u8> {
+    let req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.expect("router must answer");
+    axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("body")
+        .to_vec()
+}
+
+async fn observed_host_guard_count(app: &axum::Router) -> u64 {
+    let body = body_of(app, "GET", "/api/v1/metrics").await;
+    let value: serde_json::Value =
+        serde_json::from_slice(&body).expect("metrics tiene que ser JSON");
+    value["host_guard"]["nonloopback_observed"]
+        .as_u64()
+        .expect("GET /api/v1/metrics expone host_guard.nonloopback_observed")
+}
+
+// D-147: el contador sube solo cuando el modo aviso deja pasar, no cuando el
+// guard rechaza. Se lee del endpoint publico, no del estado interno.
+#[tokio::test(flavor = "multi_thread")]
+async fn d147_observe_mode_counts_only_when_it_does_not_reject() {
+    let _guard = config_test_lock().await;
+    let state = support::test_state_custom("d147count", None, true).await;
+    let snapshot = snapshot_nexus(&state).await;
+    let app = tylluan_kernel::transport::http::build_router(state.clone());
+    {
+        let mut config = state.config.write().await;
+        config.nexus.host = "0.0.0.0".to_string();
+        config.nexus.enforce_host_guard_nonloopback = false;
+    }
+
+    let before = observed_host_guard_count(&app).await;
+    let mut observed = Vec::new();
+    for _ in 0..3 {
+        observed.push(
+            call(&app, "GET", "/api/v1/metrics", None, Some("evil.example"), None, None).await,
+        );
+    }
+    let after_observe = observed_host_guard_count(&app).await;
+
+    // Con el endurecimiento activo no se deja pasar y no se cuenta.
+    {
+        let mut config = state.config.write().await;
+        config.nexus.enforce_host_guard_nonloopback = true;
+    }
+    let mut enforced = Vec::new();
+    for _ in 0..3 {
+        enforced.push(
+            call(&app, "GET", "/api/v1/metrics", None, Some("evil.example"), None, None).await,
+        );
+    }
+    let after_enforce = observed_host_guard_count(&app).await;
+
+    restore_nexus(&state, &snapshot).await;
+
+    for status in &observed {
+        assert_eq!(*status, StatusCode::OK, "modo aviso: deja pasar");
+    }
+    assert_eq!(
+        after_observe,
+        before + 3,
+        "tres avisos dejan tres cuentas (antes={before}, despues={after_observe})"
+    );
+    for status in &enforced {
+        assert_eq!(*status, StatusCode::FORBIDDEN, "con la clave activa: 403");
+    }
+    assert_eq!(
+        after_enforce, after_observe,
+        "un 403 no se cuenta como aviso"
+    );
 }

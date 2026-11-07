@@ -1579,6 +1579,12 @@ pub async fn metrics_handler(
         // dice cuántas veces pasa, que antes solo se veía en el log).
         "dcr": {
             "candidate_pruned": crate::transport::server::handler_remember::dcr_candidate_pruned_count()
+        },
+        // D-147: peticiones con `Host` no permitido servidas porque el binding no es
+        // loopback y el endurecimiento está apagado (modo aviso). Si crece sin que nadie
+        // haya usado un `Host` raro a propósito, hay rebinding en la red.
+        "host_guard": {
+            "nonloopback_observed": crate::transport::http::auth::host_guard_nonloopback_observed_count()
         }
     })).into_response()
 }

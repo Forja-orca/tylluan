@@ -742,8 +742,11 @@ fn origin_is_allowed(origin: &str, allowed: &[String]) -> bool {
 }
 
 /// Loopback hosts and the configured host are accepted, plus `allowed_hosts`
-/// entries (hostname or authority form). Only called when the kernel itself is
-/// bound to loopback.
+/// entries (hostname or authority form).
+///
+/// Called for every guarded path, in both bindings: in loopback the caller turns
+/// a rejection into 403; outside loopback it goes through the D-147 staged mode
+/// (observe by default, 403 only with `enforce_host_guard_nonloopback`).
 fn host_is_allowed(host_header: &str, configured_host: &str, allowed: &[String]) -> bool {
     let host = hostname_from_authority(host_header);
     is_loopback_hostname(host)
@@ -753,6 +756,41 @@ fn host_is_allowed(host_header: &str, configured_host: &str, allowed: &[String])
             entry.eq_ignore_ascii_case(host_header)
                 || hostname_from_authority(entry).eq_ignore_ascii_case(host)
         })
+}
+
+/// D-147: peticiones con un `Host` no permitido a las que se dejó pasar porque el
+/// kernel escucha fuera de loopback y `enforce_host_guard_nonloopback` está a
+/// `false`. Si crece, o hay un cliente legítimo con un `Host` que no es el suyo
+/// (se arregla añadiéndolo a `[nexus] allowed_hosts`) o hay un rebinding real.
+static HOST_GUARD_NONLOOPBACK_OBSERVED: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+/// D-147: expuesto en `GET /api/v1/metrics` como `host_guard.nonloopback_observed`.
+pub(crate) fn host_guard_nonloopback_observed_count() -> u64 {
+    HOST_GUARD_NONLOOPBACK_OBSERVED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn note_host_guard_nonloopback_observed() {
+    HOST_GUARD_NONLOOPBACK_OBSERVED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// D-147: el aviso se escribe como mucho una vez por minuto: un dashboard que
+/// sondea `/api/v1` cada pocos segundos llenaría el log con la misma línea.
+static HOST_GUARD_LAST_WARN_UNIX: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+fn should_warn_host_guard() -> bool {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let last = HOST_GUARD_LAST_WARN_UNIX.load(std::sync::atomic::Ordering::Relaxed);
+    if now.saturating_sub(last) >= 60 {
+        HOST_GUARD_LAST_WARN_UNIX.store(now, std::sync::atomic::Ordering::Relaxed);
+        true
+    } else {
+        false
+    }
 }
 
 fn forbidden_origin_host(code: &str, message: &str) -> Response {
@@ -768,7 +806,8 @@ fn forbidden_origin_host(code: &str, message: &str) -> Response {
 /// - `Origin` present and not loopback → 403 (also covers `OPTIONS` preflight
 ///   and `Origin: null`).
 /// - `Host` present and not loopback/configured/allowed while the kernel is
-///   bound to loopback → 403.
+///   bound to loopback → 403. Bound elsewhere, D-147: observe (log + counter)
+///   unless `enforce_host_guard_nonloopback` is `true`, which makes it 403 too.
 /// - No `Origin` (Claude Code, mcp-remote, agents, curl) → passes untouched.
 ///
 /// No exemption for authenticated callers: a valid bearer token does not make
@@ -815,12 +854,13 @@ pub async fn validate_mcp_origin_host_middleware(
     if !guard_origin && !guard_host {
         return next.run(request).await;
     }
-    let (configured_host, allowed_origins, allowed_hosts) = {
+    let (configured_host, allowed_origins, allowed_hosts, enforce_nonloopback) = {
         let config = state.config.read().await;
         (
             config.nexus.host.clone(),
             config.nexus.allowed_origins.clone(),
             config.nexus.allowed_hosts.clone(),
+            config.nexus.enforce_host_guard_nonloopback,
         )
     };
     if guard_origin
@@ -835,16 +875,34 @@ pub async fn validate_mcp_origin_host_middleware(
         }
     }
     if guard_host
-        && is_loopback_hostname(&configured_host)
         && let Some(host) = request.headers().get(HOST)
     {
         let host = host.to_str().unwrap_or("");
         if !host_is_allowed(host, &configured_host, &allowed_hosts) {
-            warn!("MCP origin guard: rejected Host '{host}' on {path}");
-            return forbidden_origin_host(
-                "forbidden_host",
-                "Host not allowed for loopback-bound MCP/SSE endpoints",
-            );
+            let bound_to_loopback = is_loopback_hostname(&configured_host);
+            // D-147: en loopback el 403 es el de siempre. Fuera de loopback el
+            // endurecimiento es escalonado: se avisa y se cuenta, y solo se
+            // rechaza si el operador puso `enforce_host_guard_nonloopback`.
+            if bound_to_loopback || enforce_nonloopback {
+                warn!("MCP origin guard: rejected Host '{host}' on {path}");
+                return forbidden_origin_host(
+                    "forbidden_host",
+                    if bound_to_loopback {
+                        "Host not allowed for loopback-bound MCP/SSE endpoints"
+                    } else {
+                        "Host not allowed (enforce_host_guard_nonloopback)"
+                    },
+                );
+            }
+            note_host_guard_nonloopback_observed();
+            if should_warn_host_guard() {
+                warn!(
+                    "MCP origin guard (modo aviso, D-147): Host '{host}' no permitido en {path} con \
+                     binding fuera de loopback; se deja pasar y se cuenta en \
+                     /api/v1/metrics host_guard.nonloopback_observed. Anadelo a [nexus] \
+                     allowed_hosts si es tuyo, o pon enforce_host_guard_nonloopback = true."
+                );
+            }
         }
     }
     next.run(request).await

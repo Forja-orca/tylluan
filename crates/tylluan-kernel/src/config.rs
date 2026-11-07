@@ -760,6 +760,16 @@ pub struct NexusConfig {
     /// el kernel escucha en loopback (p. ej. el hostname de un túnel WSL).
     #[serde(default)]
     pub allowed_hosts: Vec<String>,
+
+    /// D-147: con un binding NO loopback (`0.0.0.0`, una IP de LAN, un túnel) el
+    /// guard de `Host` sólo avisa (log + contador en `/api/v1/metrics`) mientras
+    /// esto sea `false`. Con `true`, un `Host` no permitido es también un 403 ahí.
+    ///
+    /// Por defecto `false` a propósito: endurecerlo sin aviso rompería un dashboard
+    /// remoto que hoy funciona (la fase VPN local del operador entra por una IP que
+    /// no es loopback). En loopback el 403 es siempre, mire lo que mire esta clave.
+    #[serde(default)]
+    pub enforce_host_guard_nonloopback: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -792,6 +802,7 @@ impl Default for NexusConfig {
             expose_guild_tools: false,
             allowed_origins: Vec::new(),
             allowed_hosts: Vec::new(),
+            enforce_host_guard_nonloopback: false,
         }
     }
 }
