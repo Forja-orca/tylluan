@@ -145,6 +145,19 @@ pub(crate) fn dcr_is_state_note(metadata: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// MEM-4: ¿el candidato del DCR sigue existiendo?
+///
+/// `search_vector` devuelve una **foto** del nodo. Entre esa foto y la fusión el
+/// nodo puede desaparecer (decay, mantenimiento, otro escritor). `update_node_content`
+/// ya lo detecta ("Node not found"), pero el handler solo avisaba y seguía: respondía
+/// como si se hubiera guardado y el texto se perdía en silencio. Se comprueba antes.
+pub(crate) async fn dcr_candidate_alive(
+    silva: &crate::memory::silva::SilvaDB,
+    id: &str,
+) -> bool {
+    matches!(silva.get_node(id).await, Ok(Some(_)))
+}
+
 /// MEM-3 v2: clave de identidad de una nota de estado.
 ///
 /// `topic_key` explícito (`metadata.topic`) si lo hay; si no, `state:<space>`.
@@ -384,7 +397,19 @@ pub async fn handle_tylluan_remember(
         // de estado se sustituyen en vez de acumularse.
         let same_space = dcr_space(&existing_node.metadata) == dcr_space(&metadata);
         let is_state_note = dcr_is_state_note(&metadata);
-        match dcr_action(&dcr_policy, sim, same_agent, same_type, same_space, is_state_note) {
+        // MEM-4: el candidato sale de una busqueda vectorial (una foto). Si se podo
+        // entre la busqueda y este punto, fusionar perderia el texto y la respuesta
+        // diria que se guardo. En ese caso se cae al flujo normal: nodo nuevo + aviso.
+        let candidato_vivo = dcr_candidate_alive(&server.silva, &existing_node.id).await;
+        if !candidato_vivo {
+            tracing::warn!(
+                "DCR: el candidato '{}' ya no existe (podado entre la busqueda vectorial y la fusion); \
+                 se escribe nodo nuevo para no perder el texto",
+                existing_node.id
+            );
+        }
+        if candidato_vivo {
+            match dcr_action(&dcr_policy, sim, same_agent, same_type, same_space, is_state_note) {
             DcrAction::Merge => {
                 // T-DSH-95: si el texto entrante aporta información nueva, se
                 // fusiona en el nodo existente en vez de descartarlo (bug: el
@@ -491,6 +516,7 @@ pub async fn handle_tylluan_remember(
                 dcr_link_to = Some(existing_node.id.clone());
             }
             DcrAction::Skip => {}
+            }
         }
     }
 
@@ -1266,6 +1292,35 @@ mod embedding_failure_tests {
             let conn = silva.conn.lock().await;
             conn.execute_batch("PRAGMA query_only=OFF;").unwrap();
         }
+    }
+
+    /// MEM-4 (T3048): un candidato PODADO no está vivo, y uno vivo sí.
+    ///
+    /// Es la condición que separa "fusionar" de "escribir nodo nuevo". Sin ella, el
+    /// DCR fusionaba contra una foto vieja, `update_node_content` fallaba con
+    /// "Node not found", el handler solo avisaba y el texto se perdía respondiendo
+    /// como si se hubiera guardado.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem4_candidato_podado_no_esta_vivo() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("cand-vivo", "memory", "texto del candidato", "{}")
+            .await
+            .unwrap();
+        assert!(
+            dcr_candidate_alive(&db, "cand-vivo").await,
+            "un nodo que existe esta vivo y se puede fusionar en el"
+        );
+
+        // Poda real del candidato, como haria el decay/mantenimiento.
+        db.delete_node("cand-vivo").await.unwrap();
+        assert!(
+            !dcr_candidate_alive(&db, "cand-vivo").await,
+            "un candidato podado NO esta vivo: no se puede fusionar en el"
+        );
+        assert!(
+            !dcr_candidate_alive(&db, "nunca-existio").await,
+            "un id que no existe tampoco"
+        );
     }
 
     /// AG-6: tylluan_remember accepts 'intent' as an ergonomic fallback alias when 'content' is omitted.
