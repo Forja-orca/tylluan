@@ -178,7 +178,7 @@ Dos o más instancias de Tylluan pueden sincronizar memorias con pares que aprue
 - **Última release:** v0.17.2 (2026-10-27). El trabajo posterior vive en `main`; consulta [CHANGELOG.md](CHANGELOG.md).
 - **Tests:** 1741 tests entre el kernel de Rust (lib), `tylluan-link` y `tylluan-fsrs`, que CI ejecuta en cada push junto con clippy, `cargo-deny`, el lint de Python y la suite de auditoría de seguridad.
 - **Qué está planificado y qué no:** [ROADMAP.md](ROADMAP.md). Estado actual de cada afirmación: [STATUS.md](STATUS.md).
-- **Plataformas:** Windows x86_64 y Linux x86_64 (WSL incluido) — las dos únicas que probamos y soportamos. CI ejecuta los tests en Linux x86_64 y el workflow de release construye los dos binarios. La medición de arranque de arriba se tomó en Windows x86_64.
+- **Plataformas:** Windows x86_64 y Linux x86_64 (WSL incluido) — las dos únicas que probamos y soportamos. CI ejecuta los tests en Linux x86_64 y el workflow de release sigue construyendo también los destinos antiguos de macOS y Linux ARM64, hasta que se limpien los workflows. La medición de arranque de arriba se tomó en Windows x86_64.
 
 ## Documentación
 

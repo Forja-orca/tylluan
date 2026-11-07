@@ -179,7 +179,7 @@ Two or more Tylluan instances can sync memories with peers you approve one by on
 
 - **Latest release:** v0.17.2 (2026-10-27). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
 - **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
-- **Platforms:** Windows x86_64 and Linux x86_64 (WSL included) — the only two we test and support. CI runs the tests on Linux x86_64 and the release workflow builds both binaries. The start-up measurement above was taken on Windows x86_64.
+- **Platforms:** Windows x86_64 and Linux x86_64 (WSL included) — the only two we test and support. CI runs the tests on Linux x86_64 and the release workflow still builds the legacy macOS and Linux ARM64 targets as well, until the workflows are cleaned up. The start-up measurement above was taken on Windows x86_64.
 
 ## Documentation
 
