@@ -205,7 +205,7 @@ async def kernel_pulse(intent: str = "") -> str:
         data = json.loads(result)
         if isinstance(data, dict) and "pulse" in data:
             return data["pulse"]
-    except Exception:
+    except Exception:  # silent-ok: payload sin JSON valido: se devuelve el texto tal cual
         pass
     return f"✅ **Kernel Pulse triggered**\n\n{result[:1000]}"
 

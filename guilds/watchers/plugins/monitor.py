@@ -58,7 +58,7 @@ async def process_list(limit: int = 10) -> str:
         for p in psutil.process_iter(['name', 'cpu_percent', 'memory_percent']):
             try:
                 p.cpu_percent(interval=None)
-            except Exception:
+            except Exception:  # silent-ok: psutil por proceso: un proceso puede morir a mitad
                 pass
         await asyncio.sleep(0.5)
 
@@ -68,7 +68,7 @@ async def process_list(limit: int = 10) -> str:
                 info = p.info
                 if info['name']:
                     procs.append(info)
-            except Exception:
+            except Exception:  # silent-ok: psutil por proceso: idem
                 pass
 
         procs.sort(key=lambda x: x.get('cpu_percent') or 0, reverse=True)

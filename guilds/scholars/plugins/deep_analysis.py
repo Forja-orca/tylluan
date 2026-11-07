@@ -123,7 +123,7 @@ def _parse_python_imports(content: str) -> Set[str]:
                     imports.add(alias.name)
             elif isinstance(node, ast.ImportFrom):
                 imports.add(node.module or "")
-    except SyntaxError:
+    except SyntaxError:  # silent-ok: fichero que no parsea: se omite su analisis
         pass
     return imports
 

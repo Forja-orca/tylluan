@@ -16,7 +16,7 @@ try:
     from mcp.server.fastmcp import FastMCP
     from guilds.core import utils
     _MCP_AVAILABLE = True
-except ImportError:
+except ImportError:  # silent-ok: import opcional; _MCP_AVAILABLE se inicializa a False antes
     pass
 
 if _MCP_AVAILABLE:
@@ -177,7 +177,7 @@ if _MCP_AVAILABLE:
                 proc = subprocess.run(rg_cmd, capture_output=True, text=True, check=False)
                 if proc.returncode in [0, 1] and proc.stdout:
                     return proc.stdout
-            except FileNotFoundError:
+            except FileNotFoundError:  # silent-ok: ripgrep no instalado: hay fallback explicito
                 pass # rg not installed, use fallback
             
             # Fallback
@@ -245,7 +245,7 @@ if _MCP_AVAILABLE:
                     proc = subprocess.run(["rg", "-rn", "#\\[allow\\(dead_code\\)\\]", directory], capture_output=True, text=True)
                     for line in proc.stdout.splitlines():
                         results["findings"].append(f"Explicit dead_code allow: {line}")
-                except (OSError, subprocess.SubprocessError): pass  # rg ausente o fallo: sin hallazgos rg, seguir (D-145)
+                except (OSError, subprocess.SubprocessError): pass  # rg ausente o fallo: sin hallazgos rg, seguir (D-145)  # silent-ok: ripgrep best-effort; el hallazgo es opcional
                 
                 # Heuristic: pub fn that isn't mentioned in other files
                 # (Very simple, might have false positives)

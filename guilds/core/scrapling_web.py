@@ -20,7 +20,7 @@ except ImportError:
         import requests
         from bs4 import BeautifulSoup
         HAS_FALLBACK = True
-    except ImportError:
+    except ImportError:  # silent-ok: ni scrapling ni requests: HAS_* ya inicializados a False
         pass
 
 
@@ -34,7 +34,7 @@ def _fetch(url: str, dynamic: bool = False) -> str:
                 p = Fetcher.fetch(url)
             if p and p.status == 200:
                 return p.text
-        except Exception:
+        except Exception:  # silent-ok: cadena de estrategias: si esta falla, se prueba la siguiente
             pass
 
     if HAS_FALLBACK:
@@ -44,7 +44,7 @@ def _fetch(url: str, dynamic: bool = False) -> str:
                                 headers={"User-Agent": "TylluanNexus/3.0"})
             if resp.status_code == 200:
                 return resp.text
-        except Exception:
+        except Exception:  # silent-ok: cadena de estrategias: si esta falla, se prueba la siguiente
             pass
 
     return ""
@@ -63,7 +63,7 @@ def _extract_text(html: str) -> str:
             if text:
                 lines = [t.strip() for t in text if t.strip()]
                 return "\n".join(lines[:200])
-        except Exception:
+        except Exception:  # silent-ok: cadena de estrategias: si esta falla, se prueba la siguiente
             pass
 
     if HAS_FALLBACK:
@@ -75,7 +75,7 @@ def _extract_text(html: str) -> str:
             text = soup.get_text(separator="\n")
             lines = [l.strip() for l in text.split("\n") if l.strip()]
             return "\n".join(lines[:200])
-        except Exception:
+        except Exception:  # silent-ok: cadena de estrategias: si esta falla, se prueba la siguiente
             pass
 
     # Last resort: basic regex

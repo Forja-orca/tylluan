@@ -61,7 +61,7 @@ def _extract_html(html_content: str, max_chars: int = 6000) -> str:
     parser = _TextExtractor()
     try:
         parser.feed(html_content)
-    except Exception:
+    except Exception:  # silent-ok: parser HTML best-effort; el texto es un extra
         pass
     result = parser.text()
     # Collapse repeated newlines

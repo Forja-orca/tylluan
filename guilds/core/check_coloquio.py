@@ -81,7 +81,7 @@ def resolve_kernel():
         try:
             data = json.loads(port_file.read_text())
             return f"http://127.0.0.1:{data.get('port', 47004)}"
-        except Exception:
+        except Exception:  # silent-ok: fichero de puerto ilegible: se usa el puerto por defecto
             pass
     if "KERNEL_BASE" in os.environ:
         return os.environ["KERNEL_BASE"]
@@ -102,7 +102,7 @@ def load_state():
     if STATE_FILE.exists():
         try:
             return json.loads(STATE_FILE.read_text())
-        except Exception:
+        except Exception:  # silent-ok: estado ilegible: se arranca sin estado
             pass
     return {}
 

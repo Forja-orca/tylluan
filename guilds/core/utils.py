@@ -149,7 +149,7 @@ async def run_command(
             process.kill()
         try:
             await asyncio.wait_for(process.wait(), timeout=10)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError:  # silent-ok: tras kill(), esperar al hijo es best-effort
             pass
         raise asyncio.TimeoutError(f"Command timed out after {timeout_secs}s")
 

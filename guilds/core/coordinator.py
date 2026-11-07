@@ -106,7 +106,7 @@ def _get_http_connection(url: str):
         try:
             conn.connect()
             conn.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        except Exception:
+        except Exception:  # silent-ok: TCP_NODELAY best-effort en un socket que ya conecto
             pass
         _THREAD_LOCAL.conn = conn
     return _THREAD_LOCAL.conn

@@ -389,7 +389,7 @@ print(json.dumps(result))
                     verdict = _json.loads(line)
                     verdict["error"] = verdict.get("error", "")
                     return _json.dumps(verdict, indent=2)
-                except _json.JSONDecodeError:
+                except _json.JSONDecodeError:  # silent-ok: linea no-JSON del sandbox: se devuelve el texto crudo
                     pass
 
         # Fallback: return raw output as error

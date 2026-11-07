@@ -284,7 +284,7 @@ if __name__ == "__main__":
             cwd = state.get("last_cwd")
             if cwd and os.path.isdir(cwd):
                 os.chdir(cwd)
-    except Exception:
+    except Exception:  # silent-ok: chdir best-effort: si falla, se sigue en el cwd actual
         pass
         
     utils.safe_mcp_run(mcp)

@@ -133,7 +133,7 @@ def _get_config():
             _CFG = new_cfg
             LLAMA_PORT = new_cfg["port"]
             _CFG_LOADED_TS = now
-        except Exception:
+        except Exception:  # silent-ok: config ilegible un instante: se conserva la anterior (documentado)
             pass  # keep stale config if file is temporarily unreadable
     return _CFG
 
@@ -250,7 +250,7 @@ def _reload_external_providers():
                     sys.stderr.write(f"[llama_backend] External backend detected on port {port}\n")
                     _EXTERNAL_PROVIDERS_LOADED_TS = now
                     return
-        except Exception:
+        except Exception:  # silent-ok: sonda de backend externo: si no responde, se sigue en local
             pass
     _EXTERNAL_PROVIDERS_LOADED_TS = now
 
@@ -443,7 +443,7 @@ def _install_llama_server():
     try:
         sp.run(["nvidia-smi"], capture_output=True, timeout=5)
         has_cuda = True
-    except Exception:
+    except Exception:  # silent-ok: nvidia-smi ausente: no hay CUDA y se sigue en CPU
         pass
 
     # Build list of release assets to try
@@ -714,7 +714,7 @@ async def _drain_process_stderr(proc):
             line = await asyncio.to_thread(proc.stderr.readline)
             if not line:
                 break
-    except Exception:
+    except Exception:  # silent-ok: EOF/lectura rota del stderr del servidor: se corta el bucle
         pass
 
 

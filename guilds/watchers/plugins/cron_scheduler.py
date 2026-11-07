@@ -51,7 +51,9 @@ def _start_timer(job: dict):
         try:
             rc, out, err = await utils.run_command(["cmd", "/c", job["command"]], timeout_secs=30)
         except Exception as exc:
-            pass
+            # BUF-D2: antes era `pass`, asi que un fallo del comando quedaba invisible: el
+            # job contaba como ejecutado y se reprogramaba igual, sin rastro en ningun sitio.
+            job["lastError"] = str(exc)
         if job.get("maxRuns") and job["runCount"] >= job["maxRuns"]:
             job["active"] = False
             _timers.pop(jid, None)

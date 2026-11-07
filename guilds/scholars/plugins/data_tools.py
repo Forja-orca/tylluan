@@ -28,7 +28,7 @@ if _MCP_AVAILABLE:
     try:
         import yaml
         _YAML_AVAILABLE = True
-    except ImportError:
+    except ImportError:  # silent-ok: yaml opcional; _YAML_AVAILABLE se inicializa a False antes
         pass
 
 if _MCP_AVAILABLE:
