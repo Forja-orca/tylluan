@@ -150,7 +150,7 @@ To change profile, stop the kernel first, then run `tylluan-cli install --profil
 - It is not hardened for hostile networks. Keep it on `127.0.0.1`.
 - Several guilds need Python 3.12 or newer, and some (web search, for example) reach the internet when you ask them to.
 
-**Retrieval quality.** On LongMemEval-S (50 questions) with the BGE-M3 model, Tylluan scored Recall@5 82%, Recall@10 90%, median latency 12.9 ms on CPU ([raw results](benchmarks/longmemeval_v0.12.0.json)). That was v0.12.0 on 2026-07-05, before the default model changed to `mxbai-embed-large`. It has not been re-run, it is a small set, and it is not a comparison against other systems.
+**Retrieval quality.** On LongMemEval-S (50 questions) with the BGE-M3 model, Tylluan scored Recall@5 82%, Recall@10 90%, median latency 12.9 ms on CPU ([raw results](benchmarks/longmemeval_v0.12.0.json)). That was v0.12.0 on 2026-07-05. Re-run on 2026-11-07 on `main` (release build, reranker off, same 50 questions): BGE-M3 reproduces it exactly (Recall@5 82%, Recall@10 90%; [raw](benchmarks/longmemeval_2026-11-07_bgem3.json)), and the current default `mxbai-embed-large` scores Recall@1 64%, Recall@5 84%, Recall@10 88% ([raw](benchmarks/longmemeval_2026-11-07_mxbai.json)). With 50 questions the difference between the two models is not statistically significant (McNemar on top-1, p=0.07): read it as "does not get worse", not as an improvement. It is a small set, the latency figures time only the search step, and it is not a comparison against other systems.
 
 ## Security: what it protects and what it does not
 

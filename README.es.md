@@ -150,7 +150,7 @@ Para cambiar de perfil, para primero el kernel y ejecuta `tylluan-cli install --
 - No está endurecido para redes hostiles. Mantenlo en `127.0.0.1`.
 - Varios gremios necesitan Python 3.12 o posterior, y algunos (la búsqueda web, por ejemplo) salen a internet cuando se lo pides.
 
-**Calidad de recuperación.** En LongMemEval-S (50 preguntas) con el modelo BGE-M3, Tylluan obtuvo Recall@5 82 %, Recall@10 90 % y una latencia mediana de 12,9 ms en CPU ([resultados en bruto](benchmarks/longmemeval_v0.12.0.json)). Fue en v0.12.0 el 2026-07-05, antes de que el modelo por defecto pasara a `mxbai-embed-large`. No se ha repetido, es un conjunto pequeño y no es una comparación con otros sistemas.
+**Calidad de recuperación.** En LongMemEval-S (50 preguntas) con el modelo BGE-M3, Tylluan obtuvo Recall@5 82 %, Recall@10 90 % y una latencia mediana de 12,9 ms en CPU ([resultados en bruto](benchmarks/longmemeval_v0.12.0.json)). Fue en v0.12.0 el 2026-07-05. Repetido el 2026-11-07 sobre `main` (build release, reranker desactivado, las mismas 50 preguntas): BGE-M3 lo reproduce exactamente (Recall@5 82 %, Recall@10 90 %; [en bruto](benchmarks/longmemeval_2026-11-07_bgem3.json)) y el modelo por defecto actual, `mxbai-embed-large`, obtiene Recall@1 64 %, Recall@5 84 %, Recall@10 88 % ([en bruto](benchmarks/longmemeval_2026-11-07_mxbai.json)). Con 50 preguntas la diferencia entre los dos modelos no es estadísticamente significativa (McNemar sobre top-1, p=0,07): léelo como «no empeora», no como una mejora. Es un conjunto pequeño, las latencias miden solo el paso de búsqueda y no es una comparación con otros sistemas.
 
 ## Seguridad: qué protege y qué no
 
