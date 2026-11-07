@@ -56,4 +56,3 @@ verás un WARN de registro del provider y el kernel sigue en CPU — nunca crash
 |---|---|---|---|
 | Windows x64 | ✓ | ✓ (sin feature) | ✓ (`--features cuda` + DLLs) |
 | Linux x64 | ✓ | — | ✓ (`--features cuda` + libs .so) |
-| ARM (aarch64) | ✓ (NEON) | — | — |

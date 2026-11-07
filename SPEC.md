@@ -49,7 +49,7 @@ Casos de uso:
 Tylluan sigue estas 7 propiedades como principios de diseño explícitos:
 
 1. **Localidad de Datos Física:** Toda la base de conocimiento (SilvaDB) reside localmente en archivos SQLite bajo el directorio del usuario. Cero dependencias de APIs en la nube en la ruta crítica.
-2. **Ejecución Hardware-Bound:** Optimizado específicamente para hardware con recursos limitados (Raspberry Pi 4 / ARM64). El motor híbrido (BM25 + fastembed ONNX) corre local sin requerir GPUs comerciales pesadas.
+2. **Ejecución Hardware-Bound:** Optimizado para hardware con recursos limitados **x86_64** (Windows y Linux, WSL incluido), que es lo único que el equipo prueba y soporta. El motor híbrido (BM25 + fastembed ONNX) corre local sin requerir GPUs comerciales pesadas.
 3. **Ausencia de Telemetría Externa:** Sin llamadas ocultas de diagnóstico ni recolección de estadísticas fuera del host.
 4. **Criptografía Soberana:** Identidad del nodo gestionada localmente mediante firmas criptográficas Ed25519 y transporte cifrado con Noise: NK en la sincronización de federación y XK en el despacho P2P entre pares.
 5. **Decaimiento Adaptativo (FSRS-5):** La memoria humana olvida de forma selectiva. FSRS-5 permite que cada nodo mantenga su propia estabilidad y retrievabilidad a nivel de base de datos, optimizando el contexto de forma biológica sin depender de LLMs para ponderar frescura.

@@ -29,14 +29,12 @@ no depende de ningún otro repositorio para funcionar, compilar, o pasar sus tes
 **Si portas un patrón de otro proyecto, adáptalo e impleméntalo limpio — nunca copies
 código ni referencies rutas de otros repositorios locales.**
 
-**Alcance real de pruebas por plataforma (2026-09-02):** el equipo solo puede
-verificar de primera mano **Windows y Linux** — ningún miembro tiene hardware
-Apple. El binario `aarch64-apple-darwin` se sigue compilando en CI (cross-compile,
-nunca ejecutado por nosotros) y se distribuye, pero **macOS es soporte
-"community-tested"**, no verificado por el equipo. No asignar tareas de
-verificación/portabilidad macOS a los agentes del equipo — si la comunidad
-reporta un problema específico de macOS, tratarlo como contribución externa,
-no como deuda propia.
+**Alcance real de pruebas por plataforma (2026-11-07, decisión de José):** Tylluan
+**solo** prueba y soporta **Windows x86_64 y Linux x86_64 (WSL incluido)**. macOS /
+Apple Silicon y Linux ARM64 (Raspberry Pi) **dejan de prometerse**: las releases
+publicadas hasta la 0.17.x siguen descargables, pero no se prueban ni se soportan. No
+asignar tareas de verificación/portabilidad de esas plataformas a los agentes del
+equipo; si la comunidad reporta un problema ahí, tratarlo como contribución externa.
 
 **🔴 NINGÚN AGENTE arranca ni para el kernel de producción de Tylluan, nunca, bajo ninguna
 circunstancia — solo José.** Incidente real (2026-09-01, ~23:44): un agente compiló y arrancó
@@ -228,7 +226,7 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 **Filtro de decisión para cualquier feature:** ¿Puede el mismo componente servir a un usuario modesto (5-10 peers, CPU sin internet) Y a uno con servidor (100+ peers, datacenter) **sin bifurcar el código** — solo diferente `tylluan.toml`?
 
 **Invariantes derivados:**
-- **Toaster-friendly:** Raspberry Pi 4 (4GB RAM) y hardware de 10 años — objetivo de diseño, **no verificado**: el CI solo compila `aarch64` y nadie ha ejecutado el binario en ARM (las únicas medidas reales están en el README y son de x86_64)
+- **Toaster-friendly:** hardware de 10 años y 4 GB de RAM — objetivo de diseño, **no verificado** (las únicas medidas reales están en el README y son de Windows x86_64; Linux x86_64 sigue sin medir con el script)
 - **USB-portable:** bundle completo cabe y arranca desde un USB
 - **Offline-first:** kernel arranca y opera sin internet
 - **Sin bifurcación de código:** un solo binario, configuración distinta por entorno

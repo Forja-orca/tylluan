@@ -20,7 +20,7 @@ This guide gets you up and running with **Tylluan**, the sovereign local-first m
 Run the automated installer for your platform:
 
 ```bash
-# Linux / macOS
+# Linux (WSL included)
 curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh | sh
 
 # Windows (PowerShell)
@@ -72,7 +72,7 @@ Select a profile tailored to your hardware and deployment target:
 
 | Profile | Semantic Embeddings | Memory Footprint | Recommended Use Case |
 |---|---|---|---|
-| **`portable`** | None (BM25 lexical search only) | ~34 MB resident idle | Zero-dependency, Raspberry Pi, lightweight containers |
+| **`portable`** | None (BM25 lexical search only) | ~34 MB resident idle | Zero-dependency, lightweight containers |
 | **`clinic`** | BGE-Small (384-dim, 67 MB) | Low RAM footprint | Edge devices, offline clinic workstations (~200k docs on 8 GB RAM) |
 | **`server`** | `mxbai-embed-large` (1024-dim) | Standard production | Full hybrid semantic search (BM25 + vector RRF + Silva graph) |
 

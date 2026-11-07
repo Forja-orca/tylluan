@@ -218,11 +218,12 @@ cd <raiz-repo> && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
-- Pre-compiled releases for 4 targets:
+- Pre-compiled releases for 2 targets (decisión de José, 2026-11-07; macOS y ARM64 dejan
+  de prometerse):
   - `x86_64-unknown-linux-gnu`
-  - `aarch64-unknown-linux-gnu` (Raspberry Pi 4+ — new in v0.6.0)
-  - `aarch64-apple-darwin` (Apple Silicon) — **community-tested, no verificado por el equipo** (sin hardware Apple; solo cross-compile en CI)
   - `x86_64-pc-windows-msvc`
+- Las releases publicadas hasta la 0.17.x incluyen además `aarch64-unknown-linux-gnu` y
+  `aarch64-apple-darwin`: siguen descargables, pero **no se prueban ni se soportan**.
 - `install.sh` / `install.ps1` — curl-pipe and irm-pipe installers
 - Installs to `~/.tylluan/bin/`, adds to PATH, prints MCP config + token hint
 - `tylluan install` auto-downloads embedding model and auto-starts kernel

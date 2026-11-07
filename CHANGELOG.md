@@ -6,6 +6,12 @@ All notable changes to Tylluan are documented here.
 
 ## [Unreleased]
 
+**Platform support narrowed to the two we can actually test (2026-11-07, José).** Tylluan
+now tests and supports **Windows x86_64 and Linux x86_64 (WSL included)** only.
+Releases published up to 0.17.x also shipped macOS (Apple Silicon) and Linux ARM64
+binaries; those remain downloadable from the releases page, but they are no longer tested
+or supported. Nothing published is being deleted.
+
 ---
 
 ## [0.17.2] — 2026-10-27

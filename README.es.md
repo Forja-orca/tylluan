@@ -45,14 +45,12 @@ Tú pones el modelo y el cliente (Claude Code, Cursor, VS Code, …). Tylluan no
 | Plataforma | Binario de la release |
 |------------|-----------------------|
 | Linux x86_64 | `tylluan-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux ARM64 | `tylluan-aarch64-unknown-linux-gnu.tar.gz` |
-| macOS, Apple Silicon | `tylluan-aarch64-apple-darwin.tar.gz` |
 | Windows x86_64 | `tylluan-x86_64-pc-windows-msvc.tar.gz` |
 
-No hay binario para macOS Intel. Los binarios están en la [página de releases](https://github.com/forja-orca/tylluan/releases).
+Estas son las dos únicas plataformas que Tylluan prueba y soporta: **Windows x86_64 y Linux x86_64 (WSL incluido)**. Las releases publicadas hasta la 0.17.x incluyen además binarios para macOS (Apple Silicon) y Linux ARM64: siguen disponibles en la [página de releases](https://github.com/forja-orca/tylluan/releases), pero desde ahora no se prueban ni se soportan.
 
 ```bash
-# Linux / macOS
+# Linux (WSL incluido)
 curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh | sh
 
 # Windows (PowerShell)
@@ -133,7 +131,7 @@ Un binario de kernel, tres configuraciones que cambian calidad de recuperación 
 | `clinic` | BGE-Small, 384 dimensiones | unos 67 MB | sin medir |
 | `server` | mxbai-embed-large, 1024 dimensiones | sin verificar | sin medir |
 
-`portable` se midió el 2026-10-26 con la release publicada v0.17.1 de Windows x86_64 (una descarga de 15,4 MB), en cuatro arranques en frío con la base de datos vacía: operativo a los 12,8 a 16,8 s, de 38,7 a 40 MB residentes, y ninguna conexión de red saliente ni socket UDP no local en los 10 segundos posteriores a estar operativo. Esa máquina no estaba en reposo (había un kernel de producción y herramientas de desarrollo en marcha), así que lee el tiempo de arranque como un máximo. El script es [scripts/measure_portable_start.ps1](scripts/measure_portable_start.ps1); la máquina y las ejecuciones en bruto están en [portable_start_2026-10-26.json](docs/reference/measurements/portable_start_2026-10-26.json). Linux, macOS, ARM y una Raspberry Pi física **no** se han medido; CI compila la versión ARM64 pero no la arranca.
+`portable` se midió el 2026-10-26 con la release publicada v0.17.1 de Windows x86_64 (una descarga de 15,4 MB), en cuatro arranques en frío con la base de datos vacía: operativo a los 12,8 a 16,8 s, de 38,7 a 40 MB residentes, y ninguna conexión de red saliente ni socket UDP no local en los 10 segundos posteriores a estar operativo. Esa máquina no estaba en reposo (había un kernel de producción y herramientas de desarrollo en marcha), así que lee el tiempo de arranque como un máximo. El script es [scripts/measure_portable_start.ps1](scripts/measure_portable_start.ps1); la máquina y las ejecuciones en bruto están en [portable_start_2026-10-26.json](docs/reference/measurements/portable_start_2026-10-26.json). Linux (incluido WSL) **no** se ha medido con este script: los datos de arriba son solo de Windows x86_64.
 
 Para cambiar de perfil, para primero el kernel y ejecuta `tylluan-cli install --profile server --force`. Sobrescribe `tylluan.toml` y arranca un kernel en el puerto por defecto, así que no dejes otro kernel en marcha. `tylluan-cli start --setup` puede elegir un perfil según tu RAM y GPU.
 
@@ -180,7 +178,7 @@ Dos o más instancias de Tylluan pueden sincronizar memorias con pares que aprue
 - **Última release:** v0.17.2 (2026-10-27). El trabajo posterior vive en `main`; consulta [CHANGELOG.md](CHANGELOG.md).
 - **Tests:** 1735 tests entre el kernel de Rust (lib), `tylluan-link` y `tylluan-fsrs`, que CI ejecuta en cada push junto con clippy, `cargo-deny`, el lint de Python y la suite de auditoría de seguridad.
 - **Qué está planificado y qué no:** [ROADMAP.md](ROADMAP.md). Estado actual de cada afirmación: [STATUS.md](STATUS.md).
-- **Plataformas:** Linux x86_64 y ARM64, macOS Apple Silicon, Windows x86_64. CI ejecuta los tests en Linux x86_64 y el workflow de release construye los cuatro binarios. La medición de arranque de arriba se tomó en Windows x86_64. Las versiones de macOS y ARM64 no las han ejecutado los mantenedores en hardware (sin verificar).
+- **Plataformas:** Windows x86_64 y Linux x86_64 (WSL incluido) — las dos únicas que probamos y soportamos. CI ejecuta los tests en Linux x86_64 y el workflow de release construye los dos binarios. La medición de arranque de arriba se tomó en Windows x86_64.
 
 ## Documentación
 

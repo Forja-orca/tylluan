@@ -45,14 +45,12 @@ You bring the model and the client (Claude Code, Cursor, VS Code, …). Tylluan 
 | Platform | Release binary |
 |----------|----------------|
 | Linux x86_64 | `tylluan-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux ARM64 | `tylluan-aarch64-unknown-linux-gnu.tar.gz` |
-| macOS, Apple Silicon | `tylluan-aarch64-apple-darwin.tar.gz` |
 | Windows x86_64 | `tylluan-x86_64-pc-windows-msvc.tar.gz` |
 
-There is no macOS Intel build. Binaries are on the [releases page](https://github.com/forja-orca/tylluan/releases).
+These are the only two platforms Tylluan tests and supports: **Windows x86_64 and Linux x86_64 (WSL included)**. Releases published up to 0.17.x also shipped macOS (Apple Silicon) and Linux ARM64 binaries: they remain available on the [releases page](https://github.com/forja-orca/tylluan/releases), but they are no longer tested or supported.
 
 ```bash
-# Linux / macOS
+# Linux (WSL included)
 curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh | sh
 
 # Windows (PowerShell)
@@ -133,7 +131,7 @@ One kernel binary, three configurations that trade retrieval quality for footpri
 | `clinic` | BGE-Small, 384 dimensions | about 67 MB | not measured |
 | `server` | mxbai-embed-large, 1024 dimensions | not verified | not measured |
 
-`portable` was measured on 2026-10-26 with the published v0.17.1 Windows x86_64 release (a 15.4 MB download), four cold starts with an empty database: healthy after 12.8 to 16.8 s, 38.7 to 40 MB resident, and no outbound network connection or non-local UDP socket in the 10 seconds after it became healthy. That machine was not idle (a production kernel and development tools were running), so read the start time as an upper bound. The script is [scripts/measure_portable_start.ps1](scripts/measure_portable_start.ps1); the machine and the raw runs are in [portable_start_2026-10-26.json](docs/reference/measurements/portable_start_2026-10-26.json). Linux, macOS, ARM and a physical Raspberry Pi have **not** been measured; CI compiles the ARM64 build but does not boot it.
+`portable` was measured on 2026-10-26 with the published v0.17.1 Windows x86_64 release (a 15.4 MB download), four cold starts with an empty database: healthy after 12.8 to 16.8 s, 38.7 to 40 MB resident, and no outbound network connection or non-local UDP socket in the 10 seconds after it became healthy. That machine was not idle (a production kernel and development tools were running), so read the start time as an upper bound. The script is [scripts/measure_portable_start.ps1](scripts/measure_portable_start.ps1); the machine and the raw runs are in [portable_start_2026-10-26.json](docs/reference/measurements/portable_start_2026-10-26.json). Linux (including WSL) has **not** been measured with this script: the numbers above are Windows x86_64 only.
 
 To change profile, stop the kernel first, then run `tylluan-cli install --profile server --force`. It overwrites `tylluan.toml` and starts a kernel on the default port, so do not leave another kernel running. `tylluan-cli start --setup` can pick a profile from your RAM and GPU.
 
@@ -181,7 +179,7 @@ Two or more Tylluan instances can sync memories with peers you approve one by on
 
 - **Latest release:** v0.17.2 (2026-10-27). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
 - **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
-- **Platforms:** Linux x86_64 and ARM64, macOS Apple Silicon, Windows x86_64. CI runs the tests on Linux x86_64, and the release workflow builds all four binaries. The start-up measurement above was taken on Windows x86_64. The macOS and ARM64 builds have not been run on hardware by the maintainers (not verified).
+- **Platforms:** Windows x86_64 and Linux x86_64 (WSL included) — the only two we test and support. CI runs the tests on Linux x86_64 and the release workflow builds both binaries. The start-up measurement above was taken on Windows x86_64.
 
 ## Documentation
 

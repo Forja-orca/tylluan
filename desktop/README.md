@@ -15,7 +15,7 @@ already exists.
 
 Claude Desktop and Codex Desktop (both official) are built with Electron — but that bundles a
 full Chromium per app (150-200MB binary, 200-400MB idle RAM), which directly contradicts
-Tylluan's own promise of running on a Raspberry Pi 4. Tauri uses the OS's native WebView
+Tylluan's own promise of running on modest hardware. Tauri uses the OS's native WebView
 (WebView2 / WebKit / WebKitGTK) and a Rust backend — same language as the kernel, no new
 runtime to maintain. See `docs/roadmap/ROADMAP_O3.md` (Tylluan Desktop section) and
 `CHANGELOG.md` for the full writeup and the sources behind this decision.

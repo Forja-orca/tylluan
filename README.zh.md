@@ -35,7 +35,7 @@
 具体来说，这意味着：
 
 - **你的数据始终属于你。** 记忆存放在本地 SQLite 数据库中，配合本地嵌入（`server` profile 用 `mxbai-embed-large` 提供完整语义搜索；`portable` profile 零下载、仅 BM25；同时支持 BGE-M3）。关键路径上没有云端往返，底层也不存在专有格式 —— 你可以用任何标准 SQLite 工具打开数据库。
-- **没有网络连接也能工作。** `portable` profile（仅 BM25）无需任何下载。2026-10-14 用已发布的 v0.17.1 Linux x86_64 二进制实测（WSL2、6 CPU、8 GB 内存、空数据库），四次冷启动：下载体积 16.7 MB，0.9–3.7 秒内达到健康状态，空闲常驻内存约 34 MB，最初 10 秒内没有任何出站 TCP 连接或 UDP socket。尚未在 ARM 或真实 Raspberry Pi 硬件上运行过；CI 会编译 ARM64 构建，但不会启动它。
+- **没有网络连接也能工作。** `portable` profile（仅 BM25）无需任何下载。2026-10-14 用已发布的 v0.17.1 Linux x86_64 二进制实测（WSL2、6 CPU、8 GB 内存、空数据库），四次冷启动：下载体积 16.7 MB，0.9–3.7 秒内达到健康状态，空闲常驻内存约 34 MB，最初 10 秒内没有任何出站 TCP 连接或 UDP socket。尚未在 Linux（含 WSL）上实测过；以上数据只来自 Windows x86_64。
 - **这里的一切都不会被夺走。** MIT 许可，无厂商锁定，没有任何功能被订阅门槛挡在后面。
 
 智能体记忆（agent memory）目前是个拥挤的赛道 —— Mem0、Letta、Zep、Cognee、Graphiti、A-MEM 等采用了真正不同的思路，值得根据你的具体需求逐一评估。Tylluan 特别押注的方向是：在配置有限、离线或气隙（air-gapped）环境中运行良好，使用编译型二进制而不是需要一直养着的 Python 服务，以及一个让对等节点直接共享知识、中间没有协调节点的网状网络。
@@ -163,7 +163,7 @@ tylluan_decide    Ask a bounded typed question (choice / score / boolean): close
 
 *\*`server` 行的 R@5/R@10/延迟是上文的 BGE-M3 数字，尚未针对当前默认模型（`mxbai-embed-large`）重新测量 —— 见上方注释。`portable`/`clinic` 不受默认模型变更影响。*
 
-`portable` 是 `install.sh`/`install.ps1` 安装的默认 profile（零下载、秒级启动，适合 Raspberry Pi 或离线部署）；`clinic` 适合内存受限的笔记本；`server` 面向把完整语义检索质量放在首位的台式机或服务器。
+`portable` 是 `install.sh`/`install.ps1` 安装的默认 profile（零下载、秒级启动，适合离线部署）；`clinic` 适合内存受限的笔记本；`server` 面向把完整语义检索质量放在首位的台式机或服务器。
 
 ### 智能体技能
 
@@ -210,16 +210,16 @@ tylluan_decide    Ask a bounded typed question (choice / score / boolean): close
 | 平台 | 二进制 |
 |----------|--------|
 | Linux x86_64 | `tylluan-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux ARM64 (Raspberry Pi 4+) | `tylluan-aarch64-unknown-linux-gnu.tar.gz` |
-| macOS Apple Silicon | `tylluan-aarch64-apple-darwin.tar.gz` |
 | Windows x86_64 | `tylluan-x86_64-pc-windows-msvc.tar.gz` |
+
+**已发布版本：** 0.17.x 及之前的版本还包含 macOS（Apple Silicon）和 Linux ARM64 二进制文件。它们仍可从 [releases 页面](https://github.com/forja-orca/tylluan/releases) 下载，但从此不再测试、也不再支持。Tylluan 现在只测试并支持 **Windows x86_64 和 Linux x86_64（含 WSL）**。
 
 ### 1 — 安装
 
 运行内核二进制并把它当 MCP 记忆使用，不需要 Rust、Python 或 Node。通过 `tylluan_do` 运行 45 个 guild（bash、文件系统、调度器等）则需要另外安装 Python 3.12 + FastMCP —— 没有它们，那些 guild 会陷入崩溃重启循环，`/api/v1/doctor` 会报告 `degraded`（2026-08-22 验证）。
 
 ```bash
-# Linux / macOS
+# Linux（含 WSL）
 curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh | sh
 
 # Windows (PowerShell)
@@ -594,7 +594,7 @@ python examples/bounded_work_contract/run.py
 
 Tylluan 正处于活跃的投产前阶段，它现在最需要的是我们手头没有的硬件和网络上的真实世界测试：
 
-1. **硬件报告** —— 在 Raspberry Pi 4、旧笔记本、迷你主机上运行它，并在 [GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions) 分享你的延迟与内存数据。
+1. **硬件报告** —— 在旧笔记本、迷你主机上运行它，并在 [GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions) 分享你的延迟与内存数据。
 2. **检索质量** —— 在你自己的数据上试试混合搜索，如实告诉我们它是否找到了你预期的内容。在这里，失败报告至少和成功故事一样有用。
 3. **Bug 报告** —— 如果安装或模型加载在你那里出问题，请附上 `tylluan-cli logs` 的输出开一个 issue。
 
