@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-10-27 · HEAD `65b0b97` · v0.17.2 (Cargo.toml)
+> Last updated: 2026-11-07 · v0.17.2 (Cargo.toml) · the HEAD of record is the `**HEAD:**` line below (kept in sync by `scripts/check_head_sync.sh`)
 
 ## Estado verificado — 2026-10-14
 

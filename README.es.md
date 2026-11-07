@@ -59,7 +59,7 @@ irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
 Esto deja `tylluan-nexus` (el kernel) y `tylluan-cli` en `~/.tylluan/bin/` y los añade al `PATH`. Abre una terminal nueva después.
 
-El kernel no necesita Rust, Python ni Node. Los 45 guilds que hay detrás de `tylluan_do` son programas Python y necesitan **Python 3.12 y FastMCP** instalados aparte (`pip install -r guilds/requirements.txt`; el fichero viene en el archivo de la release y en este repositorio); sin ellos esos guilds no arrancan y `/api/v1/doctor` informa `degraded`. La memoria y la búsqueda funcionan sin Python.
+El kernel no necesita Rust, Python ni Node. Los 45 guilds que hay detrás de `tylluan_do` son programas Python y necesitan **Python 3.12 o posterior (CI prueba 3.12) y FastMCP** instalados aparte (`pip install -r guilds/requirements.txt`; el fichero viene en el archivo de la release y en este repositorio); sin ellos esos guilds no arrancan y `/api/v1/doctor` informa `degraded`. La memoria y la búsqueda funcionan sin Python.
 
 Para compilar desde el código fuente, consulta [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md).
 
@@ -148,7 +148,7 @@ Para cambiar de perfil, para primero el kernel y ejecuta `tylluan-cli install --
 - Mem0, Letta, Zep, Cognee y otros llevan años en producción y tienen comunidades más grandes. Tylluan es joven; v0.17.2 es su última release.
 - No es un servicio alojado. No hay panel de equipo, ni copias de seguridad gestionadas, ni soporte. Existe un dashboard en React en `dashboard/`, pero los binarios publicados no lo incluyen: compila desde el código con `--features bundled-dashboard` para servirlo desde el kernel.
 - No está endurecido para redes hostiles. Mantenlo en `127.0.0.1`.
-- Varios gremios necesitan Python 3.12, y algunos (la búsqueda web, por ejemplo) salen a internet cuando se lo pides.
+- Varios gremios necesitan Python 3.12 o posterior, y algunos (la búsqueda web, por ejemplo) salen a internet cuando se lo pides.
 
 **Calidad de recuperación.** En LongMemEval-S (50 preguntas) con el modelo BGE-M3, Tylluan obtuvo Recall@5 82 %, Recall@10 90 % y una latencia mediana de 12,9 ms en CPU ([resultados en bruto](benchmarks/longmemeval_v0.12.0.json)). Fue en v0.12.0 el 2026-07-05, antes de que el modelo por defecto pasara a `mxbai-embed-large`. No se ha repetido, es un conjunto pequeño y no es una comparación con otros sistemas.
 
