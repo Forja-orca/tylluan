@@ -42,6 +42,47 @@ Federation adds peer-to-peer attack surface beyond the local threat model. See [
 - DHT poisoning (limited to peer discovery, not content)
 - Network-level encryption coverage (Noise XK/NK)
 
+### Origin and Host guard (CSRF and DNS rebinding)
+
+One middleware (`crates/tylluan-kernel/src/transport/http/auth.rs`,
+`validate_mcp_origin_host_middleware`) checks two headers before the request
+reaches a handler:
+
+| Header | When it is checked | Rejected with |
+|--------|--------------------|---------------|
+| `Origin` | the MCP/SSE paths (`/messages`, `/mcp`, `/api/v1/mcp`, `/sse`, `/sse/download`) and every **mutating** `/api/v1/*` request (any method except `GET`/`HEAD`) | `403 {"error":"forbidden_origin", ...}` |
+| `Host` | the same MCP/SSE paths **and every** `/api/v1/*` request, `GET`/`HEAD` included: a DNS rebinding needs no write to read the operator's memory | `403 {"error":"forbidden_host", ...}` |
+
+- A request with **no** `Origin` header (Claude Code, `mcp-remote`, agents, `curl`)
+  is never rejected by the origin check: only browsers send it.
+- A valid bearer token exempts nobody: authentication does not make an arbitrary
+  web origin safe.
+- `Origin: null` (a sandboxed page) is treated as hostile.
+
+**Symptom to remedy.** A browser or proxy that reaches the kernel under a name
+that is not loopback gets `403 forbidden_origin` or `403 forbidden_host`. Add that
+exact value to `[nexus]` in `tylluan.toml` and restart the kernel:
+
+```toml
+[nexus]
+allowed_origins = ["http://my-dashboard.lan:5173"]  # full origin, scheme included
+allowed_hosts   = ["my-dashboard.lan"]              # hostname or host:port
+```
+
+Loopback names (`127.0.0.1`, `localhost`, `[::1]`, any port) are always accepted
+and never need an entry.
+
+**Boundary as of 2026-11-07: the `Host` check only runs while the kernel is bound
+to loopback** (`[nexus] host` = `127.0.0.1` or `::1`, the default). If the kernel
+listens on `0.0.0.0` or on a LAN address, `Host` is **not** validated on any
+route, and no configuration option turns that validation on today; the `Origin`
+check above still runs on the mutating and MCP/SSE surface. Do not read this
+section as a DNS-rebinding guarantee for a LAN-bound kernel: the network has to
+provide that isolation.
+
+The boundary is deliberate and inherited from T-DSH-86; the REST read surface was
+added to it afterwards (BUF-D4, 2026-11-07) without revisiting the loopback gate.
+
 ## Known Limitations (Alpha)
 
 | Area | Status | Notes |
