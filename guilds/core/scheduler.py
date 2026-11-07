@@ -23,7 +23,7 @@ import uuid
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 mcp = FastMCP("scheduler")
@@ -98,14 +98,43 @@ def _post_to_coloquio(channel: str, message: str, author_id: str = "scheduler") 
         return False
 
 
+def _due_rows(conn: sqlite3.Connection):
+    """Filas vencidas y sin disparar.
+
+    D-144 (auditoría de Buffy H3, 2026-11-07): `run_at` se guardaba con
+    `isoformat()` — `2026-11-07T02:48:00.123456`, con `T` — y se comparaba como
+    **texto** contra `datetime('now')` — `2026-11-07 01:48:54`, con espacio. En
+    comparación de cadenas `'T'` (0x54) > `' '` (0x20), así que cualquier fila del
+    mismo día quedaba "en el futuro": un `schedule(delay_minutes=60)` no vencía
+    hasta el cambio de fecha, o sea a medianoche.
+
+    `datetime(run_at)` normaliza antes de comparar y entiende el formato viejo
+    (`T`, con o sin microsegundos) y el nuevo (espacio), así que arregla también
+    las filas **ya guardadas** sin migrar la tabla.
+    """
+    return conn.execute(
+        "SELECT id, intent, agent_id, channel FROM schedules "
+        "WHERE fired = 0 AND datetime(run_at) <= datetime('now')"
+    ).fetchall()
+
+
+def _run_at_for(delay_minutes: int) -> str:
+    """Cuándo vence una tarea creada ahora (formato ISO de SQLite, sin `T`).
+
+    Mismo formato que `datetime('now')` a propósito: el texto se compara y ordena
+    igual que el tiempo, así que una fila nueva no depende de `datetime()` para
+    ser correcta.
+    """
+    return (datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+
 def _scheduler_loop() -> None:
     conn = _get_conn()
     while True:
         try:
-            due = conn.execute(
-                "SELECT id, intent, agent_id, channel FROM schedules "
-                "WHERE fired = 0 AND run_at <= datetime('now')"
-            ).fetchall()
+            due = _due_rows(conn)
             for row in due:
                 sid, intent, agent_id, channel = row["id"], row["intent"], row["agent_id"], row["channel"]
                 if intent == "__DEEPEVAL_J6_J7__":
@@ -153,7 +182,7 @@ def schedule(
     schedule_id = str(uuid.uuid4())
     if delay_minutes < 0:
         return "error: delay_minutes must be non-negative"
-    run_at = (datetime.utcnow() + timedelta(minutes=delay_minutes)).isoformat()
+    run_at = _run_at_for(delay_minutes)
     conn = _get_conn()
     try:
         conn.execute(
