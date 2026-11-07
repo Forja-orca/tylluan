@@ -180,6 +180,24 @@ pub(crate) fn dcr_state_key(metadata: &str) -> Option<String> {
     Some(format!("state:{}", space.replace('"', "")))
 }
 
+/// MEM-5: cuántas veces el DCR descartó fusionar porque el candidato ya no existía.
+///
+/// MEM-4 lo arregló (se escribe nodo nuevo en vez de perder el texto), pero solo dejaba un
+/// `warn!`: nadie se enteraba salvo que leyera el log. Este contador lo hace visible en
+/// `/api/v1/metrics`, con el mismo patrón que `EMBEDDING_SAVE_FAILURES`.
+pub(crate) static DCR_CANDIDATE_PRUNED: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+/// Nº de candidatos del DCR que ya no existían desde el arranque.
+pub(crate) fn dcr_candidate_pruned_count() -> u64 {
+    DCR_CANDIDATE_PRUNED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Suma uno al contador de candidatos podados (una línea por vez que ocurre).
+pub(crate) fn note_dcr_candidate_pruned() {
+    DCR_CANDIDATE_PRUNED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// T-DSH-94: contador visible de embeddings que no se pudieron persistir.
 /// El nodo YA está guardado (la memoria no se pierde); solo el recall semántico
 /// de ese nodo queda degradado, y eso ya no puede ser silencioso.
@@ -402,6 +420,7 @@ pub async fn handle_tylluan_remember(
         // diria que se guardo. En ese caso se cae al flujo normal: nodo nuevo + aviso.
         let candidato_vivo = dcr_candidate_alive(&server.silva, &existing_node.id).await;
         if !candidato_vivo {
+            note_dcr_candidate_pruned();
             tracing::warn!(
                 "DCR: el candidato '{}' ya no existe (podado entre la busqueda vectorial y la fusion); \
                  se escribe nodo nuevo para no perder el texto",
@@ -1334,6 +1353,22 @@ mod embedding_failure_tests {
             let conn = silva.conn.lock().await;
             conn.execute_batch("PRAGMA query_only=OFF;").unwrap();
         }
+    }
+
+    /// MEM-5: el contador de candidatos podados sube y se puede leer.
+    ///
+    /// Es global y compartido entre tests en paralelo, así que se comprueba el DELTA, no un
+    /// valor absoluto (mismo criterio que el test del contador de embeddings).
+    #[test]
+    fn mem5_el_contador_de_candidato_podado_sube() {
+        let antes = dcr_candidate_pruned_count();
+        note_dcr_candidate_pruned();
+        note_dcr_candidate_pruned();
+        let despues = dcr_candidate_pruned_count();
+        assert!(
+            despues >= antes + 2,
+            "el contador tiene que subir al menos 2 (antes={antes}, despues={despues})"
+        );
     }
 
     /// MEM-4 (T3048): un candidato PODADO no está vivo, y uno vivo sí.

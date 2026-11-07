@@ -1574,7 +1574,12 @@ pub async fn metrics_handler(
         "curriculum": curriculum_stats,
         "hormones": hormone_json,
         "uptime_secs": state.start_time.elapsed().as_secs(),
-        "ts": chrono::Utc::now().to_rfc3339()
+        "ts": chrono::Utc::now().to_rfc3339(),
+        // MEM-5: candidatos del DCR que ya no existían (MEM-4 ya escribe nodo nuevo; esto
+        // dice cuántas veces pasa, que antes solo se veía en el log).
+        "dcr": {
+            "candidate_pruned": crate::transport::server::handler_remember::dcr_candidate_pruned_count()
+        }
     })).into_response()
 }
 
