@@ -773,6 +773,28 @@ fn forbidden_origin_host(code: &str, message: &str) -> Response {
 ///
 /// No exemption for authenticated callers: a valid bearer token does not make
 /// an arbitrary web origin safe.
+/// BUF-D4: ¿esta petición necesita validación de `Origin`? (CSRF)
+///
+/// MCP/SSE y la REST **mutante** (`/api/v1/*` con método distinto de GET/HEAD). Un GET no
+/// cambia estado, así que no se le exige Origin: exigirlo rompería clientes legítimos que
+/// sólo leen.
+fn needs_origin_guard(path: &str, method: &axum::http::Method) -> bool {
+    MCP_ORIGIN_GUARD_PATHS.contains(&path)
+        || (path.starts_with("/api/v1/")
+            && !matches!(
+                *method,
+                axum::http::Method::GET | axum::http::Method::HEAD
+            ))
+}
+
+/// BUF-D4: ¿esta petición necesita validación de `Host`? (DNS rebinding)
+///
+/// Toda la API REST, **también los GET/HEAD**: un rebinding no necesita escribir nada para
+/// leer la memoria del operador. Más MCP/SSE, como antes.
+fn needs_host_guard(path: &str) -> bool {
+    path.starts_with("/api/v1/") || MCP_ORIGIN_GUARD_PATHS.contains(&path)
+}
+
 pub async fn validate_mcp_origin_host_middleware(
     State(state): State<Arc<HttpState>>,
     request: Request,
@@ -783,13 +805,14 @@ pub async fn validate_mcp_origin_host_middleware(
     // gets the same guard. A browser "simple" POST (no body or text/plain) needs
     // no preflight, so CORS alone does not stop it from purging memory or
     // reloading guilds. Non-browser clients send no Origin and pass untouched.
-    let guarded = MCP_ORIGIN_GUARD_PATHS.contains(&path.as_str())
-        || (path.starts_with("/api/v1/")
-            && !matches!(
-                *request.method(),
-                axum::http::Method::GET | axum::http::Method::HEAD
-            ));
-    if !guarded {
+    //
+    // BUF-D4: el **Host** se valida en TODA la API REST, GET/HEAD incluidos (los 141 GET
+    // de lectura): un DNS rebinding no necesita escribir para leer. El Origin se queda
+    // donde estaba (mutante + MCP/SSE), porque un GET no cambia estado y exigirlo rompería
+    // clientes que sólo leen.
+    let guard_origin = needs_origin_guard(&path, request.method());
+    let guard_host = needs_host_guard(&path);
+    if !guard_origin && !guard_host {
         return next.run(request).await;
     }
     let (configured_host, allowed_origins, allowed_hosts) = {
@@ -800,7 +823,8 @@ pub async fn validate_mcp_origin_host_middleware(
             config.nexus.allowed_hosts.clone(),
         )
     };
-    if let Some(origin) = request.headers().get(ORIGIN) {
+    if guard_origin
+        && let Some(origin) = request.headers().get(ORIGIN) {
         let origin = origin.to_str().unwrap_or("");
         if !origin_is_allowed(origin, &allowed_origins) {
             warn!("MCP origin guard: rejected Origin '{origin}' on {path}");
@@ -810,7 +834,8 @@ pub async fn validate_mcp_origin_host_middleware(
             );
         }
     }
-    if is_loopback_hostname(&configured_host)
+    if guard_host
+        && is_loopback_hostname(&configured_host)
         && let Some(host) = request.headers().get(HOST)
     {
         let host = host.to_str().unwrap_or("");
@@ -1501,6 +1526,64 @@ mod mcp_origin_guard_tests {
         assert_eq!(
             MCP_ORIGIN_GUARD_PATHS,
             ["/messages", "/mcp", "/api/v1/mcp", "/sse", "/sse/download"]
+        );
+    }
+    /// BUF-D4: el **Host** se valida en toda la API REST, GET/HEAD incluidos.
+    ///
+    /// Antes el guard solo miraba MCP/SSE y `/api/v1/*` mutante, así que un DNS rebinding
+    /// sobre un GET de lectura no se comprobaba. El Origin se queda como estaba (CSRF):
+    /// un GET no cambia estado y exigirlo rompería a los clientes que sólo leen.
+    #[test]
+    fn bufd4_el_host_se_valida_en_toda_la_api_rest_y_el_origin_solo_en_lo_mutante() {
+        use axum::http::Method;
+
+        // Lectura: Host sí, Origin no.
+        assert!(needs_host_guard("/api/v1/memory/nodes"));
+        assert!(!needs_origin_guard("/api/v1/memory/nodes", &Method::GET));
+        assert!(!needs_origin_guard("/api/v1/memory/nodes", &Method::HEAD));
+
+        // Escritura: las dos, como antes de BUF-D4.
+        assert!(needs_host_guard("/api/v1/memory/nodes"));
+        assert!(needs_origin_guard("/api/v1/memory/nodes", &Method::POST));
+        assert!(needs_origin_guard("/api/v1/memory/nodes", &Method::DELETE));
+
+        // MCP/SSE: las dos, sin cambios.
+        assert!(needs_origin_guard("/messages", &Method::GET));
+        assert!(needs_host_guard("/messages"));
+        assert!(needs_origin_guard("/sse", &Method::GET));
+        assert!(needs_host_guard("/sse/download"));
+
+        // Fuera de la API: nada (health y el dashboard no se tocan).
+        assert!(!needs_host_guard("/health"));
+        assert!(!needs_origin_guard("/health", &Method::GET));
+        assert!(!needs_host_guard("/"));
+    }
+
+    /// BUF-D4: la cadena completa corta el rebinding en un GET de lectura.
+    ///
+    /// `needs_host_guard` manda mirar el Host y `host_is_allowed` rechaza el ajeno: junto
+    /// con el binding a loopback, eso es el 403 `forbidden_host` de un GET.
+    #[test]
+    fn bufd4_un_get_con_host_ajeno_se_corta() {
+        let ninguno: Vec<String> = Vec::new();
+        let path = "/api/v1/memory/quarantine";
+
+        assert!(needs_host_guard(path), "un GET de la API tiene que mirar el Host");
+        assert!(
+            host_is_allowed("127.0.0.1:47004", "127.0.0.1", &ninguno),
+            "el cliente local sigue entrando por loopback"
+        );
+        assert!(
+            host_is_allowed("localhost:47004", "127.0.0.1", &ninguno),
+            "y por localhost, que es loopback"
+        );
+        assert!(
+            !host_is_allowed("evil.example:47004", "127.0.0.1", &ninguno),
+            "un Host ajeno (rebinding) se rechaza aunque sea un GET"
+        );
+        assert!(
+            !host_is_allowed("127.0.0.1.evil.example", "127.0.0.1", &ninguno),
+            "y el truco de prefijo tampoco cuela"
         );
     }
 }
