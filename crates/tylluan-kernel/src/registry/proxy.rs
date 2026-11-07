@@ -1249,6 +1249,24 @@ impl SseMcpProxy {
     }
 }
 
+#[cfg(test)]
+impl HttpMcpProxy {
+    /// T-DSH-181 test support: an UNCONNECTED proxy good only for identity
+    /// tests. Never dials the endpoint: `ProxyKind::shutdown` for Http is a
+    /// no-op and the guarded-kill path never issues a request. Compiled only
+    /// under `cfg(test)` — zero effect on production code.
+    pub(crate) fn for_test(guild_name: &str) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            endpoint: "http://127.0.0.1:9/messages".to_string(),
+            guild_name: guild_name.to_string(),
+            session_id: None,
+            tool_call_timeout: std::time::Duration::from_millis(10),
+            request_id: AtomicU32::new(1),
+        }
+    }
+}
+
 // ─── UNIFIED PROXY ────────────────────────────────────────────────────────────
 
 /// Wraps either a stdio, HTTP Streamable, or Classic SSE MCP connection.

@@ -138,6 +138,13 @@ impl RegistryActor {
                         let timeouts_secs = [30, 60, 120, 180];
                         let mut attempt = 0;
                         let mut final_result = None;
+                        // T-DSH-181: the proxy THIS task's last attempt used.
+                        // Retries may only kill the generation that failed to
+                        // them — never whatever happens to be in the slot,
+                        // which a concurrent respawner (supervisor, or the
+                        // sibling task of the next dashboard poll) may have
+                        // just made live.
+                        let mut last_attempt_proxy: Option<Arc<crate::registry::proxy::ProxyKind>> = None;
 
                         while attempt < timeouts_secs.len() {
                             let timeout_secs = timeouts_secs[attempt];
@@ -154,16 +161,32 @@ impl RegistryActor {
                                     // Fresh spawn for this retry — but only when no
                                     // other caller is mid-call: kill() yanks the
                                     // proxy out from under concurrent callers (T981).
-                                    match reg.kill_guild_if_idle(&guild_name).await {
-                                        GuardedKill::Killed => tracing::warn!(
-                                            "🛑 [Retry] Killing guild '{}' for fresh spawn",
-                                            guild_name
-                                        ),
-                                        GuardedKill::InFlight => tracing::warn!(
-                                            "⚠️ [Retry] Guild '{}' has callers in flight — kill skipped, retrying same process",
-                                            guild_name
-                                        ),
-                                        GuardedKill::Missing => {}
+                                    // T-DSH-181: additionally, only kill the proxy
+                                    // THIS task's previous attempt used. If the slot
+                                    // holds another generation, a concurrent respawner
+                                    // (supervisor, sibling task of the next poll)
+                                    // already replaced it — killing that fresh proxy
+                                    // and spawning a third is what sustained the
+                                    // kill→respawn storm (measured live 2026-11-05:
+                                    // the retry task of one dashboard poll killed the
+                                    // supervisor's just-restored proxy 60 microseconds
+                                    // after "Successfully restored").
+                                    if let Some(prev) = &last_attempt_proxy {
+                                        match reg.kill_guild_if_idle_matching(&guild_name, prev).await {
+                                            GuardedKill::Killed => tracing::warn!(
+                                                "🛑 [Retry] Killing guild '{}' for fresh spawn (my attempt's proxy)",
+                                                guild_name
+                                            ),
+                                            GuardedKill::InFlight => tracing::warn!(
+                                                "⚠️ [Retry] Guild '{}' has callers in flight — kill skipped, retrying same process",
+                                                guild_name
+                                            ),
+                                            GuardedKill::Stale => tracing::warn!(
+                                                "♻️ [Retry] Guild '{}' proxy already replaced by another task — NOT killing the fresh spawn (T-DSH-181)",
+                                                guild_name
+                                            ),
+                                            GuardedKill::Missing => {}
+                                        }
                                     }
                                 }
                                 let needs_start = reg.guilds.get(&guild_name).map(|g| !g.is_running()).unwrap_or(false);
@@ -196,6 +219,11 @@ impl RegistryActor {
                                     continue;
                                 }
                             };
+                            // T-DSH-181: remember WHICH proxy this attempt
+                            // rode — the retry kill and the transport-failure
+                            // cleanup below may kill exactly this generation,
+                            // never whatever happens to sit in the slot.
+                            last_attempt_proxy = Some(Arc::clone(&proxy));
 
                             if tool_timeout.is_none() {
                                 tracing::info!(
@@ -310,11 +338,21 @@ impl RegistryActor {
                                     );
                                     {
                                         let mut reg = registry.write().await;
-                                        if let GuardedKill::InFlight = reg.kill_guild_after_transport_failure(&guild_name).await {
-                                            tracing::warn!(
-                                                "⚠️ [Actor] Guild '{}' has a call in flight — kill skipped this attempt",
+                                        match reg
+                                            .kill_guild_after_transport_failure_matching(&guild_name, &proxy)
+                                            .await
+                                        {
+                                            GuardedKill::Killed | GuardedKill::Missing => {}
+                                            GuardedKill::InFlight => {
+                                                tracing::warn!(
+                                                    "⚠️ [Actor] Guild '{}' has a call in flight — kill skipped this attempt",
+                                                    guild_name
+                                                );
+                                            }
+                                            GuardedKill::Stale => tracing::warn!(
+                                                "↩️ [Actor] Guild '{}' proxy ya reemplazado por otra tarea — NO se mata; el siguiente intento reusa el proxy fresco",
                                                 guild_name
-                                            );
+                                            ),
                                         }
                                     }
                                     attempt += 1;

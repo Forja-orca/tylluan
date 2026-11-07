@@ -1315,6 +1315,21 @@ pub enum GuardedKill {
     Killed,
     InFlight,
     Missing,
+    /// T-DSH-181: the slot no longer holds the caller's proxy — another task
+    /// already replaced it. The caller's failure belongs to a dead
+    /// generation; killing the slot would murder a proxy that never served
+    /// that caller (measured live 2026-11-05: a retry task killed a guild
+    /// 60 microseconds after a concurrent supervisor restored it).
+    Stale,
+}
+
+/// T-DSH-181: pure identity test for the guarded kill — does the registry
+/// slot still hold THIS exact proxy generation? `Arc::ptr_eq`, never value
+/// equality: two proxies of the same guild are different generations and
+/// only the one that failed may be killed. Kept generic and free of async
+/// so the race fix is testable without spawning any process.
+fn proxy_slot_matches<T>(slot: &Option<Arc<T>>, expected: &Arc<T>) -> bool {
+    slot.as_ref().is_some_and(|p| Arc::ptr_eq(p, expected))
 }
 
 impl GuildRegistry {
@@ -1377,6 +1392,68 @@ impl GuildRegistry {
                 };
                 if let Err(e) = guild.kill().await {
                     tracing::warn!("⚠️ kill_guild_if_idle('{name}') failed: {e}");
+                }
+                GuardedKill::Killed
+            }
+            Err(_) => GuardedKill::InFlight,
+        }
+    }
+
+    /// T-DSH-181: generation-aware variant of `kill_guild_if_idle`. Callers
+    /// that kill BECAUSE THEIR OWN call failed (transport failure, timeout
+    /// respawn in the actor retry loop) must pass the exact proxy their call
+    /// used. If the slot holds a different proxy, another task already
+    /// cleaned up and respawned — returning `Stale` prevents the retry loop
+    /// from killing that fresh proxy and spawning a third, which is how the
+    /// kill→respawn storm sustained itself (an always-on guild re-spawned
+    /// every ~5 s by two independent respawners blind to each other).
+    /// **Unión D-110 × T-DSH-181** (lo que el hunk rechazado pedía): el kill por fallo
+    /// de transporte **con identidad de generación** de dsh **y contando la muerte**
+    /// para el backoff T13 de D-110.
+    ///
+    /// - Identidad (T-DSH-181): si el slot ya no es el proxy que falló, otra tarea
+    ///   limpió y reinstaló → `Stale`, y **no se mata un árbol sano**.
+    /// - Contabilidad (D-110): cuando sí mata, `crash_count = prev + 1`. `prev` se lee
+    ///   **antes** del kill porque `kill()` lo resetea a 0.
+    pub async fn kill_guild_after_transport_failure_matching(
+        &mut self,
+        name: &str,
+        expected: &Arc<ProxyKind>,
+    ) -> GuardedKill {
+        let prev = self.guilds.get(name).map(|g| g.crash_count).unwrap_or(0);
+        let killed = self.kill_guild_if_idle_matching(name, expected).await;
+        if matches!(killed, GuardedKill::Killed)
+            && let Some(guild) = self.guilds.get_mut(name)
+        {
+            guild.crash_count = prev.saturating_add(1);
+            guild.last_crash_at = Some(Instant::now());
+        }
+        killed
+    }
+
+    pub async fn kill_guild_if_idle_matching(
+        &mut self,
+        name: &str,
+        expected: &Arc<ProxyKind>,
+    ) -> GuardedKill {
+        let Some(semaphore) = self.guilds.get(name).map(|g| g.get_semaphore()) else {
+            return GuardedKill::Missing;
+        };
+        match semaphore.try_acquire_many(self.max_concurrent as u32) {
+            Ok(_all_permits) => {
+                let Some(guild) = self.guilds.get_mut(name) else {
+                    return GuardedKill::Missing;
+                };
+                // Nothing connected: there is no live proxy to murder; the
+                // caller's failure already cleared the slot.
+                if guild.proxy.is_none() {
+                    return GuardedKill::Missing;
+                }
+                if !proxy_slot_matches(&guild.proxy, expected) {
+                    return GuardedKill::Stale;
+                }
+                if let Err(e) = guild.kill().await {
+                    tracing::warn!("⚠️ kill_guild_if_idle_matching('{name}') failed: {e}");
                 }
                 GuardedKill::Killed
             }
@@ -2739,6 +2816,74 @@ mod tests {
         assert_eq!(registry.kill_guild_if_idle("test").await, GuardedKill::InFlight);
         drop(in_flight);
         assert_eq!(registry.kill_guild_if_idle("test").await, GuardedKill::Killed);
+    }
+
+    #[test]
+    fn t_dsh_181_proxy_slot_matches_is_generation_aware() {
+        // T-DSH-181: the identity test behind `kill_guild_if_idle_matching`
+        // is pointer-based, never value-based. Two proxies "carrying the
+        // same" content are different generations; only the exact proxy that
+        // failed may be killed. Mutation guard: if `Arc::ptr_eq` were
+        // swapped for value equality, the same-value/different-Arc assertion
+        // below flips to true and this test goes red.
+        let gen_a: Arc<String> = Arc::new("proxy-a".to_string());
+        let gen_a_again = Arc::clone(&gen_a);
+        let gen_b: Arc<String> = Arc::new("proxy-a".to_string());
+        assert!(proxy_slot_matches(&Some(gen_a_again), &gen_a));
+        assert!(!proxy_slot_matches(&Some(Arc::clone(&gen_b)), &gen_a));
+        assert!(!proxy_slot_matches::<String>(&None, &gen_a));
+    }
+
+    #[tokio::test]
+    async fn t_dsh_181_guarded_kill_requires_exact_proxy_generation() {
+        // TL T2952: the behaviour hole left by the union — nothing went red if
+        // the identity check was deleted from the BODY of
+        // `kill_guild_if_idle_matching` (right before `guild.kill()`). This
+        // test pins exactly that: a caller holding a DEAD generation must get
+        // `Stale` and leave the live proxy untouched; the caller holding the
+        // exact live generation must get `Killed` and clear the slot.
+        // Mutation guard: delete `return GuardedKill::Stale;` (or flip
+        // `proxy_slot_matches` to value equality) and the first assertion
+        // below goes red — the stale caller would murder the healthy proxy.
+        let mut registry = GuildRegistry::new(
+            PathBuf::from("."),
+            300,
+            TimeoutsConfig::default(),
+            3,
+        );
+        let launcher = GuildLauncher::Http {
+            url: "http://127.0.0.1:9".to_string(),
+            headers: HashMap::new(),
+            timeout_ms: Some(1000),
+        };
+        let mut guild = GuildProcess::new("gen-test", launcher, false, None, 3);
+        let live_generation = Arc::new(ProxyKind::Http(HttpMcpProxy::for_test("gen-test")));
+        guild.proxy = Some(Arc::clone(&live_generation));
+        registry.guilds.insert("gen-test".to_string(), guild);
+
+        // A DIFFERENT proxy object — the generation a retry task used before a
+        // concurrent restore replaced it (the measured 2026-11-05 storm engine).
+        let dead_generation = Arc::new(ProxyKind::Http(HttpMcpProxy::for_test("gen-test")));
+        assert_eq!(
+            registry.kill_guild_if_idle_matching("gen-test", &dead_generation).await,
+            GuardedKill::Stale,
+            "a kill from a non-current generation must be refused as Stale"
+        );
+        assert!(
+            registry.guilds["gen-test"].proxy.is_some(),
+            "the live proxy must survive a refused stale kill — that is the whole point of T-DSH-181"
+        );
+
+        // The EXACT generation that failed: the guarded kill proceeds normally.
+        assert_eq!(
+            registry.kill_guild_if_idle_matching("gen-test", &live_generation).await,
+            GuardedKill::Killed,
+            "the generation that actually failed may be killed"
+        );
+        assert!(
+            registry.guilds["gen-test"].proxy.is_none(),
+            "a Killed result must have cleared the slot"
+        );
     }
 
     #[test]
