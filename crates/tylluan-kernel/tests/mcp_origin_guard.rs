@@ -92,11 +92,25 @@ async fn rejects_hostile_origin_and_host_in_dev_mode() {
         call(&app, "POST", "/messages", Some("null"), Some("127.0.0.1:47004"), None, Some(RPC_LIST)).await,
         StatusCode::FORBIDDEN
     );
-    // Non-MCP API/federation paths are NOT guarded (scope check).
+    // BUF-D4: la validacion de HOST cubre toda la API REST, tambien los GET de lectura
+    // (un DNS rebinding no necesita escribir para leer la memoria del operador).
     assert_eq!(
-        call(&app, "GET", "/api/v1/coloquio/channels", Some("http://evil.example"), Some("evil.example"), None, None).await,
+        call(&app, "GET", "/api/v1/coloquio/channels", None, Some("evil.example"), None, None).await,
+        StatusCode::FORBIDDEN,
+        "BUF-D4: a hostile Host must be rejected on a read-only /api/v1 GET"
+    );
+    // ...pero el ORIGEN no se exige a una lectura: un GET no cambia estado y exigirlo
+    // romperia a los clientes que solo leen (scope check del Origin).
+    assert_eq!(
+        call(&app, "GET", "/api/v1/coloquio/channels", Some("http://evil.example"), Some("127.0.0.1:47004"), None, None).await,
         StatusCode::OK,
-        "the guard must not cover the rest of the API"
+        "the Origin guard must not cover read-only GETs of the REST API"
+    );
+    // Y un cliente local normal sigue entrando.
+    assert_eq!(
+        call(&app, "GET", "/api/v1/coloquio/channels", None, Some("127.0.0.1:47004"), None, None).await,
+        StatusCode::OK,
+        "a loopback client keeps reading the REST API"
     );
 }
 
