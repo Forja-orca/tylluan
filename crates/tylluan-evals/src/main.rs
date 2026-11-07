@@ -38,11 +38,12 @@ enum CliMode {
     GenerateOracle { db_path: String, output: String },
 }
 
-fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
+fn parse_args() -> (CliMode, Option<String>, Option<usize>, Option<String>) {
     let args: Vec<String> = std::env::args().collect();
     let mut suite = "synthetic".to_string();
     let mut limit: usize = 50;
     let mut db_path = "data/silva.db".to_string();
+    let mut embed_model_cli: Option<String> = None;
     let mut use_reranker = false;
     let mut generate_oracle = false;
     let mut oracle_output = "data/idle_lab_oracle.json".to_string();
@@ -72,6 +73,12 @@ fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
             "--threads" | "-t" => {
                 if i + 1 < args.len() {
                     threads = args[i + 1].parse().ok();
+                    i += 1;
+                }
+            }
+            "--model" | "-m" => {
+                if i + 1 < args.len() {
+                    embed_model_cli = Some(args[i + 1].clone());
                     i += 1;
                 }
             }
@@ -134,7 +141,7 @@ fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
     }
 
     if generate_oracle {
-        return (CliMode::GenerateOracle { db_path, output: oracle_output }, save_path, threads);
+        return (CliMode::GenerateOracle { db_path, output: oracle_output }, save_path, threads, embed_model_cli);
     }
 
     let suite = match suite.as_str() {
@@ -156,7 +163,7 @@ fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
         }
         _ => Suite::Synthetic,
     };
-    (CliMode::Suite(suite), save_path, threads)
+    (CliMode::Suite(suite), save_path, threads, embed_model_cli)
 }
 
 /// Corre la evaluación pareada y opcionalmente guarda el informe JSON.
@@ -207,7 +214,7 @@ async fn main() {
     println!("  ╚═══════════════════════════════════════════╝");
     println!();
 
-    let (mode, save_path, threads) = parse_args();
+    let (mode, save_path, threads, embed_model_cli) = parse_args();
 
     if let CliMode::GenerateOracle { db_path, output } = &mode {
         println!("  Mode: GENERATE IDLELAB ORACLE");
@@ -228,8 +235,11 @@ async fn main() {
         println!("  ONNX thread pool capped to {applied} intra-threads (inter=1)");
     }
 
-    println!("  Loading embedding engine (fastembed BGE-M3)...");
-    let engine = match tylluan_kernel::router::embeddings::EmbeddingEngine::load("models/bge-m3") {
+    let embed_model = embed_model_cli
+        .or_else(|| std::env::var("TYLLUAN_EVAL_EMBED_MODEL").ok())
+        .unwrap_or_else(|| "models/bge-m3".to_string());
+    println!("  Loading embedding engine (fastembed, model key: {})...", embed_model);
+    let engine = match tylluan_kernel::router::embeddings::EmbeddingEngine::load(&embed_model) {
         Ok(e) => {
             println!("  Engine loaded (ONNX hybrid search active)");
             Some(e)
