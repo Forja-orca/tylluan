@@ -653,8 +653,14 @@ pub async fn handle_tylluan_remember(
     // anterior de la MISMA clave (se conserva: `valid_until`, no se borra). Solo se
     // hace si el nodo nuevo se llego a escribir: si la escritura fallo, el estado
     // anterior sigue vivo y no se pierde nada.
+    // MEM-2: lo cierto de la escritura lo dice el grafo, no el flujo. Las tres
+    // rutas de escritura (task, record_memory y anonima) solo registran sus
+    // errores (error!/warn!) y siguen; una sola lectura de comprobacion cubre
+    // las tres y responde al llamante con verdad. Es LA MISMA lectura que
+    // MEM-3 v4 usaba para gatear la caducidad: un unico get_node para ambas.
+    let stored = server.silva.get_node(&node_id).await.ok().flatten().is_some();
     if let Some(clave) = clave_estado.as_deref()
-        && server.silva.get_node(&node_id).await.ok().flatten().is_some()
+        && stored
         && let Ok(Some(previo)) = server
             .silva
             .expire_live_state_by_key_excluding(clave, chrono::Utc::now().timestamp(), &node_id)
@@ -667,17 +673,43 @@ pub async fn handle_tylluan_remember(
         estado_anterior = Some(previo);
     }
 
+    if !stored {
+        // MEM-2: la respuesta jamas debe prometer lo que el grafo no tiene.
+        // Hasta aqui, con la escritura fallando (solo aviso en el log) el
+        // CallToolResult decia igualmente `Stored node <id>` con un id que no
+        // existe. Ahora: error honesto, is_error=true, y se omite enlazar,
+        // juzgar (ASI06 Layer 2) y registrar acceso sobre un nodo fantasma.
+        // El id del texto es el propuesto — demostrablemente ausente, nunca
+        // presentado como guardado.
+        tracing::warn!("MEM-2: tylluan_remember responde is_error — el nodo {node_id} no existe tras la escritura");
+        return Ok(CallToolResult {
+            content: vec![Content::text(format!(
+                "NOT stored: writing node {node_id} failed — the node does not exist in the graph (see kernel log 'silva graph write failed'). Nothing was saved and no previous state was superseded."
+            ))],
+            is_error: Some(true),
+        });
+    }
+
     // T-DSH-154 (strict): si el DCR no fusionó por política pero había un
     // parecido >= 0.87, el nodo nuevo queda enlazado al existente para no
     // perder la relación semántica (el texto entrante se conserva íntegro).
-    if let Some(target) = dcr_link_to
-        && let Err(e) = server
+    // MEM-2: se recuerda si el enlace SE REALIZO de verdad, para que la
+    // respuesta solo lo mencione cuando la arista existe (no repetir el patrón
+    // que este parche corrige en el alta).
+    let enlace_realizado: Option<String> = match dcr_link_to.as_deref() {
+        Some(target) => match server
             .silva
-            .add_edge(&node_id, &target, "near_duplicate", 0.9, "{}")
+            .add_edge(&node_id, target, "near_duplicate", 0.9, "{}")
             .await
-    {
-        tracing::warn!("DCR strict: no se pudo enlazar {node_id} -> {target}: {e}");
-    }
+        {
+            Ok(()) => Some(target.to_string()),
+            Err(e) => {
+                tracing::warn!("DCR strict: no se pudo enlazar {node_id} -> {target}: {e}");
+                None
+            }
+        },
+        None => None,
+    };
     // ASI06 Layer 2: fire-and-forget LLM judge, runs after the node already
     // exists. Does not block this response and never fails the write -- Layer 1
     // (above, before any write) already rejected known injection patterns hard;
@@ -795,6 +827,16 @@ pub async fn handle_tylluan_remember(
         let now = chrono::Utc::now().timestamp();
         let _ = server.silva.record_agent_access(&node_id, now).await;
     }
+    // MEM-2: la respuesta dice la ACCION real que tomo este remember. Solo
+    // llega aqui lo que no respondio el propio bloque DCR: fusyon (append) y
+    // bloqueo tienen su propia respuesta dentro del bloque (T3068: no tocar).
+    // Aqui: supersede si caduco una clave de estado, si no nuevo; y el enlace
+    // near_duplicate solo cuando la arista se escribio de verdad.
+    let accion = if estado_anterior.is_some() { "supersede" } else { "nuevo" };
+    let enlace = match &enlace_realizado {
+        Some(t) => format!(" [near-duplicate edge -> {t}]"),
+        None => String::new(),
+    };
     let supersesion = match estado_anterior {
         Some(previo) => format!(
             " [state key: previous version {previo} expired (kept, not deleted)]"
@@ -802,7 +844,7 @@ pub async fn handle_tylluan_remember(
         None => String::new(),
     };
     Ok(CallToolResult {
-        content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\"{supersesion}"))],
+        content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}, action={accion}): \"{preview}\"{supersesion}{enlace}"))],
         is_error: Some(false),
     })
 }
@@ -1320,6 +1362,207 @@ mod embedding_failure_tests {
         assert!(
             !dcr_candidate_alive(&db, "nunca-existio").await,
             "un id que no existe tampoco"
+        );
+    }
+
+    /// MEM-2 (T3068): la respuesta de tylluan_remember da el id REAL del nodo
+    /// (existe en el grafo) y la ACCION que tomo: nodo nuevo.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem2_e2e_respuesta_da_id_real_y_accion_nuevo() {
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use crate::memory::mailbox::Mailbox;
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let (tx, _) = broadcast::channel(16);
+        let silva = Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap());
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(
+                crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap(),
+            )),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(GuildMatcher::new(builtin_catalog())),
+            silva.clone(),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            AgentNodeRouter::new(tx),
+        );
+
+        let mut args = serde_json::Map::new();
+        args.insert(
+            "content".to_string(),
+            serde_json::Value::String("aprendizaje plano para MEM-2".to_string()),
+        );
+        let r = handle_tylluan_remember(&server, Some(args))
+            .await
+            .expect("remember con escritura correcta");
+        assert!(!r.is_error.unwrap_or(false), "con escritura correcta no es error");
+        let t = r.content[0].as_text().unwrap().text.clone();
+        let id = t
+            .split("Stored node ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .expect("id tras el prefijo Stored node")
+            .to_string();
+        assert!(t.contains("action=nuevo"), "la respuesta debe decir la accion nuevo: {t}");
+        assert!(
+            silva.get_node(&id).await.unwrap().is_some(),
+            "EL ID PROMETIDO EN LA RESPUESTA TIENE QUE EXISTIR DE VERDAD EN EL GRAFO: {id} ({t})"
+        );
+    }
+
+    /// MEM-2: si la escritura FALLA, la respuesta es un error que dice que no
+    /// se guardo nada: jamas un `Stored node <id>` con un id inexistente.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem2_e2e_escritura_fallada_no_promete_nodo_fantasma() {
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use crate::memory::mailbox::Mailbox;
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let (tx, _) = broadcast::channel(16);
+        let silva = Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap());
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(
+                crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap(),
+            )),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(GuildMatcher::new(builtin_catalog())),
+            silva.clone(),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            AgentNodeRouter::new(tx),
+        );
+
+        // Inyeccion del fallo, igual que MEM-3 v4: la conexion pasa a solo lectura.
+        {
+            let conn = silva.conn.lock().await;
+            conn.execute_batch("PRAGMA query_only=ON;").unwrap();
+        }
+
+        let mut args = serde_json::Map::new();
+        args.insert(
+            "content".to_string(),
+            serde_json::Value::String("texto que no debe prometerse como guardado".to_string()),
+        );
+        let r = handle_tylluan_remember(&server, Some(args))
+            .await
+            .expect("el handler no debe reventar con la escritura fallando");
+        assert!(
+            r.is_error.unwrap_or(false),
+            "con la escritura fallando la respuesta tiene que ser is_error=true"
+        );
+        let t = r.content[0].as_text().unwrap().text.clone();
+        assert!(t.contains("NOT stored"), "la respuesta debe decir NOT stored: {t}");
+        assert!(
+            !t.contains("Stored node "),
+            "la respuesta de fallo NO lleva el prefijo de exito (los parsers de tests y del gate de claims parten por ahi): {t}"
+        );
+        let propuesto = t
+            .split("writing node ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .expect("el texto de fallo nombra el id propuesto")
+            .to_string();
+
+        // Se deja la conexion como estaba, para no contaminar el resto de tests.
+        {
+            let conn = silva.conn.lock().await;
+            conn.execute_batch("PRAGMA query_only=OFF;").unwrap();
+        }
+        assert!(
+            silva.get_node(&propuesto).await.unwrap().is_none(),
+            "el id nombrado en la respuesta de fallo no existe en el grafo: {propuesto}"
+        );
+    }
+
+    /// MEM-2: cuando una nota de estado sustituye a la anterior, la respuesta
+    /// lo dice como accion supersede (y sigue nombrando la version anterior).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem2_e2e_sustitucion_de_estado_dice_supersede() {
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use crate::memory::mailbox::Mailbox;
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let (tx, _) = broadcast::channel(16);
+        let silva = Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap());
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(
+                crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap(),
+            )),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(GuildMatcher::new(builtin_catalog())),
+            silva.clone(),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            AgentNodeRouter::new(tx),
+        );
+
+        let mut args = serde_json::Map::new();
+        args.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado MEM-2: version A".to_string()),
+        );
+        args.insert(
+            "metadata".to_string(),
+            serde_json::json!({"kind": "state", "space": "mem2-space"}),
+        );
+        let r1 = handle_tylluan_remember(&server, Some(args.clone()))
+            .await
+            .expect("primera nota de estado");
+        let t1 = r1.content[0].as_text().unwrap().text.clone();
+        assert!(t1.contains("action=nuevo"), "la primera nota es el nodo nuevo: {t1}");
+
+        // Que no caigan en el mismo milisegundo (el id anonimo es memory:<millis>).
+        tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+
+        let mut args2 = args.clone();
+        args2.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado MEM-2: version B".to_string()),
+        );
+        let r2 = handle_tylluan_remember(&server, Some(args2))
+            .await
+            .expect("segunda nota de estado");
+        let t2 = r2.content[0].as_text().unwrap().text.clone();
+        assert!(t2.contains("action=supersede"), "la segunda nota sustituye a la anterior: {t2}");
+        assert!(
+            t2.contains("previous version"),
+            "y sigue nombrando a la version anterior: {t2}"
         );
     }
 
