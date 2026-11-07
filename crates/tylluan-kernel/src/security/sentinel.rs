@@ -208,21 +208,67 @@ fn avisar_cpu_skip(punto: &str, cpu_pct: Option<f32>, max_cpu_pct: u8) {
     }
 }
 
+/// D-139: muestreador de CPU con el `System` **persistente**.
+///
+/// `sysinfo` calcula el uso por **diferencia entre dos muestras**: en Windows mide
+/// `\Processor(_Total)\% Idle Time` con un contador PDH y hace `uso = 100 - idle`, y
+/// la **primera** collect devuelve 0 porque no hay muestra previa — o sea
+/// `100 - 0 = 100,00 %`. El docstring de `global_cpu_usage()` lo pide: "wait a bit
+/// because CPU usage is based on diff … refresh again to get actual value".
+///
+/// Esta función creaba un `System` nuevo en cada llamada (y con la caché de 2 s,
+/// prácticamente siempre), así que devolvía **siempre 100,00 %**: medido con una
+/// sonda aparte, un refresco da `100,00 %` y dos muestras a 200 ms dan `36,84 %`.
+/// Con `max_cpu_pct = 85`, `should_skip_for_cpu(100.0, 85)` saltaba el juez en
+/// **todas** las llamadas; `/health` lo enseñaba como `cpu_skips=151`,
+/// `verdicts.unavailable=151`, `loaded=false`: el juez nunca dictaminó nada.
+///
+/// Mismo patrón que `metrics_ring.rs` (un `System` vivo entre muestras). Sin
+/// muestra previa devuelve `None` —"no lo sé"— porque `should_skip_for_cpu(None, _)`
+/// **no** salta: mejor no saltar por CPU que saltar con un número que no es una
+/// medida.
+struct CpuSampler {
+    sys: Option<sysinfo::System>,
+    last: Option<(Instant, Option<f32>)>,
+}
+
+impl CpuSampler {
+    /// TTL de la caché: lo que tarda en ser caro volver a preguntar a PDH.
+    const TTL: Duration = Duration::from_secs(2);
+
+    fn sample(&mut self, now: Instant) -> Option<f32> {
+        if let Some((ts, pct)) = self.last
+            && now.duration_since(ts) < Self::TTL
+        {
+            return pct;
+        }
+        let mut sys = match self.sys.take() {
+            Some(sys) => sys,
+            None => {
+                // Cebado: la primera muestra solo fija el punto de partida de PDH.
+                let mut fresh = sysinfo::System::new();
+                fresh.refresh_cpu_usage();
+                self.sys = Some(fresh);
+                self.last = Some((now, None));
+                return None;
+            }
+        };
+        sys.refresh_cpu_usage();
+        let pct = sys.global_cpu_usage();
+        self.sys = Some(sys);
+        self.last = Some((now, Some(pct)));
+        Some(pct)
+    }
+}
+
 fn system_cpu_pct_cached() -> Option<f32> {
     use std::sync::Mutex;
-    use std::time::Instant;
-    static CACHE: Mutex<Option<(Instant, f32)>> = Mutex::new(None);
-    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((ts, pct)) = *guard
-        && ts.elapsed() < Duration::from_secs(2)
-    {
-        return Some(pct);
-    }
-    let mut sys = sysinfo::System::new();
-    sys.refresh_cpu_usage();
-    let pct = sys.global_cpu_usage();
-    *guard = Some((Instant::now(), pct));
-    Some(pct)
+    static SAMPLER: Mutex<CpuSampler> = Mutex::new(CpuSampler {
+        sys: None,
+        last: None,
+    });
+    let mut guard = SAMPLER.lock().unwrap_or_else(|e| e.into_inner());
+    guard.sample(Instant::now())
 }
 
 /// ¿Toca descargar el servidor? Falso si hay peticiones en vuelo (T-DSH-113:
@@ -1070,14 +1116,36 @@ mod tests {
         // max_cpu_pct = 0 => cualquier CPU > 0 hace saltar el juez; con el
         // servidor falso respondiendo Unsafe, el resultado debe ser Unavailable
         // y el contador cpu_skips debe subir (no se llama al modelo).
+        //
+        // D-139: esta prueba se apoyaba en el artefacto que se ha corregido — el
+        // muestreo devolvía 100,00 % siempre, así que la guarda entraba sin falta.
+        // Ahora se mide UNA vez y se usa **ese mismo** valor de guarda: el
+        // muestreador lo cachea 2 s, así que `judge()` ve exactamente este número
+        // (antes se llamaba dos veces y podía decidir con otro distinto).
+        if system_cpu_pct_cached().is_none() {
+            // Primer muestreo del proceso: solo ceba PDH, hay que esperar al TTL.
+            tokio::time::sleep(Duration::from_millis(2_100)).await;
+        }
+        let cpu = system_cpu_pct_cached();
+
         let base = fake_server("Safety: Unsafe", 0).await;
         let mut judge = SentinelJudge::for_test(&base, 5_000);
         judge.cfg.max_cpu_pct = 0;
         let v = judge.judge("ataque").await;
-        if system_cpu_pct_cached().map(|p| p > 0.0).unwrap_or(false) {
-            assert_eq!(v, SentinelVerdict::Unavailable);
-            assert_eq!(judge.stats().cpu_skips, 1);
-            assert_eq!(judge.stats().unsafe_verdicts, 0);
+
+        match cpu {
+            Some(p) if p > 0.0 => {
+                assert_eq!(v, SentinelVerdict::Unavailable, "con CPU {p}% y tope 0 debe saltar");
+                assert_eq!(judge.stats().cpu_skips, 1);
+                assert_eq!(judge.stats().unsafe_verdicts, 0);
+            }
+            // Máquina realmente a 0 %: no hay nada que saltar y el juez dictamina.
+            Some(p) => {
+                assert_eq!(p, 0.0);
+                assert_eq!(v, SentinelVerdict::Unsafe);
+                assert_eq!(judge.stats().cpu_skips, 0);
+            }
+            None => panic!("tras cebar el muestreador tiene que haber una medida"),
         }
     }
 }
@@ -1113,5 +1181,77 @@ mod tests_cpu_skip_aviso {
 
         let sin = formato_aviso_cpu_skip("judge", None, 85, 0);
         assert!(sin.contains("desconocida"), "{sin}");
+    }
+}
+
+#[cfg(test)]
+mod tests_d139 {
+    use super::*;
+
+    fn sampler_nuevo() -> CpuSampler {
+        CpuSampler { sys: None, last: None }
+    }
+
+    /// D-139: sin muestra previa **no hay medida**. Antes se devolvía la "lectura"
+    /// del primer refresco, que en Windows vale 100,00 % siempre (PDH no tiene
+    /// muestra previa) y hacía saltar el juez por "CPU alta" en el 100 % de las
+    /// llamadas: `/health` lo enseñaba como 151 de 151 saltos.
+    #[test]
+    fn d139_sin_muestra_previa_no_hay_medida() {
+        let now = Instant::now();
+        let mut sampler = sampler_nuevo();
+        assert_eq!(
+            sampler.sample(now),
+            None,
+            "el primer muestreo solo ceba el contador: no es una medida y no puede \
+             devolver un número con el que decidir"
+        );
+        assert!(
+            !should_skip_for_cpu(sampler.sample(now), 85),
+            "sin medida, `should_skip_for_cpu` no puede saltar el juez"
+        );
+    }
+
+    /// La segunda muestra (fuera del TTL) sí es una medida: plausible, en rango y
+    /// **distinta del artefacto** 100,00 %.
+    #[test]
+    fn d139_la_segunda_muestra_si_es_una_medida() {
+        let now = Instant::now();
+        let mut sampler = sampler_nuevo();
+        assert_eq!(sampler.sample(now), None);
+
+        // PDH necesita un intervalo real entre collects para poder dar una tasa.
+        std::thread::sleep(Duration::from_millis(300));
+
+        let pct = sampler
+            .sample(now + CpuSampler::TTL + Duration::from_millis(1))
+            .expect("la segunda muestra tiene que ser una medida");
+        assert!((0.0..=100.0).contains(&pct), "porcentaje imposible: {pct}");
+        assert!(
+            pct < 100.0,
+            "100,00 % es exactamente el artefacto de una sola muestra (PDH sin muestra \
+             previa). Si esta máquina está de verdad saturada el test es inocente, pero \
+             no debe pasar desapercibido: {pct}"
+        );
+    }
+
+    /// Dentro del TTL se reusa la medida en vez de volver a preguntar a PDH.
+    #[test]
+    fn d139_la_cache_reusa_la_medida_dentro_del_ttl() {
+        let now = Instant::now();
+        let mut sampler = sampler_nuevo();
+        assert_eq!(sampler.sample(now), None);
+        std::thread::sleep(Duration::from_millis(300));
+
+        let primera = sampler
+            .sample(now + CpuSampler::TTL + Duration::from_millis(1))
+            .expect("medida");
+        let segunda = sampler
+            .sample(now + CpuSampler::TTL + Duration::from_millis(500))
+            .expect("dentro del TTL sigue habiendo medida cacheada");
+        assert_eq!(
+            primera, segunda,
+            "dentro del TTL tiene que devolver lo cacheado, no volver a muestrear"
+        );
     }
 }
