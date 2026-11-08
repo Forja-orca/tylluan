@@ -225,9 +225,43 @@ impl ModelDownloader {
     }
 
     /// Download all missing models from the registry
+    ///
+    /// HF-CACHE-ACOPLADA (2026-11-08): con `[nexus] allow_hf_download = false` (default) esto NO
+    /// descarga nada y **dice que falta y donde**. Los modelos se resuelven de la carpeta
+    /// compartida (`models/`). El registro de URLs no se borra: queda inerte, y eliminarlo es
+    /// decision de Jose.
     pub async fn download_missing(&self, models_dir: &Path) -> Result<Vec<String>> {
+        let permite_descarga = crate::config::TylluanConfig::load_cached()
+            .map(|c| c.try_read().map(|g| g.nexus.allow_hf_download).unwrap_or(false))
+            .unwrap_or(false);
         let registry = get_model_registry();
         let mut downloaded = Vec::new();
+
+        if !permite_descarga {
+            let mut faltan = Vec::new();
+            for meta in &registry {
+                if !self.is_model_present(models_dir, meta) {
+                    faltan.push(format!(
+                        "{} ({})",
+                        meta.name,
+                        models_dir.join(&meta.path).display()
+                    ));
+                }
+            }
+            if faltan.is_empty() {
+                info!("ModelDownloader: registro completo en disco; nada que descargar (allow_hf_download=false)");
+            } else {
+                warn!(
+                    "ModelDownloader: allow_hf_download=false -> NO se descarga nada. Faltan {} \
+                     modelo(s) en {}: {}. Para resolverlo deja los ficheros en models/ o activa \
+                     [nexus] allow_hf_download = true a proposito.",
+                    faltan.len(),
+                    models_dir.display(),
+                    faltan.join(", ")
+                );
+            }
+            return Ok(downloaded);
+        }
 
         info!("🧬 ModelDownloader: Checking Sovereign Registry (v3.5 April 2026)...");
 
@@ -382,5 +416,46 @@ mod tests {
                 meta.path
             );
         }
+    }
+
+    /// HF-CACHE-ACOPLADA (2026-11-08): por defecto `allow_hf_download` es **false**, y con esa
+    /// configuracion `download_missing` **no descarga nada** aunque falten modelos: devuelve lista
+    /// vacia y deja el directorio como estaba. Es el comportamiento que pide Jose (nada de red).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn download_missing_does_not_download_by_default() {
+        let config = crate::config::TylluanConfig::default();
+        assert!(
+            !config.nexus.allow_hf_download,
+            "allow_hf_download debe nacer en false"
+        );
+
+        let tmp = std::env::temp_dir().join(format!(
+            "tylluan-hf-off-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("tmp dir");
+
+        let downloader = ModelDownloader::new();
+        let descargados = downloader
+            .download_missing(&tmp)
+            .await
+            .expect("download_missing no debe fallar con la descarga apagada");
+
+        assert!(
+            descargados.is_empty(),
+            "con allow_hf_download=false no puede descargar nada, devolvio {descargados:?}"
+        );
+        let ficheros: Vec<_> = std::fs::read_dir(&tmp)
+            .expect("leer tmp")
+            .filter_map(|e| e.ok())
+            .collect();
+        assert!(
+            ficheros.is_empty(),
+            "no debe escribir nada en disco: {:?}",
+            ficheros.iter().map(|e| e.file_name()).collect::<Vec<_>>()
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

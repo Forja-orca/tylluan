@@ -770,6 +770,15 @@ pub struct NexusConfig {
     /// no es loopback). En loopback el 403 es siempre, mire lo que mire esta clave.
     #[serde(default)]
     pub enforce_host_guard_nonloopback: bool,
+
+    /// HF-CACHE-ACOPLADA (2026-11-08, directriz de Jose): permite que Tylluan descargue de
+    /// Hugging Face. **Por defecto `false`**: los modelos se resuelven de la carpeta compartida
+    /// (`models/`), y si falta alguno el kernel lo dice con la ruta en vez de bajar nada.
+    ///
+    /// Inerte a proposito: no borra el descargador heredado (`maintenance.rs`) ni su lista de
+    /// URLs, solo lo deja apagado. Que se elimine es decision de Jose, no de este cambio.
+    #[serde(default)]
+    pub allow_hf_download: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -803,6 +812,7 @@ impl Default for NexusConfig {
             allowed_origins: Vec::new(),
             allowed_hosts: Vec::new(),
             enforce_host_guard_nonloopback: false,
+            allow_hf_download: false,
         }
     }
 }
@@ -2592,7 +2602,13 @@ fn default_dimensions() -> u32 {
 
 fn default_background_concurrency() -> usize { 2 }
 fn default_background_max_wait_secs() -> u64 { 60 }
-fn default_vision_model_path() -> String { "HuggingFaceTB/SmolVLM2-256M-Instruct".into() }
+/// Ruta LOCAL del modelo de vision por defecto (directriz de Jose, T3287/T3294): la vision
+/// carga SOLO bajo `models_dir`, nunca por id de Hugging Face ni desde `~/.cache/huggingface`.
+///
+/// Antes devolvia el id `"HuggingFaceTB/SmolVLM2-256M-Instruct"`, que no es una ruta y hacia
+/// que `vision.py` resolviera contra la cache de HF del usuario. La ruta es relativa a la raiz
+/// del repo (el kernel la usa tambien en `/api/v1/models` para pintar lo que hay en disco).
+fn default_vision_model_path() -> String { "models/smolvlm2-256m".into() }
 fn default_always_on() -> Vec<String> { vec!["bash".into(), "memory".into(), "filesystem".into()] }
 fn default_lazy_timeout() -> u64 { 300 }
 fn default_handshake_secs() -> u64 { 120 }     // 2 mins default

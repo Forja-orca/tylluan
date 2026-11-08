@@ -324,6 +324,19 @@ fn resolve_model_type(embedding_model: &str) -> String {
 // explicit env overrides, then the historical per-user locations.
 fn fastembed_cache_dirs() -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
+    // HF-CACHE-ACOPLADA (2026-11-08, directriz de Jose): PRIMER candidato la copia acoplada en la
+    // carpeta compartida de modelos. Asi el kernel no depende de `~/.cache` ni de `HF_HOME`, y con
+    // `HF_HOME` apuntando a una carpeta vacia sigue encontrando los ONNX.
+    // Orden: `TYLLUAN_MODELS_DIR`/`models` -> cwd -> env de fastembed -> historicos.
+    let models_dir = std::env::var("TYLLUAN_MODELS_DIR")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("models"));
+    let acoplado = models_dir.join("fastembed");
+    if acoplado.is_dir() {
+        out.push(acoplado);
+    }
     // fastembed default: cwd-relative ".fastembed_cache" (e.g. cargo test runs
     // with cwd = crate dir -> crates/<crate>/.fastembed_cache).
     if let Ok(cwd) = std::env::current_dir() {

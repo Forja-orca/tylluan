@@ -72,20 +72,41 @@ def _detect_available_provider() -> tuple[str, list]:
 
 # ── Model loading ─────────────────────────────────────────────────────────────
 
+def _models_dir() -> str:
+    """Carpeta de modelos compartida de Tylluan (directriz de Jose, 2026-11-08).
+
+    Orden: `TYLLUAN_MODELS_DIR` explicito > `<repo>/models` (calculado desde este fichero:
+    `guilds/core/vision.py` -> dos niveles arriba). Nunca la cache de Hugging Face.
+    """
+    env = os.environ.get("TYLLUAN_MODELS_DIR", "").strip()
+    if env:
+        return env
+    aqui = os.path.dirname(os.path.abspath(__file__))
+    return os.path.normpath(os.path.join(aqui, "..", "..", "models"))
+
+
 def _resolve_model_dir() -> str:
-    from huggingface_hub import snapshot_download
-    # Uses the default HF hub cache (~/.cache/huggingface/hub) -- same
-    # location every other model in this codebase resolves from (BGE-M3,
-    # Qwen3.5-2B, Gemma-4-E2B, SmolLM2...). A separate ~/.tylluan/models_cache
-    # was never populated, so this always fell through to the degraded
-    # fallback even though the model was already downloaded and sitting in
-    # the standard cache the whole time (found 2026-07-27).
-    return snapshot_download(
-        repo_id=_MODEL_ID,
-        local_files_only=True,
-        ignore_patterns=["*.bin", "*.pt", "*.safetensors",
-                         "*bnb4*", "*fp16*", "*int8*", "*q4*", "*quantized*", "*uint8*"],
-    )
+    """Carpeta LOCAL del modelo de vision. NUNCA se resuelve por id de HF.
+
+    Directriz de Jose (T3287/T3294): la vision de Tylluan carga SOLO bajo `models_dir`.
+    Antes esto hacia `snapshot_download(repo_id=..., local_files_only=True)`, que resuelve
+    contra `~/.cache/huggingface/hub` -- la cache de las otras herramientas de Jose, que no
+    debe tocar. Ahora:
+      1. `TYLLUAN_VISION_MODEL_DIR` si esta puesto (ruta exacta, para pruebas).
+      2. `<models_dir>/smolvlm2-256m` si existe.
+      3. Error veraz con la ruta que falta: el llamante lo convierte en
+         "vision no disponible: falta <ruta>".
+    """
+    explicito = os.environ.get("TYLLUAN_VISION_MODEL_DIR", "").strip()
+    if explicito:
+        if os.path.isdir(explicito):
+            return explicito
+        raise FileNotFoundError(f"vision no disponible: falta {explicito}")
+
+    local = os.path.join(_models_dir(), "smolvlm2-256m")
+    if os.path.isdir(local):
+        return local
+    raise FileNotFoundError(f"vision no disponible: falta {local}")
 
 
 def _load_preproc_config(model_path: str) -> dict:
