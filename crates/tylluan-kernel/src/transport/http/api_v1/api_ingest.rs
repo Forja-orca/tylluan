@@ -204,6 +204,98 @@ fn resolve_ingest_file_path_in(
     Ok(resolved)
 }
 
+/// Extensions that may be rendered inline. Everything else is forced to
+/// download. `svg`/`svgz`/`html`/`xml` are deliberately ABSENT: a document
+/// of those types opened top-level from this route runs its own script in
+/// the kernel's origin, which is the same origin the dashboard keeps its
+/// bearer token in (FILES-SVG-SAMEORIGIN). `txt` stays inline because it is
+/// served as `text/plain` with `nosniff`, which cannot become a document.
+const INLINE_SAFE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "pdf", "txt"];
+
+fn extension_of(filename: &str) -> String {
+    std::path::Path::new(filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default()
+}
+
+fn mime_for_extension(extension: &str) -> &'static str {
+    match extension {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "pdf" => "application/pdf",
+        "txt" => "text/plain",
+        // No entry for svg/svgz/html/htm/xml: they leave as
+        // application/octet-stream and the headers below force a download.
+        _ => "application/octet-stream",
+    }
+}
+
+/// ASCII-only name for `Content-Disposition`. Anything unexpected collapses
+/// to `download`, so a crafted file name cannot inject header bytes or a
+/// second `filename=` parameter.
+fn disposition_filename(filename: &str) -> String {
+    let leaf = std::path::Path::new(filename)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let cleaned: String = leaf
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        .take(120)
+        .collect();
+    let cleaned = cleaned.trim_matches('.');
+    if cleaned.is_empty() {
+        "download".to_string()
+    } else {
+        cleaned.to_string()
+    }
+}
+
+/// Response headers for a served ingest file. Kept apart from the handler so
+/// the security contract is testable without touching the filesystem.
+///
+/// * `X-Content-Type-Options: nosniff` always — without it a browser may
+///   sniff an `application/octet-stream` body into an SVG/XML/HTML document
+///   and execute it in this origin.
+/// * `Content-Security-Policy: sandbox` always — belt and braces for the
+///   `inline` types (a PDF's own viewer scripting).
+/// * `Content-Disposition: attachment` unless the extension is in
+///   `INLINE_SAFE_EXTENSIONS`.
+fn file_serving_headers(
+    filename: &str,
+    extension: &str,
+) -> Vec<(axum::http::HeaderName, axum::http::HeaderValue)> {
+    let inline = INLINE_SAFE_EXTENSIONS.contains(&extension);
+    let disposition = if inline { "inline" } else { "attachment" };
+    let name = disposition_filename(filename);
+    let headers: Vec<(axum::http::HeaderName, axum::http::HeaderValue)> = vec![
+        (
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static(mime_for_extension(extension)),
+        ),
+        (
+            axum::http::header::X_CONTENT_TYPE_OPTIONS,
+            axum::http::HeaderValue::from_static("nosniff"),
+        ),
+        (
+            axum::http::HeaderName::from_static("content-security-policy"),
+            axum::http::HeaderValue::from_static(
+                "sandbox; default-src 'none'; form-action 'none'; frame-ancestors 'none'",
+            ),
+        ),
+        (
+            axum::http::header::CONTENT_DISPOSITION,
+            axum::http::HeaderValue::from_str(&format!("{disposition}; filename=\"{name}\""))
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("attachment")),
+        ),
+    ];
+    headers
+}
+
 /// GET /api/v1/ingest/files/{filename}
 /// Serves uploaded files from the data/ingest directory.
 pub async fn serve_ingested_file_handler(
@@ -215,25 +307,10 @@ pub async fn serve_ingested_file_handler(
     };
     match tokio::fs::read(&filepath).await {
         Ok(bytes) => {
-            let extension = std::path::Path::new(&filename)
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.to_lowercase())
-                .unwrap_or_default();
-            let mime = match extension.as_str() {
-                "png" => "image/png",
-                "jpg" | "jpeg" => "image/jpeg",
-                "gif" => "image/gif",
-                "webp" => "image/webp",
-                "pdf" => "application/pdf",
-                "txt" => "text/plain",
-                _ => "application/octet-stream",
-            };
-            (
-                StatusCode::OK,
-                [(axum::http::header::CONTENT_TYPE, mime)],
-                bytes,
-            ).into_response()
+            let extension = extension_of(&filename);
+            let headers: axum::http::HeaderMap =
+                file_serving_headers(&filename, &extension).into_iter().collect();
+            (StatusCode::OK, headers, bytes).into_response()
         }
         Err(_) => (StatusCode::NOT_FOUND, "File not found").into_response(),
     }
@@ -633,5 +710,105 @@ mod tests {
         std::fs::write(dir.path().join("ok.txt"), b"hello").unwrap();
         let resolved = resolve_ingest_file_path_in(dir.path(), "ok.txt").unwrap();
         assert_eq!(std::fs::read(&resolved).unwrap(), b"hello");
+    }
+
+    fn header_value(
+        headers: &[(axum::http::HeaderName, axum::http::HeaderValue)],
+        key: &str,
+    ) -> Option<String> {
+        headers
+            .iter()
+            .find(|(k, _)| k.as_str() == key)
+            .and_then(|(_, v)| v.to_str().ok())
+            .map(|s| s.to_string())
+    }
+
+    #[test]
+    fn svg_html_and_unknown_uploads_are_forced_to_download() {
+        for name in [
+            "diagram.svg", "BAD.SVG", "page.html", "page.htm", "feed.xml",
+            "archive.svgz", "double.html.svg", "no_extension", "script.js",
+        ] {
+            let headers = file_serving_headers(name, &extension_of(name));
+            let cd = header_value(&headers, "content-disposition").unwrap_or_default();
+            assert!(
+                cd.starts_with("attachment;"),
+                "{name:?}: must force a download, got {cd:?}"
+            );
+            assert_eq!(
+                header_value(&headers, "content-type").as_deref(),
+                Some("application/octet-stream"),
+                "{name:?}: must not be given a renderable media type"
+            );
+        }
+    }
+
+    #[test]
+    fn served_files_always_get_nosniff_and_a_sandboxed_csp() {
+        for name in [
+            "diagram.svg", "report.pdf", "photo.png", "notes.txt",
+            "no_extension", "page.html",
+        ] {
+            let headers = file_serving_headers(name, &extension_of(name));
+            assert_eq!(
+                header_value(&headers, "x-content-type-options").as_deref(),
+                Some("nosniff"),
+                "{name:?}: without nosniff a browser may sniff the body into a document"
+            );
+            let csp = header_value(&headers, "content-security-policy").unwrap_or_default();
+            assert!(
+                csp.contains("sandbox") && csp.contains("default-src 'none'"),
+                "{name:?}: CSP must sandbox the document, got {csp:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn inline_is_limited_to_images_pdf_and_plain_text() {
+        for name in ["a.png", "b.jpg", "c.JPEG", "d.gif", "e.webp", "f.pdf", "g.txt"] {
+            let cd = header_value(&file_serving_headers(name, &extension_of(name)), "content-disposition")
+                .unwrap_or_default();
+            assert!(cd.starts_with("inline;"), "{name:?}: expected inline, got {cd:?}");
+        }
+        for name in ["a.svg", "a.html", "a.bin", "a"] {
+            let cd = header_value(&file_serving_headers(name, &extension_of(name)), "content-disposition")
+                .unwrap_or_default();
+            assert!(!cd.starts_with("inline;"), "{name:?}: must not render inline, got {cd:?}");
+        }
+    }
+
+    #[test]
+    fn svg_never_gets_a_renderable_mime_type() {
+        for ext in ["svg", "svgz", "html", "htm", "xml", "xhtml", "js", "css", "swf", ""] {
+            assert_eq!(
+                mime_for_extension(ext),
+                "application/octet-stream",
+                "{ext:?} must stay opaque; inline SVG/HTML would execute in this origin"
+            );
+        }
+    }
+
+    #[test]
+    fn content_disposition_filename_cannot_smuggle_header_bytes() {
+        for name in [
+            "a\"; x=1\r\nSet-Cookie: evil=1",
+            "ok.png\", ; filename=\"second.html",
+            "..",
+            "....png",
+            "señor.svg",
+            "a",
+        ] {
+            let headers = file_serving_headers(name, &extension_of(name));
+            let cd = header_value(&headers, "content-disposition").unwrap_or_default();
+            assert!(
+                !cd.contains('\r') && !cd.contains('\n'),
+                "{name:?}: CR/LF in a header value: {cd:?}"
+            );
+            assert_eq!(
+                cd.matches('"').count(),
+                2,
+                "{name:?}: the quoted filename must stay a single token: {cd:?}"
+            );
+        }
     }
 }
