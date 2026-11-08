@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { GeneralSettingsPanel } from '../GeneralSettingsPanel';
 import { InferenceSettingsPanel } from '../InferenceSettingsPanel';
@@ -34,6 +34,8 @@ import type { NexusBridge } from '../../../lib/nexus-bridge';
   transform: vi.fn(),
   rect: vi.fn(),
   clip: vi.fn(),
+  bezierCurveTo: vi.fn(),
+  createLinearGradient: vi.fn().mockReturnValue({ addColorStop: vi.fn() }),
 });
 
 class MockResizeObserver {
@@ -67,12 +69,12 @@ vi.mock('@tylluan/ui-core', async (importOriginal) => {
 
 describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () => {
   let mockBridge: { fetchRaw: ReturnType<typeof vi.fn> };
-  let mockNotify: ReturnType<typeof vi.fn>;
+  let mockNotify: Mock<(msg: string, type?: 'error' | 'info') => void>;
 
   beforeEach(() => {
-    mockNotify = vi.fn();
+    mockNotify = vi.fn<(msg: string, type?: 'error' | 'info') => void>();
     mockBridge = {
-      fetchRaw: vi.fn(),
+      fetchRaw: vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>(),
     };
   });
 

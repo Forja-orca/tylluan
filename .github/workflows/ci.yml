@@ -68,6 +68,8 @@ jobs:
         run: cargo deny check bans licenses sources
       - name: Advisory scan (informational — see deny.toml to ignore specific RUSec IDs)
         run: cargo deny check advisories
+      - name: cargo deny advisories for the desktop shell (own workspace, SC-02)
+        run: cd desktop/src-tauri && cargo deny check advisories
 
   security-claims-gate:
     name: "Security — claims gate"
@@ -138,8 +140,20 @@ jobs:
           version: "10"
       - name: Build shared package (@tylluan/ui-core)
         working-directory: packages/tylluan-ui-core
-        run: npm ci && npm run build
-      - run: pnpm install --frozen-lockfile
+        run: npm ci --ignore-scripts && npm run build
+      # Supply chain (SC-01/SC-02, 2026-11-07): lifecycle scripts of dependencies are NOT run
+      # (postinstall/preinstall is the vector of the Oct-Nov 2026 npm campaigns), and the
+      # production dependency tree is audited. The production audit BLOCKS at high/critical;
+      # the dev-tool audit is informational because the dev server and test runner never ship.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Audit production dependencies (blocking, high+)
+        run: pnpm audit --prod --audit-level=high
+      - name: Audit all dependencies incl. dev tools (informational)
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+      - name: Audit shared package production dependencies (blocking, high+)
+        working-directory: packages/tylluan-ui-core
+        run: npm audit --omit=dev --audit-level=high
       - run: pnpm run lint
       - run: pnpm run build
       - name: Run dashboard hook tests

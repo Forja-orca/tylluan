@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import React from 'react';
 import { AgentCompetencyPanel, parseCompetencies } from '../AgentCompetencyPanel';
 
@@ -60,13 +60,13 @@ describe('AgentCompetencyPanel', () => {
     ],
   };
 
-  let mockBridge: { fetchRaw: ReturnType<typeof vi.fn> };
-  let mockNotify: ReturnType<typeof vi.fn>;
+  let mockBridge: { fetchRaw: Mock<(url: string, init?: RequestInit) => Promise<unknown>> };
+  let mockNotify: Mock<(msg: string, type?: 'error' | 'info') => void>;
 
   beforeEach(() => {
-    mockNotify = vi.fn();
+    mockNotify = vi.fn<(msg: string, type?: 'error' | 'info') => void>();
     mockBridge = {
-      fetchRaw: vi.fn().mockImplementation((url: string) => {
+      fetchRaw: vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>().mockImplementation((url: string) => {
         if (url.startsWith('/api/v1/agents')) {
           return Promise.resolve(mockAgentsData);
         }

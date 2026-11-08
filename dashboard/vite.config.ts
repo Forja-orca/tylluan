@@ -1,4 +1,3 @@
-import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
@@ -7,14 +6,6 @@ const kernelTarget = process.env.VITE_KERNEL_TARGET || 'http://127.0.0.1:47004'
 export default defineConfig({
   plugins: [
     react(),
-    nodePolyfills({
-      include: ['path', 'fs', 'util'],
-      globals: {
-        Buffer: true,
-        global: true,
-        process: true,
-      },
-    }),
   ],
   build: {
     outDir: "../dashboard/dist",

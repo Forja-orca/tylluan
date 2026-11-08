@@ -24,9 +24,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && corepack enable \
     && rm -rf /var/lib/apt/lists/*
 COPY packages/ ./packages/
-RUN cd packages/tylluan-ui-core && npm ci && npm run build
+RUN cd packages/tylluan-ui-core && npm ci --ignore-scripts && npm run build
 COPY dashboard/ ./dashboard/
-RUN cd dashboard && pnpm install --frozen-lockfile && pnpm run build
+RUN cd dashboard && pnpm install --frozen-lockfile --ignore-scripts && pnpm run build
 
 RUN cargo build --release --locked -p tylluan-kernel -p tylluan-cli --features encryption,bundled-dashboard
 

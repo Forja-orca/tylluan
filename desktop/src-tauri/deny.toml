@@ -1,0 +1,23 @@
+# cargo-deny para desktop/src-tauri (workspace propio, fuera del workspace principal).
+# Alcance: SOLO advisories (vulnerabilidades y yanked). Licencias y duplicados de versiones se
+# vigilan en el deny.toml de la raiz; el arbol de Tauri tiene muchos duplicados legitimos y
+# aplicar `bans` aqui seria ruido, no seguridad.
+[advisories]
+yanked = "deny"
+# unmaintained = "none": los avisos de paquetes sin mantenimiento del arbol de Tauri/GTK
+# (pin-utils, proc-macro-error, unic-*, zvariant...) no son vulnerabilidades y no se pueden
+# arreglar desde aqui; se revisan al subir Tauri. Una VULNERABILIDAD sigue rompiendo el job.
+unmaintained = "none"
+# Ignorados CON FECHA Y MOTIVO (2026-11-07). No se silencia nada sin motivo escrito.
+# RUSTSEC-2026-0194 (coste cuadratico al comprobar atributos duplicados) y
+# RUSTSEC-2026-0195 (reserva sin tope de declaraciones de namespace en NsReader): ambos son
+# denegacion de servicio al PARSEAR XML hostil de entrada. La correccion es quick-xml >= 0.41 y el
+# arbol trae 0.37.5 (tauri-winrt-notification <- notify-rust, el toast de Windows: XML que genera
+# la propia app), 0.38.4 (plist <- tauri-utils, solo en tiempo de compilacion) y 0.39.2; son
+# saltos de version incompatibles por semver que no se arreglan con `cargo update`. Ninguna ruta
+# parsea XML de origen no fiable. REVISAR al subir Tauri: si el arbol pasa a quick-xml >= 0.41,
+# quitar estos dos ignorados.
+ignore = [
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]
