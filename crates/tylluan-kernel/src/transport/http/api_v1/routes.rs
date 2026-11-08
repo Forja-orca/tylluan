@@ -113,6 +113,12 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/scheduler/confusion", get(scheduler_confusion_handler))
         .route("/api/v1/inference/providers/{name}/test", post(test_inference_provider_handler))
         .route("/api/v1/external-providers", get(list_external_providers_handler))
+        // D-152 (Jose, T3277): proveedores de loopback detectados (LM Studio, llama.cpp, Ollama).
+        // Solo lectura, timeout 600 ms, sin credenciales y sin aceptar URLs del llamante.
+        .route(
+            "/api/v1/inference/providers/discover",
+            get(api_discover::discover_providers_handler),
+        )
         .route("/api/v1/external-providers/{name}/test", post(test_external_provider_handler))
         .route("/api/v1/mcp/external", get(list_mcp_servers_handler).post(add_mcp_server_handler))
         .route("/api/v1/mcp/external/discover", post(discover_mcp_servers_handler))
