@@ -77,8 +77,14 @@ Run the kernel catalog and Python checks from the repository root:
 
 ```bash
 cargo test -p tylluan-kernel --lib
-python -m pytest tests/python/ --ignore=tests/python/test_memory_bridge_e2e.py -q
+python -m pytest tests/python/ -q
 ```
+
+`tests/python/test_memory_bridge_e2e.py` runs in CI as `xfail(strict=True)` while no
+kernel job exists: without one it is reported as an expected failure (BUF-D6,
+2026-11-08) instead of being hidden with `--ignore`. Against a live kernel it needs the
+explicit opt-in `TYLLUAN_E2E_KERNEL=1`, because those tests write real nodes into the
+operator's SilvaDB.
 
 The Rust suite checks that the guild is discoverable, has a unique name, has a description, has a valid module path, appears in the known-guild inventory, and is reachable through either `LAZY_GUILDS` or the always-on configuration. The Python suite checks the surrounding guild tooling.
 
