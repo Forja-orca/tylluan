@@ -20,6 +20,21 @@ Tylluan's own promise of running on modest hardware. Tauri uses the OS's native 
 runtime to maintain. See `docs/roadmap/ROADMAP_O3.md` (Tylluan Desktop section) and
 `CHANGELOG.md` for the full writeup and the sources behind this decision.
 
+## Cerrar la ventana
+
+Cerrar la ventana la **oculta**; la app sigue viva en la bandeja del sistema (icono del búho con un punto de estado: verde nominal, ámbar degradado, rojo en espera). Para salir de verdad: menú de la bandeja → «Salir», o menú Vista → Salir.
+
+## App Identifier y Soberanía
+
+En `src-tauri/tauri.conf.json`, el identificador de la aplicación se ha fijado deliberadamente como:
+```json
+"identifier": "com.tylluan.desktop"
+```
+**Corte limpio vs plantilla upstream:** la plantilla histórica heredaba el ID del repo de ejemplo (`dannysmith/tauri-template`). El cambio a `com.tylluan.desktop` es una decisión deliberada de corte limpio:
+1. Asegura un namespace propio para el almacenamiento de preferencias del sistema operativo (`%APPDATA%/com.tylluan.desktop` en Windows, `~/Library/Application Support/com.tylluan.desktop` en macOS, `~/.config/com.tylluan.desktop` en Linux), desacoplándolo de residuos de plantillas.
+2. Evita colisiones de claves en el llavero/almacén seguro del sistema y garantiza un ID de aplicación independiente y soberano.
+3. El cambio de namespace y rutas de configuración es 100% intencionado.
+
 ## Structure
 
 - `src-tauri/` — the Rust/Tauri shell. **Its own Cargo workspace**, deliberately decoupled from

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tylluan-desktop-feasibility",
+  "productName": "tylluan-desktop",
   "version": "0.1.0",
-  "identifier": "com.tylluan.desktop.feasibility",
+  "identifier": "com.tylluan.desktop",
   "build": {
     "removeUnusedCommands": true,
     "devUrl": "http://127.0.0.1:47004"
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Tylluan Desktop (feasibility spike)",
+        "title": "Tylluan",
         "width": 1200,
         "height": 800,
         "minWidth": 1000,
