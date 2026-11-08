@@ -394,17 +394,16 @@ export class NexusBridge {
   private token: string;
   private eventSource: EventSource | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 10;
-  private maxReconnectDelay = 30000;
+  private maxReconnectDelay = 60000;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private onEventCallback: (ev: NexusEvent) => void;
-  private onStatusCallback: (online: boolean) => void;
+  private onStatusCallback: (online: boolean, attempts?: number) => void;
 
   private static fetchCache = new Map<string, { promise: Promise<any>, ts: number }>();
 
   constructor(
     onEvent: (ev: NexusEvent) => void,
-    onStatus: (online: boolean) => void,
+    onStatus: (online: boolean, attempts?: number) => void,
     baseUrl?: string
   ) {
     this.baseUrl = baseUrl || window.location.origin;
@@ -432,7 +431,7 @@ export class NexusBridge {
 
   clone(
     onEvent: (ev: NexusEvent) => void,
-    onStatus: (online: boolean) => void
+    onStatus: (online: boolean, attempts?: number) => void
   ): NexusBridge {
     const b = new NexusBridge(onEvent, onStatus, this.baseUrl);
     b.setToken(this.token);
@@ -521,22 +520,17 @@ export class NexusBridge {
 
     this.eventSource.onopen = () => {
       this.reconnectAttempts = 0;
-      this.onStatusCallback(true);
+      this.onStatusCallback(true, 0);
     };
 
     this.eventSource.onerror = () => {
-      this.onStatusCallback(false);
       this.reconnectAttempts++;
-
-      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.error("🚨 [SSE] Max reconnect attempts reached, giving up");
-        this.onStatusCallback(false);
-        return;
-      }
+      this.onStatusCallback(false, this.reconnectAttempts);
 
       const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), this.maxReconnectDelay);
 
       if (this.eventSource) this.eventSource.close();
+      if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = setTimeout(() => this.connectEvents(), delay);
     };
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Cpu, Zap, HelpCircle } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
@@ -7,6 +7,7 @@ import type { DeviceStatus } from '../lib/api/security';
 
 export interface DeviceStatusBadgeProps {
   bridge: NexusBridge | null;
+  online?: boolean;
 }
 
 const GPU_PROVIDERS = new Set(['DmlExecutionProvider', 'CUDAExecutionProvider']);
@@ -23,22 +24,43 @@ function shortProvider(p: string | undefined): string {
  * If the endpoint hasn't answered yet (old kernel, guild not started),
  * this renders the "no detectado" state rather than guessing.
  */
-export default function DeviceStatusBadge({ bridge }: DeviceStatusBadgeProps) {
+export default function DeviceStatusBadge({ bridge, online = true }: DeviceStatusBadgeProps) {
   const [status, setStatus] = useState<DeviceStatus | null>(null);
   const [failed, setFailed] = useState(false);
+  const errorStreakRef = useRef<number>(0);
+  const ticksUntilRetryRef = useRef<number>(0);
 
   const fetchStatus = useCallback(async () => {
-    if (!bridge) return;
+    if (!bridge || !online) return;
+    if (ticksUntilRetryRef.current > 0) {
+      ticksUntilRetryRef.current -= 1;
+      return;
+    }
     try {
       const data = await bridge.getDeviceStatus();
       setStatus(data);
-      setFailed(false);
+      const visionErr = data?.guilds?.vision?.status === 'error';
+      if (visionErr) {
+        errorStreakRef.current = Math.min(errorStreakRef.current + 1, 4);
+        // Backoff en ticks de 60s: 2m -> 4m -> 8m -> 15m máx para evitar bucles de Pre-Spawn (AG-28)
+        ticksUntilRetryRef.current = Math.min(Math.pow(2, errorStreakRef.current), 15);
+      } else {
+        errorStreakRef.current = 0;
+        ticksUntilRetryRef.current = 0;
+        setFailed(false);
+      }
     } catch {
       setFailed(true);
+      errorStreakRef.current = Math.min(errorStreakRef.current + 1, 4);
+      ticksUntilRetryRef.current = Math.min(Math.pow(2, errorStreakRef.current), 15);
     }
-  }, [bridge]);
+  }, [bridge, online]);
 
-  usePolling('device-status', fetchStatus, { interval: 'slow', enabled: !!bridge });
+  // AG-28: Sondeo en bucket 'idle' (60s) con backoff exponencial si el guild vision
+  // está en error o inalcanzable, y pausado cuando el kernel está offline.
+  const shouldPoll = Boolean(bridge) && online;
+
+  usePolling('device-status', fetchStatus, { interval: 'idle', enabled: shouldPoll });
 
   const visionEntry = status?.guilds?.vision;
   const activeProvider = visionEntry?.active_provider;

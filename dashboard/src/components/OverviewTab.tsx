@@ -595,8 +595,8 @@ export function OverviewTab({
           />
           <MetricCard
             label="Disponibilidad SLO"
-            value={sloSummary?.slo_target ?? 99.9} unit="%"
-            sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% presupuesto restante` : 'Objetivo 99.9%'}
+            value={sloSummary?.slo_target ?? '—'} unit={sloSummary?.slo_target !== undefined ? "%" : ""}
+            sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% presupuesto restante` : 'Sin telemetría SLO'}
             valueClass="text-primary"
           />
         </div>
@@ -646,8 +646,10 @@ export function OverviewTab({
               />
               Mostrar latidos
             </label>
-            <span className="text-[11px] text-muted-foreground font-mono">EVENTOS EN VIVO</span>
-            <div className="w-2 h-2 rounded-full bg-emerald-600" aria-hidden="true" />
+            <span className="text-[11px] text-muted-foreground font-mono">
+              {online ? 'EVENTOS EN VIVO' : 'FLUJO EN ESPERA'}
+            </span>
+            <div className={cn("w-2 h-2 rounded-full", online ? "bg-emerald-600" : "bg-amber-500")} aria-hidden="true" />
           </div>
         </div>
         <div className="divide-y divide-border/60 font-sans">
@@ -663,7 +665,7 @@ export function OverviewTab({
           )}
 
           <div className="px-4 py-2.5 flex flex-wrap gap-2.5 bg-muted/20 border-b border-border">
-            {blackboard?.active_agents.map(agent => (
+            {(blackboard?.active_agents ?? []).map(agent => (
               <div key={agent} className="flex items-center gap-1.5">
                 <div className="w-6 h-6 rounded flex items-center justify-center border border-border bg-muted font-mono font-bold text-[11px] text-foreground">
                   {agent.slice(0, 2).toUpperCase()}
@@ -819,19 +821,24 @@ export function OverviewTab({
           <div className="space-y-3">
             {(guildsUtilization?.active_guilds || []).slice(0, 6).map((guild: { name: string; idle_secs?: number }) => {
               const idleSecs = guild.idle_secs ?? 0;
-              const utilPct = idleSecs < 60 ? 80 : idleSecs < 300 ? 40 : 10;
-              const barColor = utilPct >= 70 ? 'bg-emerald-600' : utilPct >= 40 ? 'bg-amber-600' : 'bg-muted-foreground';
-              
+              const isRecent = idleSecs < 60;
+              const isWarm = idleSecs < 300;
+              const barColor = isRecent ? 'bg-emerald-600' : isWarm ? 'bg-amber-600' : 'bg-muted-foreground';
+              const statusText = idleSecs < 60
+                ? `activo (${idleSecs}s idle)`
+                : `inactivo ${Math.floor(idleSecs / 60)}m ${idleSecs % 60}s`;
+              const visualFill = Math.max(10, Math.min(100, Math.round((1 - Math.min(idleSecs, 600) / 600) * 100)));
+
               return (
                 <div key={guild.name} className="space-y-1">
                   <div className="flex justify-between items-center text-[11px]">
                     <span className="text-foreground font-mono truncate mr-2">{guild.name}</span>
-                    <span className="text-muted-foreground font-mono">{utilPct}%</span>
+                    <span className="text-muted-foreground font-mono">{statusText}</span>
                   </div>
                   <div className="h-1.5 w-full bg-muted rounded overflow-hidden border border-border">
                     <div 
                       className={cn("h-full rounded transition-all duration-500", barColor)} 
-                      style={{ width: `${utilPct}%` }} 
+                      style={{ width: `${visualFill}%` }} 
                      />
                   </div>
                 </div>
@@ -851,7 +858,7 @@ export function OverviewTab({
             Retención de Memoria
           </div>
           
-          {memoryRetention ? (
+          {memoryRetention?.silva ? (
             <div className="space-y-2">
               <div className={cn(
                 "text-5xl font-bold font-mono transition-colors duration-300",
@@ -862,7 +869,7 @@ export function OverviewTab({
               </div>
               <div className="space-y-0.5">
                 <div className="text-sm font-bold text-foreground font-mono">
-                  {memoryRetention.silva.total_nodes.toLocaleString()}
+                  {(memoryRetention.silva.total_nodes ?? 0).toLocaleString()}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
                   Nodos Soberanos Totales

@@ -26,7 +26,13 @@ export interface SSEState {
   lastHeartbeat: number;
   reconnectAttempts: number;
   connectionStatus: 'connected' | 'reconnecting' | 'offline';
+  standbyCountdownSecs: number;
+  currentStepSecs: number;
+  isProbing: boolean;
+  triggerImmediateReconnect: () => void;
 }
+
+const BACKOFF_STEPS_SECS = [5, 10, 15, 30, 60] as const;
 
 export function useNexusSSE(
   bridge: NexusBridge | null,
@@ -37,6 +43,11 @@ export function useNexusSSE(
   const [lastHeartbeat, setLastHeartbeat] = useState<number>(Date.now());
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<SSEState['connectionStatus']>('offline');
+  const [standbyCountdownSecs, setStandbyCountdownSecs] = useState<number>(BACKOFF_STEPS_SECS[0]);
+  const [currentStepSecs, setCurrentStepSecs] = useState<number>(BACKOFF_STEPS_SECS[0]);
+  const [isProbing, setIsProbing] = useState<boolean>(false);
+  const nextProbeSecsRef = useRef<number>(BACKOFF_STEPS_SECS[0]);
+  const attemptCountRef = useRef<number>(0);
 
   // Stale-heartbeat detector: if no heartbeat for 45s → mark offline
   const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,38 +135,86 @@ export function useNexusSSE(
     if (isOnline) {
       setConnectionStatus('connected');
       setReconnectAttempts(0);
+      attemptCountRef.current = 0;
+      nextProbeSecsRef.current = BACKOFF_STEPS_SECS[0];
+      setStandbyCountdownSecs(BACKOFF_STEPS_SECS[0]);
+      setCurrentStepSecs(BACKOFF_STEPS_SECS[0]);
+      setIsProbing(false);
       resetHeartbeatTimer();
     } else {
-      const att = attempts ?? 0;
+      const att = attempts ?? attemptCountRef.current;
+      attemptCountRef.current = att;
       setReconnectAttempts(att);
       setConnectionStatus(att > 0 ? 'reconnecting' : 'offline');
     }
   }, [resetHeartbeatTimer]);
 
-  // Polling fallback when SSE is offline or reconnecting
+  const probeHealthOnce = useCallback(async () => {
+    if (!bridge) return false;
+    setIsProbing(true);
+    try {
+      const health = await bridge.getHealth();
+      if (health) {
+        attemptCountRef.current = 0;
+        setReconnectAttempts(0);
+        nextProbeSecsRef.current = BACKOFF_STEPS_SECS[0];
+        setStandbyCountdownSecs(BACKOFF_STEPS_SECS[0]);
+        setCurrentStepSecs(BACKOFF_STEPS_SECS[0]);
+        setIsProbing(false);
+        handleEvent({
+          type: 'heartbeat',
+          data: { uptime_secs: health.uptime_secs || 0 },
+          source: 'dashboard' as const,
+          ts: Date.now()
+        });
+        setConnectionStatus('connected');
+        window.dispatchEvent(new CustomEvent('nexus_polling_refresh'));
+        return true;
+      }
+    } catch {
+      // Expected while kernel is in standby / restarting
+    }
+    const nextAttempt = attemptCountRef.current + 1;
+    attemptCountRef.current = nextAttempt;
+    setReconnectAttempts(nextAttempt);
+    setConnectionStatus('reconnecting');
+    const backoffIdx = Math.min(nextAttempt, BACKOFF_STEPS_SECS.length - 1);
+    const nextStep = BACKOFF_STEPS_SECS[backoffIdx];
+    nextProbeSecsRef.current = nextStep;
+    setStandbyCountdownSecs(nextStep);
+    setCurrentStepSecs(nextStep);
+    setIsProbing(false);
+    return false;
+  }, [bridge, handleEvent]);
+
+  const triggerImmediateReconnect = useCallback(() => {
+    nextProbeSecsRef.current = 0;
+    setStandbyCountdownSecs(0);
+    void probeHealthOnce();
+  }, [probeHealthOnce]);
+
+  // Real countdown to NEXT probe + backoff probe when SSE is offline or reconnecting
   useEffect(() => {
     if (!bridge || connectionStatus === 'connected') return;
 
-    const pollInterval = setInterval(async () => {
-      try {
-        const health = await bridge.getHealth();
-        if (health) {
-          handleEvent({
-            type: 'heartbeat',
-            data: { uptime_secs: health.uptime_secs || 0 },
-            source: 'dashboard' as const,
-            ts: Date.now()
-          });
-          // Dispatch event to trigger refreshData in useNexus
-          window.dispatchEvent(new CustomEvent('nexus_polling_refresh'));
-        }
-      } catch (err) {
-        console.warn("[Polling Fallback] Health check failed:", err);
+    const tickInterval = setInterval(() => {
+      // If window is hidden, hold or avoid busy spinning
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
       }
-    }, 5000);
 
-    return () => clearInterval(pollInterval);
-  }, [bridge, connectionStatus, handleEvent]);
+      if (nextProbeSecsRef.current > 1) {
+        nextProbeSecsRef.current -= 1;
+        setStandbyCountdownSecs(nextProbeSecsRef.current);
+      } else if (nextProbeSecsRef.current === 1) {
+        nextProbeSecsRef.current = 0;
+        setStandbyCountdownSecs(0);
+        void probeHealthOnce();
+      }
+    }, 1000);
+
+    return () => clearInterval(tickInterval);
+  }, [bridge, connectionStatus, probeHealthOnce]);
 
   useEffect(() => {
     if (!bridge) return;
@@ -171,6 +230,16 @@ export function useNexusSSE(
     };
   }, [bridge, handleEvent, handleStatus, resetHeartbeatTimer]);
 
-  return { events, online, lastHeartbeat, reconnectAttempts, connectionStatus };
+  return {
+    events,
+    online,
+    lastHeartbeat,
+    reconnectAttempts,
+    connectionStatus,
+    standbyCountdownSecs,
+    currentStepSecs,
+    isProbing,
+    triggerImmediateReconnect,
+  };
 }
 

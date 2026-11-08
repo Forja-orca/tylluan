@@ -72,10 +72,14 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-primary">Sustrato Cognitivo Tylluan</span>
               <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-muted text-foreground border border-border rounded">
-                {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.2'}
+                {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : '—'}
               </span>
-              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 rounded">
-                Estado: Activo
+              <span className={`px-1.5 py-0.5 text-[10px] font-bold border rounded ${
+                props.online
+                  ? 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/30'
+                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
+              }`}>
+                {props.online ? 'Estado: Activo' : 'Estado: Standby / En espera'}
               </span>
             </div>
             <p className="break-words text-[11px] text-muted-foreground mt-0.5 font-sans">
@@ -87,7 +91,9 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
         <div className="flex max-w-full flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-muted/60 border border-border rounded-md">
             <span>Barrera de Coherencia:</span>
-            <span className="text-foreground font-bold">Capas 1, 2 y 3 activas</span>
+            <span className="text-foreground font-bold">
+              {props.online ? 'Activa (en línea)' : 'En espera de kernel'}
+            </span>
           </div>
         </div>
       </div>

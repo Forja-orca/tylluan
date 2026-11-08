@@ -111,10 +111,9 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
 
       await waitFor(() => {
         expect(screen.getByText(/Estado del Daemon Soberano/i)).toBeInTheDocument();
+        // Verificamos que se muestre el commit cargado de GET /health
+        expect(screen.getByText(/e62ddb46/i)).toBeInTheDocument();
       });
-
-      // Verificamos que se muestre el commit cargado de GET /health
-      expect(screen.getByText(/e62ddb46/i)).toBeInTheDocument();
 
       // Verificamos presencia de campos solo lectura con su razón
       expect(screen.getByText(/127.0.0.1/i)).toBeInTheDocument();
@@ -325,10 +324,10 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
 
       await waitFor(() => {
         expect(screen.getByText(/Cadena de Auditoría Criptográfica/i)).toBeInTheDocument();
+        // Insignia no alarmista en ámbar suave: RE-SINCRONIZADA
+        expect(screen.getByText(/RE-SINCRONIZADA/i)).toBeInTheDocument();
       });
 
-      // Insignia no alarmista en ámbar suave: RE-SINCRONIZADA
-      expect(screen.getByText(/RE-SINCRONIZADA/i)).toBeInTheDocument();
       expect(screen.getByText(/saltos de secuencia/i)).toBeInTheDocument();
 
       // Matriz ACL
@@ -512,11 +511,10 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
 
       await waitFor(() => {
         expect(screen.getByText(/Mantenimiento del Sustrato Soberano/i)).toBeInTheDocument();
+        // Verificamos que se muestren las métricas de memoria cargadas asíncronamente
+        expect(screen.getByText('1.00 MB')).toBeInTheDocument();
+        expect(screen.getByText('42')).toBeInTheDocument();
       });
-
-      // Verificamos que se muestren las métricas de memoria
-      expect(screen.getByText('1.00 MB')).toBeInTheDocument();
-      expect(screen.getByText('42')).toBeInTheDocument();
 
       // Verificamos que VACUUM y ONNX no tengan botones ejecutables activos (Turn #2562)
       expect(screen.queryByRole('button', { name: /ejecutar vacuum/i })).not.toBeInTheDocument();

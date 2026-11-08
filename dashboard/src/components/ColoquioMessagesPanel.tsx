@@ -12,6 +12,7 @@ import { ColoquioHandoffBadge } from './coloquio/ColoquioHandoffBadge';
 import { ColoquioThinkingBlock } from './coloquio/ColoquioThinkingBlock';
 import { ColoquioToolCard } from './coloquio/ColoquioToolCard';
 import { ColoquioHitlCard } from './coloquio/ColoquioHitlCard';
+import { PatchAttachmentViewer } from './coloquio/PatchAttachmentViewer';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
@@ -478,8 +479,10 @@ export function ColoquioMessagesPanel({
                       <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border">
                         {meta.attachments.map((att: { file: string; name: string }, idx: number) => {
                           const isImg = /\.(jpeg|jpg|gif|png|webp|svg)$/i.test(att.file);
+                          const isPatch = /\.(patch|diff)$/i.test(att.name || att.file);
                           const url = bridge ? `${bridge.getBaseUrl()}/api/v1/ingest/files/${att.file}` : '';
                           if (isImg) return <img key={idx} src={url} alt={att.name} className="max-w-[180px] max-h-[180px] rounded border border-border cursor-pointer hover:opacity-90" onClick={() => window.open(url, '_blank')} />;
+                          if (isPatch) return <PatchAttachmentViewer key={idx} url={url} name={att.name || att.file} token={bridge?.getToken()} />;
                           return <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted border border-border rounded text-xs text-foreground hover:text-primary transition-colors"><FileText className="w-3 h-3" /><span className="truncate max-w-[140px]">{att.name}</span></a>;
                         })}
                       </div>

@@ -9,6 +9,7 @@ interface HomeostasisWidgetProps {
 
 interface HomeostasisHealth {
   status?: string;
+  score?: number;
   components?: {
     guilds?: { ok?: boolean; active?: number; total?: number };
     silva?: { ok?: boolean; nodes?: number };
@@ -40,12 +41,16 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
     try { setHealth(await bridge.health_detailed()); } catch {}
   }, { interval: 'medium', enabled: !!bridge });
 
-  // Calculate homeostasis score: guilds_ok * 40 + memoria_ok * 30 + sin_errores_recientes * 30
+  // Prefer authoritative score from /api/v1/health/detailed; fallback only if endpoint omits score
   const guildsOk = health?.components?.guilds?.ok ? 1 : 0;
   const memoryOk = health?.components?.silva?.ok ? 1 : 0;
   const noRecentErrors = health?.status === 'healthy' ? 1 : 0;
   
-  const score = Math.round((guildsOk * 40) + (memoryOk * 30) + (noRecentErrors * 30));
+  const score = typeof health?.score === 'number'
+    ? Math.round(health.score)
+    : health
+    ? Math.round((guildsOk * 40) + (memoryOk * 30) + (noRecentErrors * 30))
+    : 0;
 
   // Determine color theme (logo blue / standard status semaphores)
   let statusColor = "text-emerald-600";

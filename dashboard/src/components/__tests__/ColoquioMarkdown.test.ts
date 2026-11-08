@@ -192,3 +192,46 @@ describe('D-80: invisible Unicode and terminal controls', () => {
     expect(output).not.toContain('\u202e');
   });
 });
+
+describe('UI-CIERRE: Visor ligero de parches .patch / unified diff en Coloquio', () => {
+  it('renders ```patch and ```diff blocks with unified diff highlighting and +/- stats', () => {
+    const patchInput = [
+      '```patch',
+      'diff --git a/src/App.tsx b/src/App.tsx',
+      '--- a/src/App.tsx',
+      '+++ b/src/App.tsx',
+      '@@ -10,3 +10,4 @@',
+      ' import React from "react";',
+      '-const oldMode = "error";',
+      '+const newMode = "standby";',
+      '+const countdown = 60;',
+      '```',
+    ].join('\n');
+
+    const output = parseMarkdown(patchInput);
+    expect(output).toContain('data-patch-viewer="true"');
+    expect(output).toContain('+2');
+    expect(output).toContain('-1');
+    expect(output).toContain('HUNK');
+    expect(output).toContain('bg-emerald-950/45');
+    expect(output).toContain('bg-rose-950/45');
+  });
+
+  it('auto-detects unified git diff blocks even without explicit patch language tag', () => {
+    const rawDiff = [
+      '```',
+      'diff --git a/README.zh-CN.md b/README.zh-CN.md',
+      '--- a/README.zh-CN.md',
+      '+++ b/README.zh-CN.md',
+      '@@ -45,2 +45,1 @@',
+      '-| macOS | darwin |',
+      '+| Windows x86_64 | msvc |',
+      '```',
+    ].join('\n');
+
+    const output = parseMarkdown(rawDiff);
+    expect(output).toContain('data-patch-viewer="true"');
+    expect(output).toContain('+1');
+    expect(output).toContain('-1');
+  });
+});

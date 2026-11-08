@@ -360,3 +360,19 @@
 :root:not(.dark) li.text-slate-700 {
   color: hsl(var(--foreground));
 }
+
+/* Accesibilidad y ahorro de energía: reduce o anula animaciones cuando el usuario lo solicita */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Pausar todas las animaciones y transiciones cuando la ventana está minimizada u oculta */
+html.page-hidden *, html.page-hidden *::before, html.page-hidden *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}

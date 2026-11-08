@@ -31,8 +31,112 @@ export function sanitizeDisplayText(text: string): string {
 }
 
 /**
+ * Render a unified diff / .patch snippet with line-by-line syntax highlighting,
+ * old/new line numbers, and addition/deletion statistics.
+ * Zero external dependencies — keeps Coloquio bundle minimal.
+ */
+export function renderUnifiedDiffHtml(escapedCode: string, title = 'patch / diff'): string {
+  const lines = escapedCode.split(/\r?\n/);
+  let additions = 0;
+  let deletions = 0;
+  let oldLine = 0;
+  let newLine = 0;
+
+  const renderedRows: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('+++ ') || line.startsWith('--- ')) {
+      renderedRows.push(
+        `<div class="flex items-baseline px-2.5 py-0.5 bg-slate-900/90 text-slate-300 font-bold border-y border-slate-800/80">` +
+        `<span class="w-16 shrink-0 select-none text-[10px] text-slate-500">FILE</span>` +
+        `<span class="whitespace-pre overflow-x-auto">${line}</span></div>`
+      );
+      continue;
+    }
+
+    if (line.startsWith('diff --git ') || line.startsWith('index ') || line.startsWith('new file ') || line.startsWith('deleted file ')) {
+      renderedRows.push(
+        `<div class="flex items-baseline px-2.5 py-0.5 bg-slate-900/60 text-indigo-300 font-semibold">` +
+        `<span class="w-16 shrink-0 select-none text-[10px] text-slate-500">META</span>` +
+        `<span class="whitespace-pre overflow-x-auto">${line}</span></div>`
+      );
+      continue;
+    }
+
+    const hunkMatch = line.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@(.*)$/);
+    if (hunkMatch) {
+      oldLine = parseInt(hunkMatch[1], 10);
+      newLine = parseInt(hunkMatch[2], 10);
+      renderedRows.push(
+        `<div class="flex items-baseline px-2.5 py-0.5 bg-cyan-950/50 text-cyan-300 border-y border-cyan-500/20 font-semibold">` +
+        `<span class="w-16 shrink-0 select-none text-[10px] text-cyan-400/80">HUNK</span>` +
+        `<span class="whitespace-pre overflow-x-auto">${line}</span></div>`
+      );
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      additions += 1;
+      const numStr = newLine > 0 ? String(newLine++) : '+';
+      renderedRows.push(
+        `<div class="flex items-baseline px-2.5 py-0.2 bg-emerald-950/45 text-emerald-200 border-l-2 border-emerald-500">` +
+        `<span class="w-8 shrink-0 select-none text-[10px] text-slate-600 text-right pr-1.5"></span>` +
+        `<span class="w-8 shrink-0 select-none text-[10px] text-emerald-400/80 text-right pr-2">${numStr}</span>` +
+        `<span class="whitespace-pre overflow-x-auto">${line}</span></div>`
+      );
+      continue;
+    }
+
+    if (line.startsWith('-')) {
+      deletions += 1;
+      const numStr = oldLine > 0 ? String(oldLine++) : '-';
+      renderedRows.push(
+        `<div class="flex items-baseline px-2.5 py-0.2 bg-rose-950/45 text-rose-200 border-l-2 border-rose-500">` +
+        `<span class="w-8 shrink-0 select-none text-[10px] text-rose-400/80 text-right pr-1.5">${numStr}</span>` +
+        `<span class="w-8 shrink-0 select-none text-[10px] text-slate-600 text-right pr-2"></span>` +
+        `<span class="whitespace-pre overflow-x-auto">${line}</span></div>`
+      );
+      continue;
+    }
+
+    const oldStr = oldLine > 0 ? String(oldLine++) : '';
+    const newStr = newLine > 0 ? String(newLine++) : '';
+    renderedRows.push(
+      `<div class="flex items-baseline px-2.5 py-0.2 text-slate-300 hover:bg-slate-900/50">` +
+      `<span class="w-8 shrink-0 select-none text-[10px] text-slate-600 text-right pr-1.5">${oldStr}</span>` +
+      `<span class="w-8 shrink-0 select-none text-[10px] text-slate-600 text-right pr-2">${newStr}</span>` +
+      `<span class="whitespace-pre overflow-x-auto">${line}</span></div>`
+    );
+  }
+
+  return (
+    `<div class="my-2 rounded-lg border border-slate-700/70 bg-slate-950/95 overflow-hidden font-mono text-[11px] shadow-sm" data-patch-viewer="true">` +
+    `<div class="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-[11px]">` +
+    `<span class="font-bold text-slate-200">${title}</span>` +
+    `<div class="flex items-center gap-2">` +
+    `<span class="px-1.5 py-0.2 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-semibold">+${additions}</span>` +
+    `<span class="px-1.5 py-0.2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300 font-semibold">-${deletions}</span>` +
+    `</div></div>` +
+    `<div class="max-h-96 overflow-x-auto overflow-y-auto divide-y divide-slate-900/40">${renderedRows.join('')}</div>` +
+    `</div>`
+  );
+}
+
+function isUnifiedDiffBlock(lang: string, code: string): boolean {
+  const normalizedLang = lang.toLowerCase();
+  if (normalizedLang === 'diff' || normalizedLang === 'patch' || normalizedLang.endsWith('.patch')) {
+    return true;
+  }
+  return (
+    code.includes('diff --git ') ||
+    (code.includes('--- ') && code.includes('+++ ') && code.includes('@@ '))
+  );
+}
+
+/**
  * Markdown renderer for Coloquio messages.
- * Handles code blocks, inline code, bold, italics, quotes, lists, turn jumps, and mentions.
+ * Handles code blocks, unified diff/.patch syntax highlighting, inline code,
+ * bold, italics, quotes, lists, turn jumps, and mentions.
  *
  * Word-boundary matching for underscore emphasis prevents false italics on
  * snake_case identifiers, file paths, and URLs (e.g. scripts/check_test_count.sh).
@@ -44,11 +148,15 @@ export function parseMarkdown(text: string): string {
   h = h.replace(/```([^\r\n]*)\r?\n([\s\S]*?)\r?\n```/g, (_, lang, code) => {
     const idx = codeBlocks.length;
     const cleanLang = (lang || '').trim() || 'code';
-    codeBlocks.push(
-      `<pre class="bg-slate-950/90 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-200">` +
-      `<div class="text-[11px] text-slate-400 font-bold mb-1 border-b border-slate-800 pb-1">${cleanLang}</div>` +
-      `<code>${code}</code></pre>`
-    );
+    if (isUnifiedDiffBlock(cleanLang, code)) {
+      codeBlocks.push(renderUnifiedDiffHtml(code, cleanLang === 'code' ? 'patch / diff' : cleanLang));
+    } else {
+      codeBlocks.push(
+        `<pre class="bg-slate-950/90 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-200">` +
+        `<div class="text-[11px] text-slate-400 font-bold mb-1 border-b border-slate-800 pb-1">${cleanLang}</div>` +
+        `<code>${code}</code></pre>`
+      );
+    }
     return `%%CODE_BLOCK_${idx}%%`;
   });
 

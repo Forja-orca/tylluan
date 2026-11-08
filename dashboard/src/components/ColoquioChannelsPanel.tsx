@@ -69,15 +69,16 @@ export function ColoquioChannelsPanel({
   const [deleting, setDeleting] = useState(false);
 
   const filteredChannels = useMemo(() =>
-    channels.filter(ch => ch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ch.channel_id.toLowerCase().includes(searchQuery.toLowerCase())), [channels, searchQuery]);
+    channels.filter(ch => (ch.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (ch.channel_id ?? '').toLowerCase().includes(searchQuery.toLowerCase())), [channels, searchQuery]);
 
   const groupedChannels = useMemo(() => {
     const g: Record<string, ColoquioChannel[]> = { Diarios: [], Misiones: [], 'Debates privados': [], Canales: [] };
     filteredChannels.forEach(ch => {
-      if (ch.channel_id.startsWith('daily-')) g['Diarios'].push(ch);
-      else if (ch.channel_id.startsWith('mision-')) g['Misiones'].push(ch);
-      else if (ch.channel_id.startsWith('private-') || ch.channel_id.startsWith('agent-')) g['Debates privados'].push(ch);
+      const cid = ch.channel_id ?? '';
+      if (cid.startsWith('daily-')) g['Diarios'].push(ch);
+      else if (cid.startsWith('mision-')) g['Misiones'].push(ch);
+      else if (cid.startsWith('private-') || cid.startsWith('agent-')) g['Debates privados'].push(ch);
       else g['Canales'].push(ch);
     });
     return g;

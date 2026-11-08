@@ -7,7 +7,7 @@ import {
   Settings,
   Beaker,
   Activity,
-  Wifi, WifiOff,
+  Wifi,
   AlertTriangle,
   Zap,
   Radio,
@@ -16,7 +16,7 @@ import {
   Moon,
   Monitor,
   Key,
-  Loader2
+  RefreshCw
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
@@ -30,6 +30,7 @@ import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthModal } from './components/ui/AuthModal'
 import { MissingTokenBanner } from './components/ui/MissingTokenBanner'
+import { StandbyGracefulBanner } from './components/ui/StandbyGracefulBanner'
 
 import React, { lazy, Suspense } from 'react'
 import { OverviewConsolidated } from './components/OverviewConsolidated'
@@ -69,15 +70,6 @@ function App() {
       setDevMode(Boolean(sysStatus.dev_mode));
     }
   }, [sysStatus]);
-
-  const handleRetry = useCallback(async () => {
-    setRetrying(true);
-    try {
-      await refreshData();
-    } finally {
-      setRetrying(false);
-    }
-  }, [refreshData]);
   
   const handleTabChange = useCallback((id: string) => {
     setActiveTab(id);
@@ -141,12 +133,29 @@ function App() {
   useSSEBridgeEvents({ notify })
 
   // SSE layer — resilient, with error_result -> toast routing
-  const { connectionStatus, reconnectAttempts } = useNexusSSE(bridge, {
+  const {
+    connectionStatus,
+    reconnectAttempts,
+    standbyCountdownSecs,
+    currentStepSecs,
+    isProbing,
+    triggerImmediateReconnect,
+  } = useNexusSSE(bridge, {
     onError: useCallback((msg: string, guild?: string) => {
       notify(msg, 'error', guild);
     }, [notify]),
     maxEvents: 200,
   });
+
+  const handleRetry = useCallback(async () => {
+    setRetrying(true);
+    try {
+      triggerImmediateReconnect();
+      await refreshData();
+    } finally {
+      setRetrying(false);
+    }
+  }, [refreshData, triggerImmediateReconnect]);
 
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
@@ -162,6 +171,20 @@ function App() {
       setLastRefresh(new Date());
     }
   }, [online, stats, memoryStats]);
+
+  // Page visibility listener — pauses CSS animations and sets low-power state when minimized/hidden
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        document.documentElement.classList.add('page-hidden');
+      } else {
+        document.documentElement.classList.remove('page-hidden');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    handleVisibility();
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // Polling via centralized coordinator
   usePolling('app-uptime', incrementUptime, { interval: 'fast', enabled: online });
@@ -268,7 +291,7 @@ function App() {
           )}
 
           <div className="hidden md:block">
-            <DeviceStatusBadge bridge={bridge} />
+            <DeviceStatusBadge bridge={bridge} online={online} />
           </div>
 
           <div
@@ -278,22 +301,16 @@ function App() {
               'hidden md:flex items-center gap-2 px-3 py-1.5 rounded border transition-colors',
               connectionStatus === 'connected'
                 ? 'bg-card border-border text-foreground'
-                : connectionStatus === 'reconnecting'
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
-                : 'bg-destructive/10 border-destructive/30 text-destructive'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
             )}
           >
             {connectionStatus === 'connected'
               ? <Wifi className="w-3 h-3 text-emerald-400" aria-hidden="true" />
-              : connectionStatus === 'reconnecting'
-              ? <Radio className="w-3 h-3 text-amber-400" aria-hidden="true" />
-              : <WifiOff className="w-3 h-3 text-red-400" aria-hidden="true" />}
+              : <Radio className="w-3 h-3 text-amber-400 animate-pulse" aria-hidden="true" />}
             <span className="text-[11px] font-semibold">
               {connectionStatus === 'connected'
                 ? '● Conectado'
-                : connectionStatus === 'reconnecting'
-                ? `▲ Reconectando (${reconnectAttempts})`
-                : '■ Sin Conexión'}
+                : `▲ En espera (${standbyCountdownSecs}s)`}
             </span>
           </div>
           
@@ -414,6 +431,18 @@ function App() {
             <Key className="w-4 h-4" aria-hidden="true" />
           </button>
 
+          {/* Integrated Reload / Sync Button (Replaces legacy #tylluan-desktop-reload-btn JS injection) */}
+          <button
+            type="button"
+            aria-label="Sincronizar y recargar estado"
+            disabled={retrying}
+            onClick={handleRetry}
+            className="p-2 rounded border bg-card border-border text-muted-foreground hover:text-primary hover:border-primary/40 disabled:opacity-50 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+            title="Sincronizar con el kernel (Sustituye botón flotante de escritorio)"
+          >
+            <RefreshCw className={cn("w-4 h-4", retrying && "animate-spin text-primary")} aria-hidden="true" />
+          </button>
+
           {online && healthDetailed ? (
             <div 
               role="status"
@@ -434,11 +463,11 @@ function App() {
           ) : !online ? (
             <div 
               role="status"
-              className="flex items-center gap-2 px-3 py-1.5 rounded bg-destructive/10 border border-destructive/30 text-destructive"
+              className="flex items-center gap-2 px-3 py-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400"
             >
-              <div className="w-2 h-2 rounded-full bg-destructive" />
-              <span className="text-[11px] font-semibold">
-                ■ DESCONECTADO
+              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-[11px] font-semibold font-mono">
+                ▲ STANDBY ({standbyCountdownSecs}s)
               </span>
             </div>
           ) : null}
@@ -486,41 +515,29 @@ function App() {
                <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-[10px] font-mono font-bold text-slate-400 border border-slate-700 shrink-0">TY</div>
                <div className="overflow-hidden hidden md:block">
                  <p className="text-[11px] font-bold text-slate-300 truncate">Tylluan Sovereign</p>
-                 <p className="text-[10px] text-slate-400 font-mono truncate">{sysStatus?.version ? `v${sysStatus.version}` : 'v0.17.2'}</p>
+                 <p className="text-[10px] text-slate-400 font-mono truncate">{sysStatus?.version ? `v${sysStatus.version}` : '—'}</p>
                </div>
              </div>
              <div className="h-1 bg-slate-800 rounded overflow-hidden w-full hidden md:block">
-                <div className={cn("h-full w-full", online ? "bg-emerald-500" : "bg-red-500")} />
+                <div className={cn("h-full w-full", online ? "bg-emerald-500" : "bg-amber-500")} />
              </div>
           </div>
         </aside>
 
         {/* Main Content Area */}
         <main className="flex-1 min-h-0 flex flex-col overflow-hidden bg-slate-950">
-          {error && (
-            error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('token') ? (
-              <MissingTokenBanner onOpenAuthModal={() => setAuthModalOpen(true)} />
-            ) : (
-              <div className="m-3 md:m-6 p-4 rounded bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-bold text-red-400">Error de Comunicación</h4>
-                    <p className="text-xs text-red-500/80 mt-1">{error}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={retrying}
-                  onClick={handleRetry}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-300 text-xs font-semibold shrink-0 cursor-pointer disabled:cursor-not-allowed transition-colors focus-visible:ring-1 focus-visible:ring-red-400 focus-visible:outline-none"
-                >
-                  {retrying && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-                  <span>{retrying ? 'Reintentando...' : 'Reintentar'}</span>
-                </button>
-              </div>
-            )
-          )}
+          {error && (error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('token')) ? (
+            <MissingTokenBanner onOpenAuthModal={() => setAuthModalOpen(true)} />
+          ) : (!online || error) ? (
+            <StandbyGracefulBanner
+              countdownSecs={standbyCountdownSecs}
+              totalStepSecs={currentStepSecs}
+              reconnectAttempts={reconnectAttempts}
+              retrying={retrying || isProbing}
+              onRetryNow={handleRetry}
+              lastKnownDetail={sysStatus?.version ? `v${sysStatus.version}${sysStatus?.git_commit ? ` (${sysStatus.git_commit})` : ''}` : null}
+            />
+          ) : null}
 
           {/* Consolidated View Panels */}
           <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-400">Cargando vista...</div>}>
