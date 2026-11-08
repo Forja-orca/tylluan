@@ -605,7 +605,11 @@ pub async fn handle_tylluan_remember(
             task_id
         } else {
             let mgr = crate::memory::agent_memory::AgentMemoryManager::new(server.silva.clone(), 20);
-            mgr.record_memory(aid, &content, importance).await
+            // MEM-6 (T3125): con `agent_id` se pasaba `record_memory`, que no recibe
+            // metadata: el llamante perdia `kind`/`space`/`topic`, `topic_key` quedaba
+            // NULL y MEM-3 no podia sustituir nada. Ahora se fusiona (con las claves
+            // peligrosas fuera, ver `CALLER_METADATA_DENIED`).
+            mgr.record_memory_with_metadata(aid, &content, importance, Some(&metadata)).await
         };
 
         // ASI06 Layer 2 runs once for every remember, after the node exists --
@@ -1268,6 +1272,114 @@ mod embedding_failure_tests {
             normal.valid_until.is_none(),
             "un nodo normal no se caduca por tener el mismo topic"
         );
+    }
+
+    /// MEM-6 (T3125): la ruta **con `agent_id`** conserva la metadata del llamante y
+    /// sustituye por clave de estado igual que la anónima.
+    ///
+    /// Antes de MEM-6 el nodo quedaba con `{agent_id, importance}`, `topic_key` NULL y
+    /// la segunda escritura respondía `action=nuevo` con la primera viva (medido en
+    /// producción el 2026-11-07).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem6_e2e_con_agent_id_conserva_metadata_y_sustituye() {
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use crate::memory::mailbox::Mailbox;
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let matcher = GuildMatcher::new(builtin_catalog());
+        let (tx, _) = broadcast::channel(16);
+        let node_router = AgentNodeRouter::new(tx);
+        let silva = Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap());
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(
+                crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap(),
+            )),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(matcher),
+            silva.clone(),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            node_router,
+        );
+
+        // El llamante manda su metadata de estado e intenta pisar tres claves que no
+        // son suyas (`agent_id`, `federation_source`, `protected`/`sensitivity`).
+        let mut args = serde_json::Map::new();
+        args.insert("content".to_string(), serde_json::Value::String("estado con agente: fase 1".to_string()));
+        args.insert("agent_id".to_string(), serde_json::Value::String("claude-code".to_string()));
+        args.insert("metadata".to_string(), serde_json::json!({
+            "kind": "state",
+            "space": "tl-global-map",
+            "importance": 0.7,
+            "agent_id": "otro-agente",
+            "federation_source": "peer:mentiroso",
+            "protected": true,
+            "sensitivity": "public"
+        }));
+
+        let r1 = handle_tylluan_remember(&server, Some(args.clone())).await.expect("primera nota");
+        assert!(!r1.is_error.unwrap_or(false), "la primera se guarda");
+        let t1 = r1.content[0].as_text().unwrap().text.clone();
+        let id1 = t1
+            .split("Stored node ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .expect("id de la primera nota")
+            .to_string();
+        assert!(t1.contains("action=nuevo"), "la primera no sustituye a nadie: {t1}");
+
+        let n1 = silva.get_node(&id1).await.unwrap().expect("la 1a existe");
+        let m1: serde_json::Value = serde_json::from_str(&n1.metadata).expect("metadata JSON");
+        assert_eq!(m1["kind"], "state", "la metadata del llamante se conserva: {m1}");
+        assert_eq!(m1["space"], "tl-global-map", "el espacio se conserva: {m1}");
+        assert_eq!(m1["agent_id"], "claude-code", "el llamante NO puede pisar agent_id: {m1}");
+        assert_eq!(m1["importance"], 0.7, "importance es la del argumento validado: {m1}");
+        assert!(m1.get("federation_source").is_none(), "un nodo local no se declara federado: {m1}");
+        assert!(m1.get("protected").is_none(), "protected no viaja en la metadata: {m1}");
+        assert!(m1.get("sensitivity").is_none(), "sensitivity la decide el kernel: {m1}");
+        assert_eq!(
+            n1.topic_key.as_deref(),
+            Some("state:tl-global-map"),
+            "la clave de estado se guarda tambien en la ruta con agent_id"
+        );
+
+        // La segunda nota, misma clave: sustituye a la primera (que se conserva).
+        let mut args2 = args.clone();
+        args2.insert("content".to_string(), serde_json::Value::String("estado con agente: fase 2".to_string()));
+        let r2 = handle_tylluan_remember(&server, Some(args2)).await.expect("segunda nota");
+        assert!(!r2.is_error.unwrap_or(false));
+        let t2 = r2.content[0].as_text().unwrap().text.clone();
+        let id2 = t2
+            .split("Stored node ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .expect("id de la segunda nota")
+            .to_string();
+        assert_ne!(id1, id2, "son nodos distintos");
+        assert!(t2.contains("action=supersede"), "la segunda sustituye: {t2}");
+        assert!(
+            t2.contains(&format!("previous version {id1}")),
+            "la respuesta nombra la version previa: {t2}"
+        );
+
+        let n1b = silva.get_node(&id1).await.unwrap().expect("la 1a se conserva");
+        assert!(n1b.valid_until.is_some(), "la 1a queda caducada: {n1b:?}");
+        assert_eq!(n1b.content, "[claude-code] estado con agente: fase 1", "el texto anterior NO se borra");
+        let n2 = silva.get_node(&id2).await.unwrap().expect("la 2a existe");
+        assert!(n2.valid_until.is_none(), "la 2a es la version viva");
+        assert_eq!(n2.topic_key.as_deref(), Some("state:tl-global-map"));
     }
 
     /// MEM-3 v4 (T3038, punto 2): si la escritura de la nota nueva FALLA, el estado

@@ -7,6 +7,19 @@ use uuid::Uuid;
 
 const SEMANTIC_CLUSTER_THRESHOLD: f32 = 0.85;
 
+/// MEM-6 (T3125): claves de la metadata del llamante que **no** se copian al nodo de
+/// memoria de agente, con el motivo de cada una. `agent_id` e `importance` los
+/// impone el kernel; el resto cambian decisiones de seguridad o columnas propias.
+pub(crate) const CALLER_METADATA_DENIED: [&str; 7] = [
+    "agent_id",          // lo pone el kernel: es la identidad de la llamada
+    "importance",        // lo pone el kernel desde el argumento validado
+    "federation_source", // nodes.rs lo copia a su columna: un local no se declara federado
+    "sensitivity",       // clinical_gate.rs decide con el si la peticion sale a la nube
+    "protected",         // hoy el INSERT lo fija a 0: que no pueda cambiar sin revisarse
+    "shareable",         // idem: hoy literal 0 en el INSERT
+    "owner_scope",       // sale de NodeWriteOptions, no de la metadata
+];
+
 /// Best-effort read of the audit rows for the Ouroboros harvest (T-DSH-75).
 /// Returns `None` (after a warn) on open/prepare/query failure so the caller
 /// keeps its `usize` contract (0 harvested) instead of failing silently.
@@ -216,16 +229,64 @@ impl AgentMemoryManager {
     /// filtering on owner_scope/metadata at read time; a node with no scope
     /// can't be excluded from anyone's results).
     pub async fn record_memory(&self, agent_id: &str, content: &str, importance: f64) -> String {
+        self.record_memory_with_metadata(agent_id, content, importance, None)
+            .await
+    }
+
+    /// MEM-6 (T3125): graba una memoria de agente **conservando la metadata del
+    /// llamante**.
+    ///
+    /// Antes, la ruta con `agent_id` de `tylluan_remember` llamaba a
+    /// `record_memory`, que no recibe metadata: el nodo quedaba con
+    /// `{agent_id, importance}` y `topic_key` NULL, así que MEM-3 (identidad de una
+    /// nota de estado) no podía sustituir nada y la respuesta decía `action=nuevo`.
+    /// Medido en producción el 2026-11-07 (dos notas `kind=state space=tl-global-map`,
+    /// la primera seguía viva con `topic_key` NULL).
+    ///
+    /// Fusión y límites: la metadata del llamante se conserva **menos** las claves
+    /// que el kernel posee o que cambian una decisión de seguridad, y `agent_id` e
+    /// `importance` los impone el kernel (el llamante no puede pisarlos):
+    /// - `agent_id`, `importance`: los pone el kernel, siempre.
+    /// - `federation_source`: `nodes.rs` lo copia a su columna; un nodo local no
+    ///   debe poder declararse federado.
+    /// - `sensitivity`: `router/decision/clinical_gate.rs` lo usa para decidir si
+    ///   la petición puede salir a la nube.
+    /// - `protected`, `shareable`, `owner_scope`: hoy el INSERT los fija a literal
+    ///   (0 / `NodeWriteOptions`), pero se descartan igualmente para que no se
+    ///   conviertan en escalada si esa decisión cambia.
+    ///
+    /// `topic_key` lo deriva `upsert_node_with_validity` de `metadata.topic` o
+    /// `metadata.space` (misma regla que la ruta anónima), así que la clave de
+    /// estado se guarda y MEM-3 puede sustituir por clave exacta.
+    pub async fn record_memory_with_metadata(
+        &self,
+        agent_id: &str,
+        content: &str,
+        importance: f64,
+        caller_metadata: Option<&str>,
+    ) -> String {
         let node_id = format!("agent_memory:{}:{}", agent_id, Uuid::new_v4().simple());
         let tagged = format!("[{agent_id}] {content}");
         // D-32 (V4, matiz 1 de T-DSH-33): el nodo lo crea ESTA función, no el
         // handler de Coloquio, así que la marca va aquí o no va. Es condicional a
         // la capa 1 (record_memory también persiste memorias legítimas): misma
         // semántica que `ingest` — marcar, no rechazar.
-        let mut meta_value = serde_json::json!({
-            "agent_id": agent_id,
-            "importance": importance,
-        });
+        let mut meta_value = match caller_metadata
+            .and_then(|m| serde_json::from_str::<serde_json::Value>(m).ok())
+        {
+            Some(serde_json::Value::Object(map)) => serde_json::Value::Object(map),
+            _ => serde_json::json!({}),
+        };
+        if let Some(obj) = meta_value.as_object_mut() {
+            for clave in CALLER_METADATA_DENIED {
+                obj.remove(&clave.to_string());
+            }
+            obj.insert(
+                "agent_id".to_string(),
+                serde_json::Value::String(agent_id.to_string()),
+            );
+            obj.insert("importance".to_string(), serde_json::json!(importance));
+        }
         crate::security::trust::mark_if_layer1_flagged(&mut meta_value, content, "agent_memory");
         let meta = meta_value.to_string();
         let scope = format!("agent:{agent_id}");
