@@ -95,7 +95,8 @@ jobs:
         # and install pattern as this repo's own Dockerfile (see Dockerfile
         # ~line 42-53) so CI matches the real, already-solved production case.
         run: |
-          curl -L -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz"
+          curl -fL --retry 6 --retry-delay 10 --retry-all-errors -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz"
+          gzip -t /tmp/onnxruntime.tgz
           tar -zxf /tmp/onnxruntime.tgz -C /tmp
           sudo mv /tmp/onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so* /usr/lib/
           rm -rf /tmp/onnxruntime*
