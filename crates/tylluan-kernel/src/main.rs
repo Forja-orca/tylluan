@@ -771,6 +771,15 @@ async fn main() -> anyhow::Result<()> {
     } else {
         info!("🧠 Pre-loading embedding model: {}", dense_model_name);
     }
+    // D-160: ruta+device guardados para poder RECARGAR el motor si el TTL de
+    // inactividad lo suelta (la primera consulta paga el arranque en frío).
+    let dense_reload = if dense_cached {
+        dense_model_path
+            .clone()
+            .map(|path| (path, engine_device.clone()))
+    } else {
+        None
+    };
     let dense_handle = match (dense_model_path.as_ref(), dense_cached) {
         (Some(path), true) => {
             let device = engine_device.clone();
@@ -928,6 +937,35 @@ async fn main() -> anyhow::Result<()> {
     let hormones_shared = Arc::new(std::sync::Mutex::new(HormoneSystem::new()));
     let matcher = matcher.with_hormones(hormones_shared.clone());
     let matcher = Arc::new(matcher);
+
+    // D-160: cómo recargar el motor denso cuando el TTL lo haya soltado.
+    if let Some((reload_path, reload_device)) = dense_reload {
+        matcher.set_engine_loader(std::sync::Arc::new(move || {
+            EmbeddingEngine::load_with_device(&reload_path, &reload_device)
+        }));
+    }
+
+    // D-160: barrido del TTL de inactividad (cada 30 s). Lee el valor VIVO del
+    // TOML en cada vuelta: cambiarlo no exige recompilar ni reiniciar. `0`
+    // (default) deja el comportamiento histórico intacto.
+    {
+        let matcher_reaper = matcher.clone();
+        let silva_reaper = silva.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                tick.tick().await;
+                let ttl = TylluanConfig::load_cached()
+                    .ok()
+                    .and_then(|cfg| cfg.try_read().ok().map(|g| g.memory.embedding_idle_ttl_secs))
+                    .unwrap_or(0);
+                if ttl > 0 && matcher_reaper.release_engine_if_idle(ttl) {
+                    silva_reaper.release_dense_engine();
+                }
+            }
+        });
+    }
 
     // Share the dense engine handle with SilvaDB for the recall cascade
     // (stage 2 embeds queries itself; re-installed after background hot-swap).

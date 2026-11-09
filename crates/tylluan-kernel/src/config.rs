@@ -828,6 +828,16 @@ pub struct MemoryConfig {
     #[serde(default = "default_dimensions")]
     pub vector_dimensions: u32,
 
+    /// D-160 (T3729/T3743): segundos de inactividad tras los cuales el kernel
+    /// **suelta** las sesiones ONNX del motor de embeddings; la siguiente
+    /// consulta las recarga (arranque en frío medido).
+    ///
+    /// `0` (default) = nunca liberar, que es el comportamiento histórico. El
+    /// valor de producción (600 s) lo pone el operador en el `tylluan.toml`
+    /// vivo; el kernel lo relee, así que no exige recompilar.
+    #[serde(default)]
+    pub embedding_idle_ttl_secs: u64,
+
     /// Shared budget for heavy background loops (reindexer, HNSW rebuild,
     /// memory consensus): max jobs running simultaneously + bounded wait to
     /// enter (latency budget). Prevents the 2026-08-30 GraphRAG failure class
@@ -879,6 +889,7 @@ impl Default for MemoryConfig {
             db_path: default_db_path(),
             embedding_model: default_embedding_model(),
             vector_dimensions: default_dimensions(),
+            embedding_idle_ttl_secs: 0,
             background_concurrency: default_background_concurrency(),
             background_max_wait_secs: default_background_max_wait_secs(),
             reindex_node_delay_ms: default_reindex_node_delay_ms(),

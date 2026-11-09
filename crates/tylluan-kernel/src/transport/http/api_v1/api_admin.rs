@@ -11,6 +11,36 @@ use serde::Deserialize;
 use crate::transport::http::{HttpState, SaveConfigRequest};
 use rmcp::model::CallToolRequestParam;
 
+/// D-161 (Hermes T3739): el `response_snippet` lo escribe el **upstream**, no
+/// nosotros. Puede traer de vuelta la cabecera `Authorization` (proxies y
+/// gateways que hacen eco), una `api_key` en el mensaje de error o un token
+/// largo en un JSON. Antes se recortaba a 200/300 caracteres y se devolvía tal
+/// cual.
+///
+/// Regla: se recorta **y** se tacha cualquier cosa con forma de credencial.
+/// Es deliberadamente agresivo — un snippet es diagnóstico, no un dato.
+pub(crate) fn sanitize_upstream_snippet(raw: &str, max_chars: usize) -> String {
+    use std::sync::LazyLock;
+    static BEARER: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?i)\bBearer\s+[A-Za-z0-9._+/=-]{4,}").expect("regex bearer"));
+    static SK: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\bsk-[A-Za-z0-9_-]{4,}").expect("regex sk"));
+    static HEADER: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(
+            r#"(?i)["']?(authorization|api[_-]?key|x-api-key|access[_-]?token|token|secret)["']?\s*[:=]\s*["']?[A-Za-z0-9._\-+/=]{6,}"#,
+        )
+        .expect("regex header")
+    });
+    static LONG_TOKEN: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\b[A-Za-z0-9_-]{32,}\b").expect("regex long token"));
+
+    let mut out = BEARER.replace_all(raw, "Bearer ***").to_string();
+    out = SK.replace_all(&out, "sk-***").to_string();
+    out = HEADER.replace_all(&out, "$1: ***").to_string();
+    out = LONG_TOKEN.replace_all(&out, "***").to_string();
+    out.chars().take(max_chars).collect()
+}
+
 /// Result of a real MCP ping against a provider's backend.
 #[derive(Debug, serde::Serialize)]
 pub struct ProviderTestResult {
@@ -78,7 +108,7 @@ pub async fn mcp_ping_server(endpoint: &str, timeout_secs: u64) -> ProviderTestR
                 endpoint: endpoint.to_string(),
                 http_status,
                 latency_ms,
-                response_snippet: Some(body_text.chars().take(200).collect()),
+                response_snippet: Some(sanitize_upstream_snippet(&body_text, 200)),
                 error: if mcp_ok { None } else {
                     Some("HTTP succeeded but MCP ping response lacks 'result' field".into())
                 },
@@ -211,9 +241,14 @@ pub async fn test_external_provider(
                 model_tested: Some(model.to_string()),
                 http_status,
                 latency_ms,
-                response_snippet: Some(body_text.chars().take(300).collect()),
+                response_snippet: Some(sanitize_upstream_snippet(&body_text, 300)),
+                // D-161 v2: el `error` también lleva texto del upstream (mismo eco de
+                // la cabecera Authorization). Se sanea igual que el snippet.
                 error: if op_ok { None } else {
-                    Some(format!("Provider returned HTTP {http_status}: {}", body_text.chars().take(200).collect::<String>()))
+                    Some(format!(
+                        "Provider returned HTTP {http_status}: {}",
+                        sanitize_upstream_snippet(&body_text, 200)
+                    ))
                 },
             }
         }
@@ -1435,7 +1470,7 @@ pub async fn health_detailed_handler(
     // Server capabilities
     let (embeddings_loaded, reranker_loaded, embedding_model) = if let Some(ref srv_arc) = state.server {
         if let Ok(s) = srv_arc.try_read() {
-            let emb = s.matcher.engine();
+            let emb = s.matcher.peek_engine();
             let emb_model = emb.as_ref().map(|e| e.engine_id()).unwrap_or_default();
             let rer = s.reranker.is_some();
             (emb.is_some(), rer, emb_model)
@@ -2679,6 +2714,85 @@ mod tests {
         );
         assert!(toml_text.contains("base_url"));
         assert!(toml_text.contains("api_key_env"));
+    }
+
+
+    // ── D-161: el snippet del upstream no puede devolver credenciales ───────
+
+    #[test]
+    fn d161_snippet_redacts_echoed_authorization_header() {
+        let raw = "HTTP/1.1 401 Unauthorized\nAuthorization: Bearer sk-live-ABCDEF123456\n";
+        let out = sanitize_upstream_snippet(raw, 300);
+        assert!(!out.contains("sk-live-ABCDEF123456"), "salio la clave: {out}");
+        assert!(out.contains("***"), "deberia tachar algo: {out}");
+    }
+
+    #[test]
+    fn d161_snippet_redacts_api_key_fields_and_long_tokens() {
+        let json = r#"{"error":"invalid api_key: sk-proj-9f8e7d6c5b4a","request_id":"0123456789abcdef0123456789abcdef01234567"}"#;
+        let out = sanitize_upstream_snippet(json, 300);
+        assert!(!out.contains("sk-proj-9f8e7d6c5b4a"), "{out}");
+        assert!(!out.contains("0123456789abcdef0123456789abcdef01234567"), "{out}");
+        assert!(out.contains("***"), "{out}");
+    }
+
+    #[test]
+    fn d161_snippet_still_truncates_and_keeps_diagnostics() {
+        let raw = "error: model not found; usa /v1/models para ver los disponibles";
+        let out = sanitize_upstream_snippet(raw, 20);
+        assert_eq!(out.chars().count(), 20, "el tope sigue mandando: {out}");
+        assert!(out.starts_with("error: model not"), "{out}");
+    }
+
+    /// Upstream que **ecoa la cabecera Authorization** en el cuerpo (caso
+    /// Hermes: gateways que devuelven la petición en el error).
+    async fn start_mock_echo_auth() -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let Ok((mut stream, _)) = listener.accept().await else { return };
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut buf = vec![0u8; 8192];
+            let n = stream.read(&mut buf).await.unwrap_or(0);
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            let auth = request
+                .lines()
+                .find(|l| l.to_ascii_lowercase().starts_with("authorization:"))
+                .unwrap_or("Authorization: (sin cabecera)")
+                .to_string();
+            let body = format!(r#"{{"error":"upstream echoed request","echo":"{auth}"}}"#);
+            let response = format!(
+                "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(), body
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn d161_provider_test_never_returns_the_echoed_key() {
+        let base = start_mock_echo_auth().await;
+        let secret = "sk-ECHO-1234567890abcdef";
+        let res = test_external_provider("openai_compatible", &base, secret, "gpt-4o-mini", 5).await;
+        let snippet = res.response_snippet.unwrap_or_default();
+        assert!(!snippet.is_empty(), "el caso debe producir snippet");
+        assert!(
+            !snippet.contains(secret),
+            "el upstream ecoó la clave y salió en el snippet: {snippet}"
+        );
+        assert!(!snippet.contains("sk-ECHO"), "ni siquiera el prefijo: {snippet}");
+
+        // D-161 v2 (hallazgo del TL): el campo `error` también llevaba el cuerpo
+        // del upstream. Sin sanearlo, aquí saldría la clave ecoada.
+        let error = res.error.clone().unwrap_or_default();
+        assert!(
+            !error.contains(secret),
+            "el error del provider devolvió la clave ecoada: {error}"
+        );
+        assert!(!error.contains("sk-ECHO"), "ni el prefijo en `error`: {error}");
+        assert!(error.contains("***"), "el error debería llevar el tachado: {error}");
     }
 
 }

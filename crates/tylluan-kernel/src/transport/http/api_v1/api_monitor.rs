@@ -189,9 +189,9 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
     let (homeostasis, stress_level, active_pheromones, capabilities) = if let Some(ref srv_arc) = state.server {
         let srv = srv_arc.read().await;
         let cap = serde_json::json!({
-            "embeddings_loaded": srv.matcher.engine().is_some(),
+            "embeddings_loaded": srv.matcher.peek_engine().is_some(),
             "reranker_loaded": srv.reranker.is_some(),
-            "embedding_model": srv.matcher.engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
+            "embedding_model": srv.matcher.peek_engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
             "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },
         });
         if let Ok(h) = srv.hormones.lock() {
@@ -487,7 +487,7 @@ pub async fn canary_handler(State(state): State<Arc<HttpState>>) -> impl IntoRes
         total += 1;
         let loaded = if let Some(ref srv_arc) = state.server {
             if let Ok(srv) = srv_arc.try_read() {
-                srv.matcher.engine().is_some()
+                srv.matcher.peek_engine().is_some()
             } else { false }
         } else { false };
         if loaded { passed += 1; }
@@ -649,9 +649,9 @@ pub async fn interoception_handler(State(state): State<Arc<HttpState>>) -> impl 
     let (homeostasis, stress_level, active_pheromones, _agent_rhythms, capabilities) = if let Some(ref srv_arc) = state.server {
         let srv = srv_arc.read().await;
         let cap = serde_json::json!({
-            "embeddings_loaded": srv.matcher.engine().is_some(),
+            "embeddings_loaded": srv.matcher.peek_engine().is_some(),
             "reranker_loaded": srv.reranker.is_some(),
-            "embedding_model": srv.matcher.engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
+            "embedding_model": srv.matcher.peek_engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
             "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },
         });
         if let Ok(h) = srv.hormones.lock() {

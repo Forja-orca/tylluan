@@ -357,6 +357,16 @@ impl SilvaDB {
     /// Share the dense embedding engine handle (same Arc as Matcher's).
     /// Re-install after hot-swaps so the cascade always embeds with the
     /// currently-active model.
+    /// D-160: suelta la copia del motor denso que usa la cascada de recall.
+    /// Sin esto, liberar el motor del matcher no baja RAM: SilvaDB tenía la suya.
+    /// Devuelve `true` si había algo que soltar.
+    pub fn release_dense_engine(&self) -> bool {
+        let mut guard = self.dense_engine.lock().unwrap_or_else(|e| e.into_inner());
+        let had = guard.is_some();
+        *guard = None;
+        had
+    }
+
     pub fn install_dense_engine(
         &self,
         engine: std::sync::Arc<crate::router::embeddings::EmbeddingEngine>,

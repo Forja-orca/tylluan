@@ -942,6 +942,27 @@ pub async fn await_engine_load<T: Send + 'static>(
 }
 
 impl EmbeddingEngine {
+    /// D-160: cierra los hilos coalescentes del batcher.
+    ///
+    /// Sin esto el motor **no se puede liberar**: el hilo del batcher guarda un
+    /// `Arc<EmbeddingEngine>` durante toda su vida y el motor guarda el `tx` del
+    /// batcher, así que hay un ciclo y el `strong_count` nunca llega a cero.
+    /// Tirar el `tx` cierra el canal, el hilo termina y su `Arc` cae. Idempotente.
+    pub fn shutdown_batchers(&self) {
+        let batcher = self
+            .batcher
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        let routing = self
+            .routing_batcher
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        drop(batcher);
+        drop(routing);
+    }
+
     /// Initialize the embedding engine using fastembed.
     pub fn load(model_name: &str) -> Result<Self> {
         Self::load_with_device(model_name, &InferenceDevice::Cpu)

@@ -6,7 +6,6 @@ use sysinfo::System;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::memory::idle_lab::IdleLab;
-use crate::router::embeddings::EmbeddingEngine;
 
 // Global flag to enable/disable the autoresearch daemon at runtime
 pub static AUTORESEARCH_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -16,7 +15,7 @@ pub static AUTORESEARCH_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Implements Zero-Lag logic by yielding when CPU is > 20%.
 pub async fn autoresearch_daemon(
     idle_lab: Arc<IdleLab>,
-    engine: Option<Arc<EmbeddingEngine>>,
+    matcher: Arc<crate::router::matcher::GuildMatcher>,
     reranker: Option<Arc<crate::router::embeddings::RerankEngine>>,
 ) {
     let mut sys = System::new();
@@ -45,6 +44,11 @@ pub async fn autoresearch_daemon(
         if cpu_usage < 20.0 {
             info!("🧪 AutoResearch: CPU is idle ({:.1}% < 20%). Starting organic benchmark cycle...", cpu_usage);
             
+            // D-160: el motor se pide AQUI, no al arrancar. Antes el daemon
+            // recibía un `Arc<EmbeddingEngine>` y lo retenía toda su vida
+            // (aunque `AUTORESEARCH_ACTIVE` estuviera en false), así que el TTL
+            // de inactividad nunca podía liberar la sesión ONNX.
+            let engine = matcher.engine();
             // Run exactly 1 organic experiment to prevent starving resources
             idle_lab.run_experiments(engine.as_deref(), reranker.as_deref(), 1).await;
         } else {

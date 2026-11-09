@@ -1145,7 +1145,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     // --- M18-1 AutoResearch Daemon Spawning ---
     let ar_silva = state.silva.clone();
     let data_dir = std::path::PathBuf::from("data");
-    let ar_engine = state.matcher.engine_arc();
+    // D-160: se pasa el MATCHER, no una copia del motor: el daemon lo pide
+    // sólo cuando va a usarlo, así no impide que el TTL lo libere.
+    let ar_matcher = state.matcher.clone();
     let ar_reranker = if let Some(ref s) = server {
         s.read().await.reranker.clone()
     } else {
@@ -1153,7 +1155,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     };
     tokio::spawn(async move {
         let idle_lab = std::sync::Arc::new(crate::memory::idle_lab::IdleLab::new(ar_silva, &data_dir));
-        crate::memory::autoresearch::autoresearch_daemon(idle_lab, ar_engine, ar_reranker).await;
+        crate::memory::autoresearch::autoresearch_daemon(idle_lab, ar_matcher, ar_reranker).await;
     });
 
     // M14-F Phase 3: P2P dispatch listener

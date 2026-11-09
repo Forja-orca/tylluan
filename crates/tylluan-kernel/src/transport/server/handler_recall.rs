@@ -605,6 +605,14 @@ if let Some(ref mut s) = stmt {
     // enough to answer alone.
     // Cache hit: skip dense embed entirely — results are already cached and
     // downstream stages (CoherenceGate Layer 4) handle None gracefully.
+    // D-160: si el TTL de inactividad soltó el motor, esta consulta paga el
+    // arranque en frío (una vez). Se reinstala en SilvaDB para la cascada.
+    if !server.matcher.has_engine()
+        && server.matcher.ensure_engine_loaded()
+        && let Some(eng) = server.matcher.engine_arc()
+    {
+        server.silva.install_dense_engine(eng);
+    }
     let cascade = server.recall_cascade_enabled && mode != "dual";
     let mut query_embedding = if cascade || cached_docs.is_some() {
         None

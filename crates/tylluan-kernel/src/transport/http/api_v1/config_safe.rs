@@ -72,6 +72,8 @@ pub const SCHEMA: &[SchemaField] = &[
     SchemaField { key: "inference.max_threads", section: "inference", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(256.0), options: &[], reason: "" },
     SchemaField { key: "silva.reranker_enabled", section: "inference", kind: "boolean", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], reason: "" },
     // Mantenimiento
+    // D-160: TTL de inactividad del motor de embeddings (0 = nunca liberar).
+    SchemaField { key: "memory.embedding_idle_ttl_secs", section: "inference", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(86400.0), options: &[], reason: "libera RAM de ONNX tras inactividad; 0 = apagado" },
     SchemaField { key: "memory.background_concurrency", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(32.0), options: &[], reason: "el supervisor se crea al arrancar (H1)" },
     SchemaField { key: "memory.background_max_wait_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(0.0), max: Some(3600.0), options: &[], reason: "el supervisor se crea al arrancar (H1)" },
     SchemaField { key: "memory.reindex_node_delay_ms", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(10000.0), options: &[], reason: "en caliente: se lee en cada pasada" },

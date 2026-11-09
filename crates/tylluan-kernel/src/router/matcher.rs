@@ -160,15 +160,45 @@ fn guild_category_bonus(intent_lower: &str, category: &GuildCategory) -> (f32, &
 pub struct GuildMatcher {
     catalog: Vec<GuildDescriptor>,
     engine: std::sync::Mutex<Option<Arc<EmbeddingEngine>>>,
+    /// D-160: cómo volver a cargar el motor si el TTL lo soltó. Lo instala
+    /// `main` con la ruta y el device reales; `None` = no recargable (perfil
+    /// sin modelo denso, tests).
+    engine_loader: std::sync::Mutex<Option<EngineLoader>>,
+    /// D-160: epoch (s) del último uso del motor, para el TTL de inactividad.
+    last_engine_use: std::sync::atomic::AtomicU64,
     curriculum: Option<Arc<Mutex<crate::curriculum::CurriculumLearner>>>,
     hormones: Option<Arc<std::sync::Mutex<crate::hormones::HormoneSystem>>>,
     guild_health: dashmap::DashMap<String, f64>,
 }
 
+/// D-160: cómo volver a cargar el motor denso tras un TTL cumplido. Lo
+/// instala `main` con la ruta y el device reales; `None` = no recargable.
+pub type EngineLoader = Arc<dyn Fn() -> anyhow::Result<EmbeddingEngine> + Send + Sync>;
+
+/// D-160: ¿ha pasado el TTL desde `last_use`? Puro para poder testearlo.
+fn idle_expired(last_use: u64, now: u64, ttl_secs: u64) -> bool {
+    ttl_secs > 0 && now.saturating_sub(last_use) >= ttl_secs
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 impl GuildMatcher {
     /// Create a new matcher from a catalog of guild descriptors.
     pub fn new(catalog: Vec<GuildDescriptor>) -> Self {
-        Self { catalog, engine: std::sync::Mutex::new(None), curriculum: None, hormones: None, guild_health: dashmap::DashMap::new() }
+        Self {
+            catalog,
+            engine: std::sync::Mutex::new(None),
+            engine_loader: std::sync::Mutex::new(None),
+            last_engine_use: std::sync::atomic::AtomicU64::new(now_secs()),
+            curriculum: None,
+            hormones: None,
+            guild_health: dashmap::DashMap::new(),
+        }
     }
 
     /// Attach a curriculum learner for experience-based routing.
@@ -199,12 +229,110 @@ impl GuildMatcher {
 
     /// Access the underlying embedding engine.
     pub fn engine(&self) -> Option<Arc<EmbeddingEngine>> {
+        self.touch_engine();
         self.engine.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
     }
 
     /// Access the underlying embedding engine as an Arc for shared ownership.
     pub fn engine_arc(&self) -> Option<Arc<EmbeddingEngine>> {
+        self.touch_engine();
         self.engine.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    /// D-160: marca de uso del motor (se llama desde `engine`/`engine_arc`).
+    fn touch_engine(&self) {
+        self.last_engine_use
+            .store(now_secs(), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// D-160: instala cómo recargar el motor tras un TTL cumplido.
+    pub fn set_engine_loader(&self, loader: EngineLoader) {
+        *self.engine_loader.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(loader);
+    }
+
+    /// D-160: como [`Self::engine`] pero **sin** tocar la marca de uso.
+    ///
+    /// Para observadores periódicos (monitor, doctor): si un panel que refresca
+    /// cada pocos segundos marcara uso, el TTL no se cumpliría nunca.
+    pub fn peek_engine(&self) -> Option<Arc<EmbeddingEngine>> {
+        self.engine.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    /// D-160: ¿hay motor denso cargado ahora mismo?
+    pub fn has_engine(&self) -> bool {
+        self.engine.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some()
+    }
+
+    /// D-160: suelta el motor si lleva `ttl_secs` sin usarse.
+    ///
+    /// `ttl_secs == 0` es «nunca liberar» (default histórico). Devuelve `true`
+    /// sólo si esta llamada efectivamente lo soltó. Los `Arc` que ya tengan los
+    /// llamantes siguen vivos hasta que terminen; el pico de RAM baja cuando se
+    /// sueltan, no aquí.
+    pub fn release_engine_if_idle(&self, ttl_secs: u64) -> bool {
+        if ttl_secs == 0 {
+            return false;
+        }
+        let last = self.last_engine_use.load(std::sync::atomic::Ordering::Relaxed);
+        if !idle_expired(last, now_secs(), ttl_secs) {
+            return false;
+        }
+        let mut guard = self.engine.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(engine) = guard.take() else {
+            return false;
+        };
+        drop(guard);
+        // D-160: romper el ciclo motor <-> batcher. Sin esto el motor sigue
+        // vivo (y su sesión ONNX con él) aunque nadie lo use.
+        engine.shutdown_batchers();
+        let others = Arc::strong_count(&engine).saturating_sub(1);
+        let freed = Arc::try_unwrap(engine).is_ok();
+        tracing::info!(
+            idle_secs = now_secs().saturating_sub(last),
+            ttl_secs,
+            extra_refs = others,
+            session_freed = freed,
+            "D-160: motor de embeddings liberado por inactividad (se recargará en la próxima consulta)"
+        );
+        true
+    }
+
+    /// D-160: devuelve el motor, recargándolo si el TTL lo soltó.
+    ///
+    /// Bloqueante a propósito (la carga ONNX tarda decenas de segundos): lo
+    /// llama el camino de recall, que ya envuelve trabajo bloqueante. Devuelve
+    /// `false` si no hay loader instalado o si la carga falló.
+    pub fn ensure_engine_loaded(&self) -> bool {
+        if self.has_engine() {
+            self.touch_engine();
+            return true;
+        }
+        let loader = self
+            .engine_loader
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        let Some(loader) = loader else {
+            return false;
+        };
+        tracing::info!("D-160: recargando motor de embeddings (arranque en frío)");
+        let started = std::time::Instant::now();
+        match loader() {
+            Ok(engine) => {
+                let arc = Arc::new(engine);
+                *self.engine.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(arc);
+                self.touch_engine();
+                tracing::info!(
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "D-160: motor de embeddings recargado"
+                );
+                true
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "D-160: no se pudo recargar el motor de embeddings");
+                false
+            }
+        }
     }
 
     /// Access the curriculum learner.
@@ -1443,4 +1571,48 @@ mod tests {
             .expect("real catalog must contain a trigger stemming into 'investigación'");
         assert_eq!(t.guild_name, "deep_web_research");
     }
+
+    // ── D-160: TTL de inactividad del motor denso ──────────────────────────
+
+    #[test]
+    fn d160_idle_expired_arithmetic() {
+        assert!(!idle_expired(100, 1_000, 0), "ttl 0 = nunca liberar");
+        assert!(!idle_expired(1_000, 1_100, 600), "100 s < 600 s");
+        assert!(idle_expired(1_000, 1_600, 600), "justo al cumplir el TTL");
+        assert!(idle_expired(1_000, 9_999, 600), "muy pasado");
+    }
+
+    #[test]
+    fn d160_fresh_matcher_has_no_engine_and_release_is_a_noop() {
+        let matcher = GuildMatcher::new(vec![]);
+        assert!(!matcher.has_engine());
+        assert!(
+            !matcher.release_engine_if_idle(600),
+            "sin motor no hay nada que soltar (no debe mentir con true)"
+        );
+        assert!(
+            !matcher.release_engine_if_idle(0),
+            "ttl 0 es el default historico: nunca libera"
+        );
+    }
+
+    #[test]
+    fn d160_ensure_engine_without_loader_fails_cleanly() {
+        let matcher = GuildMatcher::new(vec![]);
+        assert!(!matcher.ensure_engine_loaded(), "sin loader no puede recargar");
+    }
+
+    #[test]
+    fn d160_ensure_engine_reports_a_broken_loader() {
+        let matcher = GuildMatcher::new(vec![]);
+        matcher.set_engine_loader(std::sync::Arc::new(|| {
+            Err::<EmbeddingEngine, anyhow::Error>(anyhow::anyhow!("modelo ausente (test)"))
+        }));
+        assert!(
+            !matcher.ensure_engine_loaded(),
+            "un loader que falla no deja el matcher con motor a medias"
+        );
+        assert!(!matcher.has_engine());
+    }
+
 }
