@@ -519,7 +519,8 @@ jobs:
             --test asi06_redteam_vias3_6 \
             --test approve_audit_matrix \
             --test layer1_corpus_acceptance \
-            --test asi06_layer1_ingest_memory_write
+            --test asi06_layer1_ingest_memory_write \
+            --test d163_external_providers_hot_refresh
 
   desktop-tauri-check:
     name: Desktop — Tauri shell check
