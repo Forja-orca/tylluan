@@ -432,7 +432,7 @@ if [ -d guilds ] && [ -f crates/tylluan-kernel/src/router/catalog.rs ]; then
     guild_files=$(grep -rlE 'FastMCP\(' guilds --include='*.py' 2>/dev/null \
         | sed -E 's#.*/##; s#\.py$##' | grep -vE '^(_|test_)' | sort -u | wc -l | tr -d ' ')
     guild_excluded=$(grep -E '^[[:space:]]*const EXCLUDED_GUILDS' crates/tylluan-kernel/src/router/catalog.rs \
-        | grep -oE '"[a-z0-9_]+"' | wc -l | tr -d ' ')
+        | { grep -oE '"[a-z0-9_]+"' || true; } | wc -l | tr -d ' ')
     guild_real=$((guild_files - guild_excluded))
     for gdoc in README.md README.es.md STATUS.md docs/assets/architecture.svg docs/getting-started/QUICKSTART.md; do
         [ -f "$gdoc" ] || continue
