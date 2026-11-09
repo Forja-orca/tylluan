@@ -401,6 +401,159 @@ fn find_fastembed_snapshot(model_type: &str) -> Option<std::path::PathBuf> {
     None
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// D-166 (TL T3813, P1): el motor de embeddings NO baja modelos de HuggingFace.
+//
+// `[nexus] allow_hf_download = false` (default, D-159) ya se respetaba en
+// `maintenance.rs` (`ModelDownloader::download_missing`), en los guilds Python y
+// en su puerta de test (`tests/python/test_no_hf_download_and_models_dir.py`).
+// El hueco que quedaba era ESTE módulo: los tres motores llamaban a
+// `TextEmbedding::try_new` / `SparseTextEmbedding::try_new` /
+// `TextRerank::try_new` sin mirar la bandera, y fastembed baja el modelo DENTRO
+// de esa llamada — `retrieve_model` -> `pull_from_hf` (text_embedding/impl.rs:50
+// y common.rs:163) más los `.get()` de impl.rs:59-67 (los mismos tres patrones en
+// sparse_text_embedding/impl.rs:57-65 y reranking/impl.rs:74-80).
+//
+// Medido (no estimado) el 2026-11-09 con el binario de release `2d4d5385` y dos
+// instancias propias arrancadas desde cwd vacíos, con la bandera en `false`:
+// ~1,42 GB escritos en `<cwd>/.fastembed_cache` (`models--mixedbread-ai--mxbai-
+// embed-large-v1` 1.275,6 MB + `models--jinaai--jina-reranker-v1-turbo-en`
+// 146,23 MB). Y en ESTE mismo worktree, sin que nadie lo pidiera, ya había dos
+// cachés por-cwd: `E:\tylluan-wt-dsh\.fastembed_cache` (1.421,83 MB: mxbai +
+// jina, del 01-11) y `crates/tylluan-kernel/.fastembed_cache` (2.178,87 MB:
+// bge-m3, del 19-10) — 3,6 GB duplicados solo por el directorio de trabajo.
+// NO verificado: si una captura de red confirmaría que el origen es siempre la
+// descarga; la evidencia es el contenido y las fechas de esas carpetas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// D-166 (b): la cache HF que **se le pasa** a fastembed, en ruta absoluta y
+/// compartida (la copia acoplada `<models>/fastembed`, el mismo sitio que
+/// [`fastembed_cache_dirs`] ya mira primero).
+///
+/// Sin `with_cache_dir`, fastembed usa `get_cache_dir()` = `FASTEMBED_CACHE_DIR`
+/// o, si no está, `".fastembed_cache"` **relativo al cwd de cada arranque** — de
+/// ahí las copias duplicadas de arriba.
+///
+/// ⚠ Precedencia real: `pull_from_hf` (common.rs:170-172 de fastembed 5.8.0)
+/// pone `HF_HOME` **por delante** del `cache_dir` que le pasamos. Por eso el gate
+/// comprueba esta misma carpeta, no una distinta: lo que se comprueba es exactamente
+/// lo que fastembed va a leer.
+fn fastembed_hf_cache_dir() -> std::path::PathBuf {
+    if let Some(hf_home) = std::env::var_os("HF_HOME")
+        && !hf_home.to_string_lossy().trim().is_empty()
+    {
+        return std::path::PathBuf::from(hf_home);
+    }
+    crate::config::models_dir_absolute().join("fastembed")
+}
+
+/// Ficheros que fastembed lee **siempre** al montar un motor: el ONNX del modelo,
+/// los `additional_files` que declara su `ModelInfo` y los cuatro del tokenizer
+/// que pide `load_tokenizer_hf_hub` (common.rs:163-). Cada uno es un `.get()`; si
+/// falta uno, fastembed lo baja de HF dentro de `try_new`.
+fn fastembed_required_files(model_file: &str, additional_files: &[String]) -> Vec<String> {
+    let mut files = vec![model_file.to_string()];
+    files.extend(additional_files.iter().cloned());
+    files.extend(
+        ["tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"]
+            .map(String::from),
+    );
+    files
+}
+
+/// ¿Hay una revisión del modelo en `cache` con **todos** los ficheros que
+/// fastembed va a leer? Revisión más reciente primero (criterio de
+/// [`find_fastembed_snapshot`]); si la más nueva está incompleta se mira la
+/// siguiente. `None` = haría falta descargar.
+fn local_complete_snapshot(
+    cache: &std::path::Path,
+    hub_model: &str,
+    required: &[String],
+) -> Option<std::path::PathBuf> {
+    if required.is_empty() {
+        return None;
+    }
+    let hub_dir = format!("models--{}", hub_model.replace('/', "--"));
+    let snapshots = cache.join(&hub_dir).join("snapshots");
+    let Ok(entries) = std::fs::read_dir(&snapshots) else {
+        return None;
+    };
+    let mut revs: Vec<std::path::PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    revs.sort();
+    while let Some(rev) = revs.pop() {
+        if required.iter().all(|f| rev.join(f).is_file()) {
+            return Some(rev);
+        }
+    }
+    None
+}
+
+/// `[nexus] allow_hf_download` (default `false`), leído con el mismo idioma que
+/// `maintenance.rs:234-236`. Sin config cargada se asume `false` (fail closed).
+fn nexus_allow_hf_download() -> bool {
+    crate::config::TylluanConfig::load_cached()
+        .map(|c| c.try_read().map(|g| g.nexus.allow_hf_download).unwrap_or(false))
+        .unwrap_or(false)
+}
+
+/// D-166 (a): decide **antes** de tocar fastembed si se puede llamar a `try_new`.
+///
+/// Con `allow_hf_download = false` el modelo tiene que estar **completo en disco**
+/// en `cache` (ver [`fastembed_hf_cache_dir`]): ONNX + `additional_files` + los
+/// cuatro del tokenizer. Si falta uno solo se niega la carga; el call site
+/// propaga el `Err` y `main.rs` sigue por el camino de degradación que ya tenía
+/// (BM25-only, sparse deshabilitado, reranker fuera → RRF puro).
+///
+/// Nota honesta de alcance: un modelo ya provisionado puede seguir haciendo una
+/// petición de **metadatos** a HF (`hf_hub` llama a `info()` antes de `get()`).
+/// Esta puerta corta la descarga del peso; no afirma que no quede ningún request
+/// de red en el camino provisionado.
+fn hf_download_gate(
+    cache: &std::path::Path,
+    hub_model: &str,
+    model_file: &str,
+    additional_files: &[String],
+    allow_hf_download: bool,
+) -> std::result::Result<(), String> {
+    let required = fastembed_required_files(model_file, additional_files);
+    let local = local_complete_snapshot(cache, hub_model, &required);
+    if allow_hf_download {
+        if local.is_none() {
+            warn!(
+                "D-166: allow_hf_download=true y {} no está completo en {} — fastembed lo DESCARGARÁ ahí ({}. Se recomienda dejar los ficheros en models/ y dejar la bandera en false).",
+                hub_model,
+                cache.display(),
+                required.join(", ")
+            );
+        }
+        return Ok(());
+    }
+    match local {
+        Some(snapshot) => {
+            info!(
+                "🔒 D-166: {} ya está en disco ({}) — sin descarga de HuggingFace (allow_hf_download=false).",
+                hub_model,
+                snapshot.display()
+            );
+            Ok(())
+        }
+        None => Err(format!(
+            "allow_hf_download=false y {} no está completo en {}: hacen falta {} dentro de models--{}/snapshots/<rev>/. \
+             Ninguna capa del motor descarga pesos con esta bandera — se sigue por BM25-only / RRF puro. \
+             Para resolverlo: deja los ficheros en {} o activa [nexus] allow_hf_download = true a propósito.",
+            hub_model,
+            cache.display(),
+            required.join(", "),
+            hub_model.replace('/', "--"),
+            cache.display()
+        )),
+    }
+}
+
 /// Streaming SHA-256 of a file (64 KiB chunks — tokenizer 17 MB, ONNX graph
 /// 725 KB; worst case a single-file model ~550 MB, ~1 s once per boot).
 fn sha256_file(path: &std::path::Path) -> Option<String> {
@@ -988,16 +1141,38 @@ impl EmbeddingEngine {
         apply_onnx_thread_cap(None);
 
         // Unknown model names fail HERE, before TextInitOptions/try_new —
-        // fastembed auto-downloads on try_new (see ensure_provisioned), so
-        // this is the last point where a typo can be rejected without
-        // fetching 1.2GB of the wrong model first.
+        // fastembed auto-downloads on try_new, así que este es el último punto
+        // donde un nombre mal escrito se rechaza sin bajar antes 1,2 GB del
+        // modelo equivocado.
         let model = resolve_model(model_name)?;
         let dimension = resolve_dimension(model_name);
         let model_label = model_display_name(model_name);
+
+        // D-166 (a): puerta de descarga ANTES de cualquier llamada a fastembed
+        // (y del `with_cache_dir` de abajo, que es la carpeta que se comprueba).
+        // Va detrás del probe de ONNX a propósito: en una máquina sin dylib
+        // —el perfil portable y el job «Boot smoke — no ONNX» de CI— el log
+        // sigue diciendo lo que falta de verdad (la dylib), y aquí se añade el
+        // motivo de pesos sin bajar nada. Ambos caminos son `Err` antes de
+        // tocar `ort`, así que la guarda anti-panic no se relaja.
+        let hf_cache = fastembed_hf_cache_dir();
+        let minfo = TextEmbedding::get_model_info(&model)?;
+        hf_download_gate(
+            &hf_cache,
+            &minfo.model_code,
+            &minfo.model_file,
+            &minfo.additional_files,
+            nexus_allow_hf_download(),
+        )
+        .map_err(anyhow::Error::msg)?;
+
         info!("🧠 Loading {} engine (FastEmbed v5) dim:{} device:{:?}", model_label, dimension, device);
 
         let eps = build_execution_providers(device);
+        // D-166 (b): cache absoluta compartida; sin esto es `.fastembed_cache`
+        // relativo al cwd y cada arranque paga su propia copia.
         let options = TextInitOptions::new(model)
+            .with_cache_dir(hf_cache)
             .with_show_download_progress(true)
             .with_execution_providers(eps);
 
@@ -1030,7 +1205,13 @@ impl EmbeddingEngine {
         })
     }
 
-    /// Check if model weights exist (Not strictly needed for fastembed as it auto-downloads).
+    /// No-op **histórico**, sin ningún llamante en el repo (verificado 2026-11-09:
+    /// cero ocurrencias fuera de su propia definición). Existía porque fastembed
+    /// auto-descargaba el modelo; esa afirmación ya no describe lo que hace el
+    /// motor: con `[nexus] allow_hf_download = false` (default) la decisión se toma
+    /// en [`hf_download_gate`], que rechaza el motor si los pesos no están en
+    /// disco. Se mantiene solo por compatibilidad de API; no lo uses como
+    /// comprobación de que un modelo esté listo — no comprueba nada.
     pub fn ensure_provisioned(_model_dir: &str) -> Result<()> {
         Ok(())
     }
@@ -1380,8 +1561,23 @@ impl SparseEngine {
             ));
         }
         apply_onnx_thread_cap(None);
+        // D-166 (a)+(b): misma puerta y misma cache absoluta que la ruta densa.
+        // El sparse es BAAI/bge-m3: si no está en el disco compartido, se
+        // deshabilita la fuente sparse; dense + BM25 + RRF siguen igual que hoy.
+        let hf_cache = fastembed_hf_cache_dir();
+        let minfo = SparseTextEmbedding::get_model_info(&SparseModel::BGEM3);
+        hf_download_gate(
+            &hf_cache,
+            &minfo.model_code,
+            &minfo.model_file,
+            &minfo.additional_files,
+            nexus_allow_hf_download(),
+        )
+        .map_err(|e| anyhow!("SparseEngine deshabilitado (D-166): {e} -- dense+BM25+RRF keep working"))?;
         let eps = build_execution_providers(device);
-        let options = SparseInitOptions::new(SparseModel::BGEM3).with_execution_providers(eps);
+        let options = SparseInitOptions::new(SparseModel::BGEM3)
+            .with_cache_dir(hf_cache)
+            .with_execution_providers(eps);
         let model = SparseTextEmbedding::try_new(options)
             .map_err(|e| anyhow!("SparseEngine init failed: {e:?}"))?;
         info!("🧠 BGE-M3 sparse engine ready (ONNX)");
@@ -1647,9 +1843,24 @@ impl RerankEngine {
         }
         apply_onnx_thread_cap(None);
         // R22-1: Jina Turbo replaces BGERerankerBase (~278M→~37M params)
+        // D-166 (a)+(b): el reranker era la otra mitad del hueco — en la
+        // reproduccion del 2026-11-09 se descargó SOLO (146,23 MB
+        // `models--jinaai--jina-reranker-v1-turbo-en`) con allow_hf_download
+        // en false. Sin pesos locales: reranker fuera, RRF puro.
+        let hf_cache = fastembed_hf_cache_dir();
+        let minfo = TextRerank::get_model_info(&RerankerModel::JINARerankerV1TurboEn);
+        hf_download_gate(
+            &hf_cache,
+            &minfo.model_code,
+            &minfo.model_file,
+            &minfo.additional_files,
+            nexus_allow_hf_download(),
+        )
+        .map_err(|e| anyhow!("RerankEngine deshabilitado (D-166): {e} -- fallback a RRF puro"))?;
         info!("🔀 Loading Jina Turbo reranker (ONNX) — device: {:?}", device);
         let eps = build_execution_providers(device);
         let options = RerankInitOptions::new(RerankerModel::JINARerankerV1TurboEn)
+            .with_cache_dir(hf_cache)
             .with_execution_providers(eps);
         let model = TextRerank::try_new(options)
             .map_err(|e| anyhow!("Reranker init failed: {e:?}"))?;
@@ -2255,5 +2466,263 @@ mod tests {
         assert!(matches!(ra, EngineLoadOutcome::Loaded(1)));
         assert!(matches!(rb, EngineLoadOutcome::Failed(_)));
         assert!(matches!(rc, EngineLoadOutcome::Loaded(3)));
+    }
+
+    // ── D-166 (TL T3813, P1): el motor de embeddings no baja modelos de HF ───
+    //
+    // Asignado sobre el hallazgo de T3811: con `[nexus] allow_hf_download = false`
+    // (default) los tres motores llamaban a `try_new` sin comprobar la bandera y
+    // fastembed bajaba el peso dentro de esa llamada (~1,42 GB medidos en
+    // `<cwd>/.fastembed_cache`; ver el bloque de comentario sobre
+    // [`hf_download_gate`]). Están pensados para que una MUTACIÓN los tumbe:
+    //   • quitar la llamada a `hf_download_gate`  → caen (2) y, en una máquina con
+    //     dylib ONNX, también (1);
+    //   • poner `allow = true` fijo en el call site → cae (2) y (6);
+    //   • comprobar solo el `.onnx` (sin tokenizer) → cae (3);
+    //   • que la puerta rechace siempre → cae (4);
+    //   • quitar `with_cache_dir` (cache relativa al cwd) → cae (6).
+    // Ninguno baja nada de la red: los snapshots son carpetas falsas diminutas.
+
+    static SEQ_D166: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    /// Directorio temporal aislado, propio de un test (no pisa nunca `models/` real).
+    fn temp_d166(etiqueta: &str) -> std::path::PathBuf {
+        let n = SEQ_D166.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!(
+            "tylluan_d166_{}_{}_{}", etiqueta, std::process::id(), n
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear el directorio temporal D-166");
+        dir
+    }
+
+    /// Monta en `raiz` un snapshot con la estructura que lee fastembed:
+    /// `<raiz>/models--<org>--<name>/snapshots/<rev>/<ficheros>`. Ficheros falsos
+    /// de 21 bytes: estructura real, contenido irrelevante, coste de disco nulo.
+    fn monta_snapshot_hf(raiz: &std::path::Path, hub_model: &str, rev: &str, ficheros: &[&str]) -> std::path::PathBuf {
+        let dir = raiz
+            .join(format!("models--{}", hub_model.replace('/', "--")))
+            .join("snapshots")
+            .join(rev);
+        std::fs::create_dir_all(&dir).expect("crear la carpeta de snapshot de prueba");
+        for f in ficheros {
+            if let Some(padre) = std::path::Path::new(f).parent()
+                && !padre.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(dir.join(padre)).expect("crear subcarpetas del snapshot");
+            }
+            std::fs::write(dir.join(f), b"peso falso de prueba").expect("escribir el fichero de prueba");
+        }
+        dir
+    }
+
+    /// (1) Call site real: sin pesos y sin permiso, el motor NO debe llegar a
+    /// fastembed. Lo que se puede afirmar en cualquier máquina es que no se entra
+    /// en fastembed («FastEmbed init failed»); con dylib ONNX además se afirma el
+    /// motivo exacto (la puerta D-166), porque ahí el probe de ONNX pasa y el
+    /// único `Err` posible antes de fastembed es el de la puerta.
+    #[test]
+    fn d166_sin_pesos_ni_permiso_el_motor_degrade_sin_llamar_a_fastembed() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let modelos = temp_d166("motor_sin_pesos");
+        let antes_modelos = std::env::var_os("TYLLUAN_MODELS_DIR");
+        let antes_hf_home = std::env::var_os("HF_HOME");
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("TYLLUAN_MODELS_DIR", &modelos);
+            std::env::remove_var("HF_HOME");
+        }
+        let resultado = EmbeddingEngine::load_with_device("mxbai-embed-large", &InferenceDevice::Cpu);
+        #[allow(unused_unsafe)]
+        unsafe {
+            match antes_modelos {
+                Some(v) => std::env::set_var("TYLLUAN_MODELS_DIR", v),
+                None => std::env::remove_var("TYLLUAN_MODELS_DIR"),
+            }
+            match antes_hf_home {
+                Some(v) => std::env::set_var("HF_HOME", v),
+                None => std::env::remove_var("HF_HOME"),
+            }
+        }
+        let mensaje = match resultado {
+            Ok(_) => {
+                let _ = std::fs::remove_dir_all(&modelos);
+                panic!("D-166: el motor se cargó con models/ vacío y allow_hf_download=false — alguien está bajando el modelo de HuggingFace");
+            }
+            Err(e) => e.to_string(),
+        };
+        let _ = std::fs::remove_dir_all(&modelos);
+        assert!(
+            !mensaje.contains("FastEmbed init failed"),
+            "D-166: se llegó a llamar a TextEmbedding::try_new sin pesos ni permiso. Mensaje real: {mensaje}"
+        );
+        if onnx_runtime_ort_compatible() {
+            assert!(
+                mensaje.contains("allow_hf_download=false"),
+                "con dylib ONNX presente el rechazo debe venir de la puerta D-166. Mensaje real: {mensaje}"
+            );
+        }
+    }
+
+    /// (2) Puerta estructural, del estilo del gate `ort_entry_contract_tests` de
+    /// `main.rs` (T1116/T1122): cada línea que entra en fastembed tiene que tener
+    /// por delante la puerta de descarga y su lectura del flag real. No depende de
+    /// ONNX ni de red, así que falla en CI igual que en la máquina de un
+    /// desarrollador — que es justo donde el gate de conducta (1) es más débil.
+    #[test]
+    fn d166_cada_entrada_en_fastembed_va_por_detras_de_la_puerta_de_descarga() {
+        let fuente = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/router/embeddings.rs"))
+            .expect("leer la propia fuente de embeddings.rs");
+        let lineas: Vec<&str> = fuente.lines().collect();
+        // Marcadores construidos en runtime: si este test los escribiera literales,
+        // sus propias lineas contarian como entradas en fastembed y el gate se
+        // auto-denunciaria (falso positivo clásico de un gate estructural).
+        let motores = ["TextEmbedding::try_new", "SparseTextEmbedding::try_new", "TextRerank::try_new"];
+        let sufijo = "(options)";
+        let mut entradas = 0usize;
+        for (i, linea) in lineas.iter().enumerate() {
+            let l = linea.trim();
+            if l.starts_with("//") || l.starts_with("///") {
+                continue;
+            }
+            let entra_en_fastembed = motores.iter().any(|m| l.contains(&format!("{m}{sufijo}")));
+            if !entra_en_fastembed {
+                continue;
+            }
+            entradas += 1;
+            let (mut puerta, mut flag_real, mut probe_ort) = (false, false, false);
+            for k in (0..i).rev() {
+                let anterior = lineas[k].trim();
+                if anterior.starts_with("pub fn ") || anterior.starts_with("fn ") {
+                    break;
+                }
+                if anterior.starts_with("hf_download_gate(") {
+                    puerta = true;
+                }
+                if anterior.contains("nexus_allow_hf_download()") {
+                    flag_real = true;
+                }
+                if anterior.contains("onnx_runtime_ort_compatible()") {
+                    probe_ort = true;
+                }
+            }
+            assert!(puerta, "D-166: la linea {} ({}) no va precedida de hf_download_gate(...) dentro de su fn — se está entrando en fastembed sin comprobar allow_hf_download", i + 1, l);
+            assert!(flag_real, "D-166: la linea {} ({}) no pasa por nexus_allow_hf_download(): el call site está inventando el permiso", i + 1, l);
+            assert!(probe_ort, "D-166: la linea {} ({}) perdió la guarda onnx_runtime_ort_compatible() que precede a la entrada en ort", i + 1, l);
+        }
+        assert_eq!(entradas, 3, "D-166: se esperan exactamente 3 entradas en fastembed (densa, sparse y reranker); hay {entradas} — si añadiste una, necesita su puerta");
+    }
+
+    /// (3) La puerta exige TODOS los ficheros que fastembed va a `.get()`, no solo
+    /// el ONNX: si admitiera un snapshot al que le faltan los cuatro del tokenizer,
+    /// `try_new` volvería a la red por ellos y la bandera seguiría mintiendo.
+    #[test]
+    fn d166_la_puerta_exige_onnx_y_los_cuatro_ficheros_del_tokenizer() {
+        let raiz = temp_d166("incompleto");
+        let onnx = "onnx/model.onnx";
+        let tokenizer = ["tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"];
+
+        monta_snapshot_hf(&raiz, "mixedbread-ai/mxbai-embed-large-v1", "rev1", &[onnx]);
+        let extra: Vec<String> = Vec::new();
+        let solo_onnx = hf_download_gate(&raiz, "mixedbread-ai/mxbai-embed-large-v1", onnx, &extra, false);
+        assert!(solo_onnx.is_err(), "un snapshot sin el tokenizer NO debe colarse por la puerta: allow_hf_download=false volvería a la red por esos 4 ficheros");
+
+        let faltan = format!("{:?}", tokenizer.join(", "));
+        let err = solo_onnx.unwrap_err();
+        assert!(err.contains("tokenizer.json"), "el error debe decir QUÉ falta (eso es lo que hace accionable el degradado); faltaban: {faltan}");
+
+        monta_snapshot_hf(
+            &raiz,
+            "mixedbread-ai/mxbai-embed-large-v1",
+            "rev1",
+            &[onnx, "added_tokens.json"],
+        );
+        for f in tokenizer {
+            std::fs::write(raiz.join("models--mixedbread-ai--mxbai-embed-large-v1/snapshots/rev1").join(f), b"x").unwrap();
+        }
+        let completo = hf_download_gate(&raiz, "mixedbread-ai/mxbai-embed-large-v1", onnx, &[String::from("added_tokens.json")], false);
+        assert!(completo.is_ok(), "con el ONNX + additional_files + el tokenizer completo, la puerta NO debe bloquear: {:?}", completo.unwrap_err());
+        let _ = std::fs::remove_dir_all(&raiz);
+    }
+
+    /// (4) El caso de producción (José): pesos en la copia acoplada `models/fastembed`
+    /// ⇒ la puerta pasa, y pasa por la revisión **completa** más reciente aunque la
+    /// más nueva esté incompleta. Sin esto, el arreglo rompería el arranque offline.
+    #[test]
+    fn d166_pesos_completos_en_el_dir_acoplado_pasan_sin_descarga() {
+        let raiz = temp_d166("completo");
+        let hub = "BAAI/bge-m3";
+        let onnx = "onnx/model.onnx";
+        let tokenizer = ["tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"];
+        let viejo_completo = monta_snapshot_hf(&raiz, hub, "aaa_revision_vieja_completa", &[onnx]);
+        for f in tokenizer {
+            std::fs::write(viejo_completo.join(f), b"x").unwrap();
+        }
+        // Revisión más nueva (`zzz` ordena después) a la que le falta el ONNX.
+        monta_snapshot_hf(&raiz, hub, "zzz_revision_nueva_incompleta", &["config.json"]);
+
+        let extra: Vec<String> = Vec::new();
+        let pase = hf_download_gate(&raiz, hub, onnx, &extra, false);
+        assert!(pase.is_ok(), "la revisión completa anterior debe servir (es lo que hay hoy en maquinas con models/ provisionado): {:?}", pase.unwrap_err());
+        let _ = std::fs::remove_dir_all(&raiz);
+    }
+
+    /// (5) Con permiso explícito del operador la puerta no estorba (aunque avise).
+    #[test]
+    fn d166_con_permiso_explicito_del_operador_la_puerta_no_bloquea() {
+        let raiz = temp_d166("con_permiso");
+        let extra: Vec<String> = Vec::new();
+        let pase = hf_download_gate(&raiz, "mixedbread-ai/mxbai-embed-large-v1", "onnx/model.onnx", &extra, true);
+        assert!(pase.is_ok(), "allow_hf_download=true es una decision del operador: la puerta no la sustituye");
+        let _ = std::fs::remove_dir_all(&raiz);
+    }
+
+    /// (6) D-166 (b): la cache que se le pasa a fastembed es **absoluta** y está en
+    /// la carpeta compartida de modelos — no `./.fastembed_cache` según el cwd — y
+    /// `HF_HOME` manda sobre ella, igual que hace `pull_from_hf` de fastembed. Esta
+    /// precedencia está FIJADA aquí a propósito: la puerta comprueba esta misma
+    /// carpeta, así que cambiarla sin cambiar la comprobación volvería a abrir el hueco.
+    #[test]
+    fn d166_la_cache_hf_es_absoluta_compartida_y_hf_home_manda() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let modelos = temp_d166("cache_dir");
+        let antes_modelos = std::env::var_os("TYLLUAN_MODELS_DIR");
+        let antes_hf_home = std::env::var_os("HF_HOME");
+
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("TYLLUAN_MODELS_DIR", &modelos);
+            std::env::remove_var("HF_HOME");
+        }
+        let cache = fastembed_hf_cache_dir();
+        assert!(cache.is_absolute(), "la cache HF tiene que ser absoluta; la de un arranque no debe depender del cwd: {}", cache.display());
+        assert_eq!(cache, modelos.join("fastembed"), "la cache HF debe ser la copia acoplada <models>/fastembed, el sitio que ya miran fastembed_cache_dirs y el inventario");
+
+        let hf = temp_d166("hf_home");
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("HF_HOME", &hf);
+        }
+        assert_eq!(fastembed_hf_cache_dir(), hf, "pull_from_hf (common.rs:170-172 de fastembed 5.8.0) pone HF_HOME por delante del cache_dir que le pasamos; la puerta tiene que comprobar ESA carpeta");
+        #[allow(unused_unsafe)]
+        unsafe {
+            match antes_modelos {
+                Some(v) => std::env::set_var("TYLLUAN_MODELS_DIR", v),
+                None => std::env::remove_var("TYLLUAN_MODELS_DIR"),
+            }
+            match antes_hf_home {
+                Some(v) => std::env::set_var("HF_HOME", v),
+                None => std::env::remove_var("HF_HOME"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&modelos);
+        let _ = std::fs::remove_dir_all(&hf);
+    }
+
+    /// (7) Sin config cargada (el caso de `cargo test` y del primer arranque) el
+    /// permiso se asume `false`: la puerta no puede abrirse por defecto.
+    #[test]
+    fn d166_sin_config_leida_el_descargo_sigue_prohibido() {
+        assert!(!nexus_allow_hf_download(), "el default tiene que ser NO descargar; si esto sale true, alguien está leyendo un config ajeno o invirtiendo el default de [nexus] allow_hf_download");
     }
 }
