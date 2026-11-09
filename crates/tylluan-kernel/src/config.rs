@@ -1352,6 +1352,10 @@ pub struct ExternalProvider {
     #[serde(rename = "type")]
     pub provider_type: ExternalProviderType,
     pub base_url: String,
+    /// D-157: vacío cuando la clave vive en el SecretStore (no se declara
+    /// en la configuración). Los proveedores por variable de entorno lo
+    /// mantienen tal cual.
+    #[serde(default)]
     pub api_key_env: String,
     #[serde(default)]
     pub models: Vec<String>,
@@ -1366,6 +1370,85 @@ pub enum ExternalProviderRisk {
     SuspiciousKeyEnv(String),
 }
 
+/// Reglas anti-SSRF de una URL de proveedor externo.
+///
+/// D-157 lo expone aparte porque crear un proveedor desde la UI valida la
+/// URL aunque la clave viva en el SecretStore (no en `api_key_env`).
+/// Las reglas son las mismas de siempre: metadata de nube, rangos privados,
+/// link-local y userinfo fuera; loopback y hosts públicos dentro.
+pub fn validate_external_provider_url(base_url: &str) -> Result<(), String> {
+    let base = base_url.trim();
+    if !base.starts_with("http://") && !base.starts_with("https://") {
+        return Err(format!("base_url '{}' must start with http:// or https://", base_url));
+    }
+    // Parse with a real URL parser: hand-splitting on ':' and '/' treats
+    // `http://x@169.254.169.254/` as host `x@169.254.169.254`, which no deny
+    // rule matches while the HTTP client still connects to 169.254.169.254.
+    let parsed = reqwest::Url::parse(base)
+        .map_err(|e| format!("base_url '{}' is not a valid URL: {e}", base_url))?;
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("credentials (userinfo) in base_url are not allowed".into());
+    }
+    let raw_host = parsed
+        .host_str()
+        .ok_or_else(|| "base_url has no host".to_string())?;
+    // `host_str` keeps the brackets of an IPv6 literal.
+    let host = raw_host.trim_start_matches('[').trim_end_matches(']');
+
+    // Allow localhost/loopback freely (Ollama, LM Studio, local llama.cpp)
+    if host.eq_ignore_ascii_case("localhost") {
+        return Ok(());
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        // IPv4-mapped IPv6 is judged by the embedded IPv4 address.
+        let ip = match ip {
+            std::net::IpAddr::V6(v6) => v6
+                .to_ipv4_mapped()
+                .map(std::net::IpAddr::V4)
+                .unwrap_or(ip),
+            v4 => v4,
+        };
+        if ip.is_loopback() {
+            return Ok(());
+        }
+        if ip.is_unspecified() {
+            return Err(format!("wildcard address ('{host}')"));
+        }
+        match ip {
+            std::net::IpAddr::V4(v4) if v4.octets() == [169, 254, 169, 254] => {
+                return Err("cloud metadata endpoint (169.254.169.254)".into());
+            }
+            std::net::IpAddr::V4(v4) if v4.is_link_local() => {
+                return Err(format!("link-local IP range ('{host}')"));
+            }
+            std::net::IpAddr::V4(v4) if v4.is_private() => {
+                return Err(format!("private RFC-1918 IP range ('{host}')"));
+            }
+            std::net::IpAddr::V6(v6) => {
+                let first = v6.segments()[0];
+                if (first & 0xfe00) == 0xfc00 {
+                    return Err(format!("IPv6 unique-local range ('{host}')"));
+                }
+                if (first & 0xffc0) == 0xfe80 {
+                    return Err(format!("IPv6 link-local range ('{host}')"));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderRisk {
+    check_external_provider_with_secret(provider, false)
+}
+
+/// Igual que [`check_external_provider`], pero el llamante certifica si hay
+/// una clave guardada en el SecretStore (D-157). Con `has_vault_secret`,
+/// un `api_key_env` vacío es válido: la clave no se declara en la config.
+///
+/// La URL se valida igual en los dos casos: tener la clave en el vault **no**
+/// exime de las reglas anti-SSRF.
 /// Validate an ExternalProvider config entry against SSRF and env-var
 /// exfiltration risks. Returns [`ExternalProviderRisk::Safe`] only when
 /// the entry is safe to use.
@@ -1386,72 +1469,11 @@ pub enum ExternalProviderRisk {
 ///   list (`OPENAI_BASE_URL`, `LITELLM_API_BASE`, `OLLAMA_HOST`).
 /// - **Warn** (still allow): names that match neither pattern, so we don't
 ///   break legit custom names — but the warning is visible at startup.
-pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderRisk {
-    // ── URL validation ──────────────────────────────────────────────
-    let url_ok = (|| -> Result<(), String> {
-        let base = provider.base_url.trim();
-        if !base.starts_with("http://") && !base.starts_with("https://") {
-            return Err(format!("base_url '{}' must start with http:// or https://", provider.base_url));
-        }
-        // Parse with a real URL parser: hand-splitting on ':' and '/' treats
-        // `http://x@169.254.169.254/` as host `x@169.254.169.254`, which no deny
-        // rule matches while the HTTP client still connects to 169.254.169.254.
-        let parsed = reqwest::Url::parse(base)
-            .map_err(|e| format!("base_url '{}' is not a valid URL: {e}", provider.base_url))?;
-        if !parsed.username().is_empty() || parsed.password().is_some() {
-            return Err("credentials (userinfo) in base_url are not allowed".into());
-        }
-        let raw_host = parsed
-            .host_str()
-            .ok_or_else(|| "base_url has no host".to_string())?;
-        // `host_str` keeps the brackets of an IPv6 literal.
-        let host = raw_host.trim_start_matches('[').trim_end_matches(']');
-
-        // Allow localhost/loopback freely (Ollama, LM Studio, local llama.cpp)
-        if host.eq_ignore_ascii_case("localhost") {
-            return Ok(());
-        }
-        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-            // IPv4-mapped IPv6 is judged by the embedded IPv4 address.
-            let ip = match ip {
-                std::net::IpAddr::V6(v6) => v6
-                    .to_ipv4_mapped()
-                    .map(std::net::IpAddr::V4)
-                    .unwrap_or(ip),
-                v4 => v4,
-            };
-            if ip.is_loopback() {
-                return Ok(());
-            }
-            if ip.is_unspecified() {
-                return Err(format!("wildcard address ('{host}')"));
-            }
-            match ip {
-                std::net::IpAddr::V4(v4) if v4.octets() == [169, 254, 169, 254] => {
-                    return Err("cloud metadata endpoint (169.254.169.254)".into());
-                }
-                std::net::IpAddr::V4(v4) if v4.is_link_local() => {
-                    return Err(format!("link-local IP range ('{host}')"));
-                }
-                std::net::IpAddr::V4(v4) if v4.is_private() => {
-                    return Err(format!("private RFC-1918 IP range ('{host}')"));
-                }
-                std::net::IpAddr::V6(v6) => {
-                    let first = v6.segments()[0];
-                    if (first & 0xfe00) == 0xfc00 {
-                        return Err(format!("IPv6 unique-local range ('{host}')"));
-                    }
-                    if (first & 0xffc0) == 0xfe80 {
-                        return Err(format!("IPv6 link-local range ('{host}')"));
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    })();
-
-    if let Err(ref reason) = url_ok {
+pub fn check_external_provider_with_secret(
+    provider: &ExternalProvider,
+    has_vault_secret: bool,
+) -> ExternalProviderRisk {
+    if let Err(reason) = validate_external_provider_url(&provider.base_url) {
         return ExternalProviderRisk::DangerousUrl(format!(
             "base_url '{}' — {reason}",
             provider.base_url
@@ -1461,7 +1483,11 @@ pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderR
     // ── api_key_env validation ──────────────────────────────────────
     let env_name = provider.api_key_env.trim();
     if env_name.is_empty() {
-        return ExternalProviderRisk::MissingKeyEnv;
+        return if has_vault_secret {
+            ExternalProviderRisk::Safe
+        } else {
+            ExternalProviderRisk::MissingKeyEnv
+        };
     }
 
     // Hard-block list: env vars that are NEVER credentials
@@ -1513,7 +1539,13 @@ impl ExternalProvider {
     /// Returns `Ok(())` if the provider config is safe, or a description
     /// of what's wrong. Runs both URL (SSRF) and api_key_env checks.
     pub fn is_safe(&self) -> Result<(), String> {
-        match check_external_provider(self) {
+        self.is_safe_with_vault(false)
+    }
+
+    /// D-157: igual que [`Self::is_safe`], pero `has_vault_secret` permite un
+    /// `api_key_env` vacío cuando la clave está en el SecretStore.
+    pub fn is_safe_with_vault(&self, has_vault_secret: bool) -> Result<(), String> {
+        match check_external_provider_with_secret(self, has_vault_secret) {
             ExternalProviderRisk::Safe => Ok(()),
             ExternalProviderRisk::DangerousUrl(msg) => Err(msg),
             ExternalProviderRisk::MissingKeyEnv => Err(
@@ -1526,8 +1558,15 @@ impl ExternalProvider {
     /// Validate all external providers in a config. Logs warnings and
     /// removes unsafe entries. Called from `validate_security()`.
     pub fn validate_all(cfg: &mut TylluanConfig) {
+        Self::validate_all_with(cfg, |_| false);
+    }
+
+    /// D-157: variante que pregunta si cada proveedor tiene clave en el
+    /// SecretStore. El arranque pasa `provider_secrets::get_secret(name).is_ok()`
+    /// para no borrar los proveedores creados desde la UI.
+    pub fn validate_all_with(cfg: &mut TylluanConfig, has_vault_secret: impl Fn(&str) -> bool) {
         cfg.external_providers.retain(|p| {
-            match p.is_safe() {
+            match p.is_safe_with_vault(has_vault_secret(&p.name)) {
                 Ok(()) => true,
                 Err(msg) => {
                     warn!("Removing unsafe external provider '{name}': {msg}", name = p.name);
@@ -2116,7 +2155,7 @@ pub(crate) fn enable_wal_best_effort(conn: &rusqlite::Connection, path: Option<&
 
 /// Quick check for DBus availability on Linux (fails fast in Docker/headless).
 /// Prevents keyring from hanging for ~25s on zbus connection timeout.
-fn dbus_is_available() -> bool {
+pub(crate) fn dbus_is_available() -> bool {
     // Session bus: $XDG_RUNTIME_DIR/bus  (e.g. /run/user/1000/bus)
     if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {
         let session_bus = std::path::Path::new(&runtime).join("bus");
@@ -2943,7 +2982,20 @@ impl TylluanConfig {
             self.nexus.host = "127.0.0.1".to_string();
         }
         // SSRF + env-var exfiltration guard for external providers
-        ExternalProvider::validate_all(self);
+        // D-157: los proveedores creados desde la UI no declaran api_key_env
+        // (la clave vive en el SecretStore). Sin esta consulta, el arranque los
+        // borraria por "MissingKeyEnv". Solo se consulta el vault para esos:
+        // los de entorno no pagan una lectura de keychain en cada arranque.
+        let vault_candidates: Vec<String> = self
+            .external_providers
+            .iter()
+            .filter(|p| p.api_key_env.trim().is_empty())
+            .map(|p| p.name.clone())
+            .collect();
+        ExternalProvider::validate_all_with(self, |name| {
+            vault_candidates.iter().any(|candidate| candidate == name)
+                && crate::security::provider_secrets::has_secret_or_unknown(name)
+        });
     }
 
     /// Set by main.rs when `--config <path>` is passed on the CLI. Checked
@@ -3668,6 +3720,71 @@ code = "permissive"
             models: vec![],
         };
         assert!(p.is_safe().is_ok());
+    }
+
+    /// D-157: un proveedor creado desde la UI no declara `api_key_env` (la
+    /// clave vive en el SecretStore). Sin vault es un rechazo; con vault,
+    /// pasa — y la URL se sigue validando igual.
+    #[test]
+    fn d157_vault_secret_allows_empty_api_key_env() {
+        let mut p = provider_with_url("https://api.example.com");
+        p.api_key_env = String::new();
+        assert!(
+            matches!(check_external_provider(&p), ExternalProviderRisk::MissingKeyEnv),
+            "sin clave en el vault, un api_key_env vacío sigue siendo un fallo"
+        );
+        assert!(matches!(
+            check_external_provider_with_secret(&p, true),
+            ExternalProviderRisk::Safe
+        ));
+        assert!(p.is_safe_with_vault(true).is_ok());
+        assert!(p.is_safe().is_err());
+    }
+
+    /// El vault NO exime de las reglas anti-SSRF (D-157, criterio de José).
+    #[test]
+    fn d157_vault_secret_does_not_bypass_ssrf() {
+        for url in [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.5:8080/",
+            "http://192.168.1.10/",
+            "http://[::ffff:169.254.169.254]/",
+            "http://[fd00::1]:8080/",
+        ] {
+            let mut p = provider_with_url(url);
+            p.api_key_env = String::new();
+            assert!(
+                matches!(
+                    check_external_provider_with_secret(&p, true),
+                    ExternalProviderRisk::DangerousUrl(_)
+                ),
+                "con clave en el vault también se rechaza {url}"
+            );
+        }
+    }
+
+    /// D-157: el arranque no borra un proveedor creado desde la UI (sin
+    /// `api_key_env`) si su clave está en el SecretStore. La consulta al vault
+    /// se inyecta, así que este test no toca keychain ni disco.
+    #[test]
+    fn d157_validate_all_keeps_providers_with_key_in_the_vault() {
+        let mut cfg = TylluanConfig::default();
+        let mut con_vault = provider_with_url("https://api.example.com");
+        con_vault.name = "desde-ui".into();
+        con_vault.api_key_env = String::new();
+        let mut sin_clave = provider_with_url("https://api.example.com");
+        sin_clave.name = "sin-clave".into();
+        sin_clave.api_key_env = String::new();
+        cfg.external_providers = vec![con_vault, sin_clave];
+
+        ExternalProvider::validate_all_with(&mut cfg, |name| name == "desde-ui");
+
+        let nombres: Vec<&str> = cfg
+            .external_providers
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(nombres, vec!["desde-ui"]);
     }
 
     #[test]

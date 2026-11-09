@@ -448,7 +448,8 @@ fn candidate_config(raw: &str, edits: &[ConfigEdit]) -> Result<(toml::Value, tom
     }
 }
 
-fn config_path() -> PathBuf {
+/// Ruta del `tylluan.toml` vivo (la misma que usa `/config/edit`).
+pub fn config_path() -> PathBuf {
     crate::config::TylluanConfig::find_config_file().unwrap_or_else(|| PathBuf::from("tylluan.toml"))
 }
 
@@ -601,6 +602,181 @@ pub async fn edit_config_handler(
     }))).into_response()
 }
 
+// ── D-157: proveedores externos por la misma vía validada que /config/edit ──
+//
+// José/TL (T3700): los campos NO secretos (name, base_url, models) persisten en
+// la configuración, no en el SecretStore, y lo hacen con ETag obligatorio,
+// copia previa, auditoría y escritura atómica — exactamente lo que ya hace
+// `/config/edit`. Estas funciones son esa vía para el array
+// `[[external_providers]]`, que no es editable clave a clave porque no es
+// escalar.
+
+const PROVIDERS_KEY: &str = "external_providers";
+
+type ApiError = (StatusCode, serde_json::Value);
+
+fn api_error(status: StatusCode, code: &str, message: String) -> ApiError {
+    (
+        status,
+        json!({"ok": false, "error": code, "errors": [message]}),
+    )
+}
+
+fn parse_toml(raw: &str) -> Result<toml::Value, ApiError> {
+    toml::from_str::<toml::Value>(raw).map_err(|e| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            "config_unparsable",
+            format!("tylluan.toml no se pudo parsear: {e}"),
+        )
+    })
+}
+
+fn serialize_toml(value: &toml::Value) -> Result<String, ApiError> {
+    toml::to_string(value).map_err(|e| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "serialize_failed",
+            format!("no se pudo serializar la configuración: {e}"),
+        )
+    })
+}
+
+fn provider_name_of(entry: &toml::Value) -> Option<&str> {
+    entry.get("name").and_then(|n| n.as_str())
+}
+
+/// Añade o reemplaza (por `name`) un proveedor externo y devuelve el TOML
+/// resultante más el diff auditado. **La clave no viaja aquí**: sólo
+/// `name`, `type`, `base_url`, `api_key_env` y `models`.
+///
+/// ETag ausente → 400; ETag que no coincide → 409 (nada de «última gana»).
+pub fn upsert_external_provider_toml(
+    raw: &str,
+    etag: Option<&str>,
+    provider: &crate::config::ExternalProvider,
+) -> Result<(String, Vec<serde_json::Value>), ApiError> {
+    let current = etag_of(raw);
+    etag_guard(etag, &current)?;
+    let old = parse_toml(raw)?;
+    let mut new = old.clone();
+    let table = toml::Value::try_from(provider).map_err(|e| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "serialize_failed",
+            format!("no se pudo serializar el proveedor: {e}"),
+        )
+    })?;
+    {
+        let root = new.as_table_mut().ok_or_else(|| {
+            api_error(StatusCode::BAD_REQUEST, "config_unparsable", "tylluan.toml no es una tabla".into())
+        })?;
+        if !root.contains_key(PROVIDERS_KEY) {
+            root.insert(PROVIDERS_KEY.to_string(), toml::Value::Array(Vec::new()));
+        }
+        let list = root
+            .get_mut(PROVIDERS_KEY)
+            .and_then(|v| v.as_array_mut())
+            .ok_or_else(|| {
+                api_error(
+                    StatusCode::BAD_REQUEST,
+                    "config_unparsable",
+                    format!("{PROVIDERS_KEY} existe pero no es una lista"),
+                )
+            })?;
+        match list
+            .iter()
+            .position(|entry| provider_name_of(entry) == Some(provider.name.as_str()))
+        {
+            Some(idx) => list[idx] = table,
+            None => list.push(table),
+        }
+    }
+    let serialized = serialize_toml(&new)?;
+    let diff = config_diff(&old, &new);
+    Ok((serialized, diff))
+}
+
+/// Quita el proveedor `name` de `[[external_providers]]`. Si no existe: 404.
+pub fn remove_external_provider_toml(
+    raw: &str,
+    etag: Option<&str>,
+    name: &str,
+) -> Result<(String, Vec<serde_json::Value>), ApiError> {
+    let current = etag_of(raw);
+    etag_guard(etag, &current)?;
+    let old = parse_toml(raw)?;
+    let mut new = old.clone();
+    let removed = {
+        let root = new.as_table_mut().ok_or_else(|| {
+            api_error(StatusCode::BAD_REQUEST, "config_unparsable", "tylluan.toml no es una tabla".into())
+        })?;
+        let Some(list) = root.get_mut(PROVIDERS_KEY).and_then(|v| v.as_array_mut()) else {
+            return Err(api_error(
+                StatusCode::NOT_FOUND,
+                "provider_not_found",
+                format!("no hay {PROVIDERS_KEY} en la configuración"),
+            ));
+        };
+        match list
+            .iter()
+            .position(|entry| provider_name_of(entry) == Some(name))
+        {
+            Some(idx) => {
+                list.remove(idx);
+                true
+            }
+            None => false,
+        }
+    };
+    if !removed {
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            "provider_not_found",
+            format!("el proveedor '{name}' no existe"),
+        ));
+    }
+    let serialized = serialize_toml(&new)?;
+    let diff = config_diff(&old, &new);
+    Ok((serialized, diff))
+}
+
+/// Escribe el TOML nuevo con copia previa, `rename` atómico y auditoría.
+/// Devuelve la ruta de la copia de seguridad.
+pub fn persist_config_raw(
+    path: &Path,
+    raw: &str,
+    diff: &[serde_json::Value],
+    source: &str,
+    actor: &str,
+) -> Result<PathBuf, ApiError> {
+    let backup = backup_path_for(path).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, "backup_failed", e))?;
+    std::fs::copy(path, &backup).map_err(|e| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "backup_failed",
+            format!("no se pudo hacer copia previa: {e}"),
+        )
+    })?;
+    let tmp = path.with_extension("toml.tmp");
+    if let Err(e) = std::fs::write(&tmp, raw) {
+        return Err(api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "write_failed",
+            format!("no se pudo escribir temporal: {e}"),
+        ));
+    }
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        return Err(api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "write_failed",
+            format!("no se pudo reemplazar tylluan.toml: {e}"),
+        ));
+    }
+    audit_change(diff, &backup, source, actor);
+    Ok(backup)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -632,6 +808,129 @@ enabled = false
 command = "opencode"
 "#
         .to_string()
+    }
+
+    // ── D-157: alta/baja de proveedores externos por la vía validada ────────
+
+    fn d157_provider(name: &str, url: &str) -> crate::config::ExternalProvider {
+        crate::config::ExternalProvider {
+            name: name.into(),
+            provider_type: crate::config::ExternalProviderType::OpenAICompatible,
+            base_url: url.into(),
+            api_key_env: String::new(),
+            models: vec!["modelo-a".into()],
+        }
+    }
+
+    fn d157_raw_with_two_providers() -> String {
+        r#"
+[security.external_acl]
+enabled = false
+
+[[external_providers]]
+name = "ollama"
+type = "ollama_compatible"
+base_url = "http://127.0.0.1:11434"
+models = []
+
+[[external_providers]]
+name = "openai"
+type = "openai_compatible"
+base_url = "https://api.openai.com"
+api_key_env = "OPENAI_API_KEY"
+models = ["gpt-4o-mini"]
+"#
+        .to_string()
+    }
+
+    #[test]
+    fn d157_upsert_requires_etag_and_adds_without_the_secret() {
+        let raw = sample_raw();
+        let provider = d157_provider("local-ui", "https://api.example.com/v1");
+
+        let (status, body) = upsert_external_provider_toml(&raw, None, &provider).unwrap_err();
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "etag_required");
+
+        let etag = etag_of(&raw);
+        let (new_raw, diff) = upsert_external_provider_toml(&raw, Some(&etag), &provider).unwrap();
+        assert!(!diff.is_empty(), "el cambio debe quedar auditado");
+        let parsed: toml::Value = toml::from_str(&new_raw).unwrap();
+        let list = parsed
+            .get(PROVIDERS_KEY)
+            .and_then(|v| v.as_array())
+            .expect("external_providers creado");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].get("name").and_then(|v| v.as_str()), Some("local-ui"));
+        assert_eq!(
+            list[0].get("base_url").and_then(|v| v.as_str()),
+            Some("https://api.example.com/v1")
+        );
+        // Lo importante: la clave no viaja a la configuración por esta vía.
+        assert!(!new_raw.contains("api_key ="), "la config no lleva la clave");
+        // Y no se pisa el resto del fichero.
+        assert!(new_raw.contains("[security.external_acl]"));
+        assert!(new_raw.contains("[[external_mcp]]"));
+    }
+
+    #[test]
+    fn d157_upsert_replaces_by_name_and_keeps_the_others() {
+        let raw = d157_raw_with_two_providers();
+        let etag = etag_of(&raw);
+        let updated = d157_provider("ollama", "http://127.0.0.1:11435");
+        let (new_raw, _) = upsert_external_provider_toml(&raw, Some(&etag), &updated).unwrap();
+        let parsed: toml::Value = toml::from_str(&new_raw).unwrap();
+        let list = parsed.get(PROVIDERS_KEY).and_then(|v| v.as_array()).unwrap();
+        assert_eq!(list.len(), 2, "no debe duplicar el proveedor existente");
+        let ollama = list
+            .iter()
+            .find(|e| e.get("name").and_then(|v| v.as_str()) == Some("ollama"))
+            .expect("ollama sigue ahí");
+        assert_eq!(
+            ollama.get("base_url").and_then(|v| v.as_str()),
+            Some("http://127.0.0.1:11435")
+        );
+        let openai = list
+            .iter()
+            .find(|e| e.get("name").and_then(|v| v.as_str()) == Some("openai"))
+            .expect("openai no se toca");
+        assert_eq!(
+            openai.get("api_key_env").and_then(|v| v.as_str()),
+            Some("OPENAI_API_KEY"),
+            "las entradas por variable de entorno siguen intactas"
+        );
+    }
+
+    #[test]
+    fn d157_remove_deletes_only_the_named_provider() {
+        let raw = d157_raw_with_two_providers();
+        let etag = etag_of(&raw);
+        let (new_raw, diff) = remove_external_provider_toml(&raw, Some(&etag), "ollama").unwrap();
+        assert!(!diff.is_empty());
+        let parsed: toml::Value = toml::from_str(&new_raw).unwrap();
+        let list = parsed.get(PROVIDERS_KEY).and_then(|v| v.as_array()).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].get("name").and_then(|v| v.as_str()), Some("openai"));
+    }
+
+    #[test]
+    fn d157_remove_unknown_provider_is_404() {
+        let raw = d157_raw_with_two_providers();
+        let etag = etag_of(&raw);
+        let (status, body) = remove_external_provider_toml(&raw, Some(&etag), "no-existe").unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "provider_not_found");
+    }
+
+    #[test]
+    fn d157_stale_etag_is_409_and_nothing_changes() {
+        let raw = d157_raw_with_two_providers();
+        let provider = d157_provider("nuevo", "https://api.example.com");
+        let (status, body) = upsert_external_provider_toml(&raw, Some("0000000000000000"), &provider).unwrap_err();
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "etag_mismatch");
+        let (status, _) = remove_external_provider_toml(&raw, Some("0000000000000000"), "ollama").unwrap_err();
+        assert_eq!(status, StatusCode::CONFLICT);
     }
 
     /// D-104 criterio 2: una referencia a la bóveda (`vault:nombre`) y un valor

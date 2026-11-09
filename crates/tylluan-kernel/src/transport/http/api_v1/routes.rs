@@ -112,7 +112,17 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // eventual cutover decision. Read-only; dispatch never reads this.
         .route("/api/v1/scheduler/confusion", get(scheduler_confusion_handler))
         .route("/api/v1/inference/providers/{name}/test", post(test_inference_provider_handler))
-        .route("/api/v1/external-providers", get(list_external_providers_handler))
+        // D-157: crear/editar y borrar proveedores externos. Los campos no
+        // secretos van a tylluan.toml por la via validada (ETag + copia +
+        // auditoria) y la clave al SecretStore; nunca a la config.
+        .route(
+            "/api/v1/external-providers",
+            get(list_external_providers_handler).post(create_external_provider_handler),
+        )
+        .route(
+            "/api/v1/external-providers/{name}",
+            delete(delete_external_provider_handler),
+        )
         // D-152 (Jose, T3277): proveedores de loopback detectados (LM Studio, llama.cpp, Ollama).
         // Solo lectura, timeout 600 ms, sin credenciales y sin aceptar URLs del llamante.
         .route(

@@ -324,6 +324,14 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
     {
         return true;
     }
+    // D-157: crear/borrar un proveedor externo es escritura de configuracion
+    // (campos no secretos a tylluan.toml, clave al SecretStore). El POST de
+    // /external-providers/{name}/test NO cambia estado y sigue como estaba.
+    if (m == "POST" && path == "/api/v1/external-providers")
+        || (m == "DELETE" && path.starts_with("/api/v1/external-providers/"))
+    {
+        return true;
+    }
     // Silva destructive writes (adopted from the adversarial review of the design)
     if m == "DELETE" && path.starts_with("/api/v1/silva/nodes/") {
         return true;
@@ -1301,6 +1309,21 @@ mod fase1_operator_tests {
         assert!(operator_class_required("POST", "/api/v1/skills"));
         assert!(!operator_class_required("POST", "/api/v1/inference/providers/openai/test"));
         assert!(!operator_class_required("GET", "/api/v1/inference/providers"), "reads stay generic");
+        // D-157: escrituras de proveedores externos -> operador; lecturas y
+        // el test de conexion siguen siendo genericos.
+        assert!(operator_class_required("POST", "/api/v1/external-providers"));
+        assert!(operator_class_required(
+            "DELETE",
+            "/api/v1/external-providers/openai"
+        ));
+        assert!(
+            !operator_class_required("GET", "/api/v1/external-providers"),
+            "reads stay generic"
+        );
+        assert!(
+            !operator_class_required("POST", "/api/v1/external-providers/openai/test"),
+            "el test de conexion no cambia estado"
+        );
     }
 
     #[test]
@@ -1314,6 +1337,22 @@ mod fase1_operator_tests {
             !operator_gate_allows(Some(AclAuthKind::GuildToken)),
             "D-34: a guild credential never satisfies the operator class"
         );
+    }
+
+    /// D-157: crear/borrar proveedores externos exige la clase operador, y un
+    /// agente (credencial de guild o ausencia de credencial) NO la satisface:
+    /// el middleware responde 403 antes de llegar al handler.
+    #[test]
+    fn d157_external_provider_writes_are_operator_class_only() {
+        assert!(operator_class_required("POST", "/api/v1/external-providers"));
+        assert!(operator_class_required(
+            "DELETE",
+            "/api/v1/external-providers/openai"
+        ));
+        assert!(!operator_gate_allows(Some(AclAuthKind::GuildToken)));
+        assert!(!operator_gate_allows(None));
+        assert!(!operator_gate_allows(Some(AclAuthKind::OAuthJwt)));
+        assert!(operator_gate_allows(Some(AclAuthKind::MasterToken)));
     }
 
     /// D-34: the exception is exactly one route, one method. A list, not a

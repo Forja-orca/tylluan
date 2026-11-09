@@ -257,8 +257,12 @@ pub async fn test_external_provider_handler(
         }
     };
 
-    // Defense-in-depth: re-check SSRF + env-var safety before touching anything
-    if let Err(msg) = provider.is_safe() {
+    // Defense-in-depth: re-check SSRF + clave (SecretStore o entorno) antes de
+    // tocar nada. Con la clave en el vault, `api_key_env` vacío es válido.
+    let stored_key = crate::security::provider_secrets::get_secret(&provider.name)
+        .ok()
+        .flatten();
+    if let Err(msg) = provider.is_safe_with_vault(stored_key.is_some()) {
         return (StatusCode::FORBIDDEN, crate::transport::http::Utf8Json(serde_json::json!({
             "ok": false,
             "status": "blocked",
@@ -271,16 +275,35 @@ pub async fn test_external_provider_handler(
         .or_else(|| provider.models.first().cloned())
         .unwrap_or_else(|| "gpt-4o-mini".to_string());
 
-    // Read API key from environment (never from config)
-    let api_key = std::env::var(&provider.api_key_env).unwrap_or_default();
+    // D-157: la clave se lee del SecretStore en CADA llamada; si no hay, se
+    // mantiene la compatibilidad con `api_key_env`. Nunca sale de la config.
+    let api_key = match crate::security::provider_secrets::resolve_api_key(&provider.name, &provider.api_key_env) {
+        Ok(Some(key)) => key,
+        Ok(None) => String::new(),
+        Err(e) => {
+            return (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!({
+                "ok": false,
+                "status": "secret_store_error",
+                "provider": provider.name,
+                "type": provider.provider_type,
+                "base_url": provider.base_url,
+                "error": format!("no se pudo leer la clave del SecretStore: {e}"),
+            }))).into_response();
+        }
+    };
     if api_key.is_empty() {
+        let hint = if provider.api_key_env.is_empty() {
+            "no hay clave en el SecretStore y el proveedor no declara api_key_env".to_string()
+        } else {
+            format!("Environment variable '{}' is not set or empty, y no hay clave en el SecretStore.", provider.api_key_env)
+        };
         return (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!({
             "ok": false,
             "status": "no_key",
             "provider": provider.name,
             "type": provider.provider_type,
             "base_url": provider.base_url,
-            "error": format!("Environment variable '{}' is not set or empty. Set it with the API key.", provider.api_key_env),
+            "error": hint,
         }))).into_response();
     }
 
@@ -974,23 +997,364 @@ pub async fn update_wsl_config_handler() -> impl IntoResponse { StatusCode::OK }
 
 
 /// GET /api/v1/external-providers
+///
+/// D-157: la respuesta dice **de dónde** sale la clave (`key_source`) y si
+/// hay alguna (`api_key_set`), pero **nunca** devuelve un carácter de ella.
+/// `api_key_env` sólo lleva valor cuando la fuente es la variable de entorno;
+/// en cualquier otro caso va `null` (cambio aditivo: las entradas antiguas de
+/// `tylluan.toml` que usan entorno siguen funcionando igual).
 pub async fn list_external_providers_handler(
     State(state): State<Arc<HttpState>>,
 ) -> impl IntoResponse {
     let providers: Vec<serde_json::Value> = {
         let config = state.config.read().await;
         config.external_providers.iter().map(|p| {
-            serde_json::json!({
-                "name": p.name,
-                "type": p.provider_type,
-                "base_url": p.base_url,
-                "api_key_env": p.api_key_env,
-                "models": p.models,
-                "api_key_set": std::env::var(&p.api_key_env).is_ok(),
-            })
+            let (source, set) = crate::security::provider_secrets::key_status(&p.name, &p.api_key_env)
+                .unwrap_or_else(|err| {
+                    tracing::warn!(
+                        provider = %p.name,
+                        error = %err,
+                        "no se pudo consultar el SecretStore; se reporta que no hay clave"
+                    );
+                    (crate::security::provider_secrets::KeySource::None, false)
+                });
+            provider_public_json(p, source.as_str(), set)
         }).collect()
     };
     (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!(providers)))
+}
+
+/// Vista pública de un proveedor — **el único sitio** que construye la forma
+/// que sale por HTTP. No recibe la clave, no la lee y no tiene un campo donde
+/// ponerla: la respuesta sólo dice de dónde sale (`key_source`) y si hay
+/// (`api_key_set`). `api_key_env` sólo lleva valor cuando la fuente es `env`.
+fn provider_public_json(
+    provider: &crate::config::ExternalProvider,
+    key_source: &str,
+    api_key_set: bool,
+) -> serde_json::Value {
+    let env_visible = key_source == "env";
+    serde_json::json!({
+        "name": provider.name,
+        "type": provider.provider_type,
+        "base_url": provider.base_url,
+        "api_key_env": if env_visible { serde_json::Value::String(provider.api_key_env.clone()) } else { serde_json::Value::Null },
+        "models": provider.models,
+        "key_source": key_source,
+        "api_key_set": api_key_set,
+    })
+}
+
+/// Cuerpo de `POST /api/v1/external-providers`.
+#[derive(Debug, Deserialize)]
+pub struct CreateExternalProviderBody {
+    pub name: String,
+    pub base_url: String,
+    /// `openai_compatible` (por defecto) · `anthropic_compatible` · `ollama_compatible`.
+    #[serde(rename = "type", default)]
+    pub provider_type: Option<String>,
+    /// La clave, en claro sólo en tránsito: se guarda en el SecretStore.
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Alternativa a `api_key` para proveedores que usan variable de entorno.
+    #[serde(default)]
+    pub api_key_env: Option<String>,
+    #[serde(default)]
+    pub models: Vec<String>,
+    /// ETag de `GET /api/v1/config` (obligatorio, como en `/config/edit`).
+    #[serde(default)]
+    pub etag: Option<String>,
+}
+
+fn parse_external_provider_type(
+    raw: Option<&str>,
+) -> Result<crate::config::ExternalProviderType, String> {
+    use crate::config::ExternalProviderType as T;
+    match raw.map(str::trim).filter(|s| !s.is_empty()) {
+        None | Some("openai_compatible") => Ok(T::OpenAICompatible),
+        Some("anthropic_compatible") => Ok(T::AnthropicCompatible),
+        Some("ollama_compatible") => Ok(T::OllamaCompatible),
+        Some(other) => Err(format!(
+            "tipo de proveedor no soportado: '{other}' (usa openai_compatible, anthropic_compatible u ollama_compatible)"
+        )),
+    }
+}
+
+fn api_error(
+    status: StatusCode,
+    code: &str,
+    message: String,
+) -> axum::response::Response {
+    (
+        status,
+        crate::transport::http::Utf8Json(serde_json::json!({
+            "ok": false,
+            "error": code,
+            "errors": [message],
+        })),
+    )
+        .into_response()
+}
+
+/// Restaura la clave anterior cuando la escritura de configuración falla
+/// después de haber tocado el SecretStore. Si no había clave, la borra.
+fn rollback_secret(name: &str, previous: Option<String>) {
+    let result = match previous {
+        Some(value) => crate::security::provider_secrets::set_secret(name, &value).map(|()| true),
+        None => crate::security::provider_secrets::delete_secret(name),
+    };
+    if let Err(err) = result {
+        tracing::error!(
+            provider = %name,
+            error = %err,
+            "no se pudo restaurar la clave tras fallar la escritura de la configuración"
+        );
+    }
+}
+
+fn provider_key_source_json(name: &str, api_key_env: &str) -> (&'static str, bool) {
+    let (source, set) =
+        crate::security::provider_secrets::key_status(name, api_key_env).unwrap_or((
+            crate::security::provider_secrets::KeySource::None,
+            false,
+        ));
+    (source.as_str(), set)
+}
+
+/// POST /api/v1/external-providers — crear o editar un proveedor externo.
+///
+/// Orden deliberado (D-157, T3700):
+/// 1. nombre válido, 2. puerta anti-SSRF **antes** de escribir,
+/// 3. el TOML resultante se calcula y valida (ETag) **antes** de tocar la
+///    clave — así la mayoría de fallos no llegan a escribir nada,
+/// 4. clave al SecretStore, 5. configuración con copia + `rename` atómico.
+///
+/// Si (5) falla, se restaura la clave anterior; no queda un proveedor a medias.
+pub async fn create_external_provider_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(body): Json<CreateExternalProviderBody>,
+) -> impl IntoResponse {
+    use crate::config::{ExternalProvider, ExternalProviderRisk};
+
+    if let Err(err) = crate::security::provider_secrets::validate_name(&body.name) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid_name", err.to_string());
+    }
+    let provider_type = match parse_external_provider_type(body.provider_type.as_deref()) {
+        Ok(kind) => kind,
+        Err(err) => return api_error(StatusCode::BAD_REQUEST, "invalid_type", err),
+    };
+
+    let new_api_key = body
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .map(str::to_string);
+    let api_key_env = body.api_key_env.as_deref().unwrap_or("").trim().to_string();
+
+    let provider = ExternalProvider {
+        name: body.name.clone(),
+        provider_type,
+        base_url: body.base_url.trim().trim_end_matches('/').to_string(),
+        api_key_env: api_key_env.clone(),
+        models: body.models.clone(),
+    };
+
+    let created = {
+        let config = state.config.read().await;
+        !config
+            .external_providers
+            .iter()
+            .any(|p| p.name == provider.name)
+    };
+
+    let previous_secret = crate::security::provider_secrets::get_secret(&provider.name)
+        .ok()
+        .flatten();
+    let has_secret = new_api_key.is_some() || previous_secret.is_some();
+    match crate::config::check_external_provider_with_secret(&provider, has_secret) {
+        ExternalProviderRisk::Safe => {}
+        ExternalProviderRisk::DangerousUrl(reason) => {
+            return api_error(StatusCode::BAD_REQUEST, "unsafe_base_url", reason);
+        }
+        ExternalProviderRisk::SuspiciousKeyEnv(reason) => {
+            return api_error(StatusCode::BAD_REQUEST, "unsafe_api_key_env", reason);
+        }
+        ExternalProviderRisk::MissingKeyEnv => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "missing_api_key",
+                "falta la clave: envía 'api_key' (se guarda en el SecretStore) o 'api_key_env'".into(),
+            );
+        }
+    }
+
+    let path = crate::transport::http::api_v1::config_safe::config_path();
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "config_read_failed",
+                format!("no se pudo leer {}: {e}", path.display()),
+            );
+        }
+    };
+    let (new_raw, diff) = match crate::transport::http::api_v1::config_safe::upsert_external_provider_toml(
+        &raw,
+        body.etag.as_deref(),
+        &provider,
+    ) {
+        Ok(pair) => pair,
+        Err((status, payload)) => return (status, crate::transport::http::Utf8Json(payload)).into_response(),
+    };
+
+    if let Some(key) = &new_api_key
+        && let Err(e) = crate::security::provider_secrets::set_secret(&provider.name, key)
+    {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "secret_write_failed",
+            format!("no se pudo guardar la clave en el SecretStore: {e}"),
+        );
+    }
+
+    if let Err((status, payload)) = crate::transport::http::api_v1::config_safe::persist_config_raw(
+        &path,
+        &new_raw,
+        &diff,
+        "POST /api/v1/external-providers",
+        "config_api",
+    ) {
+        if new_api_key.is_some() {
+            rollback_secret(&provider.name, previous_secret.clone());
+        }
+        return (status, crate::transport::http::Utf8Json(payload)).into_response();
+    }
+
+    if let Err(e) = crate::config::TylluanConfig::reload().await {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "saved_reload_failed",
+            format!("config escrita pero el reload falló: {e}"),
+        );
+    }
+
+    let (key_source, api_key_set) = provider_key_source_json(&provider.name, &api_key_env);
+    let status = if created {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    (
+        status,
+        crate::transport::http::Utf8Json(serde_json::json!({
+            "ok": true,
+            "status": if created { "created" } else { "updated" },
+            "name": provider.name,
+            "type": provider.provider_type,
+            "base_url": provider.base_url,
+            "models": provider.models,
+            "key_source": key_source,
+            "api_key_set": api_key_set,
+            "etag": crate::transport::http::api_v1::config_safe::etag_of(&new_raw),
+            "diff": diff,
+            "requires_restart": false,
+        })),
+    )
+        .into_response()
+}
+
+/// DELETE /api/v1/external-providers/{name} — quita proveedor y clave.
+///
+/// El ETag viaja como `?etag=...` o en la cabecera `x-config-etag`
+/// (obligatorio, igual que `/config/edit`). Si el borrado de la clave falla,
+/// **no** se quita el proveedor: no se deja nada a medias.
+pub async fn delete_external_provider_handler(
+    State(_state): State<Arc<HttpState>>,
+    Path(name): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    if let Err(err) = crate::security::provider_secrets::validate_name(&name) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid_name", err.to_string());
+    }
+    let etag = params.get("etag").cloned().or_else(|| {
+        headers
+            .get("x-config-etag")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    });
+
+    let path = crate::transport::http::api_v1::config_safe::config_path();
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "config_read_failed",
+                format!("no se pudo leer {}: {e}", path.display()),
+            );
+        }
+    };
+    let (new_raw, diff) = match crate::transport::http::api_v1::config_safe::remove_external_provider_toml(
+        &raw,
+        etag.as_deref(),
+        &name,
+    ) {
+        Ok(pair) => pair,
+        Err((status, payload)) => return (status, crate::transport::http::Utf8Json(payload)).into_response(),
+    };
+
+    let previous_secret = crate::security::provider_secrets::get_secret(&name).ok().flatten();
+    let mut secret_deleted = false;
+    if previous_secret.is_some() {
+        match crate::security::provider_secrets::delete_secret(&name) {
+            Ok(removed) => secret_deleted = removed,
+            Err(e) => {
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "secret_delete_failed",
+                    format!("no se pudo borrar la clave del SecretStore; el proveedor NO se ha tocado: {e}"),
+                );
+            }
+        }
+    }
+
+    if let Err((status, payload)) = crate::transport::http::api_v1::config_safe::persist_config_raw(
+        &path,
+        &new_raw,
+        &diff,
+        "DELETE /api/v1/external-providers",
+        "config_api",
+    ) {
+        if secret_deleted {
+            rollback_secret(&name, previous_secret);
+        }
+        return (status, crate::transport::http::Utf8Json(payload)).into_response();
+    }
+
+    if let Err(e) = crate::config::TylluanConfig::reload().await {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "saved_reload_failed",
+            format!("config escrita pero el reload falló: {e}"),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        crate::transport::http::Utf8Json(serde_json::json!({
+            "ok": true,
+            "status": "deleted",
+            "name": name,
+            "secret_deleted": secret_deleted,
+            "etag": crate::transport::http::api_v1::config_safe::etag_of(&new_raw),
+            "diff": diff,
+            "requires_restart": false,
+        })),
+    )
+        .into_response()
 }
 
 /// POST /api/v1/inference/providers/{name}/test
@@ -2264,4 +2628,57 @@ mod tests {
         let new: toml::Value = toml::from_str("[memory]\nembedding_model = \"b\"\n").unwrap();
         assert!(protected_config_changes(&old, &new).is_empty());
     }
+
+    // ── D-157: la clave no puede salir por ninguna superficie serializada ────
+
+    fn d157_provider(api_key_env: &str) -> crate::config::ExternalProvider {
+        crate::config::ExternalProvider {
+            name: "openai".into(),
+            provider_type: crate::config::ExternalProviderType::OpenAICompatible,
+            base_url: "https://api.openai.com/v1".into(),
+            api_key_env: api_key_env.into(),
+            models: vec!["gpt-4o-mini".into()],
+        }
+    }
+
+    /// Prueba con MUTACIÓN sobre la vista pública: si alguien añade a
+    /// `provider_public_json` un campo `api_key` (o cualquier campo con la
+    /// clave resuelta), esto falla. La respuesta sólo puede decir
+    /// `key_source` + `api_key_set`, nunca un carácter de la clave.
+    #[test]
+    fn d157_provider_view_has_no_key_field() {
+        const SECRET: &str = "sk-mutacion-NO-DEBE-SALIR";
+        let p = d157_provider("");
+        let view = provider_public_json(&p, "vault", true);
+        let body = serde_json::to_string(&view).unwrap();
+        assert!(!body.contains(SECRET), "la clave salió en la respuesta: {body}");
+        assert!(!body.contains("sk-"), "la respuesta no puede llevar nada con forma de clave");
+        assert_eq!(view["key_source"], "vault");
+        assert_eq!(view["api_key_set"], true);
+        assert!(view["api_key_env"].is_null(), "con clave en el vault, api_key_env va null");
+        assert!(view.get("api_key").is_none(), "la vista no tiene campo api_key");
+        assert!(view.get("secret").is_none(), "la vista no tiene campo secret");
+
+        // Con fuente env se publica el NOMBRE de la variable, nunca su valor.
+        let env_view = provider_public_json(&d157_provider("OPENAI_API_KEY"), "env", true);
+        assert_eq!(env_view["api_key_env"], "OPENAI_API_KEY");
+        assert!(!serde_json::to_string(&env_view).unwrap().contains(SECRET));
+    }
+
+    /// Y la configuración (lo que se escribe en `tylluan.toml`) tampoco tiene
+    /// dónde guardarla: si alguien añade un campo `api_key` al struct, el TOML
+    /// empieza a llevarlo y este test falla.
+    #[test]
+    fn d157_provider_config_shape_has_no_key_field() {
+        let p = d157_provider("");
+        let toml_text = toml::to_string(&p).unwrap();
+        assert!(!toml_text.contains("sk-"));
+        assert!(
+            !toml_text.contains("api_key ="),
+            "tylluan.toml no puede llevar la clave: {toml_text}"
+        );
+        assert!(toml_text.contains("base_url"));
+        assert!(toml_text.contains("api_key_env"));
+    }
+
 }
