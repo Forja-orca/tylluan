@@ -52,6 +52,9 @@ interface ModelsResponse {
     vector_dimensions?: number;
     vision?: string;
   };
+  models_dir?: string;
+  models_dir_from_env?: boolean;
+  hint?: string | null;
   detected_local_models?: DetectedLocalModel[];
   available_embeddings?: Array<{ name: string; dimensions: number }>;
   available_vision?: Array<{ name: string; path: string }>;
@@ -457,6 +460,9 @@ export function InferenceSettingsPanel({
   const vectorDimensions = modelsData?.active?.vector_dimensions || 1024;
   const activeVision = modelsData?.active?.vision || '';
   const detectedModels = modelsData?.detected_local_models || [];
+  const modelsDir = modelsData?.models_dir;
+  const modelsDirFromEnv = modelsData?.models_dir_from_env;
+  const modelsHint = modelsData?.hint;
 
   // Comprobar existencia real del modelo de visión en disco (T3294 / T3318 / T3717)
   // No confunde modelos de texto, guardias (qwen3guard) o generativos con modelos de visión
@@ -622,6 +628,9 @@ export function InferenceSettingsPanel({
         onTestProvider={handleTestExternalProvider}
         onRemoveProvider={handleRemoveExternalProvider}
         detectedModels={detectedModels}
+        modelsDir={modelsDir}
+        modelsDirFromEnv={modelsDirFromEnv}
+        hint={modelsHint}
         onOpenAddProvider={() => setIsAddProviderDrawerOpen(true)}
         kernelSupportsPost={kernelSupportsAddProvider}
       />
@@ -663,7 +672,10 @@ export function InferenceSettingsPanel({
         onSaveEngine={handleSaveEngineSettings}
         engineSuccess={engineSuccess}
         detectedModels={detectedModels}
-        modelsDirectory={llamaStatus.models_directory || undefined}
+        modelsDirectory={modelsDir || llamaStatus.models_directory || undefined}
+        modelsDir={modelsDir}
+        modelsDirFromEnv={modelsDirFromEnv}
+        hint={modelsHint}
       />
 
       {/* Alerta Accesible de Reinicio Pendiente (AG-23 / H2) */}

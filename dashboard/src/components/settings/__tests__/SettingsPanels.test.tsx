@@ -484,6 +484,180 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
         expect(rerankInput.value).toBe('—');
       });
     });
+
+    it('inventario de modelos vacío con hint y models_dir muestra la ruta absoluta, el texto del hint y botón de copiar ruta (D-162 / T3828)', async () => {
+      // Mock de navigator.clipboard
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      });
+
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') {
+          return Promise.resolve({
+            nexus: { port: 47004 },
+            inference: { device: 'cpu', max_threads: 4 },
+            memory: {},
+          });
+        }
+        if (url === '/api/v1/config/schema') {
+          return Promise.resolve({ fields: [] });
+        }
+        if (url === '/api/v1/models') {
+          return Promise.resolve({
+            active: {
+              embedding: 'mxbai-embed-large',
+              vector_dimensions: 1024,
+              vision: undefined,
+            },
+            models_dir: 'E:\\tylluan\\models',
+            models_dir_from_env: false,
+            hint: 'La carpeta de modelos E:\\tylluan\\models existe pero no tiene ningún modelo: copia tus modelos ahí. Para chatear, copia además un modelo de chat en esa carpeta.',
+            detected_local_models: [],
+          });
+        }
+        if (url === '/api/v1/inference/points') {
+          return Promise.resolve({ points: {} });
+        }
+        if (url === '/api/v1/external-providers') {
+          return Promise.resolve([]);
+        }
+        if (url === '/api/v1/inference/providers/discover') {
+          return Promise.resolve({ providers: [] });
+        }
+        if (url === '/api/v1/dashboard/summary') {
+          return Promise.resolve({});
+        }
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        // La caja de hint de inventario vacío debe ser visible
+        const hintBox = screen.getByTestId('empty-models-hint-box');
+        expect(hintBox).toBeInTheDocument();
+
+        // Muestra el texto exacto del hint devuelto por el kernel
+        expect(screen.getByTestId('empty-models-hint-text')).toHaveTextContent(
+          /La carpeta de modelos E:\\tylluan\\models existe pero no tiene ningún modelo/i
+        );
+        expect(screen.getByTestId('empty-models-hint-text')).toHaveTextContent(
+          /Para chatear, copia además un modelo de chat en esa carpeta/i
+        );
+
+        // Muestra la ruta absoluta models_dir
+        const pathEl = screen.getByTestId('models-dir-path');
+        expect(pathEl).toHaveTextContent('E:\\tylluan\\models');
+
+        // Botón copiar ruta
+        const copyBtn = screen.getByTestId('copy-models-dir-btn');
+        expect(copyBtn).toHaveTextContent(/Copiar ruta/i);
+
+        // Al hacer click, llama a navigator.clipboard.writeText con la ruta absoluta
+        fireEvent.click(copyBtn);
+        expect(writeTextMock).toHaveBeenCalledWith('E:\\tylluan\\models');
+      });
+    });
+
+    it('inventario con modelos detectados no muestra el hint de inventario vacío (T3828)', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') {
+          return Promise.resolve({
+            nexus: { port: 47004 },
+            inference: { device: 'cpu', max_threads: 4 },
+            memory: {},
+          });
+        }
+        if (url === '/api/v1/config/schema') {
+          return Promise.resolve({ fields: [] });
+        }
+        if (url === '/api/v1/models') {
+          return Promise.resolve({
+            active: {
+              embedding: 'mxbai-embed-large',
+              vector_dimensions: 1024,
+              vision: 'models/smolvlm2-256m',
+            },
+            models_dir: 'E:\\tylluan\\models',
+            models_dir_from_env: false,
+            hint: null,
+            detected_local_models: [
+              { id: 'qwen2.5-1.5b', name: 'Local Qwen 1.5B', size_mb: 2944, role: 'chat', chat_capable: true, installed: true },
+            ],
+          });
+        }
+        if (url === '/api/v1/inference/points') {
+          return Promise.resolve({ points: {} });
+        }
+        if (url === '/api/v1/external-providers') {
+          return Promise.resolve([]);
+        }
+        if (url === '/api/v1/inference/providers/discover') {
+          return Promise.resolve({ providers: [] });
+        }
+        if (url === '/api/v1/dashboard/summary') {
+          return Promise.resolve({});
+        }
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        // Con modelos presentes, no se debe renderizar el hint de inventario vacío
+        expect(screen.queryByTestId('empty-models-hint-box')).not.toBeInTheDocument();
+      });
+    });
+
+    it('inventario vacío en kernel viejo (sin hint ni models_dir) no inventa rutas ni hints (T3828)', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') {
+          return Promise.resolve({
+            nexus: { port: 47004 },
+            inference: { device: 'cpu', max_threads: 4 },
+            memory: {},
+          });
+        }
+        if (url === '/api/v1/config/schema') {
+          return Promise.resolve({ fields: [] });
+        }
+        if (url === '/api/v1/models') {
+          return Promise.resolve({
+            active: {
+              embedding: 'mxbai-embed-large',
+              vector_dimensions: 1024,
+            },
+            // Sin campos models_dir, models_dir_from_env ni hint (kernel pre-D162)
+            detected_local_models: [],
+          });
+        }
+        if (url === '/api/v1/inference/points') {
+          return Promise.resolve({ points: {} });
+        }
+        if (url === '/api/v1/external-providers') {
+          return Promise.resolve([]);
+        }
+        if (url === '/api/v1/inference/providers/discover') {
+          return Promise.resolve({ providers: [] });
+        }
+        if (url === '/api/v1/dashboard/summary') {
+          return Promise.resolve({});
+        }
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        // En kernel viejo no se inventa la caja de hint ni rutas falsas
+        expect(screen.queryByTestId('empty-models-hint-box')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('models-dir-path')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('copy-models-dir-btn')).not.toBeInTheDocument();
+      });
+    });
   });
 
   describe('SecuritySettingsPanel', () => {

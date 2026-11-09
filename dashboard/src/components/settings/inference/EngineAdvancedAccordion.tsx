@@ -5,7 +5,11 @@ import {
   Sliders,
   HardDrive,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Copy,
+  Check,
+  Folder,
+  Info
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { DetectedLocalModel } from './RoleModelAssignmentSection';
@@ -23,6 +27,9 @@ export interface EngineAdvancedAccordionProps {
   engineSuccess: boolean;
   detectedModels: DetectedLocalModel[];
   modelsDirectory?: string | null;
+  modelsDir?: string;
+  modelsDirFromEnv?: boolean;
+  hint?: string | null;
 }
 
 export function EngineAdvancedAccordion({
@@ -38,8 +45,26 @@ export function EngineAdvancedAccordion({
   engineSuccess,
   detectedModels,
   modelsDirectory,
+  modelsDir,
+  modelsDirFromEnv = false,
+  hint,
 }: EngineAdvancedAccordionProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [copiedPath, setCopiedPath] = useState(false);
+
+  const effectiveModelsDir = modelsDir || modelsDirectory;
+
+  const handleCopyPath = async (path: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(path);
+        setCopiedPath(true);
+        setTimeout(() => setCopiedPath(false), 2000);
+      }
+    } catch (err) {
+      console.error('Error al copiar ruta al portapapeles:', err);
+    }
+  };
 
   return (
     <section
@@ -149,14 +174,58 @@ export function EngineAdvancedAccordion({
                 <h4 className="text-xs font-bold text-foreground">Inventario Físico de Modelos en Disco</h4>
               </div>
               <span className="text-[11px] font-mono text-muted-foreground">
-                {modelsDirectory || 'models/'}
+                {effectiveModelsDir || 'models/'}
               </span>
             </div>
 
             {detectedModels.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic p-2 bg-muted/20 rounded">
-                No se detectaron archivos de modelo adicionales en el directorio local de modelos.
-              </p>
+              hint || effectiveModelsDir ? (
+                <div
+                  role="region"
+                  aria-label="Directorio de modelos"
+                  className="p-3 rounded-lg border border-border/80 bg-muted/20 space-y-2.5 text-xs text-foreground"
+                  data-testid="empty-models-hint-accordion"
+                >
+                  {hint && (
+                    <div className="flex items-start gap-2">
+                      <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
+                      <p className="text-muted-foreground leading-relaxed">{hint}</p>
+                    </div>
+                  )}
+                  {effectiveModelsDir && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded bg-background/80 border border-border/60">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                        <span className="font-mono text-[11px] text-foreground break-all select-all font-medium">
+                          {effectiveModelsDir}
+                        </span>
+                        {modelsDirFromEnv && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono border border-border bg-muted text-muted-foreground shrink-0">
+                            TYLLUAN_MODELS_DIR
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPath(effectiveModelsDir)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded border border-border bg-card hover:bg-accent text-foreground transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label="Copiar ruta"
+                      >
+                        {copiedPath ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+                        )}
+                        <span>{copiedPath ? 'Copiada' : 'Copiar ruta'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic p-2 bg-muted/20 rounded">
+                  No se detectaron archivos de modelo adicionales en el directorio local de modelos.
+                </p>
+              )
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
                 {detectedModels.map((m, idx) => {

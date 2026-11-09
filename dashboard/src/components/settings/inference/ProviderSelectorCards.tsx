@@ -9,7 +9,11 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
-  Trash2
+  Trash2,
+  Copy,
+  Check,
+  Folder,
+  Info
 } from 'lucide-react';
 import type { LlamaServerStatus } from './model-catalog-contract';
 import type { DetectedLocalModel } from './RoleModelAssignmentSection';
@@ -72,6 +76,9 @@ export interface ProviderSelectorCardsProps {
   onTestProvider: (providerName: string) => void;
   onRemoveProvider?: (providerName: string) => void;
   detectedModels?: DetectedLocalModel[];
+  modelsDir?: string;
+  modelsDirFromEnv?: boolean;
+  hint?: string | null;
   onOpenAddProvider: () => void;
   kernelSupportsPost?: boolean;
 }
@@ -90,10 +97,26 @@ export function ProviderSelectorCards({
   onTestProvider,
   onRemoveProvider,
   detectedModels = [],
+  modelsDir,
+  modelsDirFromEnv = false,
+  hint,
   onOpenAddProvider,
   kernelSupportsPost = false,
 }: ProviderSelectorCardsProps) {
-  const [showTylluanModels, setShowTylluanModels] = useState(false);
+  const [showTylluanModels, setShowTylluanModels] = useState(() => Boolean(hint && detectedModels.length === 0));
+  const [copiedPath, setCopiedPath] = useState(false);
+
+  const handleCopyPath = async (path: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(path);
+        setCopiedPath(true);
+        setTimeout(() => setCopiedPath(false), 2000);
+      }
+    } catch (err) {
+      console.error('Error al copiar ruta al portapapeles:', err);
+    }
+  };
 
   // Buscar datos descubiertos para proveedores loopback
   const lmStudio = discoverData?.providers?.find(p => p.id === 'lm-studio');
@@ -179,12 +202,64 @@ export function ProviderSelectorCards({
                 <span className="font-semibold uppercase tracking-wider">
                   Modelos internos en disco:
                 </span>
-                <span className="italic">
-                  Para chatear, copia un modelo en la carpeta models
-                </span>
+                {!hint && (
+                  <span className="italic">
+                    Para chatear, copia un modelo en la carpeta models
+                  </span>
+                )}
               </div>
               {detectedModels.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">No se detectaron modelos en la carpeta models/.</p>
+                hint || modelsDir ? (
+                  <div
+                    role="region"
+                    aria-label="Directorio de modelos"
+                    className="p-3 rounded-lg border border-border/80 bg-muted/20 space-y-2.5 text-xs text-foreground"
+                    data-testid="empty-models-hint-box"
+                  >
+                    {hint && (
+                      <div className="flex items-start gap-2">
+                        <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
+                        <p className="text-muted-foreground leading-relaxed" data-testid="empty-models-hint-text">
+                          {hint}
+                        </p>
+                      </div>
+                    )}
+                    {modelsDir && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded bg-background/80 border border-border/60">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                          <span
+                            className="font-mono text-[11px] text-foreground break-all select-all font-medium"
+                            data-testid="models-dir-path"
+                          >
+                            {modelsDir}
+                          </span>
+                          {modelsDirFromEnv && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono border border-border bg-muted text-muted-foreground shrink-0">
+                              TYLLUAN_MODELS_DIR
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPath(modelsDir)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded border border-border bg-card hover:bg-accent text-foreground transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label="Copiar ruta"
+                          data-testid="copy-models-dir-btn"
+                        >
+                          {copiedPath ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+                          )}
+                          <span>{copiedPath ? 'Copiada' : 'Copiar ruta'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No se detectaron modelos en la carpeta models/.</p>
+                )
               ) : (
                 <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                   {detectedModels.map(model => {
