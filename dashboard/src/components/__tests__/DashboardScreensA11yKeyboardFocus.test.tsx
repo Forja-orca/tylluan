@@ -71,33 +71,22 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
       expect(tablist).toBeInTheDocument();
 
       const ringsTab = screen.getByRole('tab', { name: /1\. anillos de estado/i });
-      const flowTab = screen.getByRole('tab', { name: /2\. mapa de flujo/i });
-      const heatmapTab = screen.getByRole('tab', { name: /3\. mapa de calor/i });
+      const heatmapTab = screen.getByRole('tab', { name: /2\. mapa de calor/i });
 
       expect(ringsTab).toHaveAttribute('aria-selected', 'true');
       expect(ringsTab).toHaveAttribute('tabIndex', '0');
-      expect(flowTab).toHaveAttribute('aria-selected', 'false');
-      expect(flowTab).toHaveAttribute('tabIndex', '-1');
+      expect(heatmapTab).toHaveAttribute('aria-selected', 'false');
+      expect(heatmapTab).toHaveAttribute('tabIndex', '-1');
 
-      // ArrowRight: rings -> flow
+      // ArrowRight: rings -> heatmap
       ringsTab.focus();
       fireEvent.keyDown(ringsTab, { key: 'ArrowRight' });
-      expect(flowTab).toHaveAttribute('aria-selected', 'true');
-      expect(flowTab).toHaveAttribute('tabIndex', '0');
-      expect(document.activeElement).toBe(flowTab);
-
-      // ArrowRight: flow -> heatmap
-      fireEvent.keyDown(flowTab, { key: 'ArrowRight' });
       expect(heatmapTab).toHaveAttribute('aria-selected', 'true');
+      expect(heatmapTab).toHaveAttribute('tabIndex', '0');
       expect(document.activeElement).toBe(heatmapTab);
 
-      // ArrowLeft: heatmap -> flow
+      // ArrowLeft: heatmap -> rings
       fireEvent.keyDown(heatmapTab, { key: 'ArrowLeft' });
-      expect(flowTab).toHaveAttribute('aria-selected', 'true');
-      expect(document.activeElement).toBe(flowTab);
-
-      // Home: jump to first tab (rings)
-      fireEvent.keyDown(flowTab, { key: 'Home' });
       expect(ringsTab).toHaveAttribute('aria-selected', 'true');
       expect(document.activeElement).toBe(ringsTab);
 
@@ -105,6 +94,11 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
       fireEvent.keyDown(ringsTab, { key: 'End' });
       expect(heatmapTab).toHaveAttribute('aria-selected', 'true');
       expect(document.activeElement).toBe(heatmapTab);
+
+      // Home: jump to first tab (rings)
+      fireEvent.keyDown(heatmapTab, { key: 'Home' });
+      expect(ringsTab).toHaveAttribute('aria-selected', 'true');
+      expect(document.activeElement).toBe(ringsTab);
     });
   });
 
@@ -161,14 +155,21 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
       };
       render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={vi.fn()} />);
 
-      const heading = await screen.findByRole('heading', { name: /Capa 1 — Motor de Inferencia/i });
+      const heading = await screen.findByRole('heading', { name: /Configuración de Inferencia & Modelos/i });
       expect(heading).toBeInTheDocument();
 
-      const fastPreset = screen.getByRole('button', { name: /Rápido \(Baja Latencia\)/i });
-      fastPreset.focus();
-      expect(document.activeElement).toBe(fastPreset);
-      fireEvent.click(fastPreset);
-      expect(fastPreset.className).toContain('bg-primary/10');
+      const accordionBtn = screen.getByRole('button', { name: /Ajustes Avanzados & Motor de Inferencia/i });
+      fireEvent.click(accordionBtn);
+
+      const deviceSelect = screen.getByLabelText(/Dispositivo de Aceleración/i);
+      deviceSelect.focus();
+      expect(document.activeElement).toBe(deviceSelect);
+
+      const threadsInput = screen.getByLabelText(/Hilos Máximos de Inferencia/i);
+      threadsInput.focus();
+      expect(document.activeElement).toBe(threadsInput);
+      fireEvent.change(threadsInput, { target: { value: '8' } });
+      expect((threadsInput as HTMLInputElement).value).toBe('8');
     });
   });
 

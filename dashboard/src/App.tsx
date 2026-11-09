@@ -248,9 +248,9 @@ function App() {
   }, [coloquioUnread, approvals.length, devMode]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20 overflow-x-hidden">
       {/* Top Navbar */}
-      <header className="h-16 border-b border-border bg-card sticky top-0 z-50 px-6 flex items-center justify-between">
+      <header className="h-16 border-b border-border bg-card sticky top-0 z-50 px-3 sm:px-6 flex items-center justify-between overflow-x-hidden">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -447,7 +447,7 @@ function App() {
             <div 
               role="status"
               aria-live="polite"
-              className="flex items-center gap-2 px-3 py-1.5 rounded bg-card border border-border cursor-help group relative text-foreground"
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-card border border-border cursor-help group relative text-foreground shrink-0"
               title={`Embeddings: ${healthDetailed.components?.embeddings?.ok ? '✓' : '✗'} | Reranker: ${healthDetailed.components?.reranker?.ok ? '✓' : '✗'} | Guilds: ${healthDetailed.components?.guilds?.active}/${healthDetailed.components?.guilds?.total} | Silva: ${healthDetailed.components?.silva?.nodes}n/${healthDetailed.components?.silva?.edges}e`}
             >
               <div className={cn(

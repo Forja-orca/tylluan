@@ -19,20 +19,6 @@ export interface SubruntimeStatus {
   errorsTotal: number;
 }
 
-export interface FlowNode {
-  id: SubruntimeId;
-  name: string;
-  x: number;
-  y: number;
-}
-
-export interface FlowEdge {
-  from: SubruntimeId;
-  to: SubruntimeId;
-  label: string;
-  volume: number; // relative active volume
-}
-
 export interface HeatmapCell {
   agent: string;
   hour: number; // 0..23
@@ -40,11 +26,11 @@ export interface HeatmapCell {
 }
 
 export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
-  const [activeView, setActiveView] = useState<'rings' | 'flow' | 'heatmap'>(() => {
+  const [activeView, setActiveView] = useState<'rings' | 'heatmap'>(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
       const v = p.get('view');
-      if (v === 'flow' || v === 'heatmap') return v;
+      if (v === 'heatmap') return v;
     }
     return 'rings';
   });
@@ -219,14 +205,13 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
     ];
   }, [tasksData, healthDetailed, guildsData, messagesData, sysStatusData]);
 
-  const viewOrder: Array<'rings' | 'flow' | 'heatmap'> = ['rings', 'flow', 'heatmap'];
-  const tabRefs = useRef<Record<'rings' | 'flow' | 'heatmap', HTMLButtonElement | null>>({
+  const viewOrder: Array<'rings' | 'heatmap'> = ['rings', 'heatmap'];
+  const tabRefs = useRef<Record<'rings' | 'heatmap', HTMLButtonElement | null>>({
     rings: null,
-    flow: null,
     heatmap: null,
   });
 
-  const handleViewTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: 'rings' | 'flow' | 'heatmap') => {
+  const handleViewTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: 'rings' | 'heatmap') => {
     const idx = viewOrder.indexOf(current);
     let nextIdx = -1;
     if (e.key === 'ArrowRight') nextIdx = (idx + 1) % viewOrder.length;
@@ -256,7 +241,7 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
             Sala de Control Visual
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Trazabilidad visual continua sin listas de texto: anillos de subruntimes, mapa de flujo animado y matriz de calor de la flota.
+            Trazabilidad visual continua sin listas de texto: anillos de subruntimes y matriz de calor de la flota.
           </p>
         </div>
 
@@ -279,22 +264,6 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
             1. Anillos de Estado
           </button>
           <button
-            ref={(el) => { tabRefs.current.flow = el; }}
-            type="button"
-            role="tab"
-            aria-selected={activeView === 'flow'}
-            tabIndex={activeView === 'flow' ? 0 : -1}
-            onClick={() => setActiveView('flow')}
-            onKeyDown={(e) => handleViewTabKeyDown(e, 'flow')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-              activeView === 'flow'
-                ? 'bg-card text-foreground border border-border shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            2. Mapa de Flujo
-          </button>
-          <button
             ref={(el) => { tabRefs.current.heatmap = el; }}
             type="button"
             role="tab"
@@ -308,7 +277,7 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            3. Mapa de Calor
+            2. Mapa de Calor
           </button>
         </div>
       </div>
@@ -316,7 +285,6 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
       {/* Main Visual Display */}
       <div className="flex-1 min-h-[460px] rounded-lg border border-border bg-card shadow-sm p-4 md:p-6 flex flex-col relative overflow-hidden">
         {activeView === 'rings' && <SubruntimeRingsView subruntimes={subruntimes} />}
-        {activeView === 'flow' && <FlowMapCanvasView subruntimes={subruntimes} />}
         {activeView === 'heatmap' && <AgentHeatmapView messages={messagesData} />}
       </div>
 
@@ -424,183 +392,7 @@ export function SubruntimeRingsView({ subruntimes }: RingsViewProps) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. VISTA: MAPA DE FLUJO (Canvas con un solo rAF pausado si está oculto)
-// ---------------------------------------------------------------------------
-interface FlowViewProps {
-  subruntimes: SubruntimeStatus[];
-}
-
-export function FlowMapCanvasView({ subruntimes }: FlowViewProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationId: number;
-    let particleOffset = 0;
-    let isVisible = true;
-
-    // Handle Page Visibility to strictly save CPU (requirement < 2% CPU)
-    const handleVisibilityChange = () => {
-      isVisible = !document.hidden;
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Canvas dynamic sizing
-    const resize = () => {
-      if (containerRef.current && canvas) {
-        canvas.width = containerRef.current.clientWidth;
-        canvas.height = containerRef.current.clientHeight;
-      }
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    // Predefined Node Coordinates (Hexagonal Graph Layout)
-    const render = () => {
-      if (!isVisible) {
-        animationId = requestAnimationFrame(render);
-        return;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const w = canvas.width;
-      const h = canvas.height;
-      const cx = w / 2;
-      const cy = h / 2;
-      const r = Math.min(w, h) * 0.35;
-
-      const nodes: FlowNode[] = [
-        { id: 'Memoria', name: 'Memoria', x: cx + r * Math.cos(0), y: cy + r * Math.sin(0) },
-        { id: 'Inferencia', name: 'Inferencia', x: cx + r * Math.cos(Math.PI / 3), y: cy + r * Math.sin(Math.PI / 3) },
-        { id: 'Procesos', name: 'Procesos', x: cx + r * Math.cos((2 * Math.PI) / 3), y: cy + r * Math.sin((2 * Math.PI) / 3) },
-        { id: 'Decision', name: 'Decisión', x: cx + r * Math.cos(Math.PI), y: cy + r * Math.sin(Math.PI) },
-        { id: 'Coordinacion', name: 'Coordinación', x: cx + r * Math.cos((4 * Math.PI) / 3), y: cy + r * Math.sin((4 * Math.PI) / 3) },
-        { id: 'Red', name: 'Red', x: cx + r * Math.cos((5 * Math.PI) / 3), y: cy + r * Math.sin((5 * Math.PI) / 3) },
-      ];
-
-      // Dynamic volume and active status derived from actual subruntime state
-      const memStatus = subruntimes.find(s => s.id === 'Memoria');
-      const infStatus = subruntimes.find(s => s.id === 'Inferencia');
-      const procStatus = subruntimes.find(s => s.id === 'Procesos');
-      const decStatus = subruntimes.find(s => s.id === 'Decision');
-      const coordStatus = subruntimes.find(s => s.id === 'Coordinacion');
-      const redStatus = subruntimes.find(s => s.id === 'Red');
-
-      // Edges with real volume-based weights and stroke widths: [fromIdx, toIdx, weight, label]
-      const edges: [number, number, number, string][] = [
-        [0, 1, Math.max(0.2, (memStatus?.percent || 0) / 100), 'Indexación'], // Memoria -> Inferencia
-        [1, 3, Math.max(0.2, (infStatus?.percent || 0) / 100), 'Vectores'],    // Inferencia -> Decisión
-        [3, 4, Math.max(0.2, (decStatus?.percent || 0) / 100), 'Intenciones'], // Decisión -> Coordinación
-        [4, 2, Math.max(0.2, (coordStatus?.percent || 0) / 100), 'Despacho'],  // Coordinación -> Procesos
-        [2, 0, Math.max(0.2, (procStatus?.percent || 0) / 100), 'Consignación'],// Procesos -> Memoria
-        [4, 5, Math.max(0.1, (redStatus?.percent || 0) / 100), 'Gossip'],      // Coordinación -> Red
-        [5, 0, Math.max(0.1, (redStatus?.percent || 0) / 100), 'Sync'],        // Red -> Memoria
-      ];
-
-      // 1. Draw Edges with volume-based width and particle density
-      const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
-      edges.forEach(([fromIdx, toIdx, weight, label]) => {
-        const from = nodes[fromIdx];
-        const to = nodes[toIdx];
-
-        ctx.beginPath();
-        const edgeWidth = 1.5 + weight * 3;
-        ctx.strokeStyle = weight > 0.4 ? (isDark ? 'rgba(200, 122, 81, 0.45)' : 'rgba(158, 64, 36, 0.35)') : 'rgba(100, 116, 139, 0.25)';
-        ctx.lineWidth = edgeWidth;
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.stroke();
-
-        // Edge Volume Label at midpoint
-        const midX = (from.x + to.x) / 2;
-        const midY = (from.y + to.y) / 2;
-        ctx.fillStyle = isDark ? '#9BA3B0' : '#57606A';
-        ctx.font = '500 9px JetBrains Mono, monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(`${label} (v:${Math.round(weight * 100)}%)`, midX, midY - 2);
-
-        // Animated Particle along line
-        const dx = to.x - from.x;
-        const dy = to.y - from.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const progress = ((particleOffset * 0.5 * weight) % distance) / distance;
-
-        const px = from.x + dx * progress;
-        const py = from.y + dy * progress;
-
-        ctx.beginPath();
-        ctx.fillStyle = isDark ? 'rgba(200, 122, 81, 0.9)' : 'rgba(158, 64, 36, 0.85)';
-        const particleRadius = 2 + weight * 2;
-        ctx.arc(px, py, particleRadius, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-
-      // 2. Draw Nodes
-      nodes.forEach((node) => {
-        const status = subruntimes.find((s) => s.id === node.id);
-        const isOk = status?.state === 'running';
-        const hasData = status?.state !== 'nodata';
-
-        // Outer Glow/Border
-        ctx.beginPath();
-        ctx.fillStyle = isDark ? '#141922' : '#FFFFFF';
-        ctx.strokeStyle = isOk ? (isDark ? 'rgba(200, 122, 81, 0.85)' : 'rgba(158, 64, 36, 0.8)') : hasData ? 'rgba(245, 158, 11, 0.5)' : 'rgba(100, 116, 139, 0.4)';
-        ctx.lineWidth = 2.5;
-        ctx.arc(node.x, node.y, 26, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
-
-        // Node Label
-        ctx.fillStyle = isDark ? '#ECEFF4' : '#181C22';
-        ctx.font = '600 11px JetBrains Mono, monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(node.name, node.x, node.y + 40);
-
-        // Subtitle metric under node
-        ctx.fillStyle = isOk ? (isDark ? '#C87A51' : '#9E4024') : (isDark ? '#9BA3B0' : '#57606A');
-        ctx.font = '500 10px JetBrains Mono, monospace';
-        ctx.fillText(hasData ? `${status?.percent}%` : 'SIN DATO', node.x, node.y + 54);
-
-        // Center Indicator
-        ctx.beginPath();
-        ctx.fillStyle = isOk ? (isDark ? '#C87A51' : '#9E4024') : hasData ? '#f59e0b' : '#64748b';
-        ctx.arc(node.x, node.y, 5, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-
-      particleOffset += 1;
-      animationId = requestAnimationFrame(render);
-    };
-
-    animationId = requestAnimationFrame(render);
-
-    return () => {
-      cancelAnimationFrame(animationId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('resize', resize);
-    };
-  }, [subruntimes]);
-
-  return (
-    <div ref={containerRef} className="flex-1 w-full h-full min-h-[380px] relative">
-      <canvas ref={canvasRef} className="w-full h-full block" />
-      <div className="absolute top-2 left-2 bg-card border border-border rounded p-2 text-[10px] font-mono text-foreground">
-        <span>Aristas con grosor y velocidad proporcionales al volumen de datos activo</span>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 3. VISTA: MAPA DE CALOR (Agentes x Horas con Actividad Real)
+// 2. VISTA: MAPA DE CALOR (Agentes x Horas con Actividad Real)
 // ---------------------------------------------------------------------------
 interface HeatmapViewProps {
   messages: any[] | null;

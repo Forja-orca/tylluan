@@ -50,7 +50,7 @@ describe('VisualControlRoom — AG-17 Sala de Control Visual', () => {
     expect(screen.getByText(/sin dato/i)).toBeInTheDocument();
   });
 
-  it('3. Permite alternar entre las 3 vistas en la barra de control', () => {
+  it('3. Permite alternar entre las vistas en la barra de control', () => {
     const mockBridge = {
       getRaw: vi.fn().mockResolvedValue({}),
     } as any;
@@ -58,11 +58,7 @@ describe('VisualControlRoom — AG-17 Sala de Control Visual', () => {
     render(<VisualControlRoom bridge={mockBridge} online={true} />);
 
     expect(screen.getByText(/Sala de Control Visual/i)).toBeInTheDocument();
-    const btnFlow = screen.getByRole('tab', { name: /2\. Mapa de Flujo/i });
-    const btnHeatmap = screen.getByRole('tab', { name: /3\. Mapa de Calor/i });
-
-    fireEvent.click(btnFlow);
-    expect(screen.getByText(/Aristas con grosor y velocidad proporcionales/i)).toBeInTheDocument();
+    const btnHeatmap = screen.getByRole('tab', { name: /2\. Mapa de Calor/i });
 
     fireEvent.click(btnHeatmap);
     expect(screen.getByText(/Agente \\ Hora/i)).toBeInTheDocument();

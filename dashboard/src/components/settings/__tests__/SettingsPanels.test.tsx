@@ -158,7 +158,7 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
   });
 
   describe('InferenceSettingsPanel', () => {
-    it('absorbe Model Hub: renderiza Capa 1 (Motor/Hardware), Capa 2 (Inventario en disco), Capa 3 (Puntos cognitivos T-DSH-116), Capa 4 (Proveedores externos con ping de latencia) y Capa 5 (Soberanía)', async () => {
+    it('pantalla única de inferencia (SPEC §4): lista densa de proveedores, modelos por uso y drawer lateral Añadir proveedor', async () => {
       mockBridge.fetchRaw.mockImplementation((url: string) => {
         if (url === '/api/v1/config') {
           return Promise.resolve({
@@ -177,10 +177,17 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
         }
         if (url === '/api/v1/models') {
           return Promise.resolve({
-            active: { embedding: 'mxbai-embed-large', vector_dimensions: 1024, inference: 'qwen2.5-1.5b' },
+            active: {
+              embedding: 'mxbai-embed-large',
+              vector_dimensions: 1024,
+              inference: 'qwen2.5-1.5b',
+              vision: 'models/smolvlm2-256m',
+            },
             detected_local_models: [
-              { id: 'qwen2.5-1.5b', name: 'Local Qwen 1.5B', size_mb: 2944, model_type: 'generative' },
-              { id: 'smollm2-360m', name: 'Local SmolLM2', size_mb: 720, model_type: 'generative' },
+              { id: 'qwen2.5-1.5b', name: 'Local Qwen 1.5B', size_mb: 2944, role: 'chat', chat_capable: true, installed: true },
+              { id: 'smollm2-360m', name: 'Local SmolLM2', size_mb: 720, role: 'chat', chat_capable: true, installed: true },
+              { id: 'decima', name: 'decima', size_mb: 500, role: 'decision', chat_capable: false, installed: true },
+              { id: 'smolvlm2-256m', name: 'Local SmolVLM2', path: 'models/smolvlm2-256m', size_mb: 256, role: 'vision', chat_capable: false, installed: true },
             ],
           });
         }
@@ -188,11 +195,22 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
           return Promise.resolve({
             valid: true,
             points: {
-              chat: { provider: 'local_ephemeral', model: 'qwen2.5-1.5b', cloud_enabled: false },
-              decision: { provider: 'local_ephemeral', model: 'qwen2.5-1.5b', cloud_enabled: false },
+              decision: { provider: 'local_ephemeral', model: 'decima', cloud_enabled: false },
               grammar_judge: { provider: 'local_ephemeral', model: 'smollm2', cloud_enabled: false },
               sentinel: { provider: 'local_ephemeral', model: 'qwen3guard', cloud_enabled: false },
             },
+          });
+        }
+        if (url === '/api/v1/inference/providers/discover') {
+          return Promise.resolve({
+            scanned: 3,
+            any_detected: true,
+            providers: [
+              { id: 'lm-studio', label: 'LM Studio', base_url: 'http://127.0.0.1:1234', detected: true, latency_ms: 12, models: ['qwen2.5-coder-7b'] },
+              { id: 'llama-cpp', label: 'llama.cpp del usuario', base_url: 'http://127.0.0.1:9000', detected: false },
+              { id: 'ollama', label: 'Ollama', base_url: 'http://127.0.0.1:11434', detected: false },
+            ],
+            configured_external: [],
           });
         }
         if (url === '/api/v1/external-providers') {
@@ -213,30 +231,30 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
       render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
 
       await waitFor(() => {
-        expect(screen.getByText(/Capa 1 — Motor de Inferencia y Aceleración Local/i)).toBeInTheDocument();
-        expect(screen.getByText(/Capa 2 — Inventario Físico de Modelos en Disco/i)).toBeInTheDocument();
-        expect(screen.getByText(/Capa 3 — Matriz de Enrutamiento Cognitivo/i)).toBeInTheDocument();
-        expect(screen.getByText(/Capa 4 — Proveedores Externos y Telemetría de Latencia/i)).toBeInTheDocument();
-        expect(screen.getByText(/Capa 5 — Política de Resiliencia y Fallback Soberano/i)).toBeInTheDocument();
+        expect(screen.getByText(/Proveedores de inferencia/i)).toBeInTheDocument();
+        expect(screen.getByText(/Modelos por uso/i)).toBeInTheDocument();
+        expect(screen.getByText(/Ajustes Avanzados & Motor de Inferencia/i)).toBeInTheDocument();
+        expect(screen.getByTestId('provider-row-tylluan')).toBeInTheDocument();
+        expect(screen.getByTestId('provider-row-llamacpp')).toBeInTheDocument();
+        expect(screen.getByTestId('provider-row-lmstudio')).toBeInTheDocument();
+        expect(screen.getByTestId('provider-row-ollama')).toBeInTheDocument();
       });
 
-      // Verificamos los 4 puntos canónicos T-DSH-116
-      expect(screen.getByText(/Chat y Diálogo/i)).toBeInTheDocument();
-      expect(screen.getByText(/Decisión y Consenso/i)).toBeInTheDocument();
-      expect(screen.getByText(/Juez Gramatical/i)).toBeInTheDocument();
-      expect(screen.getByText(/Centinela de Coherencia/i)).toBeInTheDocument();
+      // Verificamos los tres botones de la fila llama.cpp
+      expect(screen.getByRole('button', { name: /Arrancar llama\.cpp/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Abrir UI web de llama\.cpp/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Abrir carpeta models/i })).toBeInTheDocument();
 
-      // Invariante de arquitectura
-      expect(screen.getByText(/1024 dimensiones/i)).toBeInTheDocument();
+      // Verificamos las 3 filas de Modelos por uso (SPEC §3 y §4)
+      expect(screen.getByText(/^Decision$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^Embeddings$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^Vision$/i)).toBeInTheDocument();
 
-      // Capa 2: Verificamos inventario en disco
-      expect(screen.getAllByText(/Local Qwen 1.5B/i).length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText(/2944 MB/i).length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText(/Modelo Primario Activo/i)).toBeInTheDocument();
-      expect(screen.getAllByText(/Local SmolLM2/i).length).toBeGreaterThanOrEqual(1);
+      // Invariante de arquitectura: 1024 dimensiones
+      expect(screen.getAllByTitle(/1024 dimensiones/i).length).toBeGreaterThanOrEqual(1);
 
-      // Capa 4: Verificamos proveedor externo y prueba de latencia (ping)
-      expect(screen.getByRole('heading', { name: /openrouter/i })).toBeInTheDocument();
+      // Verificamos proveedor externo y prueba de latencia (ping)
+      expect(screen.getAllByText(/openrouter/i).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText(/OPENROUTER_API_KEY/i)).toBeInTheDocument();
 
       mockBridge.fetchRaw.mockImplementation((url: string) => {
@@ -251,13 +269,13 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
             latency_ms: 142,
           });
         }
-        if (url.startsWith('/api/v1/inference/points/chat')) {
+        if (url.startsWith('/api/v1/inference/points/decision')) {
           return Promise.resolve({ ok: true });
         }
         return Promise.resolve({});
       });
 
-      const pingBtn = screen.getByRole('button', { name: /comprobar latencia/i });
+      const pingBtn = screen.getByRole('button', { name: /comprobar openrouter/i });
       fireEvent.click(pingBtn);
 
       await waitFor(() => {
@@ -268,19 +286,74 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
         expect(screen.getByText(/142 ms/i)).toBeInTheDocument();
       });
 
-      // Guardar un punto cognitivo invoca POST /api/v1/inference/points/{point} con persist: true
-      const saveChatBtn = screen.getByRole('button', { name: /guardar chat/i });
-      fireEvent.click(saveChatBtn);
+      // Guardar punto de decisión
+      const saveDecisionBtn = screen.getByRole('button', { name: /guardar modelo de decisión/i });
+      fireEvent.click(saveDecisionBtn);
 
       await waitFor(() => {
         expect(mockBridge.fetchRaw).toHaveBeenCalledWith(
-          '/api/v1/inference/points/chat',
+          '/api/v1/inference/points/decision',
           expect.objectContaining({
             method: 'POST',
             body: expect.stringContaining('"persist":true'),
           })
         );
       });
+
+      // Botón Añadir proveedor habilitado tras la entrega de D-157 en main (SPEC §6)
+      const addBtn = screen.getByTestId('add-provider-btn');
+      expect(addBtn).not.toBeDisabled();
+      expect(addBtn).toHaveTextContent(/añadir proveedor/i);
+    });
+
+    it('control de llama.cpp: los 3 botones (Arrancar, Abrir Web UI, Abrir carpeta models) operan correctamente (T3259)', async () => {
+      let isRunning = false;
+      mockBridge.fetchRaw.mockImplementation((url: string, _opts?: { method?: string }) => {
+        if (url === '/api/v1/inference/llama/status') {
+          return Promise.resolve({
+            running: isRunning,
+            port: 9000,
+            models_dir: 'E:\\tylluan\\models',
+            guild: 'llama_backend',
+            guild_running: isRunning,
+          });
+        }
+        if (url === '/api/v1/inference/llama/start') {
+          isRunning = true;
+          return Promise.resolve({ running: true, port: 9000 });
+        }
+        if (url === '/api/v1/inference/llama/stop') {
+          isRunning = false;
+          return Promise.resolve({ running: false, port: 9000 });
+        }
+        return Promise.resolve({});
+      });
+
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} kernelSupportsAddProvider={true} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Arrancar llama\.cpp/i })).toBeInTheDocument();
+      });
+
+      // 1. Click en 'Arrancar llama.cpp'
+      fireEvent.click(screen.getByRole('button', { name: /Arrancar llama\.cpp/i }));
+      await waitFor(() => {
+        expect(mockBridge.fetchRaw).toHaveBeenCalledWith('/api/v1/inference/llama/start', { method: 'POST' });
+        expect(screen.getByRole('button', { name: /Detener llama\.cpp/i })).toBeInTheDocument();
+      });
+
+      // 2. Click en 'Abrir UI web de llama.cpp'
+      fireEvent.click(screen.getByRole('button', { name: /Abrir UI web de llama\.cpp/i }));
+      expect(openSpy).toHaveBeenCalledWith('http://127.0.0.1:9000', '_blank', 'noopener,noreferrer');
+
+      // 3. Click en 'Abrir carpeta models'
+      const openFolderBtn = screen.getByRole('button', { name: /Abrir carpeta models/i });
+      expect(openFolderBtn).toBeInTheDocument();
+      fireEvent.click(openFolderBtn);
+
+      openSpy.mockRestore();
     });
   });
 

@@ -51,6 +51,12 @@ interface AppState {
 
 const getInitialTheme = (): 'dark' | 'light' | 'system' => {
   try {
+    if (typeof window !== 'undefined') {
+      const qTheme = new URLSearchParams(window.location.search).get('theme');
+      if (qTheme === 'dark' || qTheme === 'light' || qTheme === 'system') {
+        return qTheme;
+      }
+    }
     return (localStorage.getItem('tylluan_theme') as 'dark' | 'light' | 'system') || 'light';
   } catch {
     return 'light';
@@ -59,6 +65,12 @@ const getInitialTheme = (): 'dark' | 'light' | 'system' => {
 
 const getInitialTab = (): string => {
   try {
+    if (typeof window !== 'undefined') {
+      const qTab = new URLSearchParams(window.location.search).get('tab');
+      if (qTab) {
+        return (qTab === 'models' || qTab === 'guilds') ? 'settings' : qTab;
+      }
+    }
     return localStorage.getItem('tylluan_active_tab') || 'overview';
   } catch {
     return 'overview';

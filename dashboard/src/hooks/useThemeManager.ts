@@ -5,6 +5,15 @@ export function useThemeManager() {
   const { theme, setTheme } = useAppStore()
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const qTheme = new URLSearchParams(window.location.search).get('theme')
+      if (qTheme === 'light' || qTheme === 'dark') {
+        setTheme(qTheme)
+      }
+    }
+  }, [setTheme])
+
+  useEffect(() => {
     const root = window.document.documentElement
     root.classList.remove('light', 'dark')
 
