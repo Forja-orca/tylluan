@@ -259,7 +259,8 @@ impl AgentProfileStore {
         if let Some(row) = rows.next()? {
             let agent_id: String = row.get(0)?;
             let first_seen: String = row.get(1)?;
-            let total_calls: u64 = row.get(2)?;
+            // D-164: FromSql de u64 no existe en rusqlite 0.41.
+            let total_calls: u64 = row.get::<_, i64>(2)? as u64;
             let comp_json: String = row.get(3)?;
             let last_intent: Option<String> = row.get(4)?;
             let role: String = row.get(5)?;
@@ -306,7 +307,8 @@ impl AgentProfileStore {
         let rows = stmt.query_map([], |row| {
             let agent_id: String = row.get(0)?;
             let first_seen: String = row.get(1)?;
-            let total_calls: u64 = row.get(2)?;
+            // D-164: FromSql de u64 no existe en rusqlite 0.41.
+            let total_calls: u64 = row.get::<_, i64>(2)? as u64;
             let comp_json: String = row.get(3)?;
             let last_intent: Option<String> = row.get(4)?;
             let role: String = row.get(5)?;

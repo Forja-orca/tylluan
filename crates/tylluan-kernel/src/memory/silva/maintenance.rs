@@ -285,7 +285,8 @@ impl super::SilvaDB {
                          client_name = ?3, last_active_unix = ?4, tool_count = ?5, last_intent = ?6, last_guild = ?7, id = ?1",
                     rusqlite::params![
                         session.id, session.agent_id.as_deref().unwrap_or("anonymous"),
-                        session.client_name, session.last_active_unix, session.tool_count as i64,
+                        // D-164: u64 ya no implementa ToSql en rusqlite 0.41.
+                    session.client_name, session.last_active_unix as i64, session.tool_count as i64,
                         session.last_intent, session.last_guild, session.created_unix as i64
                     ],
                 );
@@ -557,7 +558,7 @@ impl super::SilvaDB {
                           AND json_extract(m2.metadata, '$.channel_id') =
                               json_extract(nodes.metadata, '$.channel_id')
                     ) - ?1",
-                &[&keep_turns],
+                &[&(keep_turns as i64)],
             )?;
             let _ = conn.execute(
                 "DELETE FROM edges WHERE source NOT IN (SELECT id FROM nodes) OR target NOT IN (SELECT id FROM nodes)",

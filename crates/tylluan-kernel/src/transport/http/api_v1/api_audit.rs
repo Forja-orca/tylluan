@@ -154,11 +154,13 @@ pub(crate) fn error_counts_from(
     );
     let (total, errors) = conn
         .query_row(&query, [], |row| {
-            let total: u64 = row.get(0)?;
+            // D-164: rusqlite 0.41 no implementa FromSql para u64; se lee i64 y
+            // se convierte (COUNT/SUM no pueden ser negativos aquí).
+            let total: i64 = row.get(0)?;
             // SUM over zero rows is NULL in SQLite; a 24h with no dispatches
             // is a valid state (0 errors), not an error.
-            let errors: Option<u64> = row.get(1)?;
-            Ok((total, errors.unwrap_or(0)))
+            let errors: Option<i64> = row.get(1)?;
+            Ok((total as u64, errors.unwrap_or(0) as u64))
         })
         .map_err(|e| format!("audit error_counts query: {e}"))?;
     Ok((total, errors))

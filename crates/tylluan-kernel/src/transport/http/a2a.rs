@@ -257,7 +257,9 @@ impl A2aTaskManager {
             let conn = conn.blocking_lock();
             conn.execute(
                 "INSERT INTO a2a_tasks (id, state, client_agent_id, method, params_json, result_json, grant_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, ?7)",
-                params![id, state_str, client_agent_id, method, params_str, now, now],
+                // D-164: rusqlite 0.41 ya no implementa ToSql para u64; se enlaza como i64
+                // (la columna es INTEGER y los valores son epoch-secs: cabe de sobra).
+                params![id, state_str, client_agent_id, method, params_str, now as i64, now as i64],
             )
         });
         id
@@ -279,7 +281,7 @@ impl A2aTaskManager {
             let conn = conn.blocking_lock();
             conn.execute(
                 "UPDATE a2a_tasks SET state = ?1, updated_at = ?2, result_json = COALESCE(?3, result_json), grant_id = COALESCE(?4, grant_id) WHERE id = ?5",
-                params![state_str, now, result_str, grant_str, task_id],
+                params![state_str, now as i64, result_str, grant_str, task_id],
             ).unwrap_or(0)
         });
         affected > 0
@@ -302,8 +304,9 @@ impl A2aTaskManager {
                         params_json: row.get(4)?,
                         result_json: row.get(5)?,
                         grant_id: row.get(6)?,
-                        created_at: row.get(7)?,
-                        updated_at: row.get(8)?,
+                        // D-164: FromSql de u64 ya no existe en rusqlite 0.41.
+                        created_at: row.get::<_, i64>(7)? as u64,
+                        updated_at: row.get::<_, i64>(8)? as u64,
                     })
                 }
             ).ok()
@@ -330,7 +333,7 @@ impl A2aTaskManager {
                 Ok(_) => {
                     conn.execute(
                         "UPDATE a2a_tasks SET state = ?1, updated_at = ?2 WHERE id = ?3",
-                        params![canceled, now, task_id],
+                        params![canceled, now as i64, task_id],
                     ).map_err(|e| e.to_string())?;
                     Ok(())
                 }

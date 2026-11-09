@@ -83,7 +83,8 @@ impl CurriculumLearner {
     /// so the router starts with useful priors instead of learning from scratch.
     /// Only inserts when the `curriculum_entries` table is empty.
     pub fn seed_from_catalog(&mut self, catalog: &[GuildDescriptor], role: &str) -> SqlResult<usize> {
-        let count: usize = self.conn.query_row(
+        // D-164: COUNT(*) llega como i64 (u64/usize ya no implementan FromSql).
+        let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM curriculum_entries", [], |row| row.get(0)
         )?;
         if count > 0 {
@@ -202,7 +203,7 @@ impl CurriculumLearner {
                 "SELECT successes, failures, total_latency_ms FROM curriculum_entries 
                  WHERE intent_sig = ?1 AND guild = ?2",
                 params![intent, guild],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, i64>(2)? as u64)),
             );
 
             if let Ok((successes, failures, _)) = result {
@@ -249,7 +250,7 @@ impl CurriculumLearner {
             let guild: String = row.get(1)?;
             let successes: u32 = row.get(2)?;
             let failures: u32 = row.get(3)?;
-            let total_latency_ms: u64 = row.get(4)?;
+            let total_latency_ms: u64 = row.get::<_, i64>(4)? as u64;
             let total = successes + failures;
             let success_rate = if total > 0 { successes as f64 / total as f64 } else { 0.0 };
             Ok(serde_json::json!({
