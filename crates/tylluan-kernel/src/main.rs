@@ -945,6 +945,11 @@ async fn main() -> anyhow::Result<()> {
         }));
     }
 
+    // D-160 fase 2: hueco swappable del reranker, creado AQUÍ para que el worker
+    // de recarga y el server compartan el mismo estado.
+    let reranker_slot: std::sync::Arc<tylluan_kernel::router::embeddings::RerankerSlot> =
+        std::sync::Arc::new(tylluan_kernel::router::embeddings::RerankerSlot::new());
+
     // D-160B (c): un ÚNICO hilo de recarga. El ruteo de guilds pide aquí una
     // recarga cuando el TTL soltó el motor, así no se queda sin embeddings hasta
     // el próximo recall. Single-flight por diseño: un hilo, una carga a la vez.
@@ -952,6 +957,7 @@ async fn main() -> anyhow::Result<()> {
         let (reload_tx, reload_rx) = std::sync::mpsc::channel::<()>();
         matcher.set_reload_sender(reload_tx);
         let matcher_reload = matcher.clone();
+        let reranker_reload = reranker_slot.clone();
         // D-160B v2: el worker TAMBIÉN tiene que devolverle el motor a SilvaDB.
         // Antes sólo lo hacía el recall, y con la recarga del worker
         // `has_engine()` ya era true -> la cascada se quedaba sin etapa densa.
@@ -972,6 +978,11 @@ async fn main() -> anyhow::Result<()> {
                             "D-160B: motor reinstalado en SilvaDB (etapa densa de la cascada)"
                         );
                     }
+                    // D-160 f2: el reranker se recarga en el MISMO worker pero con su
+                    // propio `load_gate`, así que uno no bloquea al otro (criterio b).
+                    if !reranker_reload.is_loaded() {
+                        reranker_reload.ensure_loaded();
+                    }
                 }
             });
     }
@@ -982,6 +993,7 @@ async fn main() -> anyhow::Result<()> {
     {
         let matcher_reaper = matcher.clone();
         let silva_reaper = silva.clone();
+        let reranker_reaper = reranker_slot.clone();
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -993,6 +1005,10 @@ async fn main() -> anyhow::Result<()> {
                     .unwrap_or(0);
                 if ttl > 0 && matcher_reaper.release_engine_if_idle(ttl) {
                     silva_reaper.release_dense_engine();
+                }
+                // D-160 f2: mismo TTL para el reranker (su propio last_use).
+                if ttl > 0 {
+                    reranker_reaper.release_if_idle(ttl);
                 }
             }
         });
@@ -1470,7 +1486,16 @@ async fn main() -> anyhow::Result<()> {
     }
     // Share the same HormoneSystem instance between matcher and server
     server.hormones = hormones_shared.clone();
-    server.reranker = reranker;
+    // D-160 f2: el server usa el MISMO slot que el worker, para que la recarga y
+    // la liberación sean sobre el mismo estado.
+    server.reranker = reranker_slot.clone();
+    if let Some(r) = reranker {
+        reranker_slot.install(r);
+        let rerank_device = engine_device.clone();
+        reranker_slot.set_loader(std::sync::Arc::new(move || {
+            RerankEngine::load_with_device(&rerank_device)
+        }));
+    }
     server.agent_memory = Some(Arc::new(AgentMemoryManager::new(silva.clone(), 20)));
     server.coloquio = Some(coloquio.clone());
     server.low_memory_mode = low_memory_mode;

@@ -850,7 +850,16 @@ if let Some(cached) = cached_docs {
 
     // Stage 2: Jina cross-encoder rerank on top-50 candidates (if available)
     // This corrects the RRF score ordering with a true relevance signal.
-    let docs: Result<Vec<(GraphNode, f32)>, anyhow::Error> = if let Some(ref reranker) = server.reranker {
+    // D-160 f2: si el TTL lo soltó, esta consulta va sin rerank y se pide la
+    // recarga al worker (no bloquea).
+    if !server.reranker.is_loaded() {
+        // D-160 f2 v2: `request_engine_reload` se salta si el denso YA está, y en
+        // un recall en frío lo acaba de cargar el spawn_blocking de arriba: el
+        // worker no despertaba y el reranker no volvía nunca.
+        server.matcher.request_reload();
+    }
+    let reranker_actual = server.reranker.get();
+    let docs: Result<Vec<(GraphNode, f32)>, anyhow::Error> = if let Some(ref reranker) = reranker_actual {
         let rerank_t0 = std::time::Instant::now();
         let rerank_pool = candidates.iter().take(RERANK_WINDOW.load(Ordering::Relaxed)).collect::<Vec<_>>();
         let texts: Vec<&str> = rerank_pool.iter().map(|(n, _)| n.content.as_str()).collect();

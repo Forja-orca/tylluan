@@ -16,7 +16,7 @@ pub static AUTORESEARCH_ACTIVE: AtomicBool = AtomicBool::new(false);
 pub async fn autoresearch_daemon(
     idle_lab: Arc<IdleLab>,
     matcher: Arc<crate::router::matcher::GuildMatcher>,
-    reranker: Option<Arc<crate::router::embeddings::RerankEngine>>,
+    reranker: Arc<crate::router::embeddings::RerankerSlot>,
 ) {
     let mut sys = System::new();
     sys.refresh_cpu_usage();
@@ -49,8 +49,11 @@ pub async fn autoresearch_daemon(
             // (aunque `AUTORESEARCH_ACTIVE` estuviera en false), así que el TTL
             // de inactividad nunca podía liberar la sesión ONNX.
             let engine = matcher.engine();
+            // D-160 f2: el reranker también se pide AQUÍ. Antes el daemon guardaba un
+            // `Arc<RerankEngine>` toda su vida y el TTL no podía liberarlo.
+            let reranker_now = reranker.get();
             // Run exactly 1 organic experiment to prevent starving resources
-            idle_lab.run_experiments(engine.as_deref(), reranker.as_deref(), 1).await;
+            idle_lab.run_experiments(engine.as_deref(), reranker_now.as_deref(), 1).await;
         } else {
             debug!("🧪 AutoResearch: System under load (CPU {:.1}% > 20%). Deferring optimization.", cpu_usage);
         }

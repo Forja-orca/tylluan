@@ -192,9 +192,9 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
             "embeddings_loaded": srv.matcher.peek_engine().is_some(),
             // D-160B v2: si es false, la etapa densa de la cascada sale sin embeber.
             "dense_stage_ready": srv.silva.has_dense_engine(),
-            "reranker_loaded": srv.reranker.is_some(),
+            "reranker_loaded": srv.reranker.is_loaded(),
             "embedding_model": srv.matcher.peek_engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
-            "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },
+            "reranker_model": if srv.reranker.is_loaded() { "jina-reranker-v1-turbo-en" } else { "none" },
         });
         if let Ok(h) = srv.hormones.lock() {
             let stress = h.stress_level().max(0.0);
@@ -654,9 +654,9 @@ pub async fn interoception_handler(State(state): State<Arc<HttpState>>) -> impl 
             "embeddings_loaded": srv.matcher.peek_engine().is_some(),
             // D-160B v2: si es false, la etapa densa de la cascada sale sin embeber.
             "dense_stage_ready": srv.silva.has_dense_engine(),
-            "reranker_loaded": srv.reranker.is_some(),
+            "reranker_loaded": srv.reranker.is_loaded(),
             "embedding_model": srv.matcher.peek_engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
-            "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },
+            "reranker_model": if srv.reranker.is_loaded() { "jina-reranker-v1-turbo-en" } else { "none" },
         });
         if let Ok(h) = srv.hormones.lock() {
             let signals = h.active_signals();
@@ -866,7 +866,7 @@ pub async fn autoresearch_evaluate_handler(State(state): State<Arc<HttpState>>) 
     let engine = state.matcher.engine();
     let reranker_arc = if let Some(ref s) = state.server {
         let s_read = s.read().await;
-        s_read.reranker.clone()
+        s_read.reranker.get()
     } else {
         None
     };

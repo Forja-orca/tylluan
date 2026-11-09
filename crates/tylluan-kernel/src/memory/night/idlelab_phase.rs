@@ -11,7 +11,7 @@ impl Phase for IdleLabPhase {
 
     async fn run(&self, ctx: &PhaseContext) -> PhaseReport {
         let idle = IdleLab::new(ctx.silva.clone(), &ctx.data_dir);
-        let rerank_ref = ctx.server.read().await.reranker.clone();
+        let rerank_ref = ctx.server.read().await.reranker.get();
         idle.run_experiments(ctx.matcher.engine().as_deref(), rerank_ref.as_deref(), 9).await;
         PhaseReport { name: self.name(), duration_ms: 0, ok: true, detail: "hill-climb complete".to_string() }
     }

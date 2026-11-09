@@ -1148,10 +1148,12 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     // D-160: se pasa el MATCHER, no una copia del motor: el daemon lo pide
     // sólo cuando va a usarlo, así no impide que el TTL lo libere.
     let ar_matcher = state.matcher.clone();
+    // D-160 f2: se pasa el SLOT, no una copia del motor (si no, lo retiene para
+    // siempre y el TTL del reranker nunca libera RAM).
     let ar_reranker = if let Some(ref s) = server {
         s.read().await.reranker.clone()
     } else {
-        None
+        std::sync::Arc::new(crate::router::embeddings::RerankerSlot::new())
     };
     tokio::spawn(async move {
         let idle_lab = std::sync::Arc::new(crate::memory::idle_lab::IdleLab::new(ar_silva, &data_dir));
@@ -1617,7 +1619,7 @@ async fn health_handler(
             .unwrap_or((false, String::new()));
         let reranker_loaded = state.server.as_ref()
             .and_then(|s| s.try_read().ok())
-            .map(|s| s.reranker.is_some())
+            .map(|s| s.reranker.is_loaded())
             .unwrap_or(false);
 
         // Mesh status: active P2P sessions + DHT peers

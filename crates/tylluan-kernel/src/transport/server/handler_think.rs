@@ -27,7 +27,12 @@ pub async fn handle_tylluan_think(
         })
         .ok()
     });
-    let nodes_with_scores = if let Some(ref reranker) = server.reranker {
+    if !server.reranker.is_loaded() {
+        // D-160 f2 v2: mismo hueco que en recall (ver handler_recall).
+        server.matcher.request_reload();
+    }
+    let reranker_actual = server.reranker.get();
+    let nodes_with_scores = if let Some(ref reranker) = reranker_actual {
         server.silva.search_hybrid_reranked(&query, embedding.as_deref(), 20, reranker, false).await
     } else {
         server.silva.search_hybrid(&query, embedding.as_deref(), 20, None, false).await

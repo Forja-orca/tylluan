@@ -63,7 +63,10 @@ pub struct TylluanServer {
     pub session_bridge: Arc<RwLock<VecDeque<BridgeEntry>>>,
     pub hormones: Arc<Mutex<HormoneSystem>>,
     pub agent_profiles: Option<Arc<Mutex<AgentProfileStore>>>,
-    pub reranker: Option<Arc<crate::router::embeddings::RerankEngine>>,
+    /// D-160 fase 2: hueco swappable (TTL + recarga bajo demanda). Antes era
+    /// `Option<Arc<RerankEngine>>` fijo, y tras un recall se quedaba ~1,86 GB
+    /// que el TTL del motor denso no podía tocar.
+    pub reranker: Arc<crate::router::embeddings::RerankerSlot>,
     pub agent_memory: Option<Arc<crate::memory::agent_memory::AgentMemoryManager>>,
     /// Low memory mode: reduces guild timeouts by 50%.
     pub low_memory_mode: bool,
@@ -175,7 +178,7 @@ impl TylluanServer {
             session_bridge: Arc::new(RwLock::new(VecDeque::with_capacity(15))),
             hormones: Arc::new(Mutex::new(HormoneSystem::new())),
             agent_profiles: None,
-            reranker: None,
+            reranker: Arc::new(crate::router::embeddings::RerankerSlot::new()),
             agent_memory: None,
             low_memory_mode: false,
             recall_cascade_enabled: false,

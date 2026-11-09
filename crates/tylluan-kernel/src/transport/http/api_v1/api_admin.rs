@@ -1472,7 +1472,7 @@ pub async fn health_detailed_handler(
         if let Ok(s) = srv_arc.try_read() {
             let emb = s.matcher.peek_engine();
             let emb_model = emb.as_ref().map(|e| e.engine_id()).unwrap_or_default();
-            let rer = s.reranker.is_some();
+            let rer = s.reranker.is_loaded();
             (emb.is_some(), rer, emb_model)
         } else { (false, false, String::new()) }
     } else { (false, false, String::new()) };

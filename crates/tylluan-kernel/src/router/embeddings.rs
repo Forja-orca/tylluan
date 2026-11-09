@@ -30,6 +30,7 @@ use std::time::UNIX_EPOCH;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use crate::config::InferenceDevice;
+use crate::router::matcher::{idle_expired, now_secs};
 
 /// One queued embedding request: the text to embed and the channel the
 /// collector resolves with the result.
@@ -1492,6 +1493,128 @@ fn build_execution_providers(device: &InferenceDevice) -> Vec<ExecutionProviderD
             {
                 warn!("⚠️  CoreML requested but not on macOS — falling back to CPU");
                 vec![]
+            }
+        }
+    }
+}
+
+/// D-160 fase 2: hueco swappable del reranker.
+///
+/// Mismo patrón que el motor denso de `GuildMatcher`: marca de uso, liberación
+/// por TTL y recarga con **single-flight** (`load_gate`). A diferencia del
+/// `EmbeddingEngine` (que tiene hilos coalescentes y puede formar ciclo),
+/// `RerankEngine` es sólo `Mutex<TextRerank>`: soltarlo libera la sesión ONNX
+/// sin más.
+///
+/// Con `[silva] reranker_enabled = false` el loader no se instala, así que
+/// `ensure_loaded` devuelve false y `release_if_idle` no hace nada: el
+/// comportamiento es exactamente el de antes.
+pub type RerankLoader = Arc<dyn Fn() -> anyhow::Result<RerankEngine> + Send + Sync>;
+
+pub struct RerankerSlot {
+    engine: std::sync::RwLock<Option<Arc<RerankEngine>>>,
+    loader: std::sync::Mutex<Option<RerankLoader>>,
+    load_gate: std::sync::Mutex<()>,
+    last_use: std::sync::atomic::AtomicU64,
+}
+
+impl Default for RerankerSlot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RerankerSlot {
+    pub fn new() -> Self {
+        Self {
+            engine: std::sync::RwLock::new(None),
+            loader: std::sync::Mutex::new(None),
+            load_gate: std::sync::Mutex::new(()),
+            last_use: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    /// ¿Hay reranker cargado ahora mismo? (observación, no marca uso)
+    pub fn is_loaded(&self) -> bool {
+        self.engine
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some()
+    }
+
+    /// Devuelve el reranker marcando uso. `None` = no hay (o el TTL lo soltó).
+    pub fn get(&self) -> Option<Arc<RerankEngine>> {
+        let guard = self.engine.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if guard.is_some() {
+            self.last_use.store(now_secs(), std::sync::atomic::Ordering::Relaxed);
+        }
+        guard.clone()
+    }
+
+    pub fn install(&self, engine: Arc<RerankEngine>) {
+        *self.engine.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(engine);
+        self.last_use.store(now_secs(), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn set_loader(&self, loader: RerankLoader) {
+        *self.loader.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(loader);
+    }
+
+    /// Suelta el reranker si lleva `ttl_secs` sin usarse. `0` = nunca.
+    pub fn release_if_idle(&self, ttl_secs: u64) -> bool {
+        if ttl_secs == 0 {
+            return false;
+        }
+        let last = self.last_use.load(std::sync::atomic::Ordering::Relaxed);
+        if !idle_expired(last, now_secs(), ttl_secs) {
+            return false;
+        }
+        let mut guard = self.engine.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if guard.is_none() {
+            return false;
+        }
+        *guard = None;
+        drop(guard);
+        tracing::info!(
+            idle_secs = now_secs().saturating_sub(last),
+            ttl_secs,
+            "D-160 f2: reranker liberado por inactividad (se recargará en la próxima consulta)"
+        );
+        true
+    }
+
+    /// Carga con single-flight: si otro hilo ya cargó mientras esperábamos, no
+    /// se carga un segundo.
+    pub fn ensure_loaded(&self) -> bool {
+        if self.is_loaded() {
+            return true;
+        }
+        let _gate = self.load_gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if self.is_loaded() {
+            return true;
+        }
+        let loader = self
+            .loader
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        let Some(loader) = loader else {
+            return false;
+        };
+        tracing::info!("D-160 f2: recargando reranker (arranque en frío)");
+        let started = std::time::Instant::now();
+        match loader() {
+            Ok(engine) => {
+                self.install(Arc::new(engine));
+                tracing::info!(
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "D-160 f2: reranker recargado"
+                );
+                true
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "D-160 f2: no se pudo recargar el reranker");
+                false
             }
         }
     }

@@ -182,11 +182,11 @@ pub struct GuildMatcher {
 pub type EngineLoader = Arc<dyn Fn() -> anyhow::Result<EmbeddingEngine> + Send + Sync>;
 
 /// D-160: ¿ha pasado el TTL desde `last_use`? Puro para poder testearlo.
-fn idle_expired(last_use: u64, now: u64, ttl_secs: u64) -> bool {
+pub(crate) fn idle_expired(last_use: u64, now: u64, ttl_secs: u64) -> bool {
     ttl_secs > 0 && now.saturating_sub(last_use) >= ttl_secs
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -308,6 +308,26 @@ impl GuildMatcher {
     /// D-160B (c): instala la cola del worker de recarga (un hilo en `main`).
     pub fn set_reload_sender(&self, tx: std::sync::mpsc::Sender<()>) {
         *self.reload_tx.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(tx);
+    }
+
+    /// D-160 f2 v2: pide una recarga **siempre**, sin mirar `has_engine()`.
+    ///
+    /// La usa el recall/think cuando falta el RERANKER: el denso puede estar
+    /// cargado (lo acaba de recargar el propio recall) y aun así hay que
+    /// despertar al worker, que es quien rellena los dos huecos.
+    pub fn request_reload(&self) {
+        let tx = self
+            .reload_tx
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        match tx {
+            Some(tx) => {
+                let enviado = tx.send(()).is_ok();
+                tracing::info!(enviado, "D-160 f2: recarga pedida (cualquier motor que falte)");
+            }
+            None => tracing::warn!("D-160 f2: se pide recarga pero NO hay worker instalado"),
+        }
     }
 
     /// D-160B (c): pide una recarga **sin bloquear** al llamante.
