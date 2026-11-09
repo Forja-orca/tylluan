@@ -487,17 +487,19 @@ mod tests {
         assert_eq!(KeySource::None.as_str(), "none");
     }
 
-    #[cfg(unix)]
+    // El test se compila en todos los SO (el recuento de tests debe ser igual en
+    // Windows y Linux); solo la comprobación del modo es específica de Unix.
     #[test]
     fn file_is_written_0600_on_unix() {
-        use std::os::unix::fs::PermissionsExt;
         let tmp = tempfile::tempdir().unwrap();
         set_secret_in(tmp.path(), &KEY, "openai", "sk-1").unwrap();
-        let mode = std::fs::metadata(data_path(tmp.path()))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o600, "modo real: {mode:o}");
+        let metadata = std::fs::metadata(data_path(tmp.path())).unwrap();
+        assert!(metadata.is_file());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = metadata.permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "modo real: {mode:o}");
+        }
     }
 }
