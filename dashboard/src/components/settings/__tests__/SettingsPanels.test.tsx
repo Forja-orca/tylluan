@@ -355,6 +355,135 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
 
       openSpy.mockRestore();
     });
+
+    it('muestra el estado en memoria de embeddings y reranker como «cargado / liberado por inactividad» según /api/v1/dashboard/summary (T3806)', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') {
+          return Promise.resolve({
+            inference: { device: 'cpu', max_threads: 4 },
+            memory: { embedding_model: 'mxbai-embed-large' },
+            silva: { reranker_enabled: true },
+          });
+        }
+        if (url === '/api/v1/config/schema') {
+          return Promise.resolve({ fields: [] });
+        }
+        if (url === '/api/v1/models') {
+          return Promise.resolve({
+            active: {
+              embedding: 'mxbai-embed-large',
+              vector_dimensions: 1024,
+              vision: 'models/smolvlm2-256m',
+            },
+            detected_local_models: [
+              { id: 'decima', name: 'decima', role: 'decision', chat_capable: false, installed: true },
+              { id: 'smolvlm2-256m', name: 'smolvlm2-256m', role: 'vision', chat_capable: false, installed: true },
+            ],
+          });
+        }
+        if (url === '/api/v1/inference/points') {
+          return Promise.resolve({ points: {} });
+        }
+        if (url === '/api/v1/external-providers') {
+          return Promise.resolve([]);
+        }
+        if (url === '/api/v1/inference/providers/discover') {
+          return Promise.resolve({ providers: [] });
+        }
+        if (url === '/api/v1/dashboard/summary') {
+          return Promise.resolve({
+            interoception: {
+              capabilities: {
+                embeddings_loaded: true,
+                reranker_loaded: false,
+                dense_stage_ready: true,
+                embedding_model: 'mxbai-embed-large-v2-onnx',
+                reranker_model: 'jina-reranker-v1-turbo-en',
+              },
+            },
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        // Embeddings: cargado
+        const embSummary = screen.getByTestId('embedding-summary-pill');
+        expect(embSummary).toHaveTextContent(/cargado/i);
+        const embBadge = screen.getByTestId('embeddings-loaded-badge');
+        expect(embBadge).toHaveTextContent(/cargado/i);
+
+        // Reranker: liberado por inactividad
+        const rerankSummary = screen.getByTestId('reranker-summary-pill');
+        expect(rerankSummary).toHaveTextContent(/liberado por inactividad/i);
+        const rerankBadge = screen.getByTestId('reranker-loaded-badge');
+        expect(rerankBadge).toHaveTextContent(/liberado por inactividad/i);
+      });
+    });
+
+    it('sin summary (o sin capabilities) muestra «desconocido» neutro y «—» sin inventar modelos (T3813)', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') {
+          return Promise.resolve({
+            inference: { device: 'cpu', max_threads: 4 },
+            memory: {},
+          });
+        }
+        if (url === '/api/v1/config/schema') {
+          return Promise.resolve({ fields: [] });
+        }
+        if (url === '/api/v1/models') {
+          return Promise.resolve({
+            active: {
+              embedding: undefined,
+              vector_dimensions: 1024,
+              vision: undefined,
+            },
+            detected_local_models: [],
+          });
+        }
+        if (url === '/api/v1/inference/points') {
+          return Promise.resolve({ points: {} });
+        }
+        if (url === '/api/v1/external-providers') {
+          return Promise.resolve([]);
+        }
+        if (url === '/api/v1/inference/providers/discover') {
+          return Promise.resolve({ providers: [] });
+        }
+        if (url === '/api/v1/dashboard/summary') {
+          // Sin campo interoception ni capabilities (T3813 punto a y c)
+          return Promise.resolve({});
+        }
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        // Pill de SilvaDB: desconectado y estado desconocido (sin inventar mxbai)
+        const embSummary = screen.getByTestId('embedding-summary-pill');
+        expect(embSummary).toHaveTextContent(/SilvaDB: desconectado/i);
+        expect(embSummary).toHaveTextContent(/\(desconocido\)/i);
+
+        // Pill de Reranker: estado desconocido
+        const rerankSummary = screen.getByTestId('reranker-summary-pill');
+        expect(rerankSummary).toHaveTextContent(/\(desconocido\)/i);
+
+        // Badges en lista de modelos por uso: desconocido
+        const embBadge = screen.getByTestId('embeddings-loaded-badge');
+        expect(embBadge).toHaveTextContent(/desconocido/i);
+
+        const rerankBadge = screen.getByTestId('reranker-loaded-badge');
+        expect(rerankBadge).toHaveTextContent(/desconocido/i);
+
+        // Input de modelo de reranker muestra '—' sin inventar jina
+        const rerankInput = screen.getByLabelText(/Modelo para Reranker/i) as HTMLInputElement;
+        expect(rerankInput.value).toBe('—');
+      });
+    });
   });
 
   describe('SecuritySettingsPanel', () => {

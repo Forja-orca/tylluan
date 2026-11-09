@@ -22,6 +22,14 @@ export interface DetectedLocalModel {
   chat_capable?: boolean;
 }
 
+export interface EngineCapabilitiesStatus {
+  embeddings_loaded?: boolean;
+  reranker_loaded?: boolean;
+  dense_stage_ready?: boolean;
+  embedding_model?: string;
+  reranker_model?: string;
+}
+
 export interface RoleModelAssignmentSectionProps {
   pointsState: Record<string, CognitivePointConfig>;
   onUpdatePoint: (pointId: string, partial: Partial<CognitivePointConfig>) => void;
@@ -33,6 +41,7 @@ export interface RoleModelAssignmentSectionProps {
   activeEmbedding: string;
   vectorDimensions: number;
   onChangeVision?: (model: string) => void;
+  engineCapabilities?: EngineCapabilitiesStatus | null;
 }
 
 function formatModelLabel(name: string, role?: string): string {
@@ -55,7 +64,48 @@ export function RoleModelAssignmentSection({
   activeEmbedding,
   vectorDimensions,
   onChangeVision,
+  engineCapabilities,
 }: RoleModelAssignmentSectionProps) {
+  // Estado riguroso según telemetría real (cero inventiva sin evidencia, T3813)
+  const embeddingsStatus: 'cargado' | 'liberado por inactividad' | 'desconocido' =
+    engineCapabilities?.embeddings_loaded === true
+      ? 'cargado'
+      : engineCapabilities?.embeddings_loaded === false
+      ? 'liberado por inactividad'
+      : 'desconocido';
+
+  const rerankerStatus: 'cargado' | 'liberado por inactividad' | 'desconocido' =
+    engineCapabilities?.reranker_loaded === true
+      ? 'cargado'
+      : engineCapabilities?.reranker_loaded === false
+      ? 'liberado por inactividad'
+      : 'desconocido';
+
+  const rerankerModelName = engineCapabilities?.reranker_model || '—';
+
+  const getStatusBadgeStyle = (status: 'cargado' | 'liberado por inactividad' | 'desconocido') => {
+    switch (status) {
+      case 'cargado':
+        return {
+          container: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+          dot: 'bg-emerald-500',
+        };
+      case 'liberado por inactividad':
+        return {
+          container: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+          dot: 'bg-amber-500',
+        };
+      case 'desconocido':
+      default:
+        return {
+          container: 'border-border bg-muted/40 text-muted-foreground',
+          dot: 'bg-muted-foreground/40',
+        };
+    }
+  };
+
+  const embStyle = getStatusBadgeStyle(embeddingsStatus);
+  const rerankStyle = getStatusBadgeStyle(rerankerStatus);
   // Modelos para Decisión: filtrados por role === 'decision' o nombres que contengan 'decision'/'decima'
   const decisionModels = detectedModels.filter(
     m => m.role === 'decision' || m.name?.toLowerCase().includes('decision') || m.name?.toLowerCase().includes('decima')
@@ -129,7 +179,7 @@ export function RoleModelAssignmentSection({
         </div>
 
         {/* FILA 2: Embeddings */}
-        <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-muted/20 transition-colors">
+        <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-muted/20 transition-colors" data-testid="role-row-embeddings">
           <div className="space-y-0.5 sm:w-1/3">
             <span className="text-xs font-bold text-foreground block">Embeddings</span>
             <span className="text-[11px] text-muted-foreground">
@@ -151,6 +201,45 @@ export function RoleModelAssignmentSection({
 
             <span className="px-2 py-1 rounded text-[11px] font-mono border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 font-semibold" title="1024 dimensiones">
               {vectorDimensions}d fijas
+            </span>
+
+            <span
+              className={`px-2 py-1 rounded text-[11px] font-mono border shrink-0 font-semibold flex items-center gap-1.5 ${embStyle.container}`}
+              data-testid="embeddings-loaded-badge"
+              title={`Motor denso de embeddings: ${embeddingsStatus}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${embStyle.dot}`} />
+              <span>{embeddingsStatus}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* FILA 3: Reranker */}
+        <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-muted/20 transition-colors" data-testid="role-row-reranker">
+          <div className="space-y-0.5 sm:w-1/3">
+            <span className="text-xs font-bold text-foreground block">Reranker</span>
+            <span className="text-[11px] text-muted-foreground">
+              Ordenación semántica bajo demanda para recall híbrido (D-160 f2)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <input
+              type="text"
+              readOnly
+              aria-label="Modelo para Reranker"
+              value={rerankerModelName}
+              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-muted/30 text-foreground cursor-not-allowed opacity-90"
+              title="Motor de rerank bajo demanda de SilvaDB"
+            />
+
+            <span
+              className={`px-2 py-1 rounded text-[11px] font-mono border shrink-0 font-semibold flex items-center gap-1.5 ${rerankStyle.container}`}
+              data-testid="reranker-loaded-badge"
+              title={`Motor de rerank: ${rerankerStatus}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${rerankStyle.dot}`} />
+              <span>{rerankerStatus}</span>
             </span>
           </div>
         </div>

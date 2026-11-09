@@ -18,7 +18,8 @@ import {
 import {
   RoleModelAssignmentSection,
   type CognitivePointConfig,
-  type DetectedLocalModel
+  type DetectedLocalModel,
+  type EngineCapabilitiesStatus
 } from './inference/RoleModelAssignmentSection';
 import {
   EngineAdvancedAccordion
@@ -95,6 +96,7 @@ export function InferenceSettingsPanel({
   const [modelsData, setModelsData] = useState<ModelsResponse | null>(null);
   const [discoverData, setDiscoverData] = useState<DiscoverResponse | null>(null);
   const [externalProviders, setExternalProviders] = useState<ExternalProviderConfig[]>([]);
+  const [engineCapabilities, setEngineCapabilities] = useState<EngineCapabilitiesStatus | null>(null);
 
   // Drawer de Añadir Proveedor (T-UI-2 / SPEC §4)
   const [isAddProviderDrawerOpen, setIsAddProviderDrawerOpen] = useState(false);
@@ -158,7 +160,7 @@ export function InferenceSettingsPanel({
     setError(null);
 
     try {
-      const [cfgRes, schemaRes, modelsRes, pointsRes, extProvidersRes, llamaRes, discRes] = await Promise.all([
+      const [cfgRes, schemaRes, modelsRes, pointsRes, extProvidersRes, llamaRes, discRes, summaryRes] = await Promise.all([
         bridge.fetchRaw('/api/v1/config', { signal: controller.signal }) as Promise<Record<string, unknown>>,
         bridge.fetchRaw('/api/v1/config/schema', { signal: controller.signal }) as Promise<{ fields?: SchemaFieldMeta[] }>,
         (bridge.fetchRaw('/api/v1/models', { signal: controller.signal }) as Promise<ModelsResponse>).catch(() => null),
@@ -166,6 +168,7 @@ export function InferenceSettingsPanel({
         (bridge.fetchRaw('/api/v1/external-providers', { signal: controller.signal }) as Promise<ExternalProviderConfig[]>).catch(() => []),
         (bridge.fetchRaw('/api/v1/inference/llama/status', { signal: controller.signal }) as Promise<Record<string, unknown>>).catch(() => null),
         (bridge.fetchRaw('/api/v1/inference/providers/discover', { signal: controller.signal }) as Promise<DiscoverResponse>).catch(() => null),
+        (bridge.fetchRaw('/api/v1/dashboard/summary', { signal: controller.signal }) as Promise<{ interoception?: { capabilities?: EngineCapabilitiesStatus } }>).catch(() => null),
       ]);
 
       if (schemaRes?.fields) {
@@ -201,6 +204,10 @@ export function InferenceSettingsPanel({
 
       if (discRes && Array.isArray(discRes.providers)) {
         setDiscoverData(discRes);
+      }
+
+      if (summaryRes?.interoception?.capabilities) {
+        setEngineCapabilities(summaryRes.interoception.capabilities);
       }
 
       if (llamaRes && typeof llamaRes === 'object') {
@@ -476,6 +483,21 @@ export function InferenceSettingsPanel({
   const externalActiveCount = externalProviders.filter(p => p.api_key_set).length;
   const totalActiveProviders = localDetectedCount + externalActiveCount;
 
+  // Estado dinámico riguroso según telemetría real (cero inventiva sin evidencia, T3813)
+  const embeddingsStatus: 'cargado' | 'liberado por inactividad' | 'desconocido' =
+    engineCapabilities?.embeddings_loaded === true
+      ? 'cargado'
+      : engineCapabilities?.embeddings_loaded === false
+      ? 'liberado por inactividad'
+      : 'desconocido';
+
+  const rerankerStatus: 'cargado' | 'liberado por inactividad' | 'desconocido' =
+    engineCapabilities?.reranker_loaded === true
+      ? 'cargado'
+      : engineCapabilities?.reranker_loaded === false
+      ? 'liberado por inactividad'
+      : 'desconocido';
+
   return (
     <div className="space-y-6" data-testid="inference-settings-panel">
       {/* Cabecera Principal y Barra de Estado Superior */}
@@ -493,14 +515,58 @@ export function InferenceSettingsPanel({
 
           {/* Pastillas de estado resumen */}
           <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-            {/* Embeddings SilvaDB (Fijo 1024d) */}
+            {/* Embeddings SilvaDB (Fijo 1024d + Estado en memoria D-160) */}
             <span
-              className="px-2 py-0.5 rounded border font-semibold flex items-center gap-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-              title="1024 dimensiones"
+              className={cn(
+                "px-2 py-0.5 rounded border font-semibold flex items-center gap-1.5",
+                embeddingsStatus === 'cargado'
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  : embeddingsStatus === 'liberado por inactividad'
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                  : "bg-muted/40 text-muted-foreground border-border"
+              )}
+              title={activeEmbedding ? `Vectores SilvaDB: ${activeEmbedding} (${vectorDimensions}d) · Estado en memoria: ${embeddingsStatus}` : `SilvaDB desconectado (${embeddingsStatus})`}
               data-testid="embedding-summary-pill"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>SilvaDB: {activeEmbedding ? (activeEmbedding.split('/').pop() || activeEmbedding) : 'desconectado'} ({vectorDimensions}d)</span>
+              <span className={cn(
+                "w-1.5 h-1.5 rounded-full",
+                embeddingsStatus === 'cargado'
+                  ? "bg-emerald-500"
+                  : embeddingsStatus === 'liberado por inactividad'
+                  ? "bg-amber-500"
+                  : "bg-muted-foreground/40"
+              )} />
+              <span>SilvaDB: {activeEmbedding ? (activeEmbedding.split('/').pop() || activeEmbedding) : 'desconectado'} {activeEmbedding ? `(${vectorDimensions}d)` : ''}</span>
+              <span className="text-[10px] font-normal opacity-90">
+                ({embeddingsStatus})
+              </span>
+            </span>
+
+            {/* Reranker SilvaDB (Recall híbrido bajo demanda D-160 f2) */}
+            <span
+              className={cn(
+                "px-2 py-0.5 rounded border font-semibold flex items-center gap-1.5",
+                rerankerStatus === 'cargado'
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  : rerankerStatus === 'liberado por inactividad'
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                  : "bg-muted/40 text-muted-foreground border-border"
+              )}
+              title={`Reranker semántico: ${engineCapabilities?.reranker_model || '—'} · Estado en memoria: ${rerankerStatus}`}
+              data-testid="reranker-summary-pill"
+            >
+              <span className={cn(
+                "w-1.5 h-1.5 rounded-full",
+                rerankerStatus === 'cargado'
+                  ? "bg-emerald-500"
+                  : rerankerStatus === 'liberado por inactividad'
+                  ? "bg-amber-500"
+                  : "bg-muted-foreground/40"
+              )} />
+              <span>Reranker</span>
+              <span className="text-[10px] font-normal opacity-90">
+                ({rerankerStatus})
+              </span>
             </span>
 
             {/* Visión VLM (T3294) */}
@@ -581,6 +647,7 @@ export function InferenceSettingsPanel({
         visionExists={visionExists}
         activeEmbedding={activeEmbedding}
         vectorDimensions={vectorDimensions}
+        engineCapabilities={engineCapabilities}
       />
 
       {/* SECCIÓN 3: Ajustes Avanzados & Motor de Inferencia (Acordeón Colapsable) */}
