@@ -1,5 +1,5 @@
 {
-  "name": "fastembed (cache ONNX)",
+  "name": "embedders ONNX activos (no borrar)",
   "role": "embedding",
   "roles": [
     "embedding",
@@ -7,5 +7,5 @@
   ],
   "family": "fastembed",
   "origin": "tylluan",
-  "notes": "Cache de fastembed con los ONNX vivos: mxbai-embed-large-v1 (1024d, defecto actual), jina-reranker-v1-turbo-en, bge-m3, all-MiniLM-L6-v2-onnx, multilingual-e5-large, snowflake-arctic-embed-l."
+  "notes": "NO BORRAR: esta carpeta contiene los pesos ONNX que usa la busqueda vectorial (mxbai-embed-large-v1 1024d, el embedder activo por defecto) y el reranker (jina-reranker-v1-turbo-en), mas bge-m3, all-MiniLM-L6-v2-onnx, multilingual-e5-large y snowflake-arctic-embed-l. Aparece en el inventario porque contiene pesos reales, no porque sea una cache descartable: el kernel la usa como primer candidato de cache. Borrarla deja la busqueda vectorial sin motor hasta restaurar estos ficheros (el kernel no los descarga solo: allow_hf_download=false)."
 }

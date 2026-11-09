@@ -83,6 +83,84 @@ pub struct LocalModel {
     pub manifest_error: Option<String>,
 }
 
+/// Lo que `/api/v1/models` publica sobre el inventario (D-162).
+///
+/// El motivo de existir: un `models/` vacío devolvía `[]` y nada más, así que
+/// «no hay modelos» era indistinguible de «todo bien» y el operador no sabía
+/// **dónde** tenía que copiar sus ficheros. `models_dir` viaja absoluta (la
+/// misma que se exporta a los guilds) y `hint` sólo aparece cuando no hay nada
+/// que enseñar.
+#[derive(Debug, Clone)]
+pub struct ModelsInventory {
+    /// Carpeta escaneada, siempre absoluta: es donde el operador debe copiar.
+    pub models_dir: String,
+    /// `true` si esa ruta la fijó `TYLLUAN_MODELS_DIR` y no el cwd.
+    pub models_dir_from_env: bool,
+    /// Inventario real. Vacío = no hay ninguna carpeta de modelo.
+    pub models: Vec<LocalModel>,
+    /// Pista veraz cuando `models` está vacío. `None` si hay al menos un modelo.
+    pub hint: Option<String>,
+}
+
+impl ModelsInventory {
+    /// Escanea `root`. `from_env` sólo cambia el texto de la pista.
+    ///
+    /// La ruta publicada es **siempre absoluta**: si el llamante pasa una
+    /// relativa se resuelve aquí contra el cwd, porque publicar una ruta que
+    /// depende de dónde se lanzó el kernel es justo el fallo que D-159 vino a
+    /// cerrar.
+    pub fn scan(root: &Path, from_env: bool) -> Self {
+        let root = absolute(root);
+        let models = scan(&root);
+        let hint = if models.is_empty() {
+            Some(empty_inventory_hint(&root, from_env))
+        } else {
+            None
+        };
+        Self {
+            models_dir: root.to_string_lossy().to_string(),
+            models_dir_from_env: from_env,
+            models,
+            hint,
+        }
+    }
+}
+
+/// Resuelve `path` contra el cwd si es relativa.
+fn absolute(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(path))
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Texto de la pista de inventario vacío, con la ruta concreta.
+///
+/// Distingue «la carpeta no existe» de «existe pero está vacía»: son dos
+/// acciones distintas para el operador (crear vs copiar) y confundirlas le
+/// hace perder tiempo buscando un fallo que no existe.
+fn empty_inventory_hint(root: &Path, from_env: bool) -> String {
+    let dir = root.display();
+    let origen = if from_env {
+        " (ruta fijada por TYLLUAN_MODELS_DIR)"
+    } else {
+        ""
+    };
+    if root.is_dir() {
+        format!(
+            "La carpeta de modelos {dir}{origen} existe pero no tiene ningún modelo: copia tus \
+             modelos ahí. Para chatear, copia además un modelo de chat en esa carpeta."
+        )
+    } else {
+        format!(
+            "No existe la carpeta de modelos {dir}{origen}: créala y copia ahí tus modelos. Para \
+             chatear, copia además un modelo de chat en esa carpeta."
+        )
+    }
+}
+
 /// Raíz del inventario: **la misma** que se exporta a los guilds.
 ///
 /// D-159 (F2): antes era `PathBuf::from("models")` (relativa al cwd) y
@@ -252,8 +330,16 @@ mod tests {
         dir
     }
 
+    // D-162 (a): este test se llamaba `scan_skips_dot_dirs_and_known_caches` y
+    // su aserción deja `fastembed` DENTRO, así que el nombre contradecía lo que
+    // comprueba. `fastembed` no es una caché descartable: dentro viven los pesos
+    // ONNX del embedder activo (mxbai-embed-large-v1, 1024d) y del reranker, y
+    // el kernel los usa como primer candidato de caché. Decisión del TL (T3748):
+    // se queda en el inventario para que el operador la vea, y el manifiesto la
+    // rotula «no borrar». No añadirla a `CACHE_DIR_NAMES` sin cambiar a la vez
+    // ese manifiesto y el panel.
     #[test]
-    fn scan_skips_dot_dirs_and_known_caches() {
+    fn scan_hides_dot_and_cache_dirs_but_keeps_fastembed() {
         let tmp = tempfile::tempdir().unwrap();
         for id in [".hf_home", ".hub_cache", "__pycache__", "fastembed"] {
             model_dir(tmp.path(), id);
@@ -261,6 +347,70 @@ mod tests {
         let ids: Vec<String> = scan(tmp.path()).into_iter().map(|m| m.id).collect();
         assert_eq!(ids, vec!["fastembed".to_string()]);
         assert!(ids.iter().all(|id| !id.starts_with('.')));
+    }
+
+    // D-162 (c): un inventario vacío tiene que decir DÓNDE copiar. Antes sólo
+    // salía `[]`, indistinguible de «todo bien».
+    #[test]
+    fn empty_inventory_publishes_absolute_dir_and_a_truthful_hint() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        // (1) la carpeta no existe -> la acción es crearla
+        let ausente = tmp.path().join("no-existe");
+        let inv = ModelsInventory::scan(&ausente, false);
+        assert!(inv.models.is_empty());
+        assert_eq!(inv.models_dir, ausente.to_string_lossy().to_string());
+        assert!(Path::new(&inv.models_dir).is_absolute());
+        let hint = inv.hint.expect("una carpeta ausente debe traer pista");
+        assert!(hint.contains("No existe"), "pista inesperada: {hint}");
+        assert!(
+            hint.contains(&ausente.to_string_lossy().to_string()),
+            "la pista debe nombrar la ruta: {hint}"
+        );
+        assert!(hint.contains("modelo de chat"), "pista inesperada: {hint}");
+
+        // (2) la carpeta existe pero está vacía -> la acción es copiar
+        let vacia = tmp.path().join("vacia");
+        std::fs::create_dir_all(&vacia).unwrap();
+        let inv = ModelsInventory::scan(&vacia, true);
+        assert!(inv.models.is_empty());
+        assert!(inv.models_dir_from_env);
+        let hint = inv.hint.expect("una carpeta vacía debe traer pista");
+        assert!(
+            hint.contains("existe pero no tiene"),
+            "pista inesperada: {hint}"
+        );
+        assert!(
+            hint.contains("TYLLUAN_MODELS_DIR"),
+            "la pista debe decir de dónde sale la ruta: {hint}"
+        );
+    }
+
+    #[test]
+    fn inventory_with_models_has_no_hint() {
+        let tmp = tempfile::tempdir().unwrap();
+        model_dir(tmp.path(), "bge-m3");
+        let inv = ModelsInventory::scan(tmp.path(), false);
+        assert_eq!(inv.models.len(), 1);
+        assert_eq!(inv.models[0].id, "bge-m3");
+        assert!(
+            inv.hint.is_none(),
+            "con modelos no se inventa una pista: {:?}",
+            inv.hint
+        );
+    }
+
+    // El contrato dice «absoluta»; tiene que cumplirlo también si el llamante
+    // se despista, no sólo cuando le pasan `models_root()`.
+    #[test]
+    fn inventory_absolutizes_a_relative_root() {
+        let inv = ModelsInventory::scan(Path::new("models"), false);
+        assert!(
+            Path::new(&inv.models_dir).is_absolute(),
+            "ruta relativa publicada tal cual: {}",
+            inv.models_dir
+        );
+        assert!(inv.models_dir.ends_with("models"), "{}", inv.models_dir);
     }
 
     #[test]

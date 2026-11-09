@@ -1227,7 +1227,16 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
     // son modelos, y el tamaño es recursivo: los pesos de un modelo viven en
     // subcarpetas, así que sumar sólo el primer nivel daba cifras falsas.
     // Ver `crate::models` para el contrato completo.
-    let detected_local_models = crate::models::scan(&crate::models::models_root());
+    //
+    // D-162: además de la lista, se publica la carpeta escaneada (absoluta) y
+    // una pista cuando no hay nada. `detected_local_models` conserva el nombre
+    // a propósito: el panel ya lo consume (`InferenceSettingsPanel`), así que
+    // renombrarlo rompería la UI sin ganar nada.
+    let models_dir_from_env = std::env::var_os(crate::config::MODELS_DIR_ENV)
+        .map(|value| !value.is_empty())
+        .unwrap_or(false);
+    let inventory =
+        crate::models::ModelsInventory::scan(&crate::models::models_root(), models_dir_from_env);
 
     Json(serde_json::json!({
         "active": {
@@ -1236,7 +1245,10 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
             "inference": inference_model,
             "vector_dimensions": vector_dims
         },
-        "detected_local_models": detected_local_models,
+        "models_dir": inventory.models_dir,
+        "models_dir_from_env": inventory.models_dir_from_env,
+        "hint": inventory.hint,
+        "detected_local_models": inventory.models,
         "available_embeddings": [
             { "name": "BGE-M3", "dimensions": 1024, "multilingual": true, "note": "default, multilingual best-in-class" },
             { "name": "BGE-base-en-v1.5", "dimensions": 768, "multilingual": false, "note": "fast, English-only" },
