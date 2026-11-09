@@ -1,0 +1,10 @@
+{
+  "name": "Decima (decision)",
+  "role": "decision",
+  "roles": [
+    "decision"
+  ],
+  "family": "decima",
+  "origin": "tylluan",
+  "notes": "config.json: architectures=[Decima], model_type=decima; encoder.onnx (117 MB) + scorer.onnx (5 MB). Sirve el punto [inference.points.decision] (ADR-021)."
+}

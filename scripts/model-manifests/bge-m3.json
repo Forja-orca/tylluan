@@ -1,0 +1,10 @@
+{
+  "name": "BGE-M3",
+  "role": "embedding",
+  "roles": [
+    "embedding"
+  ],
+  "family": "bge",
+  "origin": "tylluan",
+  "notes": "config.json: architectures=[XLMRobertaModel], model_type=xlm-roberta, 1024 dimensiones. Antiguo defecto de [silva] embedding_model."
+}

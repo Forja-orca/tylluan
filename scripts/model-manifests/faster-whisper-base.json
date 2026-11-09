@@ -1,0 +1,10 @@
+{
+  "name": "Faster-Whisper base",
+  "role": "stt",
+  "roles": [
+    "stt"
+  ],
+  "family": "whisper",
+  "origin": "tylluan",
+  "notes": "model.bin + config.json + tokenizer.json + vocabulary.txt de faster-whisper (CTranslate2). Voz a texto."
+}

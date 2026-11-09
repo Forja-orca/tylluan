@@ -1,0 +1,11 @@
+{
+  "name": "fastembed (cache ONNX)",
+  "role": "embedding",
+  "roles": [
+    "embedding",
+    "reranker"
+  ],
+  "family": "fastembed",
+  "origin": "tylluan",
+  "notes": "Cache de fastembed con los ONNX vivos: mxbai-embed-large-v1 (1024d, defecto actual), jina-reranker-v1-turbo-en, bge-m3, all-MiniLM-L6-v2-onnx, multilingual-e5-large, snowflake-arctic-embed-l."
+}

@@ -1215,68 +1215,13 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
     let inference_model = config.inference.primary_model.clone();
     let vector_dims = config.memory.vector_dimensions;
 
-    // Real disk scanner for local model files. Classifies each entry as
-    // embedding/vision/generative so the dashboard can route them to the
-    // right panel instead of offering an embedding model as a chat model
-    // (or vice versa) -- matches known config paths first, falls back to
-    // a directory-name heuristic for anything not currently active.
-    let embedding_dir_name = std::path::Path::new(&embedding_model)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .map(|s| s.to_lowercase());
-    let vision_dir_name = std::path::Path::new(&vision_path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .map(|s| s.to_lowercase());
-
-    let classify_model_dir = |dir_name: &str| -> &'static str {
-        let lower = dir_name.to_lowercase();
-        if embedding_dir_name.as_deref() == Some(lower.as_str())
-            || lower.contains("bge")
-            || lower.contains("embed")
-            || lower.contains("nomic")
-        {
-            "embedding"
-        } else if vision_dir_name.as_deref() == Some(lower.as_str())
-            || lower.contains("vision")
-            || lower.contains("vlm")
-            || lower.contains("moondream")
-        {
-            "vision"
-        } else {
-            "generative"
-        }
-    };
-
-    let mut detected_local_models = Vec::new();
-    let models_dir = std::path::Path::new("models");
-    if models_dir.exists()
-        && let Ok(entries) = std::fs::read_dir(models_dir)
-    {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let dir_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("unknown");
-                let mut size = 0u64;
-                if let Ok(files) = std::fs::read_dir(&path) {
-                    for f in files.flatten() {
-                        if let Ok(meta) = f.metadata() {
-                            size += meta.len();
-                        }
-                    }
-                }
-                detected_local_models.push(serde_json::json!({
-                    "id": dir_name,
-                    "name": format!("Local {}", dir_name),
-                    "path": path.to_string_lossy(),
-                    "size_bytes": size,
-                    "size_mb": size / (1024 * 1024),
-                    "installed": true,
-                    "model_type": classify_model_dir(dir_name),
-                }));
-            }
-        }
-    }
+    // D-156: inventario real de `models/`. El rol lo declara cada carpeta en
+    // `model.json`; aquí no se adivina por el nombre de la carpeta. Las
+    // carpetas con punto y las cachés (`__pycache__`, `node_modules`, ...) no
+    // son modelos, y el tamaño es recursivo: los pesos de un modelo viven en
+    // subcarpetas, así que sumar sólo el primer nivel daba cifras falsas.
+    // Ver `crate::models` para el contrato completo.
+    let detected_local_models = crate::models::scan(&crate::models::models_root());
 
     Json(serde_json::json!({
         "active": {

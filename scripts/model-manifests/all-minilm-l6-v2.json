@@ -1,0 +1,10 @@
+{
+  "name": "all-MiniLM-L6-v2",
+  "role": "embedding",
+  "roles": [
+    "embedding"
+  ],
+  "family": "minilm",
+  "origin": "tylluan",
+  "notes": "config.json: architectures=[BertModel], model_type=bert, 384 dimensiones. Perfil clinic (vector_dimensions=384)."
+}

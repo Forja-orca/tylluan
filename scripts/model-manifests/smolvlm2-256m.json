@@ -1,0 +1,10 @@
+{
+  "name": "SmolVLM2 256M Instruct",
+  "role": "vision",
+  "roles": [
+    "vision"
+  ],
+  "family": "smolvlm",
+  "origin": "tylluan",
+  "notes": "config.json: architectures=[SmolVLMForConditionalGeneration], model_type=smolvlm. Motor de vision ONNX por defecto ([vision] model_path)."
+}
