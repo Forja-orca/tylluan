@@ -607,9 +607,15 @@ if let Some(ref mut s) = stmt {
     // downstream stages (CoherenceGate Layer 4) handle None gracefully.
     // D-160: si el TTL de inactividad soltó el motor, esta consulta paga el
     // arranque en frío (una vez). Se reinstala en SilvaDB para la cascada.
-    if !server.matcher.has_engine()
-        && server.matcher.ensure_engine_loaded()
-        && let Some(eng) = server.matcher.engine_arc()
+    if !server.matcher.has_engine() {
+        // D-160B (a): la carga son ~6 s de ONNX; no se hace en el hilo async.
+        let matcher = server.matcher.clone();
+        let _ = tokio::task::spawn_blocking(move || matcher.ensure_engine_loaded()).await;
+    }
+    // D-160B v2: la condición es la de SilvaDB, NO has_engine(). Si el worker ya
+    // recargó y no reinstaló, aquí se repara; si ya está, no se toca.
+    if !server.silva.has_dense_engine()
+        && let Some(eng) = server.matcher.peek_engine()
     {
         server.silva.install_dense_engine(eng);
     }

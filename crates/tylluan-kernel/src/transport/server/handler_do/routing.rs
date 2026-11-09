@@ -16,6 +16,12 @@ pub(crate) async fn resolve_guild_name(
     agent_id: Option<&str>,
 ) -> Result<(String, Vec<String>), CallToolResult> {
     let mut trace = Vec::new();
+    // D-160B (c): el ruteo pide la recarga AQUI, en la entrada real del camino
+    // (antes la puse en match_guild y resulta que este handler puede resolver
+    // sin llegar alli). No bloquea: encola y sigue con lo que haya.
+    if !server.matcher.has_engine() {
+        server.matcher.request_engine_reload();
+    }
     if let Some(hint) = guild_hint {
         // Known to the semantic matcher OR live in the registry — external MCPs
         // activated at runtime (M25-B) exist only in the registry until reboot.

@@ -166,6 +166,12 @@ pub struct GuildMatcher {
     engine_loader: std::sync::Mutex<Option<EngineLoader>>,
     /// D-160: epoch (s) del último uso del motor, para el TTL de inactividad.
     last_engine_use: std::sync::atomic::AtomicU64,
+    /// D-160B (b): serializa las cargas. Dos recalls en frío a la vez cargaban
+    /// DOS motores (+1,3 GB) y uno se tiraba.
+    load_gate: std::sync::Mutex<()>,
+    /// D-160B (c): cola del worker de recarga (hilo único en `main`). El ruteo
+    /// de guilds la usa para no quedarse sin embeddings hasta el próximo recall.
+    reload_tx: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>>,
     curriculum: Option<Arc<Mutex<crate::curriculum::CurriculumLearner>>>,
     hormones: Option<Arc<std::sync::Mutex<crate::hormones::HormoneSystem>>>,
     guild_health: dashmap::DashMap<String, f64>,
@@ -195,6 +201,8 @@ impl GuildMatcher {
             engine: std::sync::Mutex::new(None),
             engine_loader: std::sync::Mutex::new(None),
             last_engine_use: std::sync::atomic::AtomicU64::new(now_secs()),
+            load_gate: std::sync::Mutex::new(()),
+            reload_tx: std::sync::Mutex::new(None),
             curriculum: None,
             hormones: None,
             guild_health: dashmap::DashMap::new(),
@@ -297,12 +305,51 @@ impl GuildMatcher {
         true
     }
 
+    /// D-160B (c): instala la cola del worker de recarga (un hilo en `main`).
+    pub fn set_reload_sender(&self, tx: std::sync::mpsc::Sender<()>) {
+        *self.reload_tx.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(tx);
+    }
+
+    /// D-160B (c): pide una recarga **sin bloquear** al llamante.
+    ///
+    /// La usa el ruteo de guilds: con el TTL cumplido, esta petición se degrada
+    /// a BM25, pero el worker levanta el motor y la siguiente ya lo tiene. Si no
+    /// hay worker instalado (tests), no hace nada.
+    pub fn request_engine_reload(&self) {
+        if self.has_engine() {
+            return;
+        }
+        let tx = self
+            .reload_tx
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        match tx {
+            Some(tx) => {
+                // canal std sin cota: send no bloquea (el worker drena cuando puede)
+                let enviado = tx.send(()).is_ok();
+                tracing::info!(enviado, "D-160B: ruteo pide recarga del motor (encolada)");
+            }
+            None => tracing::warn!(
+                "D-160B: el ruteo pide recarga pero NO hay worker instalado (reload_tx=None)"
+            ),
+        }
+    }
+
     /// D-160: devuelve el motor, recargándolo si el TTL lo soltó.
     ///
     /// Bloqueante a propósito (la carga ONNX tarda decenas de segundos): lo
     /// llama el camino de recall, que ya envuelve trabajo bloqueante. Devuelve
     /// `false` si no hay loader instalado o si la carga falló.
     pub fn ensure_engine_loaded(&self) -> bool {
+        if self.has_engine() {
+            self.touch_engine();
+            return true;
+        }
+        // D-160B (b): single-flight. Se toma el cerrojo ANTES de mirar si hay
+        // motor: si otro hilo lo cargó mientras esperábamos, salimos sin cargar
+        // un segundo (antes: dos recalls en frío = dos motores, +1,3 GB).
+        let _gate = self.load_gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if self.has_engine() {
             self.touch_engine();
             return true;
@@ -447,6 +494,13 @@ impl GuildMatcher {
         threshold: f32,
         ctx: Option<&GuildContext>,
     ) -> Option<MatchResult> {
+        // D-160B (c): pedir la recarga AQUI, a la entrada del ruteo. Antes estaba
+        // en la rama que sólo embebe cuando no hay match léxico, así que un intent
+        // claro nunca la pedía y el ruteo se quedaba sin motor hasta un recall.
+        if !self.has_engine() {
+            self.request_engine_reload();
+        }
+
         // Special cases: conversational greetings and file-analysis override bypass scoring
         if let Some(result) = self.trigger_special_cases(query) {
             return Some(result);
@@ -1594,6 +1648,21 @@ mod tests {
             !matcher.release_engine_if_idle(0),
             "ttl 0 es el default historico: nunca libera"
         );
+    }
+
+    /// D-160B (c): la petición del ruteo llega al worker de recarga.
+    #[test]
+    fn d160b_request_reload_pushes_to_the_worker_queue() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let matcher = GuildMatcher::new(vec![]);
+        matcher.set_reload_sender(tx);
+        matcher.request_engine_reload();
+        assert!(rx.try_recv().is_ok(), "la peticion debe llegar al worker");
+    }
+
+    #[test]
+    fn d160b_request_reload_without_worker_is_a_noop() {
+        GuildMatcher::new(vec![]).request_engine_reload();
     }
 
     #[test]

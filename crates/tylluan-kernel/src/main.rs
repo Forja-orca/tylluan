@@ -945,6 +945,37 @@ async fn main() -> anyhow::Result<()> {
         }));
     }
 
+    // D-160B (c): un ÚNICO hilo de recarga. El ruteo de guilds pide aquí una
+    // recarga cuando el TTL soltó el motor, así no se queda sin embeddings hasta
+    // el próximo recall. Single-flight por diseño: un hilo, una carga a la vez.
+    {
+        let (reload_tx, reload_rx) = std::sync::mpsc::channel::<()>();
+        matcher.set_reload_sender(reload_tx);
+        let matcher_reload = matcher.clone();
+        // D-160B v2: el worker TAMBIÉN tiene que devolverle el motor a SilvaDB.
+        // Antes sólo lo hacía el recall, y con la recarga del worker
+        // `has_engine()` ya era true -> la cascada se quedaba sin etapa densa.
+        let silva_reload = silva.clone();
+        let _ = std::thread::Builder::new()
+            .name("embed-reload".to_string())
+            .spawn(move || {
+                tracing::info!("D-160B: worker de recarga listo (hilo 'embed-reload')");
+                while reload_rx.recv().is_ok() {
+                    tracing::info!("D-160B: worker recibe peticion de recarga");
+                    if !matcher_reload.has_engine()
+                        && matcher_reload.ensure_engine_loaded()
+                        && let Some(eng) = matcher_reload.peek_engine()
+                    {
+                        silva_reload.install_dense_engine(eng);
+                        tracing::info!(
+                            dense_stage_ready = silva_reload.has_dense_engine(),
+                            "D-160B: motor reinstalado en SilvaDB (etapa densa de la cascada)"
+                        );
+                    }
+                }
+            });
+    }
+
     // D-160: barrido del TTL de inactividad (cada 30 s). Lee el valor VIVO del
     // TOML en cada vuelta: cambiarlo no exige recompilar ni reiniciar. `0`
     // (default) deja el comportamiento histórico intacto.

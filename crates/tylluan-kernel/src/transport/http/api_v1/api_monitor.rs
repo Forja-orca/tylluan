@@ -190,6 +190,8 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
         let srv = srv_arc.read().await;
         let cap = serde_json::json!({
             "embeddings_loaded": srv.matcher.peek_engine().is_some(),
+            // D-160B v2: si es false, la etapa densa de la cascada sale sin embeber.
+            "dense_stage_ready": srv.silva.has_dense_engine(),
             "reranker_loaded": srv.reranker.is_some(),
             "embedding_model": srv.matcher.peek_engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
             "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },
@@ -650,6 +652,8 @@ pub async fn interoception_handler(State(state): State<Arc<HttpState>>) -> impl 
         let srv = srv_arc.read().await;
         let cap = serde_json::json!({
             "embeddings_loaded": srv.matcher.peek_engine().is_some(),
+            // D-160B v2: si es false, la etapa densa de la cascada sale sin embeber.
+            "dense_stage_ready": srv.silva.has_dense_engine(),
             "reranker_loaded": srv.reranker.is_some(),
             "embedding_model": srv.matcher.peek_engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
             "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },

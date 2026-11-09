@@ -354,9 +354,13 @@ impl SilvaDB {
             .clone()
     }
 
-    /// Share the dense embedding engine handle (same Arc as Matcher's).
-    /// Re-install after hot-swaps so the cascade always embeds with the
-    /// currently-active model.
+    /// D-160B v2: ¿tiene SilvaDB su copia del motor denso? Si es `false`, la
+    /// etapa densa de la cascada sale sin embeber (search.rs:746) EN SILENCIO.
+    /// Para introspección y para no quedar ciego: el estado se puede leer.
+    pub fn has_dense_engine(&self) -> bool {
+        self.dense_engine_ref().is_some()
+    }
+
     /// D-160: suelta la copia del motor denso que usa la cascada de recall.
     /// Sin esto, liberar el motor del matcher no baja RAM: SilvaDB tenía la suya.
     /// Devuelve `true` si había algo que soltar.
@@ -367,6 +371,9 @@ impl SilvaDB {
         had
     }
 
+    /// Share the dense embedding engine handle (same Arc as Matcher's).
+    /// Re-install after hot-swaps so the cascade always embeds with the
+    /// currently-active model.
     pub fn install_dense_engine(
         &self,
         engine: std::sync::Arc<crate::router::embeddings::EmbeddingEngine>,
