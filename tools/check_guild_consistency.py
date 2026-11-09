@@ -33,7 +33,7 @@ def check_filesystem() -> list[str]:
     errors = []
     exclude_files = {
         "__init__", "_security", "utils", "silva_utils", "memory_bridge",
-        "analyze_friction_weights", "check_coloquio", "download_gemma4",
+        "analyze_friction_weights", "check_coloquio",
         "test_gemma_coordinator", "benchmark_routing",
         "antigravity_watcher", "claude_watcher", "forja_watcher",
         "lmstudio_watcher", "openai_compat_watcher",

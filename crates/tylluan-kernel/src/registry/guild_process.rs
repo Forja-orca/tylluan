@@ -871,6 +871,12 @@ GuildLauncher::Python { module_path } => {
                 command.env(key, value);
             }
         }
+        // D-159 (F2): carpeta de modelos ABSOLUTA para todos, para que `models/`
+        // no dependa del cwd del kernel. Vision ya la preferia; el resto igual.
+        launcher_env.push((
+            crate::config::MODELS_DIR_ENV.to_string(),
+            crate::config::models_dir_absolute().to_string_lossy().to_string(),
+        ));
         for (key, value) in launcher_env {
             command.env(key, value);
         }

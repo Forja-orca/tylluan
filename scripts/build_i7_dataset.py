@@ -22,7 +22,7 @@ AUDIT_DB = Path("data/audit.db")
 
 # G6: Canonical catalog — derived from tools/guild_catalog.py (single source of truth).
 # This replaces the former hardcoded GUILD_CATALOG. All 44 routable guilds are
-# included; excluded/experimental guilds (vision_moondream, sandbox) are omitted.
+# included; experimental guilds (sandbox) are omitted. D-159 borro vision_moondream.
 GUILD_CATALOG = {
     gid: {"category": g.category, "desc": g.description}
     for gid, g in GUILDS.items()

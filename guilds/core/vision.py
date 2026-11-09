@@ -28,8 +28,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("tylluan-vision")
 
-_MODEL_ID  = "HuggingFaceTB/SmolVLM2-256M-Instruct"
-
 _vision_session  = None
 _embed_session   = None
 _decoder_session = None
@@ -89,8 +87,8 @@ def _resolve_model_dir() -> str:
     """Carpeta LOCAL del modelo de vision. NUNCA se resuelve por id de HF.
 
     Directriz de Jose (T3287/T3294): la vision de Tylluan carga SOLO bajo `models_dir`.
-    Antes esto hacia `snapshot_download(repo_id=..., local_files_only=True)`, que resuelve
-    contra `~/.cache/huggingface/hub` -- la cache de las otras herramientas de Jose, que no
+    Antes esto resolvia por id de HuggingFace con descarga local-only, contra
+    `~/.cache/huggingface/hub` -- la cache de las otras herramientas de Jose, que no
     debe tocar. Ahora:
       1. `TYLLUAN_VISION_MODEL_DIR` si esta puesto (ruta exacta, para pruebas).
       2. `<models_dir>/smolvlm2-256m` si existe.

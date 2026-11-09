@@ -11,8 +11,10 @@ import importlib.util
 GLINER_AVAILABLE = importlib.util.find_spec("gliner") is not None
 
 import logging
+import os
 import re
 import json
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
 
@@ -23,15 +25,54 @@ mcp = FastMCP("tylluan-knowledge")
 _model = None
 _model_load_failed = False
 
+GLINER_HF_ID = "fastino/gliner2-base-v1"
+
+
+def _hf_download_allowed(config_path: Optional[str] = None) -> bool:
+    """Espejo de `[nexus] allow_hf_download` del kernel (`false` por defecto).
+
+    D-159 (TL): con HF apagado este guild NO descarga nada. Se lee el mismo
+    fichero que lee el kernel; ante cualquier duda (fichero ausente o roto) el
+    valor es `false`, que es el lado seguro.
+    """
+    import tomllib
+
+    if config_path is None:
+        config_path = str(Path(__file__).resolve().parents[3] / "tylluan.toml")
+    try:
+        with open(config_path, "rb") as handle:
+            cfg = tomllib.load(handle)
+        return bool(cfg.get("nexus", {}).get("allow_hf_download", False))
+    except Exception:
+        return False
+
+
 def get_model():
-    """Lazy-load GLiNER model. Returns None on failure without retrying."""
+    """Lazy-load GLiNER model. Returns None on failure without retrying.
+
+    Orden (D-159): copia LOCAL si el operador la tiene
+    (`TYLLUAN_GLINER_MODEL_DIR`) > descarga de HuggingFace **solo** con
+    `allow_hf_download = true` > sin modelo (la extraccion por regex sigue).
+    """
     global _model, _model_load_failed
     if _model_load_failed:
         return None
     if _model is None and GLINER_AVAILABLE:
+        local_dir = os.environ.get("TYLLUAN_GLINER_MODEL_DIR", "").strip()
+        if local_dir and os.path.isdir(local_dir):
+            source = local_dir
+        elif _hf_download_allowed():
+            source = GLINER_HF_ID
+        else:
+            logging.info(
+                "GLiNER no se carga: allow_hf_download=false y no hay copia local "
+                "(TYLLUAN_GLINER_MODEL_DIR). Se usa la extraccion por regex."
+            )
+            _model_load_failed = True
+            return None
         try:
             from gliner import GLiNER
-            _model = GLiNER.from_pretrained("fastino/gliner2-base-v1")
+            _model = GLiNER.from_pretrained(source)
         except Exception as e:
             _model_load_failed = True
             logging.warning("Failed to load GLiNER model (regex fallback active): %s", e)

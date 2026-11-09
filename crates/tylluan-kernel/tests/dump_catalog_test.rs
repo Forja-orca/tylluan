@@ -23,14 +23,7 @@ mod dump_catalog_test {
         names.dedup();
         assert_eq!(names.len(), catalog.len(), "duplicate guild names detected");
 
-        // Excluded guilds must not appear in the routable catalog
-        let excluded = ["vision_moondream"];
-        for g in &catalog {
-            assert!(
-                !excluded.contains(&g.name.as_str()),
-                "excluded guild '{}' still appears in builtin_catalog()",
-                g.name
-            );
-        }
+        // D-159: ya no hay guilds excluidos (vision_moondream se borro). El
+        // mecanismo sigue vigilado en catalog.rs (test_excluded_guilds_are_not_routable).
     }
 }

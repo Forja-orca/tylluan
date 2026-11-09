@@ -294,13 +294,6 @@ GUILDS: Dict[str, GuildEntry] = {
         category="core",
         registration="always_on",
     ),
-    "vision_moondream": GuildEntry(
-        id="vision_moondream",
-        module="guilds.core.vision_moondream",
-        description="Legacy Moondream vision (superseded by vision.py SmolVLM2)",
-        category="core",
-        status="excluded",
-    ),
     "websearch": GuildEntry(
         id="websearch",
         module="guilds.core.websearch",

@@ -119,7 +119,7 @@ cargo run -p tylluan-cli -- start
 | **M14-E Phase 2+3** | `dispatch_dst.rs` — multi-peer routing + `DispatchQueue` moved to link | ✅ |
 | **CI/deps cleanup** | `deny.toml` green · `Cargo.toml` 0.11.0 · README/docs consistency | ✅ |
 | **ADR-005 M14-F** | P2P TCP dispatch spec — Noise XK session pool, Option A transparent routing, 6-phase plan | ✅ |
-| **Moondream guild** | `guilds/core/vision_moondream.py` — `analyze_image` + `caption_image` via moondream pip | ✅ |
+| **Moondream guild** | `guilds/core/vision_moondream.py` — `analyze_image` + `caption_image` via moondream pip. **Borrado en D-159**: spike nunca enrutable que bajaba pesos de HF; `vision.py` cubre visión | ✅ borrado |
 | **M14-F Phase 1** | `p2p.rs` — `P2pSessionPool` + `execute_remote_tcp()` + `HardwareCaps.supports_p2p/tcp_port` | ✅ |
 | **M14-F Phase 2** | `start_p2p_listener_noise()` + `DispatchDecision::RemoteTcp` + score-first routing + `p2p_dst.rs` (3 tests) | ✅ |
 | **M14-F Phase 3** | `P2pHandlerFn` (BoxFuture) · `P2pConfig` `[p2p]` in `config.rs` · `p2p_pool` in `HttpState` · P2P listener spawn (conditional) · `api_mesh.rs` native `RemoteTcp` via `execute_remote_tcp` · `guild_peers_handler` exposes `supports_p2p/tcp_port` | ✅ |

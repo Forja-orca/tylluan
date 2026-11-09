@@ -25,10 +25,6 @@ use serde::{Deserialize, Serialize};
 /// Nombre del manifiesto dentro de cada carpeta de modelo.
 pub const MANIFEST_FILE: &str = "model.json";
 
-/// Carpeta raíz por defecto, relativa al cwd del kernel (igual que el resto
-/// del código: `doctor`, `mlp`, `maintenance`).
-pub const MODELS_ROOT: &str = "models";
-
 /// Profundidad máxima al sumar tamaños. Evita que un junction/symlink de
 /// Windows (que `is_symlink()` no siempre detecta) nos haga recorrer el disco
 /// entero; los pesos de un modelo nunca están a más de unas pocas carpetas.
@@ -87,9 +83,14 @@ pub struct LocalModel {
     pub manifest_error: Option<String>,
 }
 
-/// Raíz por defecto del inventario.
+/// Raíz del inventario: **la misma** que se exporta a los guilds.
+///
+/// D-159 (F2): antes era `PathBuf::from("models")` (relativa al cwd) y
+/// convivía con [`crate::config::models_dir_absolute`], así que con
+/// `TYLLUAN_MODELS_DIR` puesto el inventario miraba una carpeta y los guilds
+/// otra. Ahora hay un solo origen.
 pub fn models_root() -> PathBuf {
-    PathBuf::from(MODELS_ROOT)
+    crate::config::models_dir_absolute()
 }
 
 /// ¿Esta carpeta es caché o está oculta y por tanto no es un modelo?
@@ -359,6 +360,14 @@ mod tests {
         let model = scan(tmp.path()).pop().expect("un modelo");
         assert_eq!(model.role.as_deref(), Some("chat"));
         assert!(model.chat_capable);
+    }
+
+    /// D-159 (F2): el inventario y el env que reciben los guilds no pueden
+    /// apuntar a carpetas distintas.
+    #[test]
+    fn models_root_is_the_same_source_as_the_guilds_env() {
+        assert_eq!(models_root(), crate::config::models_dir_absolute());
+        assert!(models_root().is_absolute(), "{}", models_root().display());
     }
 
     #[test]

@@ -95,7 +95,12 @@ impl std::fmt::Display for GuildCategory {
 /// Guild implementations that exist on disk but are intentionally not routable.
 /// Keep the source file for historical/spike purposes without advertising it to
 /// the semantic matcher or runtime registry.
-const EXCLUDED_GUILDS: &[&str] = &["vision_moondream"];
+///
+/// D-159 (TL, F1): sin entradas. `vision_moondream` era la unica y se borro
+/// junto a `download_gemma4` porque no estaban en el catalogo usable y bajaban
+/// pesos de HuggingFace. El mecanismo se queda: es la puerta para el proximo
+/// spike que no deba anunciarse.
+const EXCLUDED_GUILDS: &[&str] = &[];
 
 /// Overrides for guilds that need explicit weight or required_args
 /// not inferrable from the Python file alone.
@@ -1115,7 +1120,7 @@ def stats() -> str:
             "coloquio", "coloquio_digest", "comfy_ui", "data_tools", "database", "deep_analysis", "deep_web_research",
             "docker", "filesystem", "formatter", "git", "ingest", "knowledge",
             "mcp_bridge", "memory", "monitor", "n8n_bridge", "night_reasoner", "llama_backend", "seed_tools", "pdf", "scrapling", "search",
-            "sequential_thinking", "system_metrics", "vision", "vision_moondream", "websearch",
+            "sequential_thinking", "system_metrics", "vision", "websearch",
             // V1 Port — guilds/builders/plugins/, guilds/watchers/plugins/, guilds/wardens/plugins/, guilds/scholars/plugins/
             "audio_tools", "ffmpeg_tools", "screenshot_tools", "clipboard_tools",
             "local_llm_proxy", "cron_scheduler", "coordinator", "biome_warden", "ast_surgeon", "scheduler",
@@ -1203,10 +1208,10 @@ def stats() -> str:
             "scrapling", "scheduler",
         ];
 
-        // "vision_moondream" is real "V1 Port" code under guilds/core (spike, per its
-        // own docstring: "Status: spike") that was superseded by vision.py's SmolVLM2
-        // migration. It is intentionally left unreachable — dead code, not a gap to
-        // close via guilds.v2, LAZY_GUILDS, or always_on.
+        // "vision_moondream" vivio aqui como spike no enrutable (superado por la
+        // migracion SmolVLM2 de vision.py) y D-159 lo borro: bajaba pesos de
+        // HuggingFace y no estaba en el catalogo usable. Si vuelve un spike, va a
+        // EXCLUDED_GUILDS, no a guilds.v2, LAZY_GUILDS ni always_on.
         //
         // "n8n_bridge" lives under guilds/core (not a v1-port gremio directory) and
         // is being wired via registry::guild_list::LAZY_GUILDS in a separate change.

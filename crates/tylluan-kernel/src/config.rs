@@ -2025,6 +2025,37 @@ pub fn data_file(name: &str) -> std::path::PathBuf {
     data_dir().join(name)
 }
 
+/// D-159 (F2): nombre de la variable con la que el kernel exporta la carpeta de
+/// modelos a cada guild. Un solo nombre, usado por el kernel y por los guilds.
+pub const MODELS_DIR_ENV: &str = "TYLLUAN_MODELS_DIR";
+
+/// D-159 (F2): carpeta de modelos compartida, **siempre absoluta**.
+///
+/// Los guilds resolvían `models/` relativo a su cwd; un kernel lanzado desde otra
+/// carpeta cambiaba de modelos (o los perdía) sin avisar. El kernel exporta esta
+/// ruta como [`MODELS_DIR_ENV`] al lanzar cada guild, así que todos miran la
+/// MISMA carpeta: `vision`, `llama_backend`, lo que venga.
+///
+/// Orden: `TYLLUAN_MODELS_DIR` (si el operador la fija) > `<cwd>/models`.
+pub fn models_dir_absolute() -> std::path::PathBuf {
+    if let Some(dir) = std::env::var_os(MODELS_DIR_ENV) {
+        let configured = std::path::PathBuf::from(dir);
+        if !configured.as_os_str().is_empty() {
+            return absolutize(configured);
+        }
+    }
+    absolutize(std::path::PathBuf::from("models"))
+}
+
+fn absolutize(path: std::path::PathBuf) -> std::path::PathBuf {
+    if path.is_absolute() {
+        return path;
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(&path))
+        .unwrap_or(path)
+}
+
 pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     let conn = rusqlite::Connection::open(path)?;
 
@@ -3408,6 +3439,25 @@ url = "https://slack.example.com/sse"
         assert_eq!(config.external_mcp.len(), 2);
         assert_eq!(config.external_mcp[0].name, "github");
         assert_eq!(config.external_mcp[1].url, Some("https://slack.example.com/sse".into()));
+    }
+
+    /// D-159 (F2): la ruta que se exporta a los guilds tiene que ser absoluta;
+    /// si no, un kernel lanzado desde otra carpeta les pinta otra carpeta.
+    #[test]
+    fn d159_models_dir_exported_to_guilds_is_absolute() {
+        let dir = models_dir_absolute();
+        assert!(
+            dir.is_absolute(),
+            "la carpeta exportada debe ser absoluta, salio: {}",
+            dir.display()
+        );
+        if std::env::var_os(MODELS_DIR_ENV).is_none() {
+            assert!(dir.ends_with("models"), "sin override debe ser <cwd>/models: {}", dir.display());
+        }
+        let relativa = absolutize(std::path::PathBuf::from("models"));
+        assert!(relativa.is_absolute(), "absolutize('models') = {}", relativa.display());
+        let absoluta = std::path::PathBuf::from(if cfg!(windows) { r"C:\modelos" } else { "/modelos" });
+        assert_eq!(absolutize(absoluta.clone()), absoluta, "una ruta absoluta no se toca");
     }
 
     #[test]

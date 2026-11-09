@@ -12,6 +12,12 @@ port = 47004  # canonical default (CONTRACT-01) -- matches config.rs's default_p
 port_retry_secs = 10
 transport = ["stdio", "http"]
 
+# allow_hf_download (D-159): `false` por defecto. Ni el kernel ni ningun guild
+# descargan modelos de Hugging Face; los modelos se copian a `models/` a mano y
+# los guilds reciben `TYLLUAN_MODELS_DIR` absoluta al arrancar. Ponlo a `true`
+# solo a proposito, sabiendo que escribe en la cache compartida de HF.
+# allow_hf_download = false
+
 # Security timeouts for tool execution and handshakes
 [nexus.timeouts]
 handshake_secs = 30
