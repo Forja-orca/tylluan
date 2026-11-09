@@ -66,10 +66,6 @@ def _dpc_messages(prompt: str, memory_context: str = "") -> list:
 
 mcp = FastMCP("llama_backend")
 
-DEFAULT_MODEL = "bartowski/Qwen2.5-0.5B-Instruct-GGUF"
-DEFAULT_MODEL_FILE = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
-
-
 def _read_config():
     """Read llama-server config from tylluan.toml [inference.llama] section.
     Falls back to reasonable defaults if the section is missing."""
@@ -534,27 +530,40 @@ def _install_llama_server():
 
 
 def _resolve_model_path():
-    """Ruta del GGUF. T-DSH-115: si el usuario configuro `model_path`, se usa
-    TAL CUAL (nunca se descarga nada); si no, se mantiene el legacy con cache."""
+    """Ruta del GGUF del USUARIO (D-158).
+
+    Tylluan **no trae ni descarga modelo de chat**: eso es del usuario. Si no
+    hay `[inference.llama] model_path` (ni `models_dir`, que activa el modo
+    router), se falla con la ruta exacta a configurar en vez de bajar un
+    modelo por su cuenta — la descarga automatica desde HuggingFace se retiro
+    aqui y no debe volver.
+    """
     configured = _get_config().get("model_path") or ""
-    if configured:
-        p = Path(configured).expanduser()
-        if not p.is_file():
-            raise RuntimeError(
-                f"[llama_backend] [inference.llama] model_path no existe: {p}. "
-                "El servidor es del usuario: no se descarga nada automaticamente."
-            )
-        sys.stderr.write(f"[llama_backend] Using configured model_path: {p}\n")
-        return str(p)
-    from huggingface_hub import hf_hub_download
-    sys.stderr.write(f"[llama_backend] Resolving model: {DEFAULT_MODEL} :: {DEFAULT_MODEL_FILE}\n")
-    path = hf_hub_download(
-        repo_id=DEFAULT_MODEL,
-        filename=DEFAULT_MODEL_FILE,
-        cache_dir=str(Path.home() / ".cache" / "huggingface" / "hub"),
-    )
-    sys.stderr.write(f"[llama_backend] Model ready: {path}\n")
-    return path
+    if not configured:
+        raise RuntimeError(
+            "[llama_backend] no hay modelo de chat configurado: el servidor es del usuario. "
+            "Apunta [inference.llama] model_path a tu fichero .gguf (o models_dir para el "
+            "modo router). Tylluan no empaqueta ni descarga modelos de chat."
+        )
+    p = Path(configured).expanduser()
+    if not p.is_file():
+        raise RuntimeError(
+            f"[llama_backend] [inference.llama] model_path no existe: {p}. "
+            "El servidor es del usuario: no se descarga nada automaticamente."
+        )
+    sys.stderr.write(f"[llama_backend] Using configured model_path: {p}\n")
+    return str(p)
+
+
+def _configured_model_label():
+    """Etiqueta honesta del modelo de chat: la ruta del usuario o "none".
+
+    Antes devolvia siempre el id del modelo por defecto de Tylluan, que ya no
+    existe (D-158): un panel podia creerse que habia un modelo cargado cuando
+    no habia ninguno.
+    """
+    cfg = _get_config()
+    return cfg.get("models_dir") or cfg.get("model_path") or "none"
 
 
 def _is_port_open(port):
@@ -900,7 +909,7 @@ async def backend_health() -> str:
     ext_providers = await asyncio.to_thread(_get_external_providers)
     return json.dumps({
         "status": status,
-        "model": f"{DEFAULT_MODEL}::{DEFAULT_MODEL_FILE}",
+        "model": _configured_model_label(),
         "port": LLAMA_PORT,
         "backend": "llama.cpp",
         "external_backend": await asyncio.to_thread(_detect_external_backend),

@@ -1212,7 +1212,13 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
     let config = state.config.read().await;
     let embedding_model = config.memory.embedding_model.clone();
     let vision_path = config.vision.model_path.clone();
-    let inference_model = config.inference.primary_model.clone();
+    // D-158: sin modelo de chat por defecto. `null` = "Tylluan no sirve chat",
+    // que es distinto de "hay un modelo llamado ''".
+    let inference_model = if config.inference.primary_model.trim().is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::String(config.inference.primary_model.clone())
+    };
     let vector_dims = config.memory.vector_dimensions;
 
     // D-156: inventario real de `models/`. El rol lo declara cada carpeta en

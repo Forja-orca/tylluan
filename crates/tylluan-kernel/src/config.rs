@@ -1039,7 +1039,11 @@ pub enum InferenceDevice {
 pub struct InferenceConfig {
     #[serde(default)]
     pub providers: Vec<InferenceProvider>,
-    #[serde(default = "default_model")]
+    /// D-158: **vacío por defecto**. Tylluan no trae ni sirve modelo de chat:
+    /// el chat es del usuario (llama.cpp con SU GGUF o su `models_dir`).
+    /// Un valor aquí es sólo una etiqueta informativa heredada; no se usa
+    /// para arrancar nada.
+    #[serde(default)]
     pub primary_model: String,
     #[serde(default = "auto_select_device")]
     pub device: InferenceDevice,
@@ -1316,7 +1320,7 @@ impl Default for InferenceConfig {
     fn default() -> Self {
         Self {
             providers: Vec::new(),
-            primary_model: default_model(),
+            primary_model: String::new(),
             device: auto_select_device(),
             llama: InferenceLlamaConfig::default(),
             budget: crate::memory::inference_budget::InferenceBudgetConfig::default(),
@@ -1809,7 +1813,6 @@ fn default_wsl_bridge_port() -> u16 { 3031 }
 
 fn default_max_requests_per_agent() -> u32 { 60 }
 
-fn default_model() -> String { "local-v3".into() }
 
 // ─── Security Configuration (Sandbox + ACL) ─────────────────────────
 

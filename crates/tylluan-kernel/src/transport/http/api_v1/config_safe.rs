@@ -70,7 +70,6 @@ pub const SCHEMA: &[SchemaField] = &[
     SchemaField { key: "memory.vector_dimensions", section: "inference", kind: "integer", editable: false, requires_restart: true, sensitive: false, min: Some(1024.0), max: Some(1024.0), options: &[], reason: "invariante 1024: migrar vectores antes de cambiarla" },
     SchemaField { key: "inference.device", section: "inference", kind: "enum", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &["cpu", "directml", "cuda", "coreml"], reason: "" },
     SchemaField { key: "inference.max_threads", section: "inference", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(256.0), options: &[], reason: "" },
-    SchemaField { key: "inference.primary_model", section: "inference", kind: "string", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], reason: "" },
     SchemaField { key: "silva.reranker_enabled", section: "inference", kind: "boolean", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], reason: "" },
     // Mantenimiento
     SchemaField { key: "memory.background_concurrency", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(32.0), options: &[], reason: "el supervisor se crea al arrancar (H1)" },
