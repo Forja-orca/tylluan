@@ -364,6 +364,10 @@ make_sandbox() {
     # for it to scan, so it gets the same neutral pass stub. Its own semantics
     # are tested by T11 below against real fixtures.
     printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_cfg_deadcode.py"
+    # REGLA 13 (TL, 2026-11-09): check_cfg_test_gate.py es un gate .py bloqueante
+    # que el descubrimiento "check_*.sh" no ve; sin arbol crates/ en el sandbox,
+    # neutral pass stub. Su semantica real la prueba su propio --self-test.
+    printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_cfg_test_gate.py"
 }
 
 # splice_broken_wiring <verify.sh copy> <gate>

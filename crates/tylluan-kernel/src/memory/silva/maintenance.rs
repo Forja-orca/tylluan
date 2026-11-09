@@ -286,7 +286,7 @@ impl super::SilvaDB {
                     rusqlite::params![
                         session.id, session.agent_id.as_deref().unwrap_or("anonymous"),
                         // D-164: u64 ya no implementa ToSql en rusqlite 0.41.
-                    session.client_name, session.last_active_unix as i64, session.tool_count as i64,
+                        session.client_name, session.last_active_unix as i64, session.tool_count as i64,
                         session.last_intent, session.last_guild, session.created_unix as i64
                     ],
                 );

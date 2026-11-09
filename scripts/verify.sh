@@ -258,6 +258,20 @@ if [ "$RUN_DOCS" = "1" ]; then
 
     # Agent read-route gate (2026-10-28, Jose): the same read-order table in every
     # agentic markdown file, REVIEW.md always third, CLAUDE.md imports REVIEW.md.
+    # REGLA 13 (TL 2026-11-09): ningun `#[test]` envuelto en `#[cfg(unix|windows)]`.
+    # El incidente ya se repitio dos veces (recuentos distintos por SO, CI rojo).
+    PY_CFG="python"
+    if [ -x ".venv/bin/python" ]; then PY_CFG=".venv/bin/python"; fi
+    if command -v "$PY_CFG" >/dev/null 2>&1 || [ -x "$PY_CFG" ]; then
+        if "$PY_CFG" scripts/check_cfg_test_gate.py; then
+            ok "REGLA 13: ningun #[test] gateado por SO (check_cfg_test_gate.py)"
+        else
+            fail "REGLA 13: hay #[test] bajo #[cfg(unix|windows)] - ver scripts/check_cfg_test_gate.py"
+        fi
+    else
+        fail "REGLA 13: python no encontrado (el gate lo necesita)"
+    fi
+
     if bash scripts/check_read_routes.sh; then
         ok "agent read routes consistent, REVIEW.md third (check_read_routes.sh)"
     else

@@ -1092,10 +1092,12 @@ mod tests_budget {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests_perms {
-    use super::*;
-    use std::os::unix::fs::PermissionsExt;
+    // REGLA 13: el modulo COMPILA en todos los SO; lo POSIX va dentro de cada
+    // cuerpo. Antes estaba `#[cfg(all(test, unix))]` y estos tests no existian
+    // en Windows (recuentos distintos por SO). El use super::* va dentro de
+    // cada bloque: en Windows no queda codigo en el modulo y seria un import muerto.
 
     /// D-122 (D-74/P1): la capa de auditoría guarda contenido SIN redactar, así
     /// que el fichero y su directorio no pueden quedar legibles para todo el
@@ -1103,37 +1105,52 @@ mod tests_perms {
     /// manda la ACL heredada.
     #[test]
     fn d122_la_auditoria_queda_en_0600_y_0700() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let sub = dir.path().join("audit");
-        let _w = RotatingFileWriter::open_private(&sub, "audit.log", 1024, 3).expect("open_private");
+        #[cfg(unix)]
+        {
+            use super::*;
+            use std::os::unix::fs::PermissionsExt;
 
-        let modo_dir = fs::metadata(&sub).expect("dir").permissions().mode() & 0o777;
-        let modo_file = fs::metadata(sub.join("audit.log"))
-            .expect("file")
-            .permissions()
-            .mode()
-            & 0o777;
+            let dir = tempfile::tempdir().expect("tempdir");
+            let sub = dir.path().join("audit");
+            let _w = RotatingFileWriter::open_private(&sub, "audit.log", 1024, 3)
+                .expect("open_private");
 
-        assert_eq!(modo_dir, 0o700, "el directorio de auditoria queda solo para el usuario");
-        assert_eq!(modo_file, 0o600, "audit.log queda solo para el usuario");
+            let modo_dir = fs::metadata(&sub).expect("dir").permissions().mode() & 0o777;
+            let modo_file = fs::metadata(sub.join("audit.log"))
+                .expect("file")
+                .permissions()
+                .mode()
+                & 0o777;
+
+            assert_eq!(modo_dir, 0o700, "el directorio de auditoria queda solo para el usuario");
+            assert_eq!(modo_file, 0o600, "audit.log queda solo para el usuario");
+        }
+        // En Windows manda la ACL heredada: no hay modo POSIX que comprobar.
     }
 
     /// D-122: el log normal NO cambia de permisos (solo se aprieta la auditoría).
     #[test]
     fn d122_el_log_normal_conserva_sus_permisos() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let sub = dir.path().join("logs");
-        let _w = RotatingFileWriter::open(&sub, "kernel.log", 1024, 3).expect("open");
+        #[cfg(unix)]
+        {
+            use super::*;
+            use std::os::unix::fs::PermissionsExt;
 
-        let modo_file = fs::metadata(sub.join("kernel.log"))
-            .expect("file")
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_ne!(
-            modo_file, 0o600,
-            "el log normal no se toca: si esto falla, hemos endurecido de mas"
-        );
+            let dir = tempfile::tempdir().expect("tempdir");
+            let sub = dir.path().join("logs");
+            let _w = RotatingFileWriter::open(&sub, "kernel.log", 1024, 3).expect("open");
+
+            let modo_file = fs::metadata(sub.join("kernel.log"))
+                .expect("file")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_ne!(
+                modo_file, 0o600,
+                "el log normal no se toca: si esto falla, hemos endurecido de mas"
+            );
+        }
+        // Solo Unix expone modo POSIX; en Windows no hay nada que medir.
     }
 }
 
@@ -1195,8 +1212,10 @@ mod tests_audit_max_files {
     }
 }
 
-#[cfg(all(test, target_os = "windows"))]
+#[cfg(test)]
 mod tests_h36 {
+    // REGLA 13: el modulo compila en todos los SO. El test que forja `created()`
+    // usa winapi y solo tiene sentido en Windows; el control es portable.
     use super::*;
 
     /// H36 (D-113) **por fin con test**. El arreglo fue medir la retención por
@@ -1209,6 +1228,8 @@ mod tests_h36 {
     /// (`fileapi` y `minwindef`) para `SetFileTime`.
     #[test]
     fn h36_la_retencion_mira_el_contenido_no_la_fecha_de_creacion() {
+        #[cfg(windows)]
+        {
         use std::os::windows::io::AsRawHandle;
         use winapi::shared::minwindef::FILETIME;
         use winapi::um::fileapi::SetFileTime;
@@ -1248,6 +1269,9 @@ mod tests_h36 {
             p.exists(),
             "se ha borrado evidencia RECIENTE por su fecha de CREACION (H36 ha vuelto)"
         );
+        }
+        // En otros SO no hay `created()` forjable con winapi; el control de abajo
+        // cubre el comportamiento portable.
     }
 
     /// Control: con el CONTENIDO viejo (mtime antiguo), sí se recoge. Si no, el test
