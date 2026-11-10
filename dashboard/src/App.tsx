@@ -262,7 +262,7 @@ function App() {
           </button>
         </div>
 
-        <div className="flex min-w-0 items-center gap-2 md:gap-4 lg:gap-6">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 md:gap-4 lg:gap-6">
           <div className="hidden lg:flex items-center gap-4 text-[11px] font-mono text-muted-foreground">
              <div className="flex flex-col items-end">
                <span className="opacity-70 text-[11px]">Activo</span>
@@ -314,8 +314,29 @@ function App() {
             </span>
           </div>
           
-          {/* Theme Selector Toggle */}
-          <div role="group" aria-label="Selector de Tema" className="flex items-center gap-1 bg-muted/60 border border-border rounded p-0.5">
+          {/* Mobile Theme Toggle Button (< sm) */}
+          <button
+            type="button"
+            aria-label={`Cambiar tema (actual: ${theme})`}
+            onClick={() => {
+              const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
+              setTheme(nextTheme);
+            }}
+            className="sm:hidden p-2 rounded border bg-card border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
+            title={`Tema: ${theme}. Clic para alternar.`}
+            data-testid="mobile-theme-toggle-btn"
+          >
+            {theme === 'light' ? (
+              <Sun className="w-4 h-4 text-amber-500" aria-hidden="true" />
+            ) : theme === 'dark' ? (
+              <Moon className="w-4 h-4 text-primary" aria-hidden="true" />
+            ) : (
+              <Monitor className="w-4 h-4 text-foreground" aria-hidden="true" />
+            )}
+          </button>
+
+          {/* Desktop Theme Selector Toggle (>= sm) */}
+          <div role="group" aria-label="Selector de Tema" className="hidden sm:flex items-center gap-1 bg-muted/60 border border-border rounded p-0.5">
             <button
               type="button"
               aria-label="Tema Claro"
@@ -447,26 +468,34 @@ function App() {
             <div 
               role="status"
               aria-live="polite"
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-card border border-border cursor-help group relative text-foreground shrink-0"
+              data-testid="header-health-status"
+              className={cn(
+                "flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded bg-card border cursor-help group relative shrink-0",
+                healthDetailed.score >= 80 
+                  ? "border-border text-foreground" 
+                  : healthDetailed.score >= 50 
+                  ? "border-amber-500/30 bg-amber-500/10 text-amber-500 font-medium" 
+                  : "border-red-500/30 bg-red-500/10 text-red-500 font-bold"
+              )}
               title={`Embeddings: ${healthDetailed.components?.embeddings?.ok ? '✓' : '✗'} | Reranker: ${healthDetailed.components?.reranker?.ok ? '✓' : '✗'} | Guilds: ${healthDetailed.components?.guilds?.active}/${healthDetailed.components?.guilds?.total} | Silva: ${healthDetailed.components?.silva?.nodes}n/${healthDetailed.components?.silva?.edges}e`}
             >
               <div className={cn(
-                "w-2 h-2 rounded-full",
+                "w-2 h-2 rounded-full shrink-0",
                 healthDetailed.score >= 80 ? "bg-emerald-500" :
-                healthDetailed.score >= 50 ? "bg-amber-500" : "bg-red-500"
+                healthDetailed.score >= 50 ? "bg-amber-500 motion-safe:animate-pulse" : "bg-red-500 motion-safe:animate-pulse"
               )} />
-              <span className="text-[11px] font-semibold">
-                {healthDetailed.score >= 80 ? '● ' : healthDetailed.score >= 50 ? '▲ ' : '■ '}
+              <span className="text-[11px] font-semibold tracking-tight uppercase">
                 {healthDetailed.status}
               </span>
             </div>
           ) : !online ? (
             <div 
               role="status"
-              className="flex items-center gap-2 px-3 py-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400"
+              data-testid="header-standby-status"
+              className="flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0"
             >
-              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-[11px] font-semibold font-mono">
+              <div className="w-2 h-2 rounded-full bg-amber-400 motion-safe:animate-pulse shrink-0" />
+              <span className="text-[10px] sm:text-[11px] font-semibold font-mono whitespace-nowrap">
                 ▲ STANDBY ({standbyCountdownSecs}s)
               </span>
             </div>

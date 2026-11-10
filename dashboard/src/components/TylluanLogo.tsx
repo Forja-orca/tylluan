@@ -93,7 +93,7 @@ export function TylluanLogo({
 
       {/* Typography Label */}
       {showText && (
-        <div className="font-mono leading-none">
+        <div className="hidden sm:block font-mono leading-none">
           <div className="flex items-center gap-1.5 font-bold tracking-tight text-slate-100 text-sm">
             <span className="text-primary font-bold">
               TYLLUAN
