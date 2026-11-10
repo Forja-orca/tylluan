@@ -125,7 +125,23 @@ fn isolate_sidecars(path: &Path) -> Result<()> {
         if sidecar.exists() {
             let mut renamed_os = sidecar.as_os_str().to_owned();
             renamed_os.push(".pre-restore");
-            let renamed = PathBuf::from(renamed_os);
+            let mut renamed = PathBuf::from(renamed_os);
+            // Idempotencia (T3866): si .pre-restore ya existe (restauracion
+            // previa), fs::rename falla en Windows. Usar sufijo numerado para
+            // no perder el sidecar aislado anterior.
+            if renamed.exists() {
+                let mut n = 1u32;
+                loop {
+                    let mut candidate_os = renamed.as_os_str().to_owned();
+                    candidate_os.push(format!(".{}", n));
+                    let candidate = PathBuf::from(candidate_os);
+                    if !candidate.exists() {
+                        renamed = candidate;
+                        break;
+                    }
+                    n += 1;
+                }
+            }
             fs::rename(&sidecar, &renamed).with_context(|| {
                 format!("isolating sidecar {}", sidecar.display())
             })?;
@@ -952,6 +968,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn plan_restore_isolates_backup_sidecars_idempotent() {
+        // T3866 (CVE-2026-119375 E1 v2 idempotencia): si .pre-restore ya
+        // existe (restauracion previa), isolate_sidecars no debe fallar en
+        // Windows (fs::rename no sobrescribe). Debe usar sufijo numerado.
+        let dir = tempfile::tempdir().unwrap();
+        let backup_dir = dir.path().join("backup");
+        fs::create_dir_all(&backup_dir).unwrap();
+        let db = backup_dir.join("silva.db");
+        make_db(&db, "backup");
+        let wal = backup_dir.join("silva.db-wal");
+        let manifest = format!(
+            r#"{{"created_at":"2026-01-01T00:00:00","entries":[{{"name":"silva.db","source":"{}","size":{},"secret":false}}]}}"#,
+            db.display().to_string().replace('\\', "/"),
+            fs::metadata(&db).unwrap().len()
+        );
+        fs::write(backup_dir.join("backup-manifest.json"), &manifest).unwrap();
+
+        // Primera restauracion: aísla el -wal a .pre-restore.
+        fs::write(&wal, b"tampered-wal-1").unwrap();
+        let _plan = plan_restore(&backup_dir, None).unwrap();
+        assert!(!wal.exists(), "first run did not isolate -wal");
+        assert!(
+            backup_dir.join("silva.db-wal.pre-restore").exists(),
+            "first run did not create .pre-restore"
+        );
+
+        // Segunda restauracion con un nuevo -wal: .pre-restore ya existe.
+        fs::write(&wal, b"tampered-wal-2").unwrap();
+        let _plan = plan_restore(&backup_dir, None).unwrap();
+        assert!(!wal.exists(), "second run did not isolate -wal");
+        // El nuevo sidecar debe haberse aislado con sufijo numerado.
+        assert!(
+            backup_dir.join("silva.db-wal.pre-restore.1").exists(),
+            "second run did not create numbered .pre-restore.1"
+        );
+        // El anterior se conserva (no se sobrescribe).
+        assert!(
+            backup_dir.join("silva.db-wal.pre-restore").exists(),
+            "previous .pre-restore was lost"
+        );
+    }
     #[test]
     fn resolve_sources_includes_silva_db_by_default() {
         let sources = resolve_sources(&[], false).unwrap();
