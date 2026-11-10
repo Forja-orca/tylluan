@@ -474,7 +474,8 @@ fn local_complete_snapshot(
         return None;
     }
     let hub_dir = format!("models--{}", hub_model.replace('/', "--"));
-    let snapshots = cache.join(&hub_dir).join("snapshots");
+    let hub_path = cache.join(&hub_dir);
+    let snapshots = hub_path.join("snapshots");
     let Ok(entries) = std::fs::read_dir(&snapshots) else {
         return None;
     };
@@ -486,7 +487,30 @@ fn local_complete_snapshot(
     revs.sort();
     while let Some(rev) = revs.pop() {
         if required.iter().all(|f| rev.join(f).is_file()) {
-            return Some(rev);
+            // T3875: hf-hub's cache.get() reads refs/main to resolve the
+            // commit hash, then looks up snapshots/{hash}/. If refs/main is
+            // missing or points to an incomplete snapshot, cache.get()
+            // returns None and try_new calls download() — a network request
+            // even when allow_hf_download=false. Verify here that refs/main
+            // exists and points to a complete snapshot before trusting the
+            // gate.
+            let refs_main = hub_path.join("refs").join("main");
+            if let Ok(commit_hash) = std::fs::read_to_string(&refs_main) {
+                let commit_hash = commit_hash.trim();
+                if !commit_hash.is_empty() {
+                    let ref_snapshot = snapshots.join(commit_hash);
+                    if ref_snapshot.is_dir()
+                        && required.iter().all(|f| ref_snapshot.join(f).is_file())
+                    {
+                        return Some(ref_snapshot);
+                    }
+                    // refs/main points to an incomplete or missing snapshot:
+                    // cache.get() would return None → download() → network.
+                    return None;
+                }
+            }
+            // No refs/main: hf-hub cannot resolve without network.
+            return None;
         }
     }
     None
@@ -2500,10 +2524,8 @@ mod tests {
     /// `<raiz>/models--<org>--<name>/snapshots/<rev>/<ficheros>`. Ficheros falsos
     /// de 21 bytes: estructura real, contenido irrelevante, coste de disco nulo.
     fn monta_snapshot_hf(raiz: &std::path::Path, hub_model: &str, rev: &str, ficheros: &[&str]) -> std::path::PathBuf {
-        let dir = raiz
-            .join(format!("models--{}", hub_model.replace('/', "--")))
-            .join("snapshots")
-            .join(rev);
+        let hub_dir = raiz.join(format!("models--{}", hub_model.replace('/', "--")));
+        let dir = hub_dir.join("snapshots").join(rev);
         std::fs::create_dir_all(&dir).expect("crear la carpeta de snapshot de prueba");
         for f in ficheros {
             if let Some(padre) = std::path::Path::new(f).parent()
@@ -2513,6 +2535,11 @@ mod tests {
             }
             std::fs::write(dir.join(f), b"peso falso de prueba").expect("escribir el fichero de prueba");
         }
+        // T3890: refs/main debe apuntar al rev para que hf-hub resuelva el
+        // snapshot sin red (local_complete_snapshot ahora lo exige).
+        let refs_dir = hub_dir.join("refs");
+        std::fs::create_dir_all(&refs_dir).expect("crear refs de prueba");
+        std::fs::write(refs_dir.join("main"), rev).expect("escribir refs/main de prueba");
         dir
     }
 
@@ -2661,6 +2688,10 @@ mod tests {
         // Revisión más nueva (`zzz` ordena después) a la que le falta el ONNX.
         monta_snapshot_hf(&raiz, hub, "zzz_revision_nueva_incompleta", &["config.json"]);
 
+        // T3890: refs/main debe apuntar a la revisión completa para que el gate pase.
+        let hub_dir = raiz.join(format!("models--{}", hub.replace('/', "--")));
+        std::fs::write(hub_dir.join("refs").join("main"), "aaa_revision_vieja_completa").unwrap();
+
         let extra: Vec<String> = Vec::new();
         let pase = hf_download_gate(&raiz, hub, onnx, &extra, false);
         assert!(pase.is_ok(), "la revisión completa anterior debe servir (es lo que hay hoy en maquinas con models/ provisionado): {:?}", pase.unwrap_err());
@@ -2724,5 +2755,84 @@ mod tests {
     #[test]
     fn d166_sin_config_leida_el_descargo_sigue_prohibido() {
         assert!(!nexus_allow_hf_download(), "el default tiene que ser NO descargar; si esto sale true, alguien está leyendo un config ajeno o invirtiendo el default de [nexus] allow_hf_download");
+    }
+
+    /// (8) T3875: `refs/main` debe apuntar a un snapshot completo. Sin él, hf-hub
+    /// no puede resolver el commit y try_new llamaría a download() (red) aunque
+    /// allow_hf_download=false. La puerta debe bloquear.
+    #[test]
+    fn t3875_sin_refs_main_la_puerta_bloquea_sin_red() {
+        let raiz = temp_d166("t3875_sin_refs");
+        let hub = "mixedbread-ai/mxbai-embed-large-v1";
+        let onnx = "onnx/model.onnx";
+        let tokenizer = ["tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"];
+        let rev = monta_snapshot_hf(&raiz, hub, "rev1", &[onnx]);
+        for f in tokenizer {
+            std::fs::write(rev.join(f), b"x").unwrap();
+        }
+        // T3890: monta_snapshot_hf ahora escribe refs/main; para probar el caso
+        // sin refs/main, hay que borrarlo.
+        let hub_dir = format!("models--{}", hub.replace('/', "--"));
+        let _ = std::fs::remove_file(raiz.join(&hub_dir).join("refs").join("main"));
+        let extra: Vec<String> = Vec::new();
+        // Sin refs/main: la puerta debe bloquear (no se puede confiar en cache.get()).
+        let sin_refs = hf_download_gate(&raiz, hub, onnx, &extra, false);
+        assert!(
+            sin_refs.is_err(),
+            "sin refs/main la puerta debe bloquear: hf-hub no puede resolver el commit sin red"
+        );
+        let err = sin_refs.unwrap_err();
+        assert!(
+            err.contains("allow_hf_download=false"),
+            "el error debe indicar que la puerta bloqueó por allow_hf_download=false"
+        );
+
+        // Con refs/main apuntando al snapshot completo: la puerta pasa.
+        let hub_dir = format!("models--{}", hub.replace('/', "--"));
+        let refs_dir = raiz.join(&hub_dir).join("refs");
+        std::fs::create_dir_all(&refs_dir).unwrap();
+        std::fs::write(refs_dir.join("main"), "rev1").unwrap();
+        let con_refs = hf_download_gate(&raiz, hub, onnx, &extra, false);
+        assert!(
+            con_refs.is_ok(),
+            "con refs/main correcto la puerta debe pasar: {:?}",
+            con_refs.unwrap_err()
+        );
+        let _ = std::fs::remove_dir_all(&raiz);
+    }
+
+    /// (9) T3895: `refs/main` apuntando a un snapshot incompleto o inexistente
+    /// también debe bloquear la puerta. Sin este test, la rama del fix
+    /// `refs/main apunta a snapshot incompleto` no está cubierta.
+    #[test]
+    fn t3895_refs_main_apunta_a_snapshot_incompleto_bloquea() {
+        let raiz = temp_d166("t3895_incompleto");
+        let hub = "mixedbread-ai/mxbai-embed-large-v1";
+        let onnx = "onnx/model.onnx";
+        let tokenizer = ["tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"];
+        // Snapshot completo con todos los ficheros.
+        let rev = monta_snapshot_hf(&raiz, hub, "rev1", &[onnx]);
+        for f in tokenizer {
+            std::fs::write(rev.join(f), b"x").unwrap();
+        }
+        // Snapshot incompleto (solo un fichero, no el ONNX ni el tokenizer).
+        monta_snapshot_hf(&raiz, hub, "rev2", &["config.json"]);
+
+        // T3895: apuntar refs/main a la revisión incompleta.
+        let hub_dir = format!("models--{}", hub.replace('/', "--"));
+        std::fs::write(raiz.join(&hub_dir).join("refs").join("main"), "rev2").unwrap();
+
+        let extra: Vec<String> = Vec::new();
+        let bloqueado = hf_download_gate(&raiz, hub, onnx, &extra, false);
+        assert!(
+            bloqueado.is_err(),
+            "refs/main apuntando a un snapshot incompleto debe bloquear"
+        );
+        let err = bloqueado.unwrap_err();
+        assert!(
+            err.contains("allow_hf_download=false"),
+            "el error debe indicar que la puerta bloqueó por allow_hf_download=false"
+        );
+        let _ = std::fs::remove_dir_all(&raiz);
     }
 }
