@@ -85,6 +85,11 @@ export function sanitizeHref(rawUrl: string | undefined | null): string {
     return '#';
   }
 
+  // Disallow protocol-relative URLs (e.g. //evil.com/payload) and Windows UNC paths
+  if (trimmed.startsWith('//') || trimmed.startsWith('/\\') || trimmed.startsWith('\\\\')) {
+    return '#';
+  }
+
   // Allow safe relative paths
   if (trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('#')) {
     return trimmed;

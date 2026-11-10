@@ -111,6 +111,20 @@ describe('DASH-INNERHTML-AUDIT: Coloquio Markdown & Link Security', () => {
       }
     });
 
+    it('blocks protocol-relative URLs and UNC path escapes (//evil.com, /\\evil.com)', () => {
+      const protocolRelative = [
+        '//evil.com',
+        '//attacker.org/steal.js',
+        '//localhost:8080',
+        '/\\evil.com',
+        '\\\\evil.com\\share',
+      ];
+
+      for (const url of protocolRelative) {
+        expect(sanitizeHref(url)).toBe('#');
+      }
+    });
+
     it('permits safe relative URLs and hash anchors', () => {
       expect(sanitizeHref('/api/v1/ingest/files/test.patch')).toBe('/api/v1/ingest/files/test.patch');
       expect(sanitizeHref('./download/patch.diff')).toBe('./download/patch.diff');
