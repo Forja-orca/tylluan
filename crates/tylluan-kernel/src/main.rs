@@ -2501,6 +2501,35 @@ fn fastembed_model_cached(model_name: &str) -> bool {
     if model_name.is_empty() || model_name == "none" {
         return true;
     }
+    // D-166b (T3853): a cache hit requires REAL content (a snapshot with an
+    // .onnx file), not just the `models--*` directory existing half-empty.
+    fn has_onnx_content(dir: &std::path::Path) -> bool {
+        if !dir.is_dir() {
+            return dir.is_file() && dir.extension().map(|e| e == "onnx").unwrap_or(false);
+        }
+        // Walk one level of snapshots/ then check for any .onnx recursively
+        // (bounded depth to avoid scanning huge trees).
+        fn walk(dir: &std::path::Path, depth: usize) -> bool {
+            if depth == 0 {
+                return false;
+            }
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return false;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().map(|e| e == "onnx").unwrap_or(false) {
+                    return true;
+                }
+                if path.is_dir() && walk(&path, depth - 1) {
+                    return true;
+                }
+            }
+            false
+        }
+        walk(dir, 6)
+    }
+
     let repo_id = match model_name {
         m if m.contains("bge-m3") => "BAAI/bge-m3",
         m if m.contains("bge-small") => "BAAI/bge-small-en-v1.5",
@@ -2518,11 +2547,11 @@ fn fastembed_model_cached(model_name: &str) -> bool {
         });
     let model_dir_name = format!("models--{}", repo_id.replace('/', "--"));
     let model_dir = cache_dir.join(&model_dir_name);
-    let cached = model_dir.exists();
+    let cached = has_onnx_content(&model_dir);
     if !cached {
         // Also check the local models/ directory
         let local_path = std::path::PathBuf::from("models").join(model_name);
-        if local_path.exists() {
+        if has_onnx_content(&local_path) {
             return true;
         }
         // D-166b: check the acoplado cache (<models>/fastembed/) that D-166
@@ -2531,7 +2560,7 @@ fn fastembed_model_cached(model_name: &str) -> bool {
         let acoplado = models_dir_absolute()
             .join("fastembed")
             .join(&model_dir_name);
-        return acoplado.exists();
+        return has_onnx_content(&acoplado);
     }
     cached
 }
@@ -2668,6 +2697,11 @@ mod anti_orphan_tests {
         let fastembed_dir = models_dir.join("fastembed");
         let model_dir = fastembed_dir.join("models--BAAI--bge-m3");
         std::fs::create_dir_all(&model_dir).unwrap();
+        // T3853: need real content (an .onnx file) for the cache hit
+        let snapshot_dir = model_dir.join("snapshots").join("abc123");
+        let onnx_dir = snapshot_dir.join("onnx");
+        std::fs::create_dir_all(&onnx_dir).unwrap();
+        std::fs::write(onnx_dir.join("model.onnx"), b"fake-onnx").unwrap();
 
         let prev_models = env::var("TYLLUAN_MODELS_DIR").ok();
         let prev_hf = env::var("HF_HOME").ok();
@@ -2690,8 +2724,42 @@ mod anti_orphan_tests {
             "fastembed_model_cached('bge-m3') should find the model in <models>/fastembed/ but returned false"
         );
     }
-}
 
+    #[test]
+    fn t3853_empty_models_dir_does_not_count_as_cached() {
+        // T3853: an empty `models--*` directory (no snapshot/onnx) must NOT
+        // report as cached. Mutation: revert has_onnx_content to .exists()
+        // -> this test fails.
+        use std::env;
+        let tmp = tempfile::tempdir().unwrap();
+        let models_dir = tmp.path().join("models");
+        let fastembed_dir = models_dir.join("fastembed");
+        let model_dir = fastembed_dir.join("models--BAAI--bge-m3");
+        // Create the directory but NO content
+        std::fs::create_dir_all(&model_dir).unwrap();
+
+        let prev_models = env::var("TYLLUAN_MODELS_DIR").ok();
+        let prev_hf = env::var("HF_HOME").ok();
+        unsafe { env::set_var("TYLLUAN_MODELS_DIR", models_dir.to_str().unwrap()); }
+        unsafe { env::set_var("HF_HOME", tmp.path().join("nonexistent-hf-home").to_str().unwrap()); }
+
+        let result = fastembed_model_cached("bge-m3");
+
+        match prev_models {
+            Some(v) => unsafe { env::set_var("TYLLUAN_MODELS_DIR", v); },
+            None => unsafe { env::remove_var("TYLLUAN_MODELS_DIR"); },
+        }
+        match prev_hf {
+            Some(v) => unsafe { env::set_var("HF_HOME", v); },
+            None => unsafe { env::remove_var("HF_HOME"); },
+        }
+
+        assert!(
+            !result,
+            "fastembed_model_cached('bge-m3') returned true for an empty models--* dir (should be false)"
+        );
+    }
+}
 #[cfg(test)]
 mod onnx_probe_tests {
     use tylluan_kernel::router::embeddings::{onnx_runtime_available, onnx_runtime_ort_compatible};
