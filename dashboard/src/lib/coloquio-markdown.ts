@@ -31,6 +31,78 @@ export function sanitizeDisplayText(text: string): string {
 }
 
 /**
+ * Escapes characters with special meaning in regular expressions.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Highlights matches of `search` within an HTML string safely without mutating
+ * HTML tags, element attributes, or HTML character entities.
+ *
+ * Splitting on `(<[^>]+>|&[a-zA-Z0-9#]+;)` isolates text nodes from markup,
+ * preventing corrupted attribute quotes or nested tag injection.
+ */
+export function highlightHtmlContent(html: string, search: string): string {
+  const trimmed = search.trim();
+  if (!trimmed || !html) return html;
+
+  const escaped = escapeRegex(trimmed);
+  const regex = new RegExp(`(${escaped})`, 'gi');
+
+  // Split into tags/entities and raw text content
+  const tokens = html.split(/(<[^>]+>|&[a-zA-Z0-9#]+;)/g);
+  return tokens
+    .map(token => {
+      // Preserve HTML tags (<...>) and entities (&...;) without highlighting
+      if ((token.startsWith('<') && token.endsWith('>')) || (token.startsWith('&') && token.endsWith(';'))) {
+        return token;
+      }
+      return token.replace(regex, '<mark class="bg-amber-400/30 text-foreground rounded px-0.5">$1</mark>');
+    })
+    .join('');
+}
+
+/**
+ * Validates and sanitizes URLs before use in `href` or `src` attributes.
+ * Prevents javascript:, data:, and vbscript: scheme injection while allowing
+ * relative paths and http/https protocols.
+ */
+export function sanitizeHref(rawUrl: string | undefined | null): string {
+  if (!rawUrl) return '#';
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '#';
+
+  // Strip control characters and whitespace when checking schemes
+  // eslint-disable-next-line no-control-regex
+  const normalized = trimmed.replace(/[\u0000-\u001f\s]/g, '').toLowerCase();
+  if (
+    normalized.startsWith('javascript:') ||
+    normalized.startsWith('data:') ||
+    normalized.startsWith('vbscript:')
+  ) {
+    return '#';
+  }
+
+  // Allow safe relative paths
+  if (trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('#')) {
+    return trimmed;
+  }
+
+  // Validate absolute URL protocol
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return trimmed;
+    }
+    return '#';
+  } catch {
+    return '#';
+  }
+}
+
+/**
  * Render a unified diff / .patch snippet with line-by-line syntax highlighting,
  * old/new line numbers, and addition/deletion statistics.
  * Zero external dependencies — keeps Coloquio bundle minimal.

@@ -6,7 +6,7 @@ import { useRef, useLayoutEffect, useEffect, useCallback, useMemo, useState } fr
 import { cn } from '../lib/utils';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { agentStyle } from '../lib/agent-meta';
-import { parseMarkdown } from '../lib/coloquio-markdown';
+import { parseMarkdown, highlightHtmlContent, sanitizeHref } from '../lib/coloquio-markdown';
 import { parseAgUiMessage } from '../lib/ag-ui-parser';
 import { ColoquioHandoffBadge } from './coloquio/ColoquioHandoffBadge';
 import { ColoquioThinkingBlock } from './coloquio/ColoquioThinkingBlock';
@@ -354,7 +354,6 @@ export function ColoquioMessagesPanel({
     const m = agentStyle(msg.author_id);
     const cont = !!(prev && prev.author_id === msg.author_id && msg.created_at - prev.created_at < 120);
     const highlight = highlightedTurn === msg.turn;
-    const escapedSearch = msgSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     // Detect if this message is actively streaming
     const isStreaming = activeStreams[msg.msg_id] !== undefined;
@@ -425,11 +424,13 @@ export function ColoquioMessagesPanel({
                   <ColoquioThinkingBlock thoughtContent={thoughtContent} isStreaming={isStreaming} />
                 )}
 
-                <div onClick={handleThreadClick} className="break-words" dangerouslySetInnerHTML={{
-                  __html: msgSearch.trim()
-                    ? parseMarkdown(mainContent).replace(new RegExp(`(${escapedSearch})`, 'gi'), '<mark class="bg-amber-400/30 text-foreground rounded px-0.5">$1</mark>')
-                    : parseMarkdown(mainContent)
-                }} />
+                <div
+                  onClick={handleThreadClick}
+                  className="break-words"
+                  dangerouslySetInnerHTML={{
+                    __html: highlightHtmlContent(parseMarkdown(mainContent), msgSearch),
+                  }}
+                />
 
                 {/* Show cursor indicator if streaming */}
                 {isStreaming && (
@@ -481,9 +482,31 @@ export function ColoquioMessagesPanel({
                           const isImg = /\.(jpeg|jpg|gif|png|webp|svg)$/i.test(att.file);
                           const isPatch = /\.(patch|diff)$/i.test(att.name || att.file);
                           const url = bridge ? `${bridge.getBaseUrl()}/api/v1/ingest/files/${att.file}` : '';
-                          if (isImg) return <img key={idx} src={url} alt={att.name} className="max-w-[180px] max-h-[180px] rounded border border-border cursor-pointer hover:opacity-90" onClick={() => window.open(url, '_blank')} />;
+                          const safeUrl = sanitizeHref(url);
+                          if (isImg) {
+                            return (
+                              <img
+                                key={idx}
+                                src={safeUrl}
+                                alt={att.name}
+                                className="max-w-[180px] max-h-[180px] rounded border border-border cursor-pointer hover:opacity-90"
+                                onClick={() => safeUrl !== '#' && window.open(safeUrl, '_blank', 'noopener,noreferrer')}
+                              />
+                            );
+                          }
                           if (isPatch) return <PatchAttachmentViewer key={idx} url={url} name={att.name || att.file} token={bridge?.getToken()} />;
-                          return <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted border border-border rounded text-xs text-foreground hover:text-primary transition-colors"><FileText className="w-3 h-3" /><span className="truncate max-w-[140px]">{att.name}</span></a>;
+                          return (
+                            <a
+                              key={idx}
+                              href={safeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted border border-border rounded text-xs text-foreground hover:text-primary transition-colors"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span className="truncate max-w-[140px]">{att.name}</span>
+                            </a>
+                          );
                         })}
                       </div>
                     );

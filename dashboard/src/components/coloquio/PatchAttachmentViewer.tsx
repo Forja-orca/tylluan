@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FileCode, ChevronDown, ChevronUp, ExternalLink, Loader2 } from 'lucide-react';
-import { renderUnifiedDiffHtml, sanitizeDisplayText } from '../../lib/coloquio-markdown';
+import { renderUnifiedDiffHtml, sanitizeDisplayText, sanitizeHref } from '../../lib/coloquio-markdown';
 
 interface PatchAttachmentViewerProps {
   url: string;
@@ -76,7 +76,7 @@ export const PatchAttachmentViewer: React.FC<PatchAttachmentViewerProps> = ({
           {expanded ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
         </button>
         <a
-          href={url}
+          href={sanitizeHref(url)}
           target="_blank"
           rel="noopener noreferrer"
           title="Abrir archivo original"
@@ -110,7 +110,7 @@ export const PatchAttachmentViewer: React.FC<PatchAttachmentViewerProps> = ({
                     ⚠️ Parche extenso truncado a los primeros {MAX_VISIBLE_PATCH_LINES.toLocaleString()} renglones (de {totalLines.toLocaleString()}) para proteger el rendimiento.
                   </span>
                   <a
-                    href={url}
+                    href={sanitizeHref(url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline hover:text-amber-200 ml-2 shrink-0 font-semibold"

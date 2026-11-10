@@ -14,4 +14,13 @@ describe('PatchAttachmentViewer', () => {
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('[data-patch-viewer]')!.textContent).toContain('<img src=x');
   });
+
+  it('sanitiza la URL del adjunto: neutraliza enlaces maliciosos javascript:', () => {
+    const { container } = render(
+      <PatchAttachmentViewer url="javascript:alert('pwned')" name="test.patch" />
+    );
+    const link = container.querySelector('a[title="Abrir archivo original"]');
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute('href')).toBe('#');
+  });
 });
