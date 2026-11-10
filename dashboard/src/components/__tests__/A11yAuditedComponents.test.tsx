@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
+import { NexusBridge } from '../../lib/nexus-bridge';
 import { GeneralSettingsPanel } from '../settings/GeneralSettingsPanel';
 import { SecuritySettingsPanel } from '../settings/SecuritySettingsPanel';
 import { EngineAdvancedAccordion } from '../settings/inference/EngineAdvancedAccordion';
@@ -16,7 +17,7 @@ describe('DASH-A11Y-AUDIT (P2): Componentes de Settings e Inferencia Auditados',
           if (path === '/health') return Promise.resolve({ status: 'ok', version: '0.17.2' });
           return Promise.resolve({});
         }),
-      } as any;
+      } as unknown as NexusBridge;
 
       const { container } = render(
         <GeneralSettingsPanel bridge={mockBridge} notify={vi.fn()} />
@@ -52,7 +53,7 @@ describe('DASH-A11Y-AUDIT (P2): Componentes de Settings e Inferencia Auditados',
           }
           return Promise.resolve({});
         }),
-      } as any;
+      } as unknown as NexusBridge;
 
       render(<SecuritySettingsPanel bridge={mockBridge} />);
 
@@ -130,14 +131,20 @@ describe('DASH-A11Y-AUDIT (P2): Componentes de Settings e Inferencia Auditados',
         />
       );
 
-      // Tylluan integrado: texto accesible para tecnologías asistivas
-      expect(screen.getByText(/estado: activo y disponible/i)).toBeDefined();
+      // Tylluan integrado: texto accesible para tecnologías asistivas con clase sr-only explícita
+      const tylluanStatus = screen.getByText(/estado: activo y disponible/i);
+      expect(tylluanStatus).toBeDefined();
+      expect(tylluanStatus.className).toContain('sr-only');
 
-      // LM Studio detectado: texto accesible
-      expect(screen.getByText(/estado: detectado en puerto 1234/i)).toBeDefined();
+      // LM Studio detectado: texto accesible con clase sr-only explícita
+      const lmStudioStatus = screen.getByText(/estado: detectado en puerto 1234/i);
+      expect(lmStudioStatus).toBeDefined();
+      expect(lmStudioStatus.className).toContain('sr-only');
 
-      // Ollama no detectado: texto accesible
-      expect(screen.getByText(/estado: no detectado en puerto 11434/i)).toBeDefined();
+      // Ollama no detectado: texto accesible con clase sr-only explícita
+      const ollamaStatus = screen.getByText(/estado: no detectado en puerto 11434/i);
+      expect(ollamaStatus).toBeDefined();
+      expect(ollamaStatus.className).toContain('sr-only');
 
       // Botón "Ver" modelos de Tylluan: aria-controls y foco accesible
       const verBtn = screen.getByRole('button', { name: /ver modelos de tylluan en disco/i });
