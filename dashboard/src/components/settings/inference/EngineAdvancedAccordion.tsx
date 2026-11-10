@@ -76,8 +76,9 @@ export function EngineAdvancedAccordion({
         type="button"
         id="heading-advanced-engine"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+        className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         aria-expanded={isOpen}
+        aria-controls="engine-advanced-panel"
       >
         <div className="flex items-center gap-2.5">
           <Sliders className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
@@ -105,7 +106,12 @@ export function EngineAdvancedAccordion({
       </button>
 
       {isOpen && (
-        <div className="p-4 pt-1 border-t border-border space-y-5">
+        <div
+          id="engine-advanced-panel"
+          role="region"
+          aria-labelledby="heading-advanced-engine"
+          className="p-4 pt-1 border-t border-border space-y-5"
+        >
           {/* Hardware & Motor */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
             {/* Dispositivo de Ejecución */}

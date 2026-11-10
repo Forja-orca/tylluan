@@ -171,7 +171,8 @@ export function ProviderSelectorCards({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               {/* Punto de estado verde */}
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" title="Activo y disponible" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" title="Activo y disponible" aria-hidden="true" />
+              <span className="sr-only">Estado: Activo y disponible</span>
               <div className="min-w-0">
                 <span className="text-xs font-bold text-foreground">Tylluan (integrado)</span>
                 <span className="text-[11px] text-muted-foreground ml-2 font-mono">ONNX · CPU</span>
@@ -185,8 +186,9 @@ export function ProviderSelectorCards({
               <button
                 type="button"
                 onClick={() => setShowTylluanModels(!showTylluanModels)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px]"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 aria-expanded={showTylluanModels}
+                aria-controls="tylluan-models-dropdown"
                 aria-label="Ver modelos de Tylluan en disco"
               >
                 <span>Ver</span>
@@ -197,7 +199,7 @@ export function ProviderSelectorCards({
 
           {/* Sublista desplegable de modelos Tylluan en disco */}
           {showTylluanModels && (
-            <div className="mt-3 pt-3 border-t border-border/60 space-y-2 animate-in fade-in duration-150">
+            <div id="tylluan-models-dropdown" className="mt-3 pt-3 border-t border-border/60 space-y-2 animate-in fade-in duration-150">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-muted-foreground">
                 <span className="font-semibold uppercase tracking-wider">
                   Modelos internos en disco:
@@ -303,7 +305,11 @@ export function ProviderSelectorCards({
                   lmStudio?.detected ? 'bg-emerald-500' : 'bg-muted-foreground/30 border border-muted-foreground/40'
                 }`}
                 title={lmStudio?.detected ? `Detectado en :1234${lmStudio.latency_ms != null ? ` (${lmStudio.latency_ms} ms)` : ''}` : 'No detectado :1234'}
+                aria-hidden="true"
               />
+              <span className="sr-only">
+                Estado: {lmStudio?.detected ? `Detectado en puerto 1234${lmStudio.latency_ms != null ? ` (${lmStudio.latency_ms} ms)` : ''}` : 'No detectado en puerto 1234'}
+              </span>
               <div className="min-w-0">
                 <span className="text-xs font-bold text-foreground">LM Studio</span>
                 <span className="text-[11px] text-muted-foreground ml-2 font-mono">
@@ -322,7 +328,7 @@ export function ProviderSelectorCards({
                 type="button"
                 onClick={onRefreshDiscover}
                 disabled={discoverLoading}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50 cursor-pointer min-h-[24px]"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50 cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 aria-label="Comprobar LM Studio"
               >
                 <RefreshCw className={`w-3 h-3 ${discoverLoading ? 'animate-spin' : ''}`} />
@@ -341,7 +347,11 @@ export function ProviderSelectorCards({
                   ollama?.detected ? 'bg-emerald-500' : 'bg-muted-foreground/30 border border-muted-foreground/40'
                 }`}
                 title={ollama?.detected ? `Detectado en :11434${ollama.latency_ms != null ? ` (${ollama.latency_ms} ms)` : ''}` : 'No detectado :11434'}
+                aria-hidden="true"
               />
+              <span className="sr-only">
+                Estado: {ollama?.detected ? `Detectado en puerto 11434${ollama.latency_ms != null ? ` (${ollama.latency_ms} ms)` : ''}` : 'No detectado en puerto 11434'}
+              </span>
               <div className="min-w-0">
                 <span className="text-xs font-bold text-foreground">Ollama</span>
                 <span className="text-[11px] text-muted-foreground ml-2 font-mono">
@@ -360,7 +370,7 @@ export function ProviderSelectorCards({
                 type="button"
                 onClick={onRefreshDiscover}
                 disabled={discoverLoading}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50 cursor-pointer min-h-[24px]"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50 cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 aria-label="Reintentar detección de Ollama"
               >
                 <RefreshCw className={`w-3 h-3 ${discoverLoading ? 'animate-spin' : ''}`} />
@@ -379,7 +389,11 @@ export function ProviderSelectorCards({
                   isLlamaRunning ? 'bg-emerald-500' : 'bg-muted-foreground/30 border border-muted-foreground/40'
                 }`}
                 title={isLlamaRunning ? `En ejecución :${llamaPort}` : `Parado :${llamaPort}`}
+                aria-hidden="true"
               />
+              <span className="sr-only">
+                Estado: {isLlamaRunning ? `En ejecución en puerto ${llamaPort}` : `Parado en puerto ${llamaPort}`}
+              </span>
               <div className="min-w-0">
                 <span className="text-xs font-bold text-foreground">llama.cpp</span>
                 <span className="text-[11px] text-muted-foreground ml-2 font-mono">
@@ -396,7 +410,7 @@ export function ProviderSelectorCards({
                 type="button"
                 onClick={() => onToggleLlamaServer(!isLlamaRunning)}
                 aria-label={isLlamaRunning ? "Detener llama.cpp" : "Arrancar llama.cpp"}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border transition-colors cursor-pointer min-h-[24px] ${
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border transition-colors cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                   isLlamaRunning
                     ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
                     : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
@@ -410,7 +424,7 @@ export function ProviderSelectorCards({
                 type="button"
                 onClick={onOpenLlamaWebUI}
                 aria-label="Abrir UI web de llama.cpp"
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-border bg-muted/30 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px]"
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-border bg-muted/30 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 <ExternalLink className="w-3 h-3 text-muted-foreground" />
                 <span>Abrir web</span>
@@ -421,7 +435,7 @@ export function ProviderSelectorCards({
                 onClick={onOpenLlamaDirectory}
                 aria-label="Abrir carpeta models"
                 title="Copiar ruta de la carpeta models al portapapeles"
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-border bg-muted/30 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px]"
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-border bg-muted/30 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 <FolderOpen className="w-3 h-3 text-muted-foreground" />
                 <span>Carpeta models</span>
@@ -472,7 +486,21 @@ export function ProviderSelectorCards({
                         ? 'Clave configurada (pendiente de comprobación)'
                         : 'Sin clave configurada'
                     }
+                    aria-hidden="true"
                   />
+                  <span className="sr-only">
+                    Estado: {
+                      testResult
+                        ? testResult.ok
+                          ? testResult.models && testResult.models.length === 0
+                            ? 'Conectado pero sin modelos disponibles'
+                            : 'Conectado'
+                          : `Error: ${testResult.error || 'fallo de conexión'}`
+                        : provider.api_key_set
+                        ? 'Clave configurada'
+                        : 'Sin clave configurada'
+                    }
+                  </span>
                   <div className="min-w-0">
                     <span className="text-xs font-bold text-foreground capitalize">{provider.name}</span>
                     <span className="text-[11px] text-muted-foreground ml-2 font-mono">
@@ -492,7 +520,7 @@ export function ProviderSelectorCards({
                     type="button"
                     onClick={() => onTestProvider(provider.name)}
                     disabled={isTesting}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px]"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                     aria-label={`Comprobar ${provider.name}`}
                   >
                     <Zap className={`w-3 h-3 text-amber-500 ${isTesting ? 'animate-pulse' : ''}`} />
@@ -505,7 +533,7 @@ export function ProviderSelectorCards({
                     disabled={!kernelSupportsPost}
                     title={kernelSupportsPost ? 'Quitar proveedor' : 'disponible cuando el kernel lo soporte'}
                     aria-label={`Quitar ${provider.name}`}
-                    className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-border transition-colors min-h-[24px] ${
+                    className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-border transition-colors min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                       kernelSupportsPost
                         ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer'
                         : 'opacity-50 text-muted-foreground cursor-not-allowed'

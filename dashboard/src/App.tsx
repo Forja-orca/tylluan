@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   LayoutDashboard,
   MessageSquare,
@@ -104,6 +104,19 @@ function App() {
   }, [handleTabChange]);
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const bellButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showMentionsDropdown) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowMentionsDropdown(false);
+        bellButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showMentionsDropdown, setShowMentionsDropdown]);
 
   useEffect(() => {
     const onUnauthorized = () => {
@@ -381,9 +394,12 @@ function App() {
           {/* Notifications Bell */}
           <div className="relative">
             <button
+              ref={bellButtonRef}
               type="button"
               aria-label="Menciones Recientes"
               aria-expanded={showMentionsDropdown}
+              aria-haspopup="dialog"
+              aria-controls="mentions-dropdown-dialog"
               onClick={() => setShowMentionsDropdown(!showMentionsDropdown)}
               className={cn(
                 "p-2 rounded border transition-colors relative cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none",
@@ -400,7 +416,14 @@ function App() {
             </button>
 
             {showMentionsDropdown && (
-              <div className="absolute right-0 mt-2 w-80 bg-card border border-border rounded shadow-none z-50 overflow-hidden">
+              <div
+                id="mentions-dropdown-dialog"
+                role="dialog"
+                aria-label="Menciones recientes"
+                aria-modal="false"
+                tabIndex={-1}
+                className="absolute right-0 mt-2 w-80 bg-card border border-border rounded shadow-none z-50 overflow-hidden focus:outline-none"
+              >
                 <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground">Menciones (@yo)</span>
                   {activeMentions.length > 0 && (

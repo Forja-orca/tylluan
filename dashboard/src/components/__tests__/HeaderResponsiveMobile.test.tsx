@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import App from '../../App';
 
@@ -91,5 +91,28 @@ describe('Header Responsive Mobile (390px)', () => {
     const refreshBtn = screen.getByRole('button', { name: /sincronizar y recargar estado/i });
     expect(refreshBtn).toBeInTheDocument();
     expect(refreshBtn).not.toBeDisabled();
+  });
+
+  it('el dropdown de menciones cumple el patrón WAI-ARIA dialog y se cierra con Escape', () => {
+    render(<App />);
+
+    const bellBtn = screen.getByRole('button', { name: /menciones recientes/i });
+    expect(bellBtn).toBeInTheDocument();
+    expect(bellBtn.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(bellBtn.getAttribute('aria-controls')).toBe('mentions-dropdown-dialog');
+    expect(bellBtn.getAttribute('aria-expanded')).toBe('false');
+
+    // Abre el diálogo
+    fireEvent.click(bellBtn);
+    expect(bellBtn.getAttribute('aria-expanded')).toBe('true');
+
+    const dialog = screen.getByRole('dialog', { name: /menciones recientes/i });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.getAttribute('id')).toBe('mentions-dropdown-dialog');
+
+    // Cierra con Escape
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(bellBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('dialog', { name: /menciones recientes/i })).not.toBeInTheDocument();
   });
 });

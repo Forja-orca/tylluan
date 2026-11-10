@@ -150,7 +150,7 @@ export function RoleModelAssignmentSection({
               aria-label="Modelo para Decisión"
               value={currentDecisionModel}
               onChange={e => onUpdatePoint('decision', { model: e.target.value })}
-              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={fallbackDecisionOptions.length === 0}
             >
               {fallbackDecisionOptions.length > 0 ? (
@@ -169,7 +169,7 @@ export function RoleModelAssignmentSection({
               onClick={() => onSavePoint('decision')}
               disabled={savingPoint['decision'] || fallbackDecisionOptions.length === 0}
               aria-label="Guardar modelo de decisión"
-              className="px-2.5 py-1.5 text-xs font-medium rounded-md border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50 cursor-pointer shrink-0 flex items-center gap-1 min-h-[24px]"
+              className="px-2.5 py-1.5 text-xs font-medium rounded-md border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50 cursor-pointer shrink-0 flex items-center gap-1 min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               title="Guardar modelo de decisión"
             >
               <Save className="w-3 h-3" />
@@ -259,7 +259,7 @@ export function RoleModelAssignmentSection({
               value={activeVision}
               onChange={e => onChangeVision?.(e.target.value)}
               disabled={visionModels.length <= 1}
-              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer disabled:bg-muted/30 disabled:cursor-default"
+              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer disabled:bg-muted/30 disabled:cursor-default"
             >
               {visionModels.length > 0 ? (
                 visionModels.map(m => (

@@ -205,8 +205,10 @@ export function SecuritySettingsPanel({ bridge, notify: _notify }: SecuritySetti
               {auditData.link_break_count > 0 && (
                 <button
                   type="button"
+                  aria-expanded={showLinkBreakDetails}
+                  aria-controls="link-break-details-list"
                   onClick={() => setShowLinkBreakDetails(!showLinkBreakDetails)}
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold bg-card border border-border hover:bg-muted text-foreground transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-md text-xs font-semibold bg-card border border-border hover:bg-muted text-foreground transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   {showLinkBreakDetails ? (
                     <>
@@ -225,7 +227,7 @@ export function SecuritySettingsPanel({ bridge, notify: _notify }: SecuritySetti
 
             {/* Detalle desplegable de saltos de enlace */}
             {showLinkBreakDetails && auditData.link_break_ids && auditData.link_break_ids.length > 0 && (
-              <div className="p-3 bg-muted/40 border border-border rounded-md space-y-2">
+              <div id="link-break-details-list" className="p-3 bg-muted/40 border border-border rounded-md space-y-2">
                 <span className="text-[11px] font-semibold text-foreground">
                   IDs de registros con salto de secuencia previo:
                 </span>
