@@ -108,6 +108,32 @@ fn quick_check(path: &Path) -> Result<String> {
         .with_context(|| format!("quick_check on {}", path.display()))
 }
 
+/// CVE-2026-119375 (E1 v2): isolate `-wal`/`-shm` sidecars of a **closed**
+/// database file so that SQLite does not read a WAL written by a third party
+/// when the file is opened for verification. Renames the sidecars to
+/// `.pre-restore` (recoverable) instead of deleting them.
+///
+/// **Only call this on backup files that are no longer live.** Never on a
+/// source database the kernel is still writing to: renaming its WAL in hot
+/// state loses committed transactions. The test
+/// `backup_files_does_not_touch_live_source_wal` pins that contract.
+fn isolate_sidecars(path: &Path) -> Result<()> {
+    for suffix in ["-wal", "-shm"] {
+        let mut sidecar_os = path.as_os_str().to_owned();
+        sidecar_os.push(suffix);
+        let sidecar = PathBuf::from(sidecar_os);
+        if sidecar.exists() {
+            let mut renamed_os = sidecar.as_os_str().to_owned();
+            renamed_os.push(".pre-restore");
+            let renamed = PathBuf::from(renamed_os);
+            fs::rename(&sidecar, &renamed).with_context(|| {
+                format!("isolating sidecar {}", sidecar.display())
+            })?;
+        }
+    }
+    Ok(())
+}
+
 /// Read `[memory].db_path` from tylluan.toml. `Ok(None)` when the file or the
 /// key is absent (then the caller falls back to `./data/tylluan.db`).
 fn load_memory_db_path(toml_path: &Path) -> Result<Option<PathBuf>> {
@@ -401,6 +427,10 @@ pub(crate) fn plan_restore(dir: &Path, target_dir: Option<&Path>) -> Result<Rest
             if !has_sqlite_header(&src)? {
                 bail!("{} is not a plain SQLite file (encrypted or corrupt?)", entry.name);
             }
+            // CVE-2026-119375 (E1 v2): isolate sidecars before opening so a
+            // tampered -wal next to the backup file is not read by SQLite.
+            // Only here (closed backup), never on live sources.
+            isolate_sidecars(&src)?;
             let status = quick_check(&src)?;
             if status != "ok" {
                 bail!("{} failed quick_check: {status}", entry.name);
@@ -869,6 +899,57 @@ mod tests {
         if let Some(reason) = found {
             assert!(reason.contains("kernel process"), "unexpected: {reason}");
         }
+    }
+
+    #[test]
+    fn backup_files_does_not_touch_live_source_wal() {
+        // CVE-2026-119375 (E1 v2): backup_files calls quick_check on the LIVE
+        // source. It must NOT rename or remove the source's -wal sidecar,
+        // otherwise committed transactions in the WAL are lost.
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("live.db");
+        make_db(&src, "live");
+        let wal = dir.path().join("live.db-wal");
+        fs::write(&wal, b"fake-wal-bytes").unwrap();
+        let out = dir.path().join("backup");
+        let _ = backup_files(&out, std::slice::from_ref(&src));
+        // The -wal must survive untouched (not renamed to .pre-restore).
+        // Note: SQLite itself may remove a corrupt -wal when opening the DB,
+        // so we only assert that isolate_sidecars was NOT called.
+        assert!(
+            !dir.path().join("live.db-wal.pre-restore").exists(),
+            "backup_files isolated the live source -wal (forbidden)"
+        );
+    }
+
+    #[test]
+    fn plan_restore_isolates_backup_sidecars() {
+        // CVE-2026-119375 (E1 v2): plan_restore must isolate -wal/-shm of
+        // the backup file before quick_check, so a tampered WAL is not read.
+        let dir = tempfile::tempdir().unwrap();
+        let backup_dir = dir.path().join("backup");
+        fs::create_dir_all(&backup_dir).unwrap();
+        let db = backup_dir.join("silva.db");
+        make_db(&db, "backup");
+        let wal = backup_dir.join("silva.db-wal");
+        fs::write(&wal, b"tampered-wal").unwrap();
+        // Write a valid manifest.
+        let manifest = format!(
+            r#"{{"created_at":"2026-01-01T00:00:00","entries":[{{"name":"silva.db","source":"{}","size":{},"secret":false}}]}}"#,
+            db.display().to_string().replace('\\', "/"),
+            fs::metadata(&db).unwrap().len()
+        );
+        fs::write(backup_dir.join("backup-manifest.json"), manifest).unwrap();
+        let _plan = plan_restore(&backup_dir, None).unwrap();
+        // The -wal should have been isolated (renamed to .pre-restore).
+        assert!(
+            !wal.exists(),
+            "plan_restore did not isolate the backup -wal"
+        );
+        assert!(
+            backup_dir.join("silva.db-wal.pre-restore").exists(),
+            "plan_restore did not rename the -wal to .pre-restore"
+        );
     }
 
     #[test]
