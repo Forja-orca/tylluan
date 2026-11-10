@@ -5,7 +5,7 @@
 mod setup;
 mod cleanup;
 
-use tylluan_kernel::config::{TylluanConfig, load_guild_config};
+use tylluan_kernel::config::{TylluanConfig, load_guild_config, models_dir_absolute};
 use tylluan_kernel::transport::server::TylluanServer;
 use tylluan_kernel::transport;
 use tylluan_kernel::registry::{guild_process::GuildRegistry, guild_list::LAZY_GUILDS, lifecycle, service_manager::ServiceManager, actor::RegistryActor};
@@ -763,7 +763,7 @@ async fn main() -> anyhow::Result<()> {
     let dense_cached = dense_model_path
         .as_ref()
         .is_some_and(|_| fastembed_model_cached(&dense_model_name));
-    let needs_bg_download = dense_model_path.is_some() && !dense_cached;
+    let needs_bg_download = dense_model_path.is_some() && !dense_cached && config.nexus.allow_hf_download;
     if dense_model_path.is_none() {
         info!("🧠 Embedding model disabled — using BM25-only retrieval");
     } else if !dense_cached {
@@ -2522,7 +2522,16 @@ fn fastembed_model_cached(model_name: &str) -> bool {
     if !cached {
         // Also check the local models/ directory
         let local_path = std::path::PathBuf::from("models").join(model_name);
-        return local_path.exists();
+        if local_path.exists() {
+            return true;
+        }
+        // D-166b: check the acoplado cache (<models>/fastembed/) that D-166
+        // added so the kernel finds ONNX even with HF_HOME pointing at an
+        // empty folder.
+        let acoplado = models_dir_absolute()
+            .join("fastembed")
+            .join(&model_dir_name);
+        return acoplado.exists();
     }
     cached
 }
@@ -2649,6 +2658,37 @@ mod anti_orphan_tests {
             None,
         );
         assert_eq!(parse_listen_port_from_listing(netstat_out, 99999), None);
+    }
+
+    #[test]
+    fn d166b_fastembed_model_cached_sees_acoplado_models_dir() {
+        use std::env;
+        let tmp = tempfile::tempdir().unwrap();
+        let models_dir = tmp.path().join("models");
+        let fastembed_dir = models_dir.join("fastembed");
+        let model_dir = fastembed_dir.join("models--BAAI--bge-m3");
+        std::fs::create_dir_all(&model_dir).unwrap();
+
+        let prev_models = env::var("TYLLUAN_MODELS_DIR").ok();
+        let prev_hf = env::var("HF_HOME").ok();
+        unsafe { env::set_var("TYLLUAN_MODELS_DIR", models_dir.to_str().unwrap()); }
+        unsafe { env::set_var("HF_HOME", tmp.path().join("nonexistent-hf-home").to_str().unwrap()); }
+
+        let result = fastembed_model_cached("bge-m3");
+
+        match prev_models {
+            Some(v) => unsafe { env::set_var("TYLLUAN_MODELS_DIR", v); },
+            None => unsafe { env::remove_var("TYLLUAN_MODELS_DIR"); },
+        }
+        match prev_hf {
+            Some(v) => unsafe { env::set_var("HF_HOME", v); },
+            None => unsafe { env::remove_var("HF_HOME"); },
+        }
+
+        assert!(
+            result,
+            "fastembed_model_cached('bge-m3') should find the model in <models>/fastembed/ but returned false"
+        );
     }
 }
 
