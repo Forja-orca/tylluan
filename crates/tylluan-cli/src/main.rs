@@ -93,7 +93,7 @@ enum Commands {
         #[arg(value_hint = ValueHint::Url)]
         url: Option<String>,
         /// Host (alternative to full URL, e.g. 192.168.1.42:47004)
-        #[arg(long, short)]
+        #[arg(long)]
         host: Option<String>,
         /// Bearer token for authenticated instances
         #[arg(long, short)]
@@ -1833,16 +1833,19 @@ mod installer_flag_tests {
     const INSTALL_PS1: &str = include_str!("../../../install.ps1");
 
     fn accepted_flags(subcommand: &str) -> BTreeSet<String> {
-        // No cmd.build(): building the root walks every subcommand, and the
-        // pre-existing `connect -h`/auto-help conflict debug-asserts panic
-        // (separate latent bug, reported, not #1's scope). find_subcommand
-        // only materializes the requested subcommand's derive-defined args.
         let cmd = Cli::command();
         cmd.find_subcommand(subcommand)
             .unwrap_or_else(|| panic!("CLI lost its `{subcommand}` subcommand"))
             .get_arguments()
             .filter_map(|a| a.get_long().map(|l| l.to_string()))
             .collect()
+    }
+
+    #[test]
+    fn test_cli_command_debug_assert() {
+        // Validates all Clap derive definitions, ensuring no flag collisions
+        // (such as `-h` for both `--help` and `--host` in `connect`).
+        Cli::command().debug_assert();
     }
 
     /// Every `<cli-binary> <subcommand> [--flag ...]` invocation found in an
