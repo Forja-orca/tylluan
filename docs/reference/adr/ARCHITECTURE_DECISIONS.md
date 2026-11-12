@@ -29,3 +29,6 @@
 - [M14-F — P2P Guild Dispatch (especificación)](M14F_p2p_dispatch_spec.md). Su encabezado dice "ADR-005" (colisión con Governance); implementado.
 
 > Índice actualizado 2026-10-14 con ADR-018 y la especificación M14-F.
+- [ADR-030 - Escudo MVP-01 F0: deteccion pasiva con canary tokens](ADR030_escudo_deteccion_pasiva.md) - 2026-11-12. Borrador F0 (clase A, revision de pareja pendiente): vive en el kernel (security/canary.rs, polling de metadata cada 1 s, sin dependencias nuevas), evento {ts, token_id, kind, origin} sin payload, SQLite data/canary.db con retencion <=7 dias, API de solo lectura /api/v1/canary/{status,events}, falla cerrado por tarea y opt-in ([canary] enabled=false).
+
+> Indice actualizado 2026-11-12 con ADR-030 (borrador F0 del escudo).
