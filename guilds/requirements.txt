@@ -1,5 +1,10 @@
 # ForjaNexus Guild Dependencies
 # ──────────────────────────────────────────────────────────────────────────────
+# BUF-D12-REQS (2026-11-12): cada dependencia lleva TECHO, no solo suelo.
+# El suelo dice lo minimo que el codigo necesita; el techo evita que un
+# pip install -r (sin hashes) salte a una major desconocida. La version
+# exacta que se instala de verdad sale, con sha256, de
+# requirements-hashes.txt: si cambias un rango aqui, regenera el lock.
 # Install with:
 #   pip install --require-hashes -r guilds/requirements-hashes.txt
 # (requirements.txt remains the range source; regenerate the hash lock with uv)
@@ -12,10 +17,10 @@
 
 # ── Core — required for ALL guilds ────────────────────────────────────────────
 mcp>=1.27.0,<2
-fastmcp>=3.2.4
+fastmcp>=3.2.4,<4
 
 # ── System guilds: system_metrics, monitor ────────────────────────────────────
-psutil>=5.9.0
+psutil>=5.9.0,<8
 
 # Seguridad 2026-10: bundle de CAs sin las 8 intermedias eMudhra comprometidas
-certifi>=2026.10.19
+certifi>=2026.10.19,<2027
