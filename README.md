@@ -70,7 +70,7 @@ tylluan-cli start
 curl -s http://127.0.0.1:47004/health
 ```
 
-Run `tylluan-cli install` first: it writes the configuration. Starting without one makes the first start load the default embedding model, which took 52 s in our test, longer than the 30 s the CLI waits, and the CLI then stops the kernel. The kernel listens on `127.0.0.1:47004`. Authentication is on by default: on first start it creates a bearer token in a file named `.tylluan-token` **in the directory the kernel was started from**. Keep that file private; whoever holds the token can run tools on your machine.
+Run `tylluan-cli install` first: it writes the configuration. Starting without one makes the first start load the default embedding model, and that cold preload took about 52 s in our test (a Xeon E5-2680 v4 with no configuration file). The CLI now waits 180 s for the kernel to answer (`STARTUP_WAIT_SECS` in `crates/tylluan-cli/src/main.rs`), so it does come up — installing first just skips that wait. The kernel listens on `127.0.0.1:47004`. Authentication is on by default: on first start it creates a bearer token in a file named `.tylluan-token` **in the directory the kernel was started from**. Keep that file private; whoever holds the token can run tools on your machine.
 
 Connect a client by sending the token in an `Authorization` header. For Claude Code:
 
@@ -128,8 +128,8 @@ One kernel binary, three configurations that trade retrieval quality for footpri
 | Profile | Embeddings | Extra model download | Measured |
 |---------|-----------|----------|----------|
 | `portable` (default install profile) | none, BM25 keyword search only | 0 MB | Windows start time and memory, below |
-| `clinic` | BGE-Small, 384 dimensions | about 67 MB | not measured |
-| `server` | mxbai-embed-large, 1024 dimensions | not verified | not measured |
+| `clinic` | BGE-Small, 384 dimensions | about 67 MB (vendor figure; not measured in this repo) | not measured |
+| `server` | mxbai-embed-large, 1024 dimensions | 1.34 GB (`onnx/model.onnx` = 1,336,854,282 B in `mixedbread-ai/mxbai-embed-large-v1`) | not measured |
 
 `portable` was measured on 2026-10-26 with the published v0.17.1 Windows x86_64 release (a 15.4 MB download), four cold starts with an empty database: healthy after 12.8 to 16.8 s, 38.7 to 40 MB resident, and no outbound network connection or non-local UDP socket in the 10 seconds after it became healthy. That machine was not idle (a production kernel and development tools were running), so read the start time as an upper bound. The script is [scripts/measure_portable_start.ps1](scripts/measure_portable_start.ps1); the machine and the raw runs are in [portable_start_2026-10-26.json](docs/reference/measurements/portable_start_2026-10-26.json). Linux (including WSL) has **not** been measured with this script: the numbers above are Windows x86_64 only.
 
