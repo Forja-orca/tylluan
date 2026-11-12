@@ -29,6 +29,13 @@ pub struct GuildHealth {
     pub running: bool,
     pub tools_count: usize,
     pub issues: Vec<String>,
+    /// BUF-D9-DOS-PROC (2026-11-12): procesos vivos cuyo `-m` es este guild.
+    pub processes: usize,
+    /// `true` cuando hay más de un proceso pero con **imágenes distintas**:
+    /// lanzador del venv + intérprete real. En ese caso el runtime del guild
+    /// NO está duplicado. `false` con `processes > 1` sería un doble
+    /// lanzamiento de verdad y habría que mirarlo.
+    pub launcher: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -181,18 +188,24 @@ impl Doctor {
 
         let mut healths = Vec::new();
 
+        // BUF-D9-DOS-PROC: una sola foto de procesos para todos los guilds.
+        let sys = guild_process_snapshot();
+
         for status in reg.status_all() {
             let mut guild_issues = Vec::new();
             if !status.running && status.always_on {
                 guild_issues.push("Critical: Always-on guild is not running.".to_string());
                 suggestions.push(format!("Run 'doctor_repair(target=\"guild\", name=\"{}\")' to restart.", status.name));
             }
+            let (processes, launcher) = guild_process_counts(&sys, &status.name);
 
             healths.push(GuildHealth {
                 name: status.name.clone(),
                 running: status.running,
                 tools_count: status.tools_count,
                 issues: guild_issues,
+                processes,
+                launcher,
             });
         }
         healths
@@ -374,5 +387,107 @@ impl Doctor {
                 false
             }
         }
+    }
+}
+
+
+/// Foto única de procesos con línea de comandos cargada.
+///
+/// BUF-D9-DOS-PROC (2026-11-12). sysinfo 0.32 **no** carga `cmd()` con
+/// `refresh_processes(All, true)` (ver D-119): hay que pedirla explícitamente
+/// o todas las `cmd()` vuelven vacías y el conteo sería 0 para todo.
+fn guild_process_snapshot() -> System {
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::everything(),
+    );
+    sys
+}
+
+/// ¿Esta línea de comandos es la de este guild? (`python -m guilds.<...>.<name>`)
+///
+/// Se compara el módulo completo: `memory` no debe casar con
+/// `guilds.scholars.plugins.memory_bridge`. Por eso se exige el prefijo
+/// `guilds.` y el sufijo `.{name}`.
+fn cmd_runs_guild(cmd: &[std::ffi::OsString], name: &str) -> bool {
+    let suffix = format!(".{name}");
+    cmd.iter().any(|arg| {
+        let arg = arg.to_string_lossy();
+        arg.starts_with("guilds.") && arg.ends_with(&suffix)
+    })
+}
+
+/// Procesos vivos de un guild y si el par es el lanzador del venv.
+///
+/// Medido (BUF-D9-DOS-PROC): en un venv de Windows cuyo `Scripts\python.exe`
+/// es un **lanzador**, un guild sano aparece como DOS procesos: el lanzador
+/// (imagen = python del venv) y el intérprete real (imagen = python base) con
+/// el MISMO argv. Por eso `launcher` es `true` cuando hay más de un proceso
+/// con **imágenes distintas**: significa "lanzador + intérprete", no un
+/// runtime duplicado. `processes > 1` con `launcher == false` sí sería un
+/// doble lanzamiento real y merece mirada.
+fn guild_process_counts(sys: &System, name: &str) -> (usize, bool) {
+    let mut processes = 0usize;
+    let mut exes = std::collections::HashSet::new();
+    for process in sys.processes().values() {
+        if !cmd_runs_guild(process.cmd(), name) {
+            continue;
+        }
+        processes += 1;
+        if let Some(exe) = process.exe() {
+            exes.insert(exe.to_path_buf());
+        }
+    }
+    (processes, processes > 1 && exes.len() > 1)
+}
+
+#[cfg(test)]
+mod buf_d9_tests {
+    use super::cmd_runs_guild;
+    use std::ffi::OsString;
+
+    fn cmd(parts: &[&str]) -> Vec<OsString> {
+        parts.iter().map(OsString::from).collect()
+    }
+
+    /// El módulo del guild se reconoce por su nombre final exacto.
+    #[test]
+    fn reconoce_el_modulo_del_guild() {
+        assert!(cmd_runs_guild(
+            &cmd(&[
+                r"E:\tylluan\.venv\Scripts\python.exe",
+                "-m",
+                "guilds.builders.plugins.bash"
+            ]),
+            "bash"
+        ));
+        assert!(cmd_runs_guild(
+            &cmd(&["python", "-m", "guilds.scholars.plugins.memory"]),
+            "memory"
+        ));
+        assert!(cmd_runs_guild(
+            &cmd(&["python", "-m", "guilds.watchers.plugins.system_metrics"]),
+            "system_metrics"
+        ));
+    }
+
+    /// Y no confunde un guild con otro que solo comparte prefijo.
+    #[test]
+    fn no_confunde_prefijos() {
+        assert!(!cmd_runs_guild(
+            &cmd(&["python", "-m", "guilds.scholars.plugins.memory_bridge"]),
+            "memory"
+        ));
+        assert!(!cmd_runs_guild(
+            &cmd(&["python", "-m", "guilds.builders.plugins.bash_extra"]),
+            "bash"
+        ));
+        // Un proceso ajeno (sin `-m guilds.*`) no cuenta.
+        assert!(!cmd_runs_guild(
+            &cmd(&["python", "-c", "print('hola')", "bash"]),
+            "bash"
+        ));
     }
 }
