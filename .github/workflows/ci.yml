@@ -238,6 +238,8 @@ jobs:
                           # that parent at all, so cat-file/merge-base fail
                           # on a perfectly valid citation. Caught live by
                           # this exact job on its first real CI run.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }} # en PR, checar la CABEZA del PR; el merge ref sintetico anade 2 ancestros y el lag (3) rebasa MAX_LAG=2.
+          # en push, github.sha es main directo -> comportamiento invariante.
       - name: Verify STATUS.md cites exactly one HEAD and it's the real one
         run: bash scripts/check_head_sync.sh
 
