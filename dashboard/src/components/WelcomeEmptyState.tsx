@@ -4,6 +4,7 @@ import { cn } from '../lib/utils';
 import { useNexus } from '../hooks/useNexus';
 import { TylluanLogo } from './TylluanLogo';
 import type { NexusBridge } from '../lib/nexus-bridge';
+import { FirstBootConsentSection } from './first-boot/FirstBootConsentSection';
 
 interface WelcomeEmptyStateProps {
   bridge: NexusBridge | null;
@@ -35,19 +36,39 @@ export function WelcomeEmptyState({
   useEffect(() => {
     const b = bridge ?? ctxBridge ?? null;
     if (!b?.fetchRaw) return;
-    b.fetchRaw('/api/v1/setup-hint')
-      .then((hint: { mcp_clients?: { claude_desktop?: { config?: { mcpServers?: { tylluan?: { url?: string } } } } } }) => {
-        if (hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url) {
-          setSseUrl(hint.mcp_clients.claude_desktop.config.mcpServers.tylluan.url);
-        }
-      })
-      .catch(() => {});
+    try {
+      const res = b.fetchRaw('/api/v1/setup-hint');
+      if (res && typeof (res as Promise<unknown>).then === 'function') {
+        (res as Promise<{ mcp_clients?: { claude_desktop?: { config?: { mcpServers?: { tylluan?: { url?: string } } } } } }>)
+          .then((hint) => {
+            if (hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url) {
+              setSseUrl(hint.mcp_clients.claude_desktop.config.mcpServers.tylluan.url);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {
+      // Safe fallback
+    }
   }, [bridge, ctxBridge]);
+
+  // Decisión de consentimiento de primer arranque guardada en localStorage
+  const [firstBootChoice, setFirstBootChoice] = useState<string | null>(
+    () => localStorage.getItem('tylluan_first_boot_choice')
+  );
+  const [localModelReady, setLocalModelReady] = useState(false);
 
   // States for checklist (using localStorage and api telemetry)
   const isInstalled = true; // By definition if they see the dashboard
   const isProfileResolved = agentProfiles && agentProfiles.length > 0;
-  const isModelLoaded = !!(sysStatus?.embeddings_loaded || sysStatus?.silva_healthy);
+  
+  // D-166 / T3898: No considerar el modelo cargado sólo porque SQLite (silva_healthy) esté inicializada.
+  // La búsqueda vectorial densa requiere que embeddings_loaded sea true o que haya un modelo no vacío distinto de 'none'.
+  const isModelLoaded = localModelReady || Boolean(
+    sysStatus?.embeddings_loaded || 
+    (typeof sysStatus?.embedding_model === 'string' && sysStatus.embedding_model !== 'none' && sysStatus.embedding_model.trim() !== '')
+  );
+  const isEmbeddingsStepDone = isModelLoaded || firstBootChoice === 'bm25_offline';
   
   // MCP is connected if there is at least one session, or if they checked the box
   const [mcpChecked, setMcpChecked] = useState(() => localStorage.getItem('tylluan_wizard_mcp') === 'true');
@@ -151,6 +172,42 @@ export function WelcomeEmptyState({
         </p>
       </div>
 
+      {/* Panel interactivo de Primer Arranque y Consentimiento de Descarga */}
+      {!isModelLoaded && firstBootChoice !== 'bm25_offline' && (
+        <FirstBootConsentSection
+          bridge={bridge ?? ctxBridge ?? null}
+          sysStatus={sysStatus}
+          notify={notify}
+          onContinueOffline={() => {
+            setFirstBootChoice('bm25_offline');
+          }}
+          onModelReady={(_modelId) => {
+            setLocalModelReady(true);
+            onRefresh();
+          }}
+        />
+      )}
+
+      {/* Banner discreto si el operador eligió modo BM25 offline */}
+      {firstBootChoice === 'bm25_offline' && !isModelLoaded && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-xl bg-card border border-border text-xs text-muted-foreground animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>Operando en modo puramente léxico BM25 sin descargas de red ni dependencias externas.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem('tylluan_first_boot_choice');
+              setFirstBootChoice(null);
+            }}
+            className="text-primary hover:underline font-semibold text-[11px] cursor-pointer shrink-0 text-left sm:text-right"
+          >
+            Activar búsqueda semántica vectorial
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Onboarding Tasks Checklist */}
         <div className="lg:col-span-1 bg-card border border-border rounded-2xl p-5 space-y-4">
@@ -161,7 +218,13 @@ export function WelcomeEmptyState({
             {[
               { id: 'install', label: 'Instalar Tylluan', done: isInstalled },
               { id: 'profile', label: 'Crear Perfil de Agente', done: isProfileResolved },
-              { id: 'model', label: 'Motor de Embeddings', done: isModelLoaded },
+              { 
+                id: 'model', 
+                label: isModelLoaded 
+                  ? 'Motor de Embeddings (Activo)' 
+                  : (firstBootChoice === 'bm25_offline' ? 'Búsqueda Léxica (BM25 Soberano)' : 'Motor de Embeddings'), 
+                done: isEmbeddingsStepDone 
+              },
               { id: 'mcp', label: 'Conectar Cliente MCP', done: isMcpConnected },
               { id: 'query', label: 'Primera Consulta / Acción', done: firstQueryDone }
             ].map(task => (
