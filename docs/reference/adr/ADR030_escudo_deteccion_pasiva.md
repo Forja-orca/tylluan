@@ -1,6 +1,6 @@
 # ADR-030: Escudo MVP-01 F0 — detección pasiva con canary tokens
 
-**Status:** Borrador F0, 2026-11-12 (pendiente: revisión de pareja Hermes y del TL).
+**Status:** Aprobado por José el 2026-11-13 (`DEC-20261113-03`). Condición: antes de F2, enmendar la Decisión 1 con la evidencia del spike F1 (el polling de mtime NO detecta lecturas; hace falta inotify/atime u otro mecanismo). Sigue opt-in y desactivado por defecto hasta el dictamen jurídico.
 **Autor:** Deep. **Decide:** José (`DEC-20261112-09`, «sí»). **Clase de riesgo:** A.
 **Ficha:** `ESCUDO-MVP-01` (`D:\tylluan-loops\briefs\ESCUDO-MVP-01_deteccion_pasiva.md`). Nada de esta decisión mueve
 un LLM dentro del bucle de defensa: el componente es determinista y los LLM solo leen su telemetría.
