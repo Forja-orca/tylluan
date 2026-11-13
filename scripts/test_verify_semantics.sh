@@ -125,7 +125,8 @@ fi
 # EXEMPT_GATE_HELPERS lists tools that are not run as pre-commit/CI gates
 # directly but serve as standalone developer/build utilities with documented rationale.
 # verify_restart.sh: operator tool run by hand after a kernel restart (T-DSH-60); not a gate.
-EXEMPT_GATE_HELPERS="verify_portable_guild.py verify_restart.sh"
+# check_dashboard_dist_fresh.sh: post-build/deploy dist freshness gate (T4028; dashboard/dist is gitignored); tested in CI via tests/python/test_check_dashboard_dist_fresh.py.
+EXEMPT_GATE_HELPERS="verify_portable_guild.py verify_restart.sh check_dashboard_dist_fresh.sh"
 
 # ONE awk pass over every wiring source (verify.sh + CI workflows + scripts/*.sh)
 # replacing the old grep-per-candidate-per-source loop (~75 spawns). Semantics
