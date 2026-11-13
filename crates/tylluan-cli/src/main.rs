@@ -348,6 +348,61 @@ async fn wait_for_health(client: &reqwest::Client, url: &str, cap_secs: u64) -> 
     }
 }
 
+// ── Resolución de `guilds/` para `tylluan doctor` ───────────────────────────
+//
+// INS-LINUX-DOCTOR-RUTA-GUILDS (2026-11-13): el paso [4/8] comprobaba solo
+// `./guilds/core` y, al no encontrarlo, anunciaba `~/.tylluan/guilds` — una ruta
+// que ningún instalador crea (install.sh deja las guilds en `<install>/bin/guilds`).
+// En una instalación limpia desde release decía "not found" con las guilds
+// instaladas. Se resuelve con el mismo orden de prioridad que el catálogo del
+// kernel: cwd y su padre, el directorio del ejecutable hacia arriba, y las rutas
+// reales de instalación.
+
+/// Raíces candidatas que pueden contener `guilds/core`, en orden de prioridad.
+///
+/// Función pura (no toca el FS) para que el orden se pueda fijar con tests, igual
+/// que `router::catalog::guild_root_candidates` en el kernel.
+fn guilds_root_candidates(
+    cwd: &Path,
+    exe_dir: Option<&Path>,
+    home: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    candidates.push(cwd.to_path_buf());
+    if let Some(parent) = cwd.parent() {
+        candidates.push(parent.to_path_buf());
+    }
+
+    if let Some(dir) = exe_dir {
+        let mut candidate = dir.to_path_buf();
+        for _ in 0..6 {
+            candidates.push(candidate.clone());
+            match candidate.parent() {
+                Some(parent) => candidate = parent.to_path_buf(),
+                None => break,
+            }
+        }
+    }
+
+    // Rutas que deja un instalador: `<install>/bin/guilds` (install.sh) y la
+    // `~/.tylluan/guilds` que anunciaba el mensaje anterior, por si existe.
+    if let Some(home) = home {
+        candidates.push(home.join(".tylluan").join("bin"));
+        candidates.push(home.join(".tylluan"));
+    }
+
+    candidates
+}
+
+/// Primer candidato que tiene `guilds/core` de verdad, o `None`.
+fn resolve_guilds_core(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .map(|root| root.join("guilds").join("core"))
+        .find(|core| core.is_dir())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -475,16 +530,34 @@ async fn main() -> Result<()> {
             }
 
             // ── 4. Guilds installed ──
-            let guild_dir = PathBuf::from("guilds").join("core");
-            if guild_dir.exists() {
-                let count = match std::fs::read_dir(&guild_dir) {
-                    Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x == "py" || x == "rs")).count(),
-                    Err(_) => 0,
-                };
-                println!("[4/8] Guilds core: {} guilds at {} ... ✅", count, guild_dir.display());
-            } else {
-                println!("[4/8] Guilds core: {} not found ... ⚠️", guild_dir.display());
-                println!("       Guilds will be loaded from ~/.tylluan/guilds/ at runtime.");
+            // INS-LINUX-DOCTOR-RUTA-GUILDS: se resuelve como el kernel
+            // (`cwd -> ejecutable -> <install>/bin/guilds`), no solo
+            // `./guilds/core`, y el mensaje de fallo nombra rutas que existen.
+            let cwd = std::env::current_dir().unwrap_or_default();
+            let exe_dir = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(Path::to_path_buf));
+            let home = std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .map(PathBuf::from);
+            let guilds_core = resolve_guilds_core(&guilds_root_candidates(
+                &cwd,
+                exe_dir.as_deref(),
+                home.as_deref(),
+            ));
+            match guilds_core {
+                Some(guild_dir) => {
+                    let count = match std::fs::read_dir(&guild_dir) {
+                        Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x == "py" || x == "rs")).count(),
+                        Err(_) => 0,
+                    };
+                    println!("[4/8] Guilds core: {} guilds at {} ... ✅", count, guild_dir.display());
+                }
+                None => {
+                    println!("[4/8] Guilds core: not found ... ⚠️");
+                    println!("       Probed ./guilds/core, <install>/bin/guilds, ~/.tylluan/bin/guilds.");
+                    println!("       Re-run install.sh (or the release archive) if the guilds are missing.");
+                }
             }
 
             // ── 5. Embedding model cache ──
@@ -2573,5 +2646,88 @@ mod b8_tests {
         // Y un hash válido pero del archivo equivocado falla la verificación.
         let right = "b".repeat(64);
         assert!(verify_sha256(b"payload", &right).is_err());
+    }
+}
+
+#[cfg(test)]
+mod doctor_guilds_root_tests {
+    use super::*;
+
+    /// INS-LINUX-DOCTOR-RUTA-GUILDS: una instalación desde release deja las
+    /// guilds en `<install>/bin/guilds`. Antes el doctor miraba solo
+    /// `./guilds/core` desde el cwd del operador y decía «not found» con las
+    /// guilds instaladas. Mutación: quitar los candidatos del ejecutable deja
+    /// este test en `None`.
+    #[test]
+    fn doctor_encuentra_las_guilds_en_el_bin_de_la_instalacion() {
+        let dir = tempfile::tempdir().unwrap();
+        let install_bin = dir.path().join("install").join("bin");
+        let core = install_bin.join("guilds").join("core");
+        std::fs::create_dir_all(&core).unwrap();
+        std::fs::write(core.join("memory.py"), b"").unwrap();
+
+        let cwd = dir.path().join("cualquier-cwd");
+        std::fs::create_dir_all(&cwd).unwrap();
+
+        let encontrado = resolve_guilds_core(&guilds_root_candidates(
+            &cwd,
+            Some(&install_bin),
+            None,
+        ))
+        .expect("debe encontrar <install>/bin/guilds/core");
+
+        assert_eq!(encontrado, core);
+    }
+
+    /// Y también la ruta de instalación por defecto en `$HOME`.
+    #[test]
+    fn doctor_encuentra_las_guilds_bajo_home() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = dir.path().join(".tylluan").join("bin").join("guilds").join("core");
+        std::fs::create_dir_all(&core).unwrap();
+        std::fs::write(core.join("filesystem.py"), b"").unwrap();
+
+        let cwd = dir.path().join("cualquier-cwd");
+        std::fs::create_dir_all(&cwd).unwrap();
+
+        // Sin HOME y sin ejecutable delante: solo el candidato de $HOME puede
+        // resolverlo.
+        assert_eq!(
+            resolve_guilds_core(&guilds_root_candidates(&cwd, None, Some(dir.path()))),
+            Some(core)
+        );
+    }
+
+    /// El checkout manda: si se ejecuta desde el repo, gana `./guilds/core`.
+    #[test]
+    fn doctor_prefiere_el_checkout_del_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("repo");
+        let checkout = cwd.join("guilds").join("core");
+        std::fs::create_dir_all(&checkout).unwrap();
+        let instalado = dir.path().join("install").join("bin").join("guilds").join("core");
+        std::fs::create_dir_all(&instalado).unwrap();
+
+        let encontrado = resolve_guilds_core(&guilds_root_candidates(
+            &cwd,
+            Some(&dir.path().join("install").join("bin")),
+            Some(dir.path()),
+        ))
+        .unwrap();
+
+        assert_eq!(encontrado, checkout);
+    }
+
+    /// Sin guilds en ningún sitio el doctor no inventa una ruta.
+    #[test]
+    fn doctor_sin_guilds_no_devuelve_ruta() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("vacio");
+        std::fs::create_dir_all(&cwd).unwrap();
+
+        assert_eq!(
+            resolve_guilds_core(&guilds_root_candidates(&cwd, None, Some(dir.path()))),
+            None
+        );
     }
 }
