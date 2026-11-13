@@ -2296,6 +2296,17 @@ pub struct GuildHealth {
     pub tools_active: usize,
 }
 
+/// Ruta del interprete del venv **sin resolver enlaces**.
+///
+/// LINUX-FIND-PYTHON-CANONICALIZE-VENV (2026-11-13): `canonicalize()` sigue el
+/// symlink `.venv/bin/python -> /usr/bin/python3.x` en Linux, y el kernel
+/// acababa ejecutando el interprete del sistema: al no ver `pyvenv.cfg` no
+/// entra en el venv y los guilds pierden sus dependencias. Aqui se absolutiza
+/// sin tocar el sistema de ficheros.
+fn venv_interpreter_path(path: &std::path::Path) -> PathBuf {
+    std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 /// Detect the correct Python binary for the current platform.
 ///
 /// - Windows: tries `python` then `python3`
@@ -2330,17 +2341,19 @@ pub async fn find_python() -> Result<String> {
     }
 
     if let Some(venv_path) = venv_python {
-        if let Ok(path_str) = venv_path.canonicalize() {
-             let final_path = path_str.to_string_lossy().to_string();
-             // Critical for Windows: remove UNC prefix \\?\ if present for subprocess stability
-             let final_path = final_path.trim_start_matches(r"\\?\").to_string();
-             debug!("Sovereign Venv found: {}", final_path);
-             return Ok(final_path);
-        } else {
-            warn!("Failed to canonicalize .venv python path, trying direct path");
-            let final_path = venv_path.to_string_lossy().to_string();
-            return Ok(final_path);
-        }
+        // LINUX-FIND-PYTHON-CANONICALIZE-VENV (2026-11-13): NO se canonicaliza
+        // el interprete. En Linux `.venv/bin/python` es un symlink a
+        // `/usr/bin/python3.x`, y `canonicalize()` lo sigue: el kernel acababa
+        // ejecutando el interprete del SISTEMA, que al no ver `pyvenv.cfg` sale
+        // del venv y los guilds pierden sus dependencias. Se absolutiza sin
+        // tocar el sistema de ficheros.
+        let final_path = venv_interpreter_path(&venv_path)
+            .to_string_lossy()
+            .to_string();
+        // En Windows, por si el path llegaba ya con el prefijo UNC.
+        let final_path = final_path.trim_start_matches(r"\\?\").to_string();
+        debug!("Sovereign Venv found: {}", final_path);
+        return Ok(final_path);
     } else {
         warn!(".venv not found in chain, falling back to system python");
     }
@@ -3491,6 +3504,61 @@ mod tests {
             "una tool en cuarentena no debe aparecer en el descubrimiento"
         );
     }
+
+    /// LINUX-FIND-PYTHON-CANONICALIZE-VENV (P1, 2026-11-13): el interprete del
+    /// venv **no** se resuelve.
+    ///
+    /// En Linux `.venv/bin/python` es un symlink a `/usr/bin/python3.x`.
+    /// `canonicalize()` lo sigue y el kernel acaba ejecutando el interprete del
+    /// sistema, que no ve `pyvenv.cfg` y sale del venv. Mutacion: volver a
+    /// canonicalizar colapsa la ruta al destino del symlink (o mete el prefijo
+    /// UNC en Windows) y este test cae.
+    #[test]
+    fn linux_venv_no_resuelve_el_symlink_del_interprete() {
+        let dir = tempfile::tempdir().unwrap();
+        let venv_bin = dir.path().join(".venv").join("bin");
+        std::fs::create_dir_all(&venv_bin).unwrap();
+        let sistema = dir.path().join("python-sistema");
+        std::fs::write(&sistema, b"").unwrap();
+        let interprete = venv_bin.join("python");
+
+        // REGLA 13: se gatea el CUERPO, no la funcion de test.
+        #[cfg(unix)]
+        {
+            // En Linux el interprete del venv ES un symlink al del sistema.
+            std::os::unix::fs::symlink(&sistema, &interprete).unwrap();
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&interprete, b"").unwrap();
+        }
+
+        let elegido = venv_interpreter_path(&interprete);
+        assert!(
+            elegido.starts_with(dir.path()),
+            "debe quedarse dentro del venv: {}",
+            elegido.display()
+        );
+        assert!(
+            elegido.ends_with(std::path::Path::new(".venv").join("bin").join("python")),
+            "debe conservar .venv/bin/python: {}",
+            elegido.display()
+        );
+        assert_ne!(
+            elegido, sistema,
+            "no debe colapsar al destino del symlink (seria el python del sistema)"
+        );
+
+        #[cfg(unix)]
+        {
+            // Y el symlink existe de verdad: canonicalizar SI lo resolveria.
+            assert_eq!(
+                interprete.canonicalize().unwrap(),
+                sistema.canonicalize().unwrap(),
+                "el fixture debe ser un symlink real, o el test no prueba nada"
+            );
+        }
+    }
 }
 
 impl GuildRegistry {
@@ -3639,5 +3707,4 @@ pub struct GuildCallStats {
     pub avg_latency_ms: f64,
     pub last_call_unix: u64,
     pub success_rate: f64,
-
 }
