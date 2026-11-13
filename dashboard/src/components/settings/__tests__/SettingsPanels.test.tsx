@@ -658,6 +658,98 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
         expect(screen.queryByTestId('copy-models-dir-btn')).not.toBeInTheDocument();
       });
     });
+
+    it('T4064(a) mutación: sin modelo activo en /api/v1/models la fila Tylluan NO dice «Activo y disponible»', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') return Promise.resolve({ inference: { device: 'cpu', max_threads: 4 } });
+        if (url === '/api/v1/config/schema') return Promise.resolve({ fields: [] });
+        if (url === '/api/v1/models') {
+          return Promise.resolve({ active: {}, detected_local_models: [], models_dir: 'E:\\tylluan\\models' });
+        }
+        if (url === '/api/v1/inference/points') return Promise.resolve({ points: {} });
+        if (url === '/api/v1/external-providers') return Promise.resolve([]);
+        if (url === '/api/v1/inference/providers/discover') return Promise.resolve({ providers: [] });
+        if (url === '/api/v1/dashboard/summary') return Promise.resolve({});
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('provider-row-tylluan')).toBeInTheDocument();
+      });
+
+      // Sin modelo activo el estado real es neutro (antes: literal fijo «Activo y disponible»)
+      expect(screen.queryByText(/Activo y disponible/i)).not.toBeInTheDocument();
+      expect(screen.getAllByText(/sin modelo activo/i).length).toBeGreaterThan(0);
+    });
+
+    it('T4064(a) con modelo activo y embeddings cargados la fila Tylluan muestra el estado real «Activo y disponible»', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') return Promise.resolve({ inference: { device: 'cpu', max_threads: 4 } });
+        if (url === '/api/v1/config/schema') return Promise.resolve({ fields: [] });
+        if (url === '/api/v1/models') {
+          return Promise.resolve({
+            active: { embedding: 'mxbai-embed-large', vector_dimensions: 1024 },
+            detected_local_models: [],
+            models_dir: 'E:\\tylluan\\models',
+          });
+        }
+        if (url === '/api/v1/inference/points') return Promise.resolve({ points: {} });
+        if (url === '/api/v1/external-providers') return Promise.resolve([]);
+        if (url === '/api/v1/inference/providers/discover') return Promise.resolve({ providers: [] });
+        if (url === '/api/v1/dashboard/summary') {
+          return Promise.resolve({ interoception: { capabilities: { embeddings_loaded: true } } });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/Activo y disponible/i).length).toBeGreaterThan(0);
+      });
+    });
+
+    it('T4064(b) mutación: cambiar el modelo de Visión persiste en /api/v1/config/inference-llama', async () => {
+      mockBridge.fetchRaw.mockImplementation((url: string) => {
+        if (url === '/api/v1/config') return Promise.resolve({ inference: { device: 'cpu', max_threads: 4 } });
+        if (url === '/api/v1/config/schema') return Promise.resolve({ fields: [] });
+        if (url === '/api/v1/models') {
+          return Promise.resolve({
+            active: { embedding: 'mxbai-embed-large', vector_dimensions: 1024, vision: 'E:\\models\\smolvlm2-256m' },
+            detected_local_models: [
+              { id: 'smolvlm2-256m', name: 'SmolVLM2 256M', path: 'E:\\models\\smolvlm2-256m', role: 'vision' },
+              { id: 'vlm-b', name: 'VLM B', path: 'E:\\models\\vlm-b', role: 'vision' },
+            ],
+            models_dir: 'E:\\tylluan\\models',
+          });
+        }
+        if (url === '/api/v1/inference/points') return Promise.resolve({ points: {} });
+        if (url === '/api/v1/external-providers') return Promise.resolve([]);
+        if (url === '/api/v1/inference/providers/discover') return Promise.resolve({ providers: [] });
+        if (url === '/api/v1/dashboard/summary') return Promise.resolve({});
+        return Promise.resolve({});
+      });
+
+      render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
+
+      const visionSelect = await screen.findByLabelText('Modelo para Visión');
+      fireEvent.change(visionSelect, { target: { value: 'E:\\models\\vlm-b' } });
+
+      await waitFor(() => {
+        expect(mockBridge.fetchRaw).toHaveBeenCalledWith(
+          '/api/v1/config/inference-llama',
+          expect.objectContaining({ method: 'POST' })
+        );
+      });
+
+      const llamada = mockBridge.fetchRaw.mock.calls.find(c => c[0] === '/api/v1/config/inference-llama');
+      expect(llamada).toBeDefined();
+      const init = llamada?.[1] as RequestInit;
+      expect(String(init.body)).toContain('vision_model');
+      expect(String(init.body)).toContain('vlm-b');
+    });
   });
 
   describe('SecuritySettingsPanel', () => {

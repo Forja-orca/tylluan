@@ -62,12 +62,25 @@ export interface ExternalProviderTestResult {
   error?: string;
 }
 
+/** T4064(a): estado REAL del motor integrado de Tylluan, nunca un literal fijo. */
+export interface TylluanEngineStatus {
+  tone: 'ok' | 'warn' | 'unknown';
+  label: string;
+}
+
+const DEFAULT_TYLLUAN_STATUS: TylluanEngineStatus = {
+  tone: 'unknown',
+  label: 'estado no verificado',
+};
+
 export interface ProviderSelectorCardsProps {
   discoverData: DiscoverResponse | null;
   discoverLoading: boolean;
   onRefreshDiscover: () => void;
   externalProviders: ExternalProviderConfig[];
   llamaStatus: LlamaServerStatus;
+  /** T4064(a): estado real del motor ONNX integrado (lo calcula el panel desde /api/v1/models). */
+  tylluanStatus?: TylluanEngineStatus;
   onToggleLlamaServer: (start: boolean) => void;
   onOpenLlamaDirectory: () => void;
   onOpenLlamaWebUI: () => void;
@@ -89,6 +102,7 @@ export function ProviderSelectorCards({
   onRefreshDiscover,
   externalProviders,
   llamaStatus,
+  tylluanStatus = DEFAULT_TYLLUAN_STATUS,
   onToggleLlamaServer,
   onOpenLlamaDirectory,
   onOpenLlamaWebUI,
@@ -170,12 +184,28 @@ export function ProviderSelectorCards({
         <div className="p-3 hover:bg-muted/30 transition-colors" data-testid="provider-row-tylluan">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              {/* Punto de estado verde */}
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" title="Activo y disponible" aria-hidden="true" />
-              <span className="sr-only">Estado: Activo y disponible</span>
+              {/* T4064(a): estado real del motor integrado (ya no un literal fijo) */}
+              <span
+                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                  tylluanStatus.tone === 'ok'
+                    ? 'bg-emerald-500'
+                    : tylluanStatus.tone === 'warn'
+                    ? 'bg-amber-500'
+                    : 'bg-muted-foreground/30 border border-muted-foreground/40'
+                }`}
+                title={tylluanStatus.label}
+                aria-hidden="true"
+              />
+              <span className="sr-only">Estado: {tylluanStatus.label}</span>
               <div className="min-w-0">
                 <span className="text-xs font-bold text-foreground">Tylluan (integrado)</span>
                 <span className="text-[11px] text-muted-foreground ml-2 font-mono">ONNX · CPU</span>
+                <span
+                  className="text-[11px] text-muted-foreground ml-2"
+                  data-testid="tylluan-engine-status"
+                >
+                  · {tylluanStatus.label}
+                </span>
               </div>
             </div>
 

@@ -13,7 +13,8 @@ import {
   ProviderSelectorCards,
   type DiscoverResponse,
   type ExternalProviderConfig,
-  type ExternalProviderTestResult
+  type ExternalProviderTestResult,
+  type TylluanEngineStatus
 } from './inference/ProviderSelectorCards';
 import {
   RoleModelAssignmentSection,
@@ -115,6 +116,9 @@ export function InferenceSettingsPanel({
 
   // Form states: Cognitive Points
   const [pointsState, setPointsState] = useState<Record<string, CognitivePointConfig>>({});
+
+  // T4064(b): modelo de visión elegido en la UI (persistido en tylluan.toml vía /config/inference-llama)
+  const [visionOverride, setVisionOverride] = useState<string | null>(null);
 
   // Llama.cpp user server status (T3259)
   const [llamaStatus, setLlamaStatus] = useState<LlamaServerStatus>({
@@ -291,6 +295,29 @@ export function InferenceSettingsPanel({
       }
     } catch {
       notify(`Carpeta models: ${dir}`, 'info');
+    }
+  };
+
+  // T4064(b): el selector de Visión del panel no tenía handler cableado (control muerto).
+  // Persiste [vision] model_path con el endpoint existente POST /api/v1/config/inference-llama
+  // (no se toca backend). Elige el VLM que el usuario ya tiene en su carpeta de modelos.
+  const handleChangeVision = async (model: string) => {
+    if (!bridge || !model) return;
+    try {
+      await bridge.fetchRaw('/api/v1/config/inference-llama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vision_model: model }),
+      });
+      setVisionOverride(model);
+      notify(
+        `Modelo de visión guardado en tylluan.toml: ${model}. Si no se refleja en caliente, aplica al reiniciar.`,
+        'info'
+      );
+      await loadData();
+    } catch (err) {
+      console.error('Error guardando modelo de visión:', err);
+      notify(`Error al guardar modelo de visión: ${String(err)}`, 'error');
     }
   };
 
@@ -504,6 +531,19 @@ export function InferenceSettingsPanel({
       ? 'liberado por inactividad'
       : 'desconocido';
 
+  // T4064(a): estado REAL del motor ONNX integrado (antes había un «Activo y disponible» fijo).
+  // Fuente: GET /api/v1/models (modelo activo) + capabilities reales de /api/v1/dashboard/summary.
+  // Sin dato => neutro; nunca verde por defecto.
+  const tylluanStatus: TylluanEngineStatus = (() => {
+    if (!modelsData) return { tone: 'unknown', label: 'estado no verificado' };
+    const hasActive = Boolean(modelsData.active?.embedding || modelsData.active?.inference);
+    if (!hasActive) return { tone: 'unknown', label: 'sin modelo activo' };
+    const loaded = engineCapabilities?.embeddings_loaded;
+    if (loaded === true) return { tone: 'ok', label: 'Activo y disponible' };
+    if (loaded === false) return { tone: 'warn', label: 'liberado por inactividad' };
+    return { tone: 'warn', label: 'modelo activo (carga no verificada)' };
+  })();
+
   return (
     <div className="space-y-6" data-testid="inference-settings-panel">
       {/* Cabecera Principal y Barra de Estado Superior */}
@@ -620,6 +660,7 @@ export function InferenceSettingsPanel({
         onRefreshDiscover={fetchDiscover}
         externalProviders={externalProviders}
         llamaStatus={llamaStatus}
+        tylluanStatus={tylluanStatus}
         onToggleLlamaServer={handleToggleLlamaServer}
         onOpenLlamaDirectory={handleOpenLlamaDirectory}
         onOpenLlamaWebUI={handleOpenLlamaWebUI}
@@ -652,8 +693,9 @@ export function InferenceSettingsPanel({
         onSavePoint={handleSaveCognitivePoint}
         savingPoint={savingPoint}
         detectedModels={detectedModels}
-        activeVision={displayVision}
+        activeVision={visionOverride || displayVision}
         visionExists={visionExists}
+        onChangeVision={handleChangeVision}
         activeEmbedding={activeEmbedding}
         vectorDimensions={vectorDimensions}
         engineCapabilities={engineCapabilities}

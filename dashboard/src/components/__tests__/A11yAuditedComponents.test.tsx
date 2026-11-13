@@ -121,6 +121,7 @@ describe('DASH-A11Y-AUDIT (P2): Componentes de Settings e Inferencia Auditados',
           onRefreshDiscover={vi.fn()}
           externalProviders={[]}
           llamaStatus={{ running: false, port: 9000, endpoint: 'http://localhost:9000', models_directory: '', pid: null, version: null }}
+          tylluanStatus={{ tone: 'ok', label: 'Activo y disponible' }}
           onToggleLlamaServer={vi.fn()}
           onOpenLlamaDirectory={vi.fn()}
           onOpenLlamaWebUI={vi.fn()}
