@@ -39,11 +39,40 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Raw data from endpoints
-  const [tasksData, setTasksData] = useState<any[] | null>(null);
-  const [healthDetailed, setHealthDetailed] = useState<any | null>(null);
-  const [guildsData, setGuildsData] = useState<any[] | null>(null);
-  const [messagesData, setMessagesData] = useState<any[] | null>(null);
-  const [sysStatusData, setSysStatusData] = useState<any | null>(null);
+  interface RuntimeTaskEntry {
+    subruntime?: string;
+    name?: string;
+    runs?: number;
+    errors?: number;
+  }
+  interface HealthDetailedResponse {
+    status?: string;
+    components?: {
+      silva?: { ok?: boolean; nodes?: number; edges?: number };
+      embeddings?: { ok?: boolean; model?: string; status?: string };
+      reranker?: { ok?: boolean; status?: string };
+      inference?: { ok?: boolean; status?: string };
+      guilds?: { total?: number; active?: number };
+      tunnel?: { ok?: boolean };
+    };
+  }
+  interface GuildProcessEntry {
+    running?: boolean;
+  }
+  interface ColoquioHeatmapMessage {
+    author_id?: string;
+    created_at?: number;
+  }
+  interface SystemStatusSummary {
+    score?: number;
+    mailbox_healthy?: boolean;
+  }
+
+  const [tasksData, setTasksData] = useState<RuntimeTaskEntry[] | null>(null);
+  const [healthDetailed, setHealthDetailed] = useState<HealthDetailedResponse | null>(null);
+  const [guildsData, setGuildsData] = useState<GuildProcessEntry[] | null>(null);
+  const [messagesData, setMessagesData] = useState<ColoquioHeatmapMessage[] | null>(null);
+  const [sysStatusData, setSysStatusData] = useState<SystemStatusSummary | null>(null);
 
   // Poll data with interval >= 5s
   const fetchData = useCallback(async () => {
@@ -85,8 +114,9 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
 
       setLastUpdated(new Date());
       setErrorMsg(null);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Error consultando endpoints de telemetría');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMsg(msg || 'Error consultando endpoints de telemetría');
     } finally {
       setLoading(false);
     }
@@ -110,10 +140,10 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
     let memErrors = 0;
 
     if (tasksData) {
-      const memT = tasksData.filter((t: any) => t.subruntime === 'Memoria' || t.name === 'reindexer');
+      const memT = tasksData.filter((t) => t.subruntime === 'Memoria' || t.name === 'reindexer');
       memTasks = memT.length;
-      memRuns = memT.reduce((acc: number, t: any) => acc + (t.runs || 0), 0);
-      memErrors = memT.reduce((acc: number, t: any) => acc + (t.errors || 0), 0);
+      memRuns = memT.reduce((acc: number, t) => acc + (t.runs || 0), 0);
+      memErrors = memT.reduce((acc: number, t) => acc + (t.errors || 0), 0);
     }
 
     if (healthDetailed?.components?.silva) {
@@ -143,15 +173,17 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
     let procDetails = 'Sin guilds activos';
     if (guildsData && Array.isArray(guildsData) && guildsData.length > 0) {
       const total = guildsData.length;
-      const running = guildsData.filter((g: any) => g.running).length;
+      const running = guildsData.filter((g) => g.running).length;
       procPercent = Math.round((running / total) * 100);
       procState = running > 0 ? 'running' : 'idle';
       procDetails = `${running} de ${total} procesos activos`;
     } else if (healthDetailed?.components?.guilds) {
       const g = healthDetailed.components.guilds;
-      procPercent = g.total > 0 ? Math.round((g.active / g.total) * 100) : 0;
-      procState = g.active > 0 ? 'running' : 'idle';
-      procDetails = `${g.active} de ${g.total} guilds activos`;
+      const gTotal = g.total ?? 0;
+      const gActive = g.active ?? 0;
+      procPercent = gTotal > 0 ? Math.round((gActive / gTotal) * 100) : 0;
+      procState = gActive > 0 ? 'running' : 'idle';
+      procDetails = `${gActive} de ${gTotal} guilds activos`;
     }
 
     // 4. Decisión
@@ -395,7 +427,7 @@ export function SubruntimeRingsView({ subruntimes }: RingsViewProps) {
 // 2. VISTA: MAPA DE CALOR (Agentes x Horas con Actividad Real)
 // ---------------------------------------------------------------------------
 interface HeatmapViewProps {
-  messages: any[] | null;
+  messages: { author_id?: string; created_at?: number }[] | null;
 }
 
 export function AgentHeatmapView({ messages }: HeatmapViewProps) {

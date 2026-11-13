@@ -11,10 +11,10 @@ import {
   Code
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { ProjectSkill } from '../lib/nexus-bridge';
+import { NexusBridge, ProjectSkill } from '../lib/nexus-bridge';
 
 interface ProjectSkillsPanelProps {
-  bridge: any;
+  bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 
@@ -41,10 +41,11 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     try {
       const data = await bridge.getProjectSkills();
       setSkills(data || []);
-    } catch (err: any) {
-      console.error("Project Skills API error:", err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Project Skills API error:", msg);
       setSkills([]);
-      setError(`Error al consultar habilidades del proyecto: ${err.message}`);
+      setError(`Error al consultar habilidades del proyecto: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -55,6 +56,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
   }, [loadSkills]);
 
   const handleSave = async () => {
+    if (!bridge) return;
     const nameToSave = isCreating ? newName.trim() : editingSkill?.name;
     const contentToSave = newContent.trim();
 
@@ -70,14 +72,16 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
       await loadSkills();
       setIsCreating(false);
       setEditingSkill(null);
-    } catch (err: any) {
-      notify(`Failed to save: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`Failed to save: ${msg}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (name: string) => {
+    if (!bridge) return;
     if (!window.confirm(`Are you sure you want to delete the skill '${name}'?`)) return;
 
     setLoading(true);
@@ -88,8 +92,9 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
       if (editingSkill?.name === name) {
         setEditingSkill(null);
       }
-    } catch (err: any) {
-      notify(`Failed to delete: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`Failed to delete: ${msg}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -105,6 +110,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
       setNewContent('');
       return;
     }
+    if (!bridge) return;
     setIsCreating(false);
     setLoadingSkill(true);
     try {
@@ -112,8 +118,9 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
       setEditingSkill(full);
       setNewName(full.name);
       setNewContent(full.content);
-    } catch (err: any) {
-      notify(`Failed to load skill '${skillName}': ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`Failed to load skill '${skillName}': ${msg}`, 'error');
     } finally {
       setLoadingSkill(false);
     }

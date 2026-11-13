@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VisualControlRoom, SubruntimeRingsView, AgentHeatmapView } from '../VisualControlRoom';
 import type { SubruntimeStatus } from '../VisualControlRoom';
+import type { NexusBridge } from '../../lib/nexus-bridge';
 
 describe('VisualControlRoom — AG-17 Sala de Control Visual', () => {
   beforeEach(() => {
@@ -53,7 +54,7 @@ describe('VisualControlRoom — AG-17 Sala de Control Visual', () => {
   it('3. Permite alternar entre las vistas en la barra de control', () => {
     const mockBridge = {
       getRaw: vi.fn().mockResolvedValue({}),
-    } as any;
+    } as unknown as NexusBridge;
 
     render(<VisualControlRoom bridge={mockBridge} online={true} />);
 

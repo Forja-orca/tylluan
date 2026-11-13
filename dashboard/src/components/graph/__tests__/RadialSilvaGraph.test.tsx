@@ -67,7 +67,7 @@ describe('RadialSilvaGraph (AG-30b — Consumo de Cómputo Mínimo)', () => {
       expect(mockBridge.fetchRaw).toHaveBeenCalledTimes(1);
     });
 
-    const calls = (mockBridge.fetchRaw as any).mock.calls;
+    const calls = vi.mocked(mockBridge.fetchRaw).mock.calls;
     expect(calls[0][0]).toBe('/api/v1/silva/graph?limit=40');
     expect(calls[0][1]?.signal instanceof AbortSignal).toBe(true);
   });

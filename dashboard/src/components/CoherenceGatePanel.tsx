@@ -28,7 +28,7 @@ function TacticalStatCard({
   accentColor,
   subtitle,
 }: {
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
   accentColor: string;
@@ -65,8 +65,9 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
       ]);
       setGate(gateStats);
       setSignal(signalStats);
-    } catch (err: any) {
-      setError(err.message || 'Failed to reach Tylluan Kernel on :47004');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg || 'Failed to reach Tylluan Kernel on :47004');
     } finally {
       setLoading(false);
     }
