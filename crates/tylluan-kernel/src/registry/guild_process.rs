@@ -2296,15 +2296,24 @@ pub struct GuildHealth {
     pub tools_active: usize,
 }
 
-/// Ruta del interprete del venv **sin resolver enlaces**.
+/// Ruta final del interprete del venv: absolutizada **sin resolver enlaces** y
+/// sin el prefijo UNC que rompe el spawn en Windows.
 ///
 /// LINUX-FIND-PYTHON-CANONICALIZE-VENV (2026-11-13): `canonicalize()` sigue el
 /// symlink `.venv/bin/python -> /usr/bin/python3.x` en Linux, y el kernel
 /// acababa ejecutando el interprete del sistema: al no ver `pyvenv.cfg` no
-/// entra en el venv y los guilds pierden sus dependencias. Aqui se absolutiza
-/// sin tocar el sistema de ficheros.
-fn venv_interpreter_path(path: &std::path::Path) -> PathBuf {
-    std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf())
+/// entra en el venv y los guilds pierden sus dependencias. `absolute()` no toca
+/// el sistema de ficheros, asi que el enlace se conserva.
+///
+/// Esta funcion es la rama completa que `find_python()` devuelve (absolutizar +
+/// recortar `\\?\`), no un paso intermedio: el test que la cubre protege el
+/// camino real de produccion (hueco senalado por Hermes en T4066).
+fn venv_final_path(path: &std::path::Path) -> String {
+    let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    absolute
+        .to_string_lossy()
+        .trim_start_matches(r"\\?\")
+        .to_string()
 }
 
 /// Detect the correct Python binary for the current platform.
@@ -2347,11 +2356,7 @@ pub async fn find_python() -> Result<String> {
         // ejecutando el interprete del SISTEMA, que al no ver `pyvenv.cfg` sale
         // del venv y los guilds pierden sus dependencias. Se absolutiza sin
         // tocar el sistema de ficheros.
-        let final_path = venv_interpreter_path(&venv_path)
-            .to_string_lossy()
-            .to_string();
-        // En Windows, por si el path llegaba ya con el prefijo UNC.
-        let final_path = final_path.trim_start_matches(r"\\?\").to_string();
+        let final_path = venv_final_path(&venv_path);
         debug!("Sovereign Venv found: {}", final_path);
         return Ok(final_path);
     } else {
@@ -3533,7 +3538,15 @@ mod tests {
             std::fs::write(&interprete, b"").unwrap();
         }
 
-        let elegido = venv_interpreter_path(&interprete);
+        // Se aserta sobre `venv_final_path`, que es la rama entera que
+        // `find_python()` devuelve (no un helper intermedio): asi el test
+        // protege el camino real de produccion, no una copia del fix.
+        let elegido = venv_final_path(&interprete);
+        assert!(
+            !elegido.starts_with(r"\\?\"),
+            "no debe devolver el prefijo UNC de Windows: {elegido}"
+        );
+        let elegido = PathBuf::from(&elegido);
         assert!(
             elegido.starts_with(dir.path()),
             "debe quedarse dentro del venv: {}",
