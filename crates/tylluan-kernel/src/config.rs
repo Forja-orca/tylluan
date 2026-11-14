@@ -779,6 +779,21 @@ pub struct NexusConfig {
     /// URLs, solo lo deja apagado. Que se elimine es decision de Jose, no de este cambio.
     #[serde(default)]
     pub allow_hf_download: bool,
+
+    /// T4106 (TL): hosts permitidos para descargar modelos. Solo https y solo
+    /// estos hosts; cualquier otra URL se descarta con `warn` en vez de
+    /// descargarse. El manifiesto `<models_dir>/*/model.json` no es de
+    /// confianza: lo puede escribir cualquier guild o agente con acceso.
+    #[serde(default = "default_allowed_model_hosts")]
+    pub allowed_model_hosts: Vec<String>,
+}
+
+/// Hosts por defecto para descargas de modelos (T4106).
+pub fn default_allowed_model_hosts() -> Vec<String> {
+    vec![
+        "huggingface.co".to_string(),
+        "cdn-lfs.huggingface.co".to_string(),
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -813,6 +828,7 @@ impl Default for NexusConfig {
             allowed_hosts: Vec::new(),
             enforce_host_guard_nonloopback: false,
             allow_hf_download: false,
+            allowed_model_hosts: default_allowed_model_hosts(),
         }
     }
 }

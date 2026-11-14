@@ -3,7 +3,7 @@
 //! Handles export, import, and model download of the TylluanNexus sovereign state.
 //! Enables the "60-second USB portability" killer feature and auto-download of AI weights.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs::{self, File};
 use anyhow::{Result, Context, anyhow};
 use tar::Archive;
@@ -37,96 +37,176 @@ pub struct ModelMeta {
     pub size_expected: u64,
 }
 
-/// Registry of available models for sovereign auto-download
-pub fn get_model_registry() -> Vec<ModelMeta> {
-    vec![
-        ModelMeta {
-            name: "SmolLM2-135M-Instruct".to_string(),
-            path: "smollm2/model.safetensors".to_string(),
-            url: "https://huggingface.co/HuggingFaceTB/smollm-135m-instruct/resolve/main/model.safetensors".to_string(),
-            size_expected: 270_000_000, // ~270MB
-        },
-        ModelMeta {
-            name: "SmolLM2-135M-Config".to_string(),
-            path: "smollm2/config.json".to_string(),
-            url: "https://huggingface.co/HuggingFaceTB/smollm-135m-instruct/resolve/main/config.json".to_string(),
-            size_expected: 2_000,
-        },
-        ModelMeta {
-            name: "SmolLM2-135M-Tokenizer".to_string(),
-            path: "smollm2/tokenizer.json".to_string(),
-            url: "https://huggingface.co/HuggingFaceTB/smollm-135m-instruct/resolve/main/tokenizer.json".to_string(),
-            size_expected: 2_000_000,
-        },
-        // --- Sovereign Tier (Qwen2.5 2024-2025) ---
-        ModelMeta {
-            name: "Qwen2.5-1.5B-Instruct".to_string(),
-            path: "qwen2.5-1.5b/model.safetensors".to_string(),
-            url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/resolve/main/model.safetensors".to_string(),
-            size_expected: 1_600_000_000,
-        },
-        ModelMeta {
-            name: "Qwen2.5-0.5B-Instruct".to_string(),
-            path: "qwen2.5-0.5b/model.safetensors".to_string(),
-            url: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/main/model.safetensors".to_string(),
-            size_expected: 600_000_000,
-        },
-        ModelMeta {
-            name: "Nomic-Embed-v2".to_string(),
-            path: "nomic-embed/model.safetensors".to_string(),
-            url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/model.safetensors".to_string(),
-            size_expected: 137_000_000, // Fixed expected size to ~137MB (V1.5 safetensors)
-        },
-        ModelMeta {
-            name: "Nomic-Embed-v2-Config".to_string(),
-            path: "nomic-embed/config.json".to_string(),
-            url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/config.json".to_string(),
-            size_expected: 1_000,
-        },
-        // --- Core Embeddings: BGE-M3 (BAAI, MIT) ---
-        ModelMeta {
-            name: "BGE-M3-ONNX-Model".to_string(),
-            path: "bge-m3/onnx/model.onnx".to_string(),
-            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/model.onnx".to_string(),
-            size_expected: 1_140_000_000,
-        },
-        ModelMeta {
-            name: "BGE-M3-ONNX-Data".to_string(),
-            path: "bge-m3/onnx/model.onnx_data".to_string(),
-            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/model.onnx_data".to_string(),
-            size_expected: 2_200_000_000,
-        },
-        ModelMeta {
-            name: "BGE-M3-ONNX-Constant".to_string(),
-            path: "bge-m3/onnx/Constant_7_attr__value".to_string(),
-            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/Constant_7_attr__value".to_string(),
-            size_expected: 1_000,
-        },
-        ModelMeta {
-            name: "BGE-M3-Tokenizer".to_string(),
-            path: "bge-m3/tokenizer.json".to_string(),
-            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/tokenizer.json".to_string(),
-            size_expected: 17_100_000,
-        },
-        ModelMeta {
-            name: "BGE-M3-Config".to_string(),
-            path: "bge-m3/config.json".to_string(),
-            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/config.json".to_string(),
-            size_expected: 1_000,
-        },
-        ModelMeta {
-            name: "BGE-M3-SpecialTokens".to_string(),
-            path: "bge-m3/special_tokens_map.json".to_string(),
-            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/special_tokens_map.json".to_string(),
-            size_expected: 1_000,
-        },
-        ModelMeta {
-            name: "BGE-M3-TokenizerConfig".to_string(),
-            path: "bge-m3/tokenizer_config.json".to_string(),
-            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/tokenizer_config.json".to_string(),
-            size_expected: 1_500,
-        },
-    ]
+/// Roles que el catálogo de descarga admite: **lo mínimo** que el kernel carga
+/// de verdad (el embedder de la búsqueda vectorial y el reranker).
+///
+/// Un `chat`, un `vision` o un `decision` no se descargan solos nunca, ni
+/// siquiera con `allow_hf_download = true`: si un manifiesto los declara, se
+/// descarta la entrada y se dice por qué.
+pub const DOWNLOADABLE_ROLES: [&str; 2] = ["embedding", "reranker"];
+
+/// Catálogo de descarga, **leído del manifiesto** (`<models_dir>/*/model.json`).
+///
+/// DIR-CATALOGO-DESCARGA (orden de Jose 2026-11-10, TL T3913). Antes esto era un
+/// `vec![...]` de 14 entradas con URL de HuggingFace, y tres de ellas eran pesos
+/// de CHAT (SmolLM2-135M-Instruct, Qwen2.5-1.5B-Instruct, Qwen2.5-0.5B-Instruct)
+/// que se autodescargaban en cuanto `allow_hf_download` estaba en `true`.
+/// Tylluan no sirve chat: el catálogo es exactamente lo que el manifiesto
+/// declara, y sólo en los roles de [`DOWNLOADABLE_ROLES`].
+///
+/// Un manifiesto sin bloque `download` no aporta entradas: aquí no se inventan
+/// URLs ni tamaños.
+pub fn get_model_registry(models_dir: &Path) -> Vec<ModelMeta> {
+    let mut registry = Vec::new();
+    let Ok(entries) = fs::read_dir(models_dir) else {
+        // Sin carpeta de modelos no hay catálogo (y no es un error: es el
+        // estado normal de una instalación que no los ha traído todavía).
+        return registry;
+    };
+
+    let mut dirs: Vec<std::path::PathBuf> = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    dirs.sort();
+
+    for dir in dirs {
+        let Some(id) = dir.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if id.starts_with('.') {
+            continue;
+        }
+        let manifest_path_for_log = dir.join("model.json").display().to_string();
+        let manifest = match crate::models::read_manifest(&dir) {
+            Ok(Some(manifest)) => manifest,
+            // Sin manifiesto no hay declaración de descarga: no se inventa nada.
+            Ok(None) => continue,
+            Err(err) => {
+                warn!(
+                    "ModelDownloader: {} no se pudo leer como manifiesto; fuera del catálogo ({err})",
+                    manifest_path_for_log
+                );
+                continue;
+            }
+        };
+        let Some(spec) = manifest.download.as_ref() else {
+            continue;
+        };
+        if spec.files.is_empty() {
+            continue;
+        }
+
+        let allowed = DOWNLOADABLE_ROLES
+            .iter()
+            .any(|role| manifest.has_role(role));
+        if !allowed {
+            warn!(
+                "ModelDownloader: '{}' declara descarga pero su rol no está entre los mínimos \
+                 ({:?}); NO se descarga. Si de verdad hace falta, se declara el rol o se copia a mano.",
+                id, DOWNLOADABLE_ROLES
+            );
+            continue;
+        }
+
+        let display = manifest
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("Local {id}"));
+        for file in &spec.files {
+            if file.url.trim().is_empty() {
+                warn!(
+                    "ModelDownloader: '{}' declara el fichero '{}' sin URL; se ignora",
+                    id, file.path
+                );
+                continue;
+            }
+            registry.push(ModelMeta {
+                name: format!("{display} ({})", file.path),
+                path: format!("{id}/{}", file.path),
+                url: file.url.clone(),
+                size_expected: file.size_bytes,
+            });
+        }
+    }
+
+    registry
+}
+
+/// Un `path` del manifiesto solo puede ser **relativo y limpio**: sin `..`,
+/// sin ruta absoluta, sin prefijo de unidad (`C:`), sin componentes vacíos.
+///
+/// T4106 (TL): antes `path` y `url` eran constantes de confianza en el código;
+/// ahora salen de `<models_dir>/*/model.json`, que puede escribir cualquier
+/// guild o agente con acceso a esa carpeta. Devuelve el path normalizado o
+/// `None` si no es aceptable.
+pub fn safe_relative_model_path(raw: &str) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    // `C:algo`, `C:\algo`, `c:/algo`: prefijo de unidad.
+    let bytes = raw.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+        return None;
+    }
+    if raw.starts_with('\\') || raw.starts_with('/') || raw.starts_with('~') {
+        return None;
+    }
+    let parsed = Path::new(raw);
+    if parsed.is_absolute() {
+        return None;
+    }
+    let mut out = PathBuf::new();
+    for comp in parsed.components() {
+        match comp {
+            std::path::Component::Normal(seg) => out.push(seg),
+            // ParentDir (`..`), CurDir (`.`), RootDir y Prefix quedan fuera.
+            _ => return None,
+        }
+    }
+    if out.as_os_str().is_empty() { None } else { Some(out) }
+}
+
+/// `true` solo si la URL es **https** y su host está en la allow-list.
+///
+/// T4106 (TL): sin esto, un `model.json` podía apuntar a cualquier host (o a
+/// http) y el kernel lo descargaba con `allow_hf_download = true`.
+pub fn is_allowed_model_url(url: &str, allowed_hosts: &[String]) -> bool {
+    let Some((scheme, rest)) = url.trim().split_once("://") else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("https") {
+        return false;
+    }
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    // Sin credenciales embebidas (`user@host`) ni puerto: solo host.
+    let host = authority.rsplit('@').next().unwrap_or(authority);
+    let host = host.split(':').next().unwrap_or(host).to_ascii_lowercase();
+    if host.is_empty() {
+        return false;
+    }
+    allowed_hosts
+        .iter()
+        .any(|allowed| allowed.trim().eq_ignore_ascii_case(&host))
+}
+
+/// Resuelve `meta.path` dentro de `models_dir` y comprueba la contención.
+///
+/// Devuelve `Err` con el motivo para que `download_model` lo registre y se
+/// descarte la entrada, en vez de escribir fuera de `models/`.
+pub fn resolve_model_download_path(models_dir: &Path, raw: &str) -> Result<PathBuf, String> {
+    let rel = safe_relative_model_path(raw)
+        .ok_or_else(|| format!("path no valido en el manifiesto: '{raw}'"))?;
+    let full = models_dir.join(&rel);
+    if !full.starts_with(models_dir) {
+        return Err(format!(
+            "path fuera de models_dir tras normalizar: '{}'",
+            full.display()
+        ));
+    }
+    Ok(full)
 }
 
 #[derive(Clone)]
@@ -170,8 +250,24 @@ impl ModelDownloader {
     }
 
     /// Download a model weight file with progress reporting via tracing and SSE
-    pub async fn download_model(&self, models_dir: &Path, meta: &ModelMeta) -> Result<()> {
-        let full_path = models_dir.join(&meta.path);
+    pub async fn download_model(
+        &self,
+        models_dir: &Path,
+        meta: &ModelMeta,
+        allowed_hosts: &[String],
+    ) -> Result<()> {
+        // T4106: path y url vienen del manifiesto (escribible por guilds y
+        // agentes). Se validan ANTES de crear directorios o descargar nada.
+        let full_path = resolve_model_download_path(models_dir, &meta.path)
+            .map_err(|why| anyhow!("{} (modelo '{}')", why, meta.name))?;
+        if !is_allowed_model_url(&meta.url, allowed_hosts) {
+            return Err(anyhow!(
+                "url no permitida en el manifiesto del modelo '{}': '{}' (solo https y hosts {:?})",
+                meta.name,
+                meta.url,
+                allowed_hosts
+            ));
+        }
         if let Some(parent) = full_path.parent() {
             fs::create_dir_all(parent).ok();
         }
@@ -231,13 +327,28 @@ impl ModelDownloader {
     /// compartida (`models/`). El registro de URLs no se borra: queda inerte, y eliminarlo es
     /// decision de Jose.
     pub async fn download_missing(&self, models_dir: &Path) -> Result<Vec<String>> {
-        let permite_descarga = crate::config::TylluanConfig::load_cached()
-            .map(|c| c.try_read().map(|g| g.nexus.allow_hf_download).unwrap_or(false))
-            .unwrap_or(false);
-        let registry = get_model_registry();
+        let (permite_descarga, allowed_hosts) = crate::config::TylluanConfig::load_cached()
+            .map(|c| {
+                c.try_read()
+                    .map(|g| (g.nexus.allow_hf_download, g.nexus.allowed_model_hosts.clone()))
+                    .unwrap_or((false, crate::config::default_allowed_model_hosts()))
+            })
+            .unwrap_or((false, crate::config::default_allowed_model_hosts()));
+        let registry = get_model_registry(models_dir);
         let mut downloaded = Vec::new();
 
         if !permite_descarga {
+            if registry.is_empty() {
+                // DIR-CATALOGO-DESCARGA: sin manifiesto de descargas no hay
+                // nada que echar de menos. Decirlo así evita el mensaje falso
+                // de "registro completo" cuando en realidad no se declara nada.
+                info!(
+                    "ModelDownloader: el manifiesto de {} no declara descargas; nada que comprobar \
+                     (allow_hf_download=false)",
+                    models_dir.display()
+                );
+                return Ok(downloaded);
+            }
             let mut faltan = Vec::new();
             for meta in &registry {
                 if !self.is_model_present(models_dir, meta) {
@@ -268,7 +379,7 @@ impl ModelDownloader {
         for meta in registry {
             if !self.is_model_present(models_dir, &meta) {
                 info!("📥 Model missing, downloading: {}", meta.name);
-                if let Err(e) = self.download_model(models_dir, &meta).await {
+                if let Err(e) = self.download_model(models_dir, &meta, &allowed_hosts).await {
                     error!("❌ Failed to download {}: {}", meta.name, e);
                 } else {
                     downloaded.push(meta.name);
@@ -372,49 +483,132 @@ pub fn import_state(input_path: &Path, target_dir: &Path) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn registry_contains_bge_m3_onnx_and_tokenizer() {
-        let registry = get_model_registry();
-        let paths: Vec<String> = registry.iter().map(|m| m.path.clone()).collect();
+    /// Escribe `<dir>/<id>/model.json` con el contenido dado.
+    fn write_manifest(dir: &Path, id: &str, json: &str) {
+        let model_dir = dir.join(id);
+        std::fs::create_dir_all(&model_dir).expect("crear carpeta de modelo");
+        std::fs::write(model_dir.join("model.json"), json).expect("escribir model.json");
+    }
 
-        assert!(
-            paths.contains(&"bge-m3/onnx/model.onnx".to_string()),
-            "BGE-M3 ONNX graph missing from registry: {paths:?}"
+    /// DIR-CATALOGO-DESCARGA: el catálogo sale del MANIFIESTO, no de una lista
+    /// en Rust. Un `embedding` con bloque `download` produce exactamente sus
+    /// ficheros, con su URL y su tamaño declarados.
+    #[test]
+    fn catalogo_sale_del_manifiesto() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(
+            dir.path(),
+            "embedder",
+            r#"{
+                "name": "Embedder de prueba",
+                "role": "embedding",
+                "download": { "required": true, "files": [
+                    { "path": "onnx/model.onnx", "url": "https://example.invalid/m.onnx", "size_bytes": 1234 }
+                ] }
+            }"#,
         );
+
+        let registry = get_model_registry(dir.path());
+        assert_eq!(registry.len(), 1, "una sola entrada declarada: {registry:?}");
+        assert_eq!(registry[0].path, "embedder/onnx/model.onnx");
+        assert_eq!(registry[0].url, "https://example.invalid/m.onnx");
+        assert_eq!(registry[0].size_expected, 1234);
+    }
+
+    /// Y sin bloque `download` no hay entrada: aquí no se inventan URLs.
+    #[test]
+    fn manifiesto_sin_bloque_download_no_aporta_entradas() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(dir.path(), "decima", r#"{ "role": "decision", "name": "Decima" }"#);
         assert!(
-            paths.contains(&"bge-m3/onnx/model.onnx_data".to_string()),
-            "BGE-M3 ONNX external tensor missing from registry: {paths:?}"
-        );
-        assert!(
-            paths.contains(&"bge-m3/tokenizer.json".to_string()),
-            "BGE-M3 tokenizer missing from registry: {paths:?}"
+            get_model_registry(dir.path()).is_empty(),
+            "sin download.files no hay nada que descargar"
         );
     }
 
+    /// El test de la orden de Jose (TL T3913): un modelo de CHAT declarado en
+    /// el manifiesto **no** entra en el catálogo, ni con URL ni sin ella.
+    /// Mutacion: si se quita la lista blanca de roles, este test cae.
     #[test]
-    fn registry_entries_have_valid_metadata_and_unique_paths() {
-        let registry = get_model_registry();
-        let mut seen_paths = std::collections::HashSet::new();
+    fn catalogo_descarta_modelos_de_chat() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(
+            dir.path(),
+            "smollm2",
+            r#"{
+                "name": "SmolLM2-135M-Instruct",
+                "role": "chat",
+                "family": "smollm2",
+                "download": { "files": [
+                    { "path": "model.safetensors", "url": "https://example.invalid/chat.safetensors", "size_bytes": 270000000 }
+                ] }
+            }"#,
+        );
+        // Y un rol fuera de la lista mínima que tampoco es chat, por si acaso.
+        write_manifest(
+            dir.path(),
+            "visioncito",
+            r#"{ "role": "vision", "download": { "files": [
+                { "path": "v.onnx", "url": "https://example.invalid/v.onnx", "size_bytes": 10 }
+            ] } }"#,
+        );
 
+        let registry = get_model_registry(dir.path());
+        assert!(
+            registry.is_empty(),
+            "ni chat ni vision pueden entrar en el catálogo de descarga: {registry:?}"
+        );
+    }
+
+    /// La lista mínima es `embedding` + `reranker`: el reranker sí es descargable
+    /// (lo carga el kernel para la búsqueda híbrida).
+    #[test]
+    fn catalogo_admite_embedding_y_reranker() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(
+            dir.path(),
+            "embedder",
+            r#"{ "role": "embedding", "download": { "files": [
+                { "path": "e.onnx", "url": "https://example.invalid/e.onnx", "size_bytes": 1 }
+            ] } }"#,
+        );
+        write_manifest(
+            dir.path(),
+            "reranker",
+            r#"{ "role": "reranker", "roles": ["embedding"], "download": { "files": [
+                { "path": "r.onnx", "url": "https://example.invalid/r.onnx", "size_bytes": 2 }
+            ] } }"#,
+        );
+        let paths: Vec<String> = get_model_registry(dir.path()).into_iter().map(|m| m.path).collect();
+        assert!(paths.contains(&"embedder/e.onnx".to_string()), "{paths:?}");
+        assert!(paths.contains(&"reranker/r.onnx".to_string()), "{paths:?}");
+    }
+
+    /// Y ninguna entrada del catálogo declara metadatos inválidos: esto antes
+    /// se comprobaba sobre la lista hardcodeada, ahora sobre lo que la función
+    /// devuelve de verdad.
+    #[test]
+    fn entradas_del_catalogo_tienen_metadatos_utiles() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(
+            dir.path(),
+            "embedder",
+            r#"{ "role": "embedding", "download": { "files": [
+                { "path": "e.onnx", "url": "https://example.invalid/e.onnx", "size_bytes": 7 },
+                { "path": "sin-url.onnx", "url": "", "size_bytes": 7 }
+            ] } }"#,
+        );
+        let registry = get_model_registry(dir.path());
+        assert_eq!(
+            registry.len(),
+            1,
+            "la entrada sin URL se ignora en vez de viajar rota: {registry:?}"
+        );
         for meta in &registry {
-            assert!(!meta.name.is_empty(), "ModelMeta name cannot be empty");
-            assert!(!meta.path.is_empty(), "ModelMeta path cannot be empty");
-            assert!(
-                meta.url.starts_with("https://"),
-                "ModelMeta URL must be https, got: {}",
-                meta.url
-            );
-            assert!(
-                meta.size_expected > 0,
-                "ModelMeta size_expected must be > 0, got {} for {}",
-                meta.size_expected,
-                meta.name
-            );
-            assert!(
-                seen_paths.insert(&meta.path),
-                "Duplicate path in registry: {}",
-                meta.path
-            );
+            assert!(!meta.name.is_empty(), "name vacio");
+            assert!(!meta.path.is_empty(), "path vacio");
+            assert!(meta.url.starts_with("https://"), "url no https: {}", meta.url);
+            assert!(meta.size_expected > 0, "size_expected debe ser > 0");
         }
     }
 
@@ -457,5 +651,76 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+}
+
+#[cfg(test)]
+mod t3_download_guards_tests {
+    use super::*;
+
+    fn hosts() -> Vec<String> {
+        vec!["huggingface.co".to_string(), "cdn-lfs.huggingface.co".to_string()]
+    }
+
+    /// T4106: `..` no puede salir de `models/`. Antes se hacía
+    /// `models_dir.join(&meta.path)` a secas y un manifiesto con `../../algo`
+    /// escribía fuera.
+    #[test]
+    fn path_con_parent_dir_se_rechaza() {
+        assert!(safe_relative_model_path("../../.ssh/authorized_keys").is_none());
+        assert!(safe_relative_model_path("modelo/../../../fuera.bin").is_none());
+        assert!(resolve_model_download_path(Path::new("/models"), "../../evil.bin").is_err());
+    }
+
+    /// Ni rutas absolutas ni prefijo de unidad (`C:`) ni `~`.
+    #[test]
+    fn path_absoluto_o_con_unidad_se_rechaza() {
+        for raw in ["/etc/passwd", "\\servidor\\share\\x.bin", "C:\\windows\\x.dll", "C:x.dll", "~/x.bin"] {
+            assert!(
+                safe_relative_model_path(raw).is_none(),
+                "debe rechazar '{raw}'"
+            );
+        }
+    }
+
+    /// Una ruta relativa limpia se acepta y se resuelve dentro de models_dir.
+    #[test]
+    fn path_relativo_limpio_se_acepta_y_queda_dentro() {
+        let rel = safe_relative_model_path("mxbai-embed-large/onnx/model.onnx").unwrap();
+        assert_eq!(rel, PathBuf::from("mxbai-embed-large/onnx/model.onnx"));
+        let full = resolve_model_download_path(Path::new("/models"), "m/w.bin").unwrap();
+        assert!(full.starts_with(Path::new("/models")));
+    }
+
+    /// T4106: solo https. `http://` (o sin esquema) se descarta.
+    #[test]
+    fn url_http_se_rechaza() {
+        assert!(!is_allowed_model_url("http://huggingface.co/x.bin", &hosts()));
+        assert!(!is_allowed_model_url("huggingface.co/x.bin", &hosts()));
+        assert!(!is_allowed_model_url("ftp://huggingface.co/x.bin", &hosts()));
+    }
+
+    /// T4106: host ajeno se descarta aunque sea https.
+    #[test]
+    fn url_de_host_ajeno_se_rechaza() {
+        assert!(!is_allowed_model_url("https://evil.example/x.bin", &hosts()));
+        // Con credenciales o puerto, el host tampoco cuela.
+        assert!(!is_allowed_model_url("https://huggingface.co@evil.example/x.bin", &hosts()));
+        assert!(!is_allowed_model_url("https://evil.example:443/x.bin", &hosts()));
+    }
+
+    /// Y la URL buena pasa: https + host de la allow-list.
+    #[test]
+    fn url_https_de_host_permitido_se_acepta() {
+        assert!(is_allowed_model_url(
+            "https://huggingface.co/mxbai/resolve/main/model.onnx",
+            &hosts()
+        ));
+        assert!(is_allowed_model_url(
+            "https://cdn-lfs.huggingface.co/blob/abc",
+            &hosts()
+        ));
+        // La comparación de host no distingue mayúsculas.
+        assert!(is_allowed_model_url("https://HuggingFace.co/x", &hosts()));
     }
 }

@@ -145,10 +145,18 @@ async fn handle_maintenance_commands(args: &[String]) -> anyhow::Result<bool> {
         let downloader = tylluan_kernel::maintenance::ModelDownloader::new();
         match downloader.download_missing(&models_dir).await {
             Ok(downloaded) => {
-                if downloaded.is_empty() {
-                    info!("✅ All models already present.");
-                } else {
+                if !downloaded.is_empty() {
                     info!("✅ Downloaded models: {:?}", downloaded);
+                } else if tylluan_kernel::maintenance::get_model_registry(&models_dir).is_empty() {
+                    // Honestidad: "no hay nada que descargar" no es lo mismo
+                    // que "todo estaba puesto".
+                    info!(
+                        "El manifiesto de {} no declara descargas. Copia los ficheros ahí o \
+                         declara un bloque `download` en el model.json del modelo.",
+                        models_dir.display()
+                    );
+                } else {
+                    info!("✅ All declared models already present.");
                 }
             }
             Err(e) => {

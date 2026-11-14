@@ -58,6 +58,57 @@ pub struct ModelManifest {
     /// Nota libre de auditoría: de dónde sale el rol declarado.
     #[serde(default)]
     pub notes: Option<String>,
+    /// Bloque de descarga opcional. **Sin él el modelo no es descargable.**
+    ///
+    /// DIR-CATALOGO-DESCARGA (orden de Jose 2026-11-10, TL T3913): el catálogo
+    /// de descarga sale del manifiesto, nunca de una lista hardcodeada en Rust.
+    /// La lista que vivía en `maintenance.rs` traía pesos de chat (SmolLM2,
+    /// Qwen2.5) con URL de HuggingFace lista para autodescarga.
+    #[serde(default)]
+    pub download: Option<DownloadSpec>,
+}
+
+/// Qué ficheros hay que traer para un modelo, y si el kernel los necesita.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DownloadSpec {
+    /// Ficheros a descargar, con su ruta dentro de la carpeta del modelo.
+    #[serde(default)]
+    pub files: Vec<DownloadFile>,
+    /// `true` = el kernel pierde función sin este modelo; `false` = opcional.
+    #[serde(default)]
+    pub required: bool,
+}
+
+/// Un fichero descargable de un modelo declarado en el manifiesto.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadFile {
+    /// Ruta relativa dentro de `models/<id>/`.
+    pub path: String,
+    /// URL de origen. Sólo se toca si el operador da consentimiento.
+    pub url: String,
+    /// Tamaño esperado en bytes (para publicar el tamaño real, no inventarlo).
+    #[serde(default)]
+    pub size_bytes: u64,
+    /// Hash del fichero cuando el manifiesto lo declara.
+    #[serde(default)]
+    pub sha256: Option<String>,
+}
+
+impl ModelManifest {
+    /// ¿Declara este manifiesto el rol pedido, como principal o secundario?
+    pub fn has_role(&self, wanted: &str) -> bool {
+        let want = normalize_role(wanted);
+        if want.is_none() {
+            return false;
+        }
+        if primary_role(self) == want {
+            return true;
+        }
+        self.roles
+            .iter()
+            .filter_map(|r| normalize_role(r))
+            .any(|r| Some(r) == want)
+    }
 }
 
 /// Una entrada del inventario tal como la consume `/api/v1/models`.
