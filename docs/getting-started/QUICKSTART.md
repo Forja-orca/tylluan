@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh 
 irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 ```
 
-The installer downloads the pre-built release binaries (`tylluan-nexus` and `tylluan-cli`) into `~/.tylluan/bin/`, adds them to your PATH, writes a `tylluan.toml` with the `portable` profile and starts the kernel. Open a new terminal afterwards so the PATH change takes effect.
+The installer downloads the pre-built release binaries (`tylluan-nexus` and `tylluan-cli`) into `~/.tylluan/bin/`, adds them to your PATH, creates `~/.tylluan/.venv` and installs the Python guild dependencies there from the hash-locked `guilds/requirements-hashes.txt` (one time, needs network, never into your system Python), writes a `tylluan.toml` with the `portable` profile and starts the kernel. Open a new terminal afterwards so the PATH change takes effect. `--no-start` writes the config without starting the kernel, and `--skip-guild-deps` / `-SkipGuildDeps` skips the Python dependencies.
 
 ### Option B: Build from Source
 
@@ -131,17 +131,21 @@ The kernel exposes exactly 6 sovereign tools:
 
 ## 7. Python Guilds
 
-Guilds extend Tylluan's execution capabilities. Guild scripts in `guilds/` are auto-discovered on boot (45 default routable guilds):
+Guilds extend Tylluan's execution capabilities. Guild scripts in `guilds/` are auto-discovered on boot (45 default routable guilds).
+
+The installers already do this: they create `~/.tylluan/.venv` and install the dependencies from `guilds/requirements-hashes.txt` there (never into your system Python). For a source build, use the repository's own virtualenv with the same hash-locked file:
 
 ```bash
-# Set up guild environment
+# Source builds only — a release install already has ~/.tylluan/.venv
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install --require-hashes -r guilds/requirements-hashes.txt
 
 # Verify guild status
 tylluan-cli doctor
 ```
+
+If a release ever ships without `requirements-hashes.txt`, the installer refuses to pip-install anything: there would be no hashes to verify. `--allow-unhashed-deps` / `-AllowUnhashedDeps` overrides that on purpose, and says so in red.
 
 ---
 

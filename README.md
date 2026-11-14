@@ -59,7 +59,7 @@ irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
 This puts `tylluan-nexus` (the kernel) and `tylluan-cli` in `~/.tylluan/bin/` and adds them to your `PATH`. Open a new terminal afterwards.
 
-The kernel needs no Rust, Python or Node. The 45 guilds behind `tylluan_do` are Python programs and need **Python 3.12 or newer (CI tests 3.12) and FastMCP** installed separately (`pip install --require-hashes -r guilds/requirements-hashes.txt`; both files ship in the release archive and in this repository); without them those guilds fail to start and `/api/v1/doctor` reports `degraded`. Memory and recall work without Python.
+The kernel needs no Rust, Python or Node. The 45 guilds behind `tylluan_do` are Python programs and need **Python 3.12 or newer (CI tests 3.12) and FastMCP**. The installers create `~/.tylluan/.venv` and install those dependencies there from the hash-locked `guilds/requirements-hashes.txt` (one time, needs network, never touches your system Python); the kernel prefers that interpreter on its own. `--skip-guild-deps` / `-SkipGuildDeps` skips the step, and if a release ever ships without the hashes file the installer refuses to pip-install anything. Without the dependencies those guilds fail to start and `/api/v1/doctor` reports `degraded`. Memory and recall work without Python.
 
 To build from source, see [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md).
 
@@ -175,7 +175,7 @@ Two or more Tylluan instances can sync memories with peers you approve one by on
 
 ## Status
 
-1818 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
+1819 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
 
 - **Latest release:** v0.17.2 (2026-10-27). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
 - **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
