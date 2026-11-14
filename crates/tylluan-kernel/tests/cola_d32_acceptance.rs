@@ -151,12 +151,19 @@ async fn v4_coloquio_index_debe_marcar_veneno_es() {
     let app = support::build_test_app(state.clone());
     let author = format!("d32v4-{}", next_case());
     let content = format!("{VENENO_ES} — informe semanal de despliegue y notas del equipo");
-    let (status, body) = post_json(
-        &app,
-        "/api/v1/coloquio/channels/general/post",
-        serde_json::json!({ "author_id": author, "role": "agent", "content": content }),
-    )
-    .await;
+    // D180b: el handler de Coloquio es fail-closed sin contexto de auth; el test
+    // app no monta el middleware, asi que se instala DevBypass (lo que test_state
+    // produciria en produccion con dev_mode).
+    let (status, body) = tylluan_kernel::transport::http::auth::ACL_AUTH_KIND
+        .scope(
+            tylluan_kernel::transport::http::auth::AclAuthKind::DevBypass,
+            post_json(
+                &app,
+                "/api/v1/coloquio/channels/general/post",
+                serde_json::json!({ "author_id": author, "role": "agent", "content": content }),
+            ),
+        )
+        .await;
     assert!(
         status == StatusCode::OK || status == StatusCode::CREATED,
         "V4: Coloquio debía aceptar el mensaje para poder medir la marca en el index: {status} {body}"

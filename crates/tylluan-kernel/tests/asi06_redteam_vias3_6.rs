@@ -111,7 +111,15 @@ async fn post_coloquio(app: &axum::Router, channel: &str, author: &str, content:
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap();
-    app.clone().oneshot(req).await.unwrap().status()
+    // D180b: el handler de Coloquio exige contexto de autenticacion (fail-closed).
+    // `build_test_app` no monta el middleware de auth, asi que se instala aqui el
+    // que `test_state` (dev_mode) produciria en produccion: DevBypass.
+    tylluan_kernel::transport::http::auth::ACL_AUTH_KIND
+        .scope(
+            tylluan_kernel::transport::http::auth::AclAuthKind::DevBypass,
+            async { app.clone().oneshot(req).await.unwrap().status() },
+        )
+        .await
 }
 
 // ---------------------------------------------------------------------------
