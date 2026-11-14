@@ -35,11 +35,17 @@ def test_kernel_exports_the_models_dir_to_guilds():
     guild_process = (ROOT / "crates/tylluan-kernel/src/registry/guild_process.rs").read_text(
         encoding="utf-8"
     )
-    assert "TYLLUAN_MODELS_DIR" in guild_process or "MODELS_DIR_ENV" in guild_process, (
-        "el kernel debe exportar TYLLUAN_MODELS_DIR al lanzar un guild"
-    )
     config = (ROOT / "crates/tylluan-kernel/src/config.rs").read_text(encoding="utf-8")
     assert 'pub const MODELS_DIR_ENV: &str = "TYLLUAN_MODELS_DIR";' in config
+    # T4120: el entorno de los guilds se construye en config::guild_launcher_env_with_operator_override;
+    # el spawn debe usarlo y esa funcion debe exportar la variable.
+    assert "guild_launcher_env(" in guild_process, (
+        "el kernel debe exportar TYLLUAN_MODELS_DIR al lanzar un guild (via guild_launcher_env)"
+    )
+    builder = config.split("pub fn guild_launcher_env_with_operator_override", 1)[1].split("pub fn guild_launcher_env(", 1)[0]
+    assert "MODELS_DIR_ENV.to_string()" in builder, (
+        "guild_launcher_env_with_operator_override debe incluir TYLLUAN_MODELS_DIR"
+    )
 
 
 def test_vision_prefers_the_exported_models_dir(tmp_path, monkeypatch):
