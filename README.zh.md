@@ -89,11 +89,8 @@ Tylluan 的核心是一个本地 Rust 内核，你的智能体通过 MCP 与它�
 ### 架构总览
 
 <p align="center">
-  <a href="docs/assets/architecture.svg" target="_blank">
-    <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
-  </a>
+  <img src="docs/assets/how-it-fits.svg" alt="进程架构图：MCP 客户端（Claude Code、Codex、Cursor、VS Code）与 REST、A2A 及仪表盘客户端连接到单个 Rust 进程 tylluan-nexus 的 HTTP 传输层（127.0.0.1 端口 47004）；经批准的联邦对等节点通过加密网状网络加入（Ed25519、Noise NK/XK、按空间权限）。每个请求经过认证与守卫（bearer token、默认拒绝的 ACL、Origin/Host 403）后进入六个主权工具，路由至管理 45 个 Python FastMCP guild（stdio JSON-RPC）的注册表；读写 SilvaDB（带 FTS5、图与向量的 SQLite WAL），使用进程内 ONNX Runtime 进行 1024 维嵌入与重排序，可选调用运行在独立临时 llama-server 上的内核裁判（write gate、centinela、语法），并维护 Coloquio 频道与哈希链审计日志。用户自有的 llama.cpp 服务器为可选项且永不自动启动。" width="100%">
 </p>
-<p align="right"><sub>💡 <i>点击图片可在新标签页打开全分辨率 SVG，无限缩放。想要交互版本（平移/缩放，点击组件可查看其真实源码 file:line）请下载 <a href="docs/assets/architecture_interactive.html">architecture_interactive.html</a> 并在本地打开。</i></sub></p>
 
 ### 仪表盘
 
@@ -132,6 +129,10 @@ tylluan_decide    Ask a bounded typed question (choice / score / boolean): close
 这是有意为之。无论最终干活的是哪个 guild —— git、视觉、还是数据库查询 —— 客户端始终只看到这一个干净的接口。
 
 > **`main` 上的新内容（2026-10-16）：`tylluan_decide`，第六个主权工具。** CONTRACT-01 现在规定恰好六个工具（已由 ADR-021 修订）。它默认开启，可通过 MCP 和 REST 两条通道访问（`POST /api/v1/decide`，同一请求体、同一响应）。今天它只用确定性规则基线回答两个命名契约（`scheduler_routing`、`human_review`），处于影子模式，并记录每一次决策以供后续比较（输入仅以哈希形式保存）。自由问题会显式弃权（`no_model_provider`），因为**尚未接入任何模型提供方**。它永远不是权限闸门。它已在 `main`，但尚未进入带标签的发布版本。见[进行中的架构决策](#进行中的架构决策)。
+
+<p align="center">
+  <img src="docs/assets/memory-flow.svg" alt="记忆流水线。写入路径：tylluan_remember 经过 L1 注入过滤（已知模式被拒绝），使用 mxbai-embed-large（1024 维，ONNX）向量化并存入 SilvaDB（带 FTS5、图与向量的 SQLite WAL）；可选的异步 L2 写入裁判将节点分类为 SAFE 或 SUSPICIOUS 并设置隔离标记（opt-in，fail-open）。召回路径：tylluan_recall 接收查询与限制数量，按 token 数与熵将其分类为检索层级（Fast、Balanced 或 Deep），随后执行 FTS5 BM25 与余弦搜索并以 k=60 的 RRF 融合（图提供 PageRank 信号；Fast 跳过向量扫描），再经由一致性门控（L1 模式、L2 溯源、L3 低于 0.85 的语义漂移、可选 L4 裁判）过滤候选，最后将排序后的记忆与 gate-stats 头部返回给智能体。" width="100%">
+</p>
 
 ### 检索效果究竟如何？
 
@@ -197,7 +198,7 @@ tylluan_decide    Ask a bounded typed question (choice / score / boolean): close
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-1134 个测试覆盖 Rust 内核（lib）、`tylluan-link` 与 `tylluan-fsrs` —— 全部通过。每次推送都会运行 Rust 构建 + 测试、clippy、`cargo-deny`（bans、licenses、advisories）、Python lint + 测试、仪表盘构建和安全审计套件。详情见 [STATUS.md](STATUS.md) 和 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
+1819 个测试（1732 个内核库测试 + 75 个 `tylluan-link` + 12 个 `tylluan-fsrs`）覆盖 Rust 内核（lib）、`tylluan-link` 与 `tylluan-fsrs` —— 全部通过。每次推送都会运行 Rust 构建 + 测试、clippy、`cargo-deny`（bans、licenses、advisories）、Python lint + 测试、仪表盘构建和安全审计套件。详情见 [STATUS.md](STATUS.md) 和 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ---
 
