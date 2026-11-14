@@ -1,6 +1,13 @@
 # ADR-014 — Capability Provider Fabric: de "guild router" a tejido de capacidades
 
-**Status:** Draft (pendiente de validación del Tech Lead — Claude Code). Documento de diseño only — **cero cambios de código**; este ADR no adopta nada por sí mismo. Igual que el gate de cutover del WS3, la adopción no es de quien escribe el documento.
+**Status:** Parcial — **índice de capacidades de solo lectura implementado; selector universal de proveedores pendiente** (actualizado 2026-11-14; originalmente `Draft`, 2026-09-14).
+- **Implementado (solo lectura, sin alterar enrutado/matching/scheduling/dispatch):**
+  - `crates/tylluan-kernel/src/registry/capability_registry.rs:35-145`: índice read-only (`ProviderRef::Local { guild }` en `:35-38`, `Capability` en `:43-58`, `build_registry()` en `:71-113` sobre `builtin_catalog()` + `TOOL_METADATA`, `registry()` en `:117-120`, `capabilities_for_guild()` en `:124-133`, `registry_json()` en `:141`).
+  - `crates/tylluan-kernel/src/transport/http/api_v1/routes.rs:334-335` y `crates/tylluan-kernel/src/transport/http/api_v1/api_guilds.rs:258-269`: endpoints `GET /api/v1/capability-registry` (`capability_registry_handler`) y `GET /api/v1/capability-registry/{guild}` (`capability_registry_guild_handler`).
+  - `crates/tylluan-kernel/src/router/system_snapshot.rs:46,125`: `capability_registry_hash` integrado en `SystemSnapshot`.
+- **Pendiente (no implementado):**
+  - El selector universal de proveedores (`ProviderSelector`, fase F3) y el cutover (F4): `ProviderSelector` solo aparece en comentarios de `crates/tylluan-kernel/src/registry/capability_registry.rs:3,32` (ningún struct/trait/función en `crates/tylluan-kernel/src/`).
+  - Variantes remotas/internas/HITL en `ProviderRef` (`crates/tylluan-kernel/src/registry/capability_registry.rs:35-38` solo define `Local { guild }`), unificación en runtime con `tylluan_link::capability::CapabilityRegistry` (`crates/tylluan-kernel/src/transport/http/mod.rs:137`) y endpoint de confusion matrix `/provider/selections/confusion`.
 **Date:** 2026-09-14
 **Authors:** Buffy (documento; dirección heredada del audit externo 2026-09-13, adoptado como ciclo WS8 del plan aprobado)
 **Depends on:** ADR-009 (contrato declarativo de agentes), ADR-013 (non-predation — el fabric DEBE respetar las reglas de rollout opt-in/default-off y declaración de impacto), G6 (identity gate — `61fb702`), WS2/WS3/WS5 (infraestructura de decisión y observación de esta campaña, commits `9fc8bfb`/`8ac01f4`/`73c3f12`), CONTRACT-01 (5 tools soberanos, inviolable)
