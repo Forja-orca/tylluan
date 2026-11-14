@@ -137,7 +137,11 @@ async fn handle_maintenance_commands(args: &[String]) -> anyhow::Result<bool> {
     // Download missing models command
     if args.contains(&"--download-models".to_string()) {
         info!("📥 Downloading missing AI models...");
-        let models_dir = PathBuf::from("models");
+        // DIR-CATALOGO-DESCARGA (TL T3913): la misma raíz que publica
+        // `/api/v1/models` y que se exporta a los guilds. Antes esto era
+        // `PathBuf::from("models")` (relativa al cwd), así que con
+        // TYLLUAN_MODELS_DIR puesto el comando miraba otra carpeta.
+        let models_dir = tylluan_kernel::models::models_root();
         let downloader = tylluan_kernel::maintenance::ModelDownloader::new();
         match downloader.download_missing(&models_dir).await {
             Ok(downloaded) => {
@@ -1165,8 +1169,22 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // ─── Registry Actor ───────────────────────────────────────────
+    // P1 installer (TL order 2026-11-10): resolve `guilds/` the same way the
+    // router catalog does (env override -> cwd -> executable's directory ->
+    // compile-time anchor). A release install lives in `<install>/bin` with
+    // `<install>/bin/guilds`, and the operator starts the kernel from any
+    // directory; using the cwd-only workspace root there made every spawn fail
+    // as a "ghost guild ... missing" even though the catalog was resolved.
+    let guilds_root = tylluan_kernel::router::catalog::guilds_root(&workspace_root);
+    if guilds_root != workspace_root {
+        info!(
+            "🏰 Guilds root resolved from the executable: {} (workspace root was {})",
+            guilds_root.display(),
+            workspace_root.display()
+        );
+    }
     let mut registry_raw = GuildRegistry::new(
-        workspace_root.clone(),
+        guilds_root.clone(),
         config.guilds.core.lazy_load_timeout_secs,
         config.nexus.timeouts.clone(),
         config.guilds.guild_max_concurrent_calls,

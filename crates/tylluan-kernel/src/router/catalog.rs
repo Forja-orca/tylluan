@@ -741,9 +741,71 @@ fn guild_root_candidates(
 
     candidates
 }
+
+/// Root that actually contains `guilds/`, resolved exactly like
+/// `builtin_catalog()` does.
+///
+/// P1 installer (TL order 2026-11-10): a release install puts the kernel in
+/// `<install>/bin` and the Python guilds in `<install>/bin/guilds`, and the
+/// operator starts it from whatever directory their shell happens to be in.
+/// The cwd-based `setup::find_workspace_root()` then lands somewhere without
+/// `guilds/`, so every spawn died on "ghost guild … missing" while the router
+/// catalog — which already probes the executable's directory — looked fine.
+/// Spawning has to use the same answer as the catalog, or the two disagree.
+///
+/// `fallback` is returned untouched when no candidate qualifies, so a caller
+/// that passes a deliberate path keeps its previous behavior.
+pub fn guilds_root(fallback: &Path) -> PathBuf {
+    let env_root = std::env::var_os("TYLLUAN_REPO_ROOT").map(PathBuf::from);
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+    pick_guilds_root(
+        &guild_root_candidates(&cwd, exe_dir.as_deref(), env_root.as_deref()),
+        fallback,
+    )
+}
+
+/// Pure half of `guilds_root`: the first candidate with a real `guilds/`
+/// directory, else `fallback`.
+fn pick_guilds_root(candidates: &[PathBuf], fallback: &Path) -> PathBuf {
+    candidates
+        .iter()
+        .find(|root| root.join("guilds").is_dir())
+        .cloned()
+        .unwrap_or_else(|| fallback.to_path_buf())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P1 installer: el registro de guilds tiene que resolver `guilds/` igual
+    /// que el catalogo (cwd -> directorio del ejecutable -> ancla de
+    /// compilacion). Antes usaba solo el cwd y una instalacion limpia arrancaba
+    /// con todos los guilds como "ghost guild ... missing".
+    #[test]
+    fn p1_pick_guilds_root_prefiere_el_candidato_con_guilds() {
+        let dir = tempfile::tempdir().unwrap();
+        let sin_guilds = dir.path().join("bin");
+        let con_guilds = dir.path().join("install");
+        std::fs::create_dir_all(&sin_guilds).unwrap();
+        std::fs::create_dir_all(con_guilds.join("guilds")).unwrap();
+
+        assert_eq!(
+            pick_guilds_root(&[sin_guilds.clone(), con_guilds.clone()], &sin_guilds),
+            con_guilds,
+            "gana el primer candidato que tiene guilds/"
+        );
+
+        std::fs::remove_dir_all(con_guilds.join("guilds")).unwrap();
+        assert_eq!(
+            pick_guilds_root(&[sin_guilds.clone(), con_guilds], &sin_guilds),
+            sin_guilds,
+            "sin candidato valido se devuelve el fallback, no una ruta inventada"
+        );
+    }
 
     #[test]
     fn extract_capabilities_handles_multiline_singleline_and_comments() {

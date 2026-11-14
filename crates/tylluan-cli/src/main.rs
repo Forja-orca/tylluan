@@ -414,14 +414,22 @@ async fn main() -> Result<()> {
             }
             println!("🚀 Starting TylluanNexus kernel...");
             let exe_path = find_kernel_exe()?;
-            
-            let mut cmd = Command::new(&exe_path);
-            if headless {
-                cmd.arg("--headless");
-            }
-            if let Some(p) = port {
-                cmd.args(["--port", &p.to_string()]);
-            }
+
+            // D-169 (decisión del TL, 2026-11-10): el kernel hereda el cwd del
+            // operador y su raíz de modelos cae a `<cwd>/models` cuando
+            // `TYLLUAN_MODELS_DIR` no está fijada, así que dos arranques desde
+            // carpetas distintas usaban carpetas distintas (de ahí las cachés
+            // de fastembed duplicadas). Se fija aquí, y sólo si el operador no
+            // la puso. El cwd no se toca.
+            let install_dir = default_install_dir();
+            let models_env = std::env::var_os("TYLLUAN_MODELS_DIR");
+            let mut cmd = kernel_command(
+                &exe_path,
+                headless,
+                port,
+                install_dir.as_deref(),
+                models_env.as_deref(),
+            );
 
             let child = cmd.spawn()
                 .with_context(|| format!("Failed to launch kernel at {}", exe_path.display()))?;
@@ -1610,6 +1618,59 @@ fn resolve_url(url: Option<String>, host: Option<String>) -> Result<String> {
     Err(anyhow::anyhow!("Provide a URL or --host"))
 }
 
+/// Directorio de instalación por defecto: `<HOME|USERPROFILE>/.tylluan`.
+///
+/// D-169: ahí viven los binarios (`bin/`), la configuración (`tylluan.toml`) y,
+/// desde este cambio, la raíz de modelos (`models/`).
+fn default_install_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(|home| PathBuf::from(home).join(".tylluan"))
+}
+
+/// `TYLLUAN_MODELS_DIR` que esta CLI debe exportar al kernel.
+///
+/// D-169 (decisión del TL, 2026-11-10): si el operador **no** fijó la variable,
+/// se exporta `<install_dir>/models`, para que la raíz de modelos deje de
+/// depender del cwd con el que se lanzó `tylluan-cli start` (la del kernel caía
+/// a `<cwd>/models`, y cada arranque desde otra carpeta usaba otra carpeta).
+/// Si el operador la fijó, manda su valor y aquí no se devuelve nada: misma
+/// precedencia que `config::models_dir_absolute()`.
+fn models_dir_override(current: Option<&std::ffi::OsStr>, install_dir: &Path) -> Option<PathBuf> {
+    let already_set = current.map(|value| !value.is_empty()).unwrap_or(false);
+    if already_set {
+        return None;
+    }
+    Some(install_dir.join("models"))
+}
+
+/// Construye el comando del kernel con lo que la CLI decide por él.
+///
+/// Separado del arranque para poder afirmarlo en un test: el kernel recibe
+/// `--headless`/`--port` y, desde D-169, `TYLLUAN_MODELS_DIR`. El **cwd no se
+/// toca** (decisión del TL: sólo la variable).
+fn kernel_command(
+    exe: &Path,
+    headless: bool,
+    port: Option<u16>,
+    install_dir: Option<&Path>,
+    models_env: Option<&std::ffi::OsStr>,
+) -> Command {
+    let mut cmd = Command::new(exe);
+    if headless {
+        cmd.arg("--headless");
+    }
+    if let Some(p) = port {
+        cmd.args(["--port", &p.to_string()]);
+    }
+    if let Some(dir) = install_dir
+        && let Some(models_dir) = models_dir_override(models_env, dir)
+    {
+        cmd.env("TYLLUAN_MODELS_DIR", models_dir);
+    }
+    cmd
+}
+
 fn find_kernel_exe() -> Result<PathBuf> {
     let names = ["tylluan-nexus.exe", "tylluan-nexus"];
 
@@ -2729,5 +2790,112 @@ mod doctor_guilds_root_tests {
             resolve_guilds_core(&guilds_root_candidates(&cwd, None, Some(dir.path()))),
             None
         );
+    }
+}
+
+/// D-169: la raíz de modelos que recibe el kernel al lanzarlo `tylluan-cli start`.
+///
+/// El criterio del TL se afirma sobre el `Command` real (no sobre una copia de
+/// la lógica): `get_envs()` dice lo que de verdad se exporta y
+/// `get_current_dir()` que el cwd no se toca.
+#[cfg(test)]
+mod d169_models_dir_tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    fn envs(cmd: &Command) -> Vec<(String, Option<String>)> {
+        cmd.get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().to_string(),
+                    value.map(|value| value.to_string_lossy().to_string()),
+                )
+            })
+            .collect()
+    }
+
+    fn models_entry(cmd: &Command) -> Option<Option<String>> {
+        envs(cmd)
+            .into_iter()
+            .find(|(key, _)| key == "TYLLUAN_MODELS_DIR")
+            .map(|(_, value)| value)
+    }
+
+    /// Sin variable del operador, el kernel recibe `<install>/models`.
+    ///
+    /// Mutación: quitar el `cmd.env(...)` de `kernel_command` hace caer este
+    /// test (y con él la garantía de que la raíz no dependa del cwd).
+    #[test]
+    fn d169_exporta_el_models_dir_del_install_dir() {
+        let install = Path::new(r"D:\casa\.tylluan");
+        let cmd = kernel_command(
+            Path::new("tylluan-nexus.exe"),
+            false,
+            None,
+            Some(install),
+            None,
+        );
+        let entry = models_entry(&cmd).expect("D-169: el kernel debe recibir TYLLUAN_MODELS_DIR");
+        assert_eq!(
+            entry.expect("la variable debe llevar valor"),
+            install.join("models").to_string_lossy(),
+            "la raíz debe ser <install>/models"
+        );
+    }
+
+    /// Si el operador la fijó, manda él: la CLI no la pisa.
+    #[test]
+    fn d169_respeta_la_variable_del_operador() {
+        let install = Path::new("/opt/tylluan");
+        let operator = OsStr::new("/datos/modelos");
+        let cmd = kernel_command(
+            Path::new("tylluan-nexus"),
+            false,
+            None,
+            Some(install),
+            Some(operator),
+        );
+        assert!(
+            models_entry(&cmd).is_none(),
+            "la CLI no debe reescribir la variable del operador"
+        );
+        assert_eq!(models_dir_override(Some(operator), install), None);
+        // Y una variable vacía cuenta como no fijada.
+        assert_eq!(
+            models_dir_override(Some(OsStr::new("")), install),
+            Some(install.join("models"))
+        );
+    }
+
+    /// No se toca el cwd (decisión del TL: sólo la variable), y los flags
+    /// existentes siguen viajando.
+    #[test]
+    fn d169_no_cambia_el_cwd_y_conserva_los_flags() {
+        let cmd = kernel_command(
+            Path::new("tylluan-nexus"),
+            true,
+            Some(47151),
+            Some(Path::new("/opt/tylluan")),
+            None,
+        );
+        assert!(
+            cmd.get_current_dir().is_none(),
+            "D-169: el cwd no se toca; solo se exporta la variable"
+        );
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+        assert!(args.contains(&"--headless".to_string()), "args: {args:?}");
+        assert!(args.contains(&"--port".to_string()), "args: {args:?}");
+        assert!(args.contains(&"47151".to_string()), "args: {args:?}");
+    }
+
+    /// Sin directorio de instalación resoluble no se inventa una ruta: se deja
+    /// el comportamiento anterior (el kernel decide, como hasta ahora).
+    #[test]
+    fn d169_sin_install_dir_no_exporta_nada() {
+        let cmd = kernel_command(Path::new("tylluan-nexus"), false, None, None, None);
+        assert!(models_entry(&cmd).is_none(), "sin install dir no hay export");
     }
 }
