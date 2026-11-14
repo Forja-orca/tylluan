@@ -6,6 +6,7 @@ use axum::{
 };
 use std::sync::Arc;
 use serde::Deserialize;
+use crate::transport::http::auth::{operator_gate_allows, AclAuthKind};
 use crate::transport::http::HttpState;
 use tracing::warn;
 use crate::memory::mailbox::BlackboardMessage;
@@ -24,6 +25,111 @@ pub struct ColoquioPostRequest {
     pub content: String,
     #[serde(default = "default_metadata_str")]
     pub metadata: String,
+}
+
+/// Guilds que publican **en nombre de otros** por diseño: su tool recibe el
+/// `author_id` de quien la usa y lo reenvía con su propio token de guild.
+///
+/// `coloquio` es el caso auditado (T4149): `guilds/core/coloquio.py:600,795`
+/// publica con `TYLLUAN_GUILD_TOKEN`, así que sin esta excepción todo agente
+/// que publique por la tool perdería su nombre y quedaría como
+/// `guild:coloquio`. Es el mismo patrón que la excepción única de D-34
+/// (`guild_operator_exception`): una allow-list explícita, no un agujero.
+///
+/// Añadir una guild aquí exige justificarlo: significa que su token puede
+/// firmar como cualquier agente del Coloquio.
+pub(crate) const COLOQUIO_PROXY_GUILDS: &[&str] = &["coloquio"];
+
+/// Resultado de resolver con qué identidad se firma un mensaje.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum AuthorOutcome {
+    /// Se guarda el `author_id` pedido: solo la clase operador puede elegirlo.
+    AsRequested(String),
+    /// Se fuerza la identidad de la credencial porque el cuerpo pedía otra.
+    /// Se registra el intento; no se reescribe en silencio.
+    Forced { author: String, attempted: String },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum AuthorReject {
+    /// `author_id` vacío.
+    Empty,
+    /// Sin contexto de autenticación instalado (fail-closed).
+    Unauthenticated,
+}
+
+/// Identidad canónica de una credencial que NO es de clase operador. Existe
+/// para que una credencial sin binding siga pudiendo publicar, pero **nunca**
+/// con un nombre elegido por el cliente.
+fn canonical_author_for(auth_kind: AclAuthKind) -> &'static str {
+    match auth_kind {
+        AclAuthKind::GuildToken => "guild",
+        AclAuthKind::OAuthJwt => "oauth",
+        AclAuthKind::MasterTokenQuery => "operator-query",
+        // PublicBypass autentica en el propio endpoint; aquí no hay endpoint
+        // federado todavía, así que se trata como no identificado.
+        AclAuthKind::PublicBypass => "anonymous",
+        // Inalcanzables: son clase operador.
+        AclAuthKind::MasterToken | AclAuthKind::DevBypass => "operator",
+    }
+}
+
+/// Resuelve la identidad del autor de un POST de Coloquio (D-80 / ADR-031).
+///
+/// Regla: **solo la clase operador puede declarar `author_id`**. Cualquier otra
+/// credencial publica con su identidad (el binding del token, M31-P1, o la
+/// identidad canónica de su clase) y, si pedía otro nombre, se fuerza y se
+/// registra el intento. Es la misma filosofía que el downgrade de `role` que ya
+/// existe en el handler (un agente no puede declararse `human`).
+pub(crate) fn effective_author(
+    requested: &str,
+    auth_kind: Option<AclAuthKind>,
+    bound_agent: Option<&str>,
+) -> Result<AuthorOutcome, AuthorReject> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(AuthorReject::Empty);
+    }
+    let Some(kind) = auth_kind else {
+        return Err(AuthorReject::Unauthenticated);
+    };
+    if operator_gate_allows(Some(kind)) {
+        return Ok(AuthorOutcome::AsRequested(requested.to_string()));
+    }
+
+    let identity = bound_agent
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| canonical_author_for(kind));
+
+    // Una credencial de guild viene con binding `guild:<nombre>` (auth.rs:678).
+    if let Some(guild) = identity.strip_prefix("guild:") {
+        // 1) Proxy del Coloquio: publica en nombre de otros por diseño.
+        if COLOQUIO_PROXY_GUILDS
+            .iter()
+            .any(|proxy| proxy.eq_ignore_ascii_case(guild))
+        {
+            return Ok(AuthorOutcome::AsRequested(requested.to_string()));
+        }
+        // 2) Cualquier guild puede firmar con SU propio nombre, con o sin
+        //    prefijo: `scheduler` para `guild:scheduler` (scheduler.py:86).
+        if requested.eq_ignore_ascii_case(guild)
+            || requested.eq_ignore_ascii_case(identity)
+        {
+            return Ok(AuthorOutcome::AsRequested(requested.to_string()));
+        }
+    }
+
+    if identity.eq_ignore_ascii_case(requested) {
+        // Mismo nombre con otra caja: no es suplantación (el Coloquio ya
+        // normaliza identidades así, ver filter_known_mentions).
+        Ok(AuthorOutcome::AsRequested(identity.to_string()))
+    } else {
+        Ok(AuthorOutcome::Forced {
+            author: identity.to_string(),
+            attempted: requested.to_string(),
+        })
+    }
 }
 
 pub fn default_agent_role() -> String { "agent".to_string() }
@@ -271,7 +377,33 @@ pub async fn coloquio_post_message(
             tracing::warn!("⛔ Coloquio: HTTP client tried to claim 'human' role but sent agent header. Forcing role to 'agent'.");
             role = "agent".to_string();
         }
-    match state.coloquio.post_message(&id, &req.author_id, &role, &req.content, &req.metadata).await {
+    // ADR-031: la identidad no la elige el cliente. Solo la clase operador
+    // puede declarar `author_id`; el resto firma con su credencial.
+    let author = match effective_author(
+        &req.author_id,
+        crate::transport::http::auth::current_auth_kind(),
+        crate::transport::http::auth::current_bound_agent_id().as_deref(),
+    ) {
+        Ok(AuthorOutcome::AsRequested(name)) => name,
+        Ok(AuthorOutcome::Forced { author, attempted }) => {
+            warn!(
+                "⛔ Coloquio: credencial no-operadora intentó firmar como '{}'; se guarda como '{}'",
+                attempted, author
+            );
+            author
+        }
+        Err(AuthorReject::Empty) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": "author_id cannot be empty"
+            }))).into_response();
+        }
+        Err(AuthorReject::Unauthenticated) => {
+            return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+                "error": "no authenticated principal for this request"
+            }))).into_response();
+        }
+    };
+    match state.coloquio.post_message(&id, &author, &role, &req.content, &req.metadata).await {
         Ok(msg) => {
             let job_payload = serde_json::json!({
                 "channel_id": id,
@@ -286,7 +418,7 @@ pub async fn coloquio_post_message(
 
             let task_target = format!("task:{id}");
             let silva_coloquio = state.silva.clone();
-            let author_coloquio = req.author_id.clone();
+            let author_coloquio = author.clone();
             tokio::spawn(async move {
                 let _ = silva_coloquio.record_work_trace(&task_target, "task", &author_coloquio, "write", 1.0).await;
             });
@@ -640,3 +772,106 @@ pub async fn coloquio_get_doc_version(
     }
 }
 
+#[cfg(test)]
+mod author_identity_tests {
+    use super::*;
+
+    /// La clase operador (token maestro por cabecera, o dev bypass) sí puede
+    /// publicar en nombre de otro agente: es quien opera la instalación.
+    #[test]
+    fn operador_puede_declarar_el_autor() {
+        assert_eq!(
+            effective_author("deep", Some(AclAuthKind::MasterToken), None),
+            Ok(AuthorOutcome::AsRequested("deep".to_string()))
+        );
+        assert_eq!(
+            effective_author("  buffy  ", Some(AclAuthKind::DevBypass), None),
+            Ok(AuthorOutcome::AsRequested("buffy".to_string()))
+        );
+    }
+
+    /// ADR-031: un token de guild (o un par) NO puede firmar como otro agente.
+    /// Se guarda con la identidad que le ata el token y se registra el intento.
+    #[test]
+    fn guild_no_puede_firmar_como_otro_agente() {
+        assert_eq!(
+            effective_author("deep", Some(AclAuthKind::GuildToken), Some("filesystem")),
+            Ok(AuthorOutcome::Forced {
+                author: "filesystem".to_string(),
+                attempted: "deep".to_string(),
+            })
+        );
+    }
+
+    /// Sin binding configurado sigue pudiendo publicar, pero con la identidad
+    /// canónica de su clase: nunca con un nombre elegido por el cliente.
+    #[test]
+    fn credencial_sin_binding_usa_la_identidad_canonica() {
+        assert_eq!(
+            effective_author("deep", Some(AclAuthKind::GuildToken), None),
+            Ok(AuthorOutcome::Forced {
+                author: "guild".to_string(),
+                attempted: "deep".to_string(),
+            })
+        );
+        assert_eq!(
+            effective_author("deep", Some(AclAuthKind::OAuthJwt), Some("")),
+            Ok(AuthorOutcome::Forced {
+                author: "oauth".to_string(),
+                attempted: "deep".to_string(),
+            })
+        );
+    }
+
+    /// Mismo nombre con otra caja no es suplantación (el Coloquio ya trata las
+    /// identidades sin distinguir caja).
+    #[test]
+    fn mismo_nombre_con_otra_caja_no_es_suplantacion() {
+        assert_eq!(
+            effective_author("Deep", Some(AclAuthKind::GuildToken), Some("deep")),
+            Ok(AuthorOutcome::AsRequested("deep".to_string()))
+        );
+    }
+
+    /// T4149 (antigravity): la guild `coloquio` publica en nombre de otros por
+    /// diseño (su tool recibe el `author_id` de quien la usa). Sin esta
+    /// excepción, todo agente que publicara por ella perdía su nombre.
+    #[test]
+    fn la_guild_proxy_del_coloquio_puede_firmar_por_un_agente() {
+        assert_eq!(
+            effective_author("deep", Some(AclAuthKind::GuildToken), Some("guild:coloquio")),
+            Ok(AuthorOutcome::AsRequested("deep".to_string()))
+        );
+    }
+
+    /// La guild `scheduler` (scheduler.py:86) firma con SU nombre, pero no
+    /// puede firmar como otro agente.
+    #[test]
+    fn una_guild_puede_firmar_con_su_propio_nombre_pero_no_por_otro() {
+        assert_eq!(
+            effective_author("scheduler", Some(AclAuthKind::GuildToken), Some("guild:scheduler")),
+            Ok(AuthorOutcome::AsRequested("scheduler".to_string()))
+        );
+        assert_eq!(
+            effective_author("deep", Some(AclAuthKind::GuildToken), Some("guild:scheduler")),
+            Ok(AuthorOutcome::Forced {
+                author: "guild:scheduler".to_string(),
+                attempted: "deep".to_string(),
+            })
+        );
+    }
+
+    /// Fail-closed: sin contexto de autenticación no se publica, y un
+    /// `author_id` vacío es un error explícito.
+    #[test]
+    fn sin_autenticacion_o_autor_vacio_se_rechaza() {
+        assert_eq!(
+            effective_author("deep", None, None),
+            Err(AuthorReject::Unauthenticated)
+        );
+        assert_eq!(
+            effective_author("   ", Some(AclAuthKind::MasterToken), None),
+            Err(AuthorReject::Empty)
+        );
+    }
+}
