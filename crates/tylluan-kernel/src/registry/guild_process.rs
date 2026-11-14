@@ -872,10 +872,12 @@ GuildLauncher::Python { module_path } => {
             }
         }
         // D-159 (F2): carpeta de modelos ABSOLUTA para todos, para que `models/`
-        // no dependa del cwd del kernel. Vision ya la preferia; el resto igual.
-        launcher_env.push((
-            crate::config::MODELS_DIR_ENV.to_string(),
-            crate::config::models_dir_absolute().to_string_lossy().to_string(),
+        // no dependa del cwd del kernel. T4120: además `TYLLUAN_VISION_MODEL_DIR`
+        // ABSOLUTA desde `[vision] model_path`; es la variable que el guild de
+        // visión lee de verdad (guilds/core/vision.py) y hasta T4120 no la
+        // escribía nadie: el selector de Visión del dashboard no tenía efecto.
+        launcher_env.extend(crate::config::guild_launcher_env(
+            &crate::config::configured_vision_model_path(),
         ));
         for (key, value) in launcher_env {
             command.env(key, value);

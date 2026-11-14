@@ -198,7 +198,7 @@ tylluan_decide    Ask a bounded typed question (choice / score / boolean): close
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-1819 个测试（1732 个内核库测试 + 75 个 `tylluan-link` + 12 个 `tylluan-fsrs`）覆盖 Rust 内核（lib）、`tylluan-link` 与 `tylluan-fsrs` —— 全部通过。每次推送都会运行 Rust 构建 + 测试、clippy、`cargo-deny`（bans、licenses、advisories）、Python lint + 测试、仪表盘构建和安全审计套件。详情见 [STATUS.md](STATUS.md) 和 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
+1822 个测试（1735 个内核库测试 + 75 个 `tylluan-link` + 12 个 `tylluan-fsrs`）覆盖 Rust 内核（lib）、`tylluan-link` 与 `tylluan-fsrs` —— 全部通过。每次推送都会运行 Rust 构建 + 测试、clippy、`cargo-deny`（bans、licenses、advisories）、Python lint + 测试、仪表盘构建和安全审计套件。详情见 [STATUS.md](STATUS.md) 和 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ---
 

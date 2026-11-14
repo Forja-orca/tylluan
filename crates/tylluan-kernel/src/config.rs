@@ -2067,6 +2067,84 @@ fn absolutize(path: std::path::PathBuf) -> std::path::PathBuf {
         .unwrap_or(path)
 }
 
+/// T4120: nombre de la variable con la que el kernel exporta la ruta ABSOLUTA
+/// del modelo de visión (`[vision] model_path`) a cada guild. El guild de visión
+/// la lee (`guilds/core/vision.py`); hasta T4120 nadie la escribía, así que la
+/// clave `[vision] model_path` solo servía para reportar en `/api/v1/models`.
+pub const VISION_MODEL_DIR_ENV: &str = "TYLLUAN_VISION_MODEL_DIR";
+
+/// T4120: resuelve `[vision] model_path` a ruta absoluta.
+///
+/// - ruta absoluta: se respeta tal cual.
+/// - relativa que empieza por `models/`: se resuelve contra
+///   [`models_dir_absolute`] (la misma carpeta que se exporta a los guilds), para
+///   que un `TYLLUAN_MODELS_DIR` del operador no desincronice visión del inventario.
+/// - cualquier otra relativa: contra el cwd, igual que [`models_dir_absolute`].
+pub fn vision_model_dir_absolute_from(model_path: &str) -> std::path::PathBuf {
+    let raw = std::path::PathBuf::from(model_path);
+    if raw.is_absolute() {
+        return raw;
+    }
+    if let Ok(rest) = raw.strip_prefix("models") {
+        return models_dir_absolute().join(rest);
+    }
+    absolutize(raw)
+}
+
+/// T4120: `[vision] model_path` de la config viva (vacía o ilegible => default).
+pub fn configured_vision_model_path() -> String {
+    TylluanConfig::load_cached()
+        .ok()
+        .and_then(|cfg| cfg.try_read().ok().map(|c| c.vision.model_path.clone()))
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(default_vision_model_path)
+}
+
+/// T4124: valor NO vacío que el operador tenga fijado en `TYLLUAN_VISION_MODEL_DIR`
+/// en el entorno del kernel. `vision.py` lo trata como ruta explícita de máxima
+/// prioridad, así que el kernel no debe pisarlo con `[vision] model_path`.
+fn operator_vision_model_dir() -> Option<String> {
+    std::env::var(VISION_MODEL_DIR_ENV)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+/// Construye el entorno de lanzamiento con una anulación de operador explícita.
+///
+/// Separado de `std::env` a propósito: permite testear la prioridad T4124
+/// (el valor del operador gana) sin tocar variables del proceso de test.
+pub fn guild_launcher_env_with_operator_override(
+    vision_model_path: &str,
+    operator_vision_dir: Option<&str>,
+) -> Vec<(String, String)> {
+    let vision = match operator_vision_dir.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(explicit) => explicit.to_string(),
+        None => vision_model_dir_absolute_from(vision_model_path)
+            .to_string_lossy()
+            .to_string(),
+    };
+    vec![
+        (
+            MODELS_DIR_ENV.to_string(),
+            models_dir_absolute().to_string_lossy().to_string(),
+        ),
+        (VISION_MODEL_DIR_ENV.to_string(), vision),
+    ]
+}
+
+/// D-159 (F2) + T4120/T4124: variables de entorno que el kernel inyecta al lanzar
+/// CUALQUIER guild. Las dos rutas son absolutas para no depender del cwd del
+/// proceso hijo; `TYLLUAN_VISION_MODEL_DIR` es la que consume el guild de visión.
+/// Si el operador ya la fijó en el entorno del kernel, se respeta (no se pisa).
+pub fn guild_launcher_env(vision_model_path: &str) -> Vec<(String, String)> {
+    guild_launcher_env_with_operator_override(
+        vision_model_path,
+        operator_vision_model_dir().as_deref(),
+    )
+}
+
 pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     let conn = rusqlite::Connection::open(path)?;
 
@@ -3469,6 +3547,75 @@ url = "https://slack.example.com/sse"
         assert!(relativa.is_absolute(), "absolutize('models') = {}", relativa.display());
         let absoluta = std::path::PathBuf::from(if cfg!(windows) { r"C:\modelos" } else { "/modelos" });
         assert_eq!(absolutize(absoluta.clone()), absoluta, "una ruta absoluta no se toca");
+    }
+
+    /// T4120: la ruta del modelo de visión debe viajar ABSOLUTA al spawn de los
+    /// guilds como `TYLLUAN_VISION_MODEL_DIR`; el guild de visión es su único
+    /// consumidor real (`guilds/core/vision.py`). Sin esta inyección el selector
+    /// de Visión del dashboard escribe una clave que nadie lee.
+    #[test]
+    fn t4120_guild_launcher_env_exporta_vision_model_dir_absoluta() {
+        let env = guild_launcher_env_with_operator_override("models/smolvlm2-256m", None);
+        let vision = env
+            .iter()
+            .find(|(k, _)| k == VISION_MODEL_DIR_ENV)
+            .map(|(_, v)| v.clone())
+            .expect("TYLLUAN_VISION_MODEL_DIR debe viajar al spawn de los guilds");
+        let p = std::path::Path::new(&vision);
+        assert!(p.is_absolute(), "la ruta de visión debe ser absoluta: {vision}");
+        if std::env::var_os(MODELS_DIR_ENV).is_none() {
+            assert_eq!(
+                p,
+                models_dir_absolute().join("smolvlm2-256m"),
+                "models/... se resuelve contra models_dir_absolute"
+            );
+        }
+    }
+
+    /// T4124: si el operador ya fijó `TYLLUAN_VISION_MODEL_DIR` en el entorno del
+    /// kernel, el spawn NO la pisa con `[vision] model_path` (vision.py la trata
+    /// como explícita y de prioridad máxima). Sin este respeto, ese caso se rompe.
+    #[test]
+    fn t4124_guild_launcher_env_respeta_vision_model_dir_del_operador() {
+        let env = guild_launcher_env_with_operator_override(
+            "models/smolvlm2-256m",
+            Some("D:/modelos/vlm-del-operador"),
+        );
+        let vision = env
+            .iter()
+            .find(|(k, _)| k == VISION_MODEL_DIR_ENV)
+            .map(|(_, v)| v.clone())
+            .expect("TYLLUAN_VISION_MODEL_DIR debe viajar al spawn de los guilds");
+        assert_eq!(
+            vision, "D:/modelos/vlm-del-operador",
+            "el valor del operador NO se pisa (vision.py lo trata como explícito)"
+        );
+
+        // Vacío/blanco no es una anulación: se calcula desde la config.
+        let env2 = guild_launcher_env_with_operator_override("models/smolvlm2-256m", Some("   "));
+        let vision2 = env2
+            .iter()
+            .find(|(k, _)| k == VISION_MODEL_DIR_ENV)
+            .map(|(_, v)| v.clone())
+            .expect("TYLLUAN_VISION_MODEL_DIR debe viajar al spawn de los guilds");
+        assert!(
+            std::path::Path::new(&vision2).is_absolute(),
+            "un override en blanco debe caer al path absoluto de la config: {vision2}"
+        );
+    }
+
+    /// T4120: una ruta absoluta se respeta; una relativa rara va contra el cwd.
+    #[test]
+    fn t4120_vision_model_dir_respeta_absoluta_y_resuelve_otras_relativas() {
+        let tmp = tempfile::tempdir().unwrap();
+        let abs = tmp.path().join("mi-vlm");
+        let resolved = vision_model_dir_absolute_from(abs.to_str().unwrap());
+        assert!(resolved.is_absolute(), "{}", resolved.display());
+        assert_eq!(resolved, abs, "una ruta absoluta no se toca");
+
+        let otra = vision_model_dir_absolute_from("vlm-local/smol");
+        assert!(otra.is_absolute(), "{}", otra.display());
+        assert!(otra.ends_with(std::path::Path::new("vlm-local").join("smol")), "{}", otra.display());
     }
 
     #[test]
