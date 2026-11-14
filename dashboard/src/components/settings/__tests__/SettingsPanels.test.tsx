@@ -243,7 +243,7 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
       // Verificamos los tres botones de la fila llama.cpp
       expect(screen.getByRole('button', { name: /Arrancar llama\.cpp/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Abrir UI web de llama\.cpp/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Abrir carpeta models/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Copiar ruta de carpeta models/i })).toBeInTheDocument();
 
       // Verificamos las 3 filas de Modelos por uso (SPEC §3 y §4)
       expect(screen.getByText(/^Decision$/i)).toBeInTheDocument();
@@ -306,7 +306,14 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
       expect(addBtn).toHaveTextContent(/añadir proveedor/i);
     });
 
-    it('control de llama.cpp: los 3 botones (Arrancar, Abrir Web UI, Abrir carpeta models) operan correctamente (T3259)', async () => {
+    it('control de llama.cpp: los 3 botones (Arrancar, Abrir Web UI, Copiar ruta) operan correctamente y no prometen abrir carpeta (T3259)', async () => {
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      });
+
       let isRunning = false;
       mockBridge.fetchRaw.mockImplementation((url: string, _opts?: { method?: string }) => {
         if (url === '/api/v1/inference/llama/status') {
@@ -348,10 +355,15 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
       fireEvent.click(screen.getByRole('button', { name: /Abrir UI web de llama\.cpp/i }));
       expect(openSpy).toHaveBeenCalledWith('http://127.0.0.1:9000', '_blank', 'noopener,noreferrer');
 
-      // 3. Click en 'Abrir carpeta models'
-      const openFolderBtn = screen.getByRole('button', { name: /Abrir carpeta models/i });
-      expect(openFolderBtn).toBeInTheDocument();
-      fireEvent.click(openFolderBtn);
+      // 3. Botón 'Copiar ruta': no promete 'abrir' y copia la ruta al portapapeles
+      expect(screen.queryByRole('button', { name: /abrir.*carpeta/i })).not.toBeInTheDocument();
+      const copyPathBtn = screen.getByRole('button', { name: /Copiar ruta de carpeta models/i });
+      expect(copyPathBtn).toHaveTextContent(/^Copiar ruta$/i);
+      expect(copyPathBtn).not.toHaveTextContent(/abrir/i);
+      fireEvent.click(copyPathBtn);
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith('E:\\tylluan\\models');
+      });
 
       openSpy.mockRestore();
     });

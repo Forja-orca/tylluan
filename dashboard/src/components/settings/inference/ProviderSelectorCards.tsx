@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   RefreshCw,
   ExternalLink,
-  FolderOpen,
   Play,
   Square,
   Zap,
@@ -463,12 +462,12 @@ export function ProviderSelectorCards({
               <button
                 type="button"
                 onClick={onOpenLlamaDirectory}
-                aria-label="Abrir carpeta models"
+                aria-label="Copiar ruta de carpeta models"
                 title="Copiar ruta de la carpeta models al portapapeles"
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-border bg-muted/30 hover:bg-muted text-foreground transition-colors cursor-pointer min-h-[24px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
-                <FolderOpen className="w-3 h-3 text-muted-foreground" />
-                <span>Carpeta models</span>
+                <Copy className="w-3 h-3 text-muted-foreground" />
+                <span>Copiar ruta</span>
               </button>
             </div>
           </div>
