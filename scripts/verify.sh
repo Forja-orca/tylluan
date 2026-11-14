@@ -272,6 +272,19 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "REGLA 13: python no encontrado (el gate lo necesita)"
     fi
 
+    # Catalog of downloadable models (Jose 2026-11-10, TL T3913): the download
+    # registry comes from the manifest and carries only minimal roles. This gate
+    # fails if a chat family or a HuggingFace URL comes back into Rust code.
+    if command -v "$PY_CFG" >/dev/null 2>&1 || [ -x "$PY_CFG" ]; then
+        if "$PY_CFG" scripts/check_model_catalog.py; then
+            ok "catalogo de descarga sin chat ni URLs en Rust (check_model_catalog.py)"
+        else
+            fail "catalogo de descarga: modelo de chat o URL de HF en Rust - ver scripts/check_model_catalog.py"
+        fi
+    else
+        fail "catalogo de descarga: python no encontrado (el gate lo necesita)"
+    fi
+
     if bash scripts/check_read_routes.sh; then
         ok "agent read routes consistent, REVIEW.md third (check_read_routes.sh)"
     else
