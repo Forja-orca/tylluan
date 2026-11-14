@@ -711,7 +711,7 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
       });
     });
 
-    it('T4064(b) mutación: cambiar el modelo de Visión persiste en /api/v1/config/inference-llama', async () => {
+    it('T4120(b): el selector de Visión se declara «no configurable todavía» y no escribe config', async () => {
       mockBridge.fetchRaw.mockImplementation((url: string) => {
         if (url === '/api/v1/config') return Promise.resolve({ inference: { device: 'cpu', max_threads: 4 } });
         if (url === '/api/v1/config/schema') return Promise.resolve({ fields: [] });
@@ -735,20 +735,13 @@ describe('Ajustes del Sistema — Paneles Unificados A2 (Consumo Mínimo)', () =
       render(<InferenceSettingsPanel bridge={mockBridge as unknown as NexusBridge} notify={mockNotify} />);
 
       const visionSelect = await screen.findByLabelText('Modelo para Visión');
+      expect(visionSelect).toBeDisabled();
+      expect(screen.getByTestId('vision-not-configurable')).toHaveTextContent('no configurable todavía');
+
+      // Aunque se fuerce el cambio, no debe disparar ningún POST de configuración.
       fireEvent.change(visionSelect, { target: { value: 'E:\\models\\vlm-b' } });
-
-      await waitFor(() => {
-        expect(mockBridge.fetchRaw).toHaveBeenCalledWith(
-          '/api/v1/config/inference-llama',
-          expect.objectContaining({ method: 'POST' })
-        );
-      });
-
       const llamada = mockBridge.fetchRaw.mock.calls.find(c => c[0] === '/api/v1/config/inference-llama');
-      expect(llamada).toBeDefined();
-      const init = llamada?.[1] as RequestInit;
-      expect(String(init.body)).toContain('vision_model');
-      expect(String(init.body)).toContain('vlm-b');
+      expect(llamada).toBeUndefined();
     });
   });
 

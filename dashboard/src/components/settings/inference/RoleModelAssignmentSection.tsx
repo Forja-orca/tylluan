@@ -40,7 +40,6 @@ export interface RoleModelAssignmentSectionProps {
   visionExists: boolean;
   activeEmbedding: string;
   vectorDimensions: number;
-  onChangeVision?: (model: string) => void;
   engineCapabilities?: EngineCapabilitiesStatus | null;
 }
 
@@ -63,7 +62,6 @@ export function RoleModelAssignmentSection({
   visionExists,
   activeEmbedding,
   vectorDimensions,
-  onChangeVision,
   engineCapabilities,
 }: RoleModelAssignmentSectionProps) {
   // Estado riguroso según telemetría real (cero inventiva sin evidencia, T3813)
@@ -253,13 +251,13 @@ export function RoleModelAssignmentSection({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="flex flex-wrap items-center gap-2 flex-1 max-w-md">
             <select
               aria-label="Modelo para Visión"
               value={activeVision}
-              onChange={e => onChangeVision?.(e.target.value)}
-              disabled={visionModels.length <= 1}
-              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer disabled:bg-muted/30 disabled:cursor-default"
+              disabled
+              title="El modelo de visión se configura en tylluan.toml; este selector todavía no aplica cambios."
+              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none disabled:bg-muted/30 disabled:cursor-not-allowed"
             >
               {visionModels.length > 0 ? (
                 visionModels.map(m => (
@@ -273,6 +271,13 @@ export function RoleModelAssignmentSection({
                 </option>
               )}
             </select>
+
+            <span
+              data-testid="vision-not-configurable"
+              className="px-2 py-1 rounded text-[11px] font-medium border shrink-0 border-muted-foreground/30 bg-muted/40 text-muted-foreground"
+            >
+              no configurable todavía
+            </span>
 
             <span
               className={`px-2 py-1 rounded text-[11px] font-medium border shrink-0 flex items-center gap-1 ${

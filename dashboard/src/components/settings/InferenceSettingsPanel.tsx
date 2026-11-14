@@ -117,9 +117,6 @@ export function InferenceSettingsPanel({
   // Form states: Cognitive Points
   const [pointsState, setPointsState] = useState<Record<string, CognitivePointConfig>>({});
 
-  // T4064(b): modelo de visión elegido en la UI (persistido en tylluan.toml vía /config/inference-llama)
-  const [visionOverride, setVisionOverride] = useState<string | null>(null);
-
   // Llama.cpp user server status (T3259)
   const [llamaStatus, setLlamaStatus] = useState<LlamaServerStatus>({
     running: false,
@@ -295,29 +292,6 @@ export function InferenceSettingsPanel({
       }
     } catch {
       notify(`Carpeta models: ${dir}`, 'info');
-    }
-  };
-
-  // T4064(b): el selector de Visión del panel no tenía handler cableado (control muerto).
-  // Persiste [vision] model_path con el endpoint existente POST /api/v1/config/inference-llama
-  // (no se toca backend). Elige el VLM que el usuario ya tiene en su carpeta de modelos.
-  const handleChangeVision = async (model: string) => {
-    if (!bridge || !model) return;
-    try {
-      await bridge.fetchRaw('/api/v1/config/inference-llama', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vision_model: model }),
-      });
-      setVisionOverride(model);
-      notify(
-        `Modelo de visión guardado en tylluan.toml: ${model}. Si no se refleja en caliente, aplica al reiniciar.`,
-        'info'
-      );
-      await loadData();
-    } catch (err) {
-      console.error('Error guardando modelo de visión:', err);
-      notify(`Error al guardar modelo de visión: ${String(err)}`, 'error');
     }
   };
 
@@ -693,9 +667,8 @@ export function InferenceSettingsPanel({
         onSavePoint={handleSaveCognitivePoint}
         savingPoint={savingPoint}
         detectedModels={detectedModels}
-        activeVision={visionOverride || displayVision}
+        activeVision={displayVision}
         visionExists={visionExists}
-        onChangeVision={handleChangeVision}
         activeEmbedding={activeEmbedding}
         vectorDimensions={vectorDimensions}
         engineCapabilities={engineCapabilities}
