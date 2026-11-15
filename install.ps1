@@ -4,7 +4,16 @@
 
 param(
     [string]$Version = "latest",
-    [switch]$NoStart
+    [switch]$NoStart,
+    # P1 installer: skip creating <DataDir>\.venv and installing the Python
+    # guild dependencies there (they are installed by default; the operator's
+    # system Python is never touched).
+    [switch]$SkipGuildDeps,
+    # P1 (TL T3907): installing guild dependencies WITHOUT the hash lock is
+    # opt-in. Default is fail-closed: no requirements-hashes.txt in the release
+    # means no pip run, because "install these ranges from PyPI" is a
+    # supply-chain gamble nobody was asked to take.
+    [switch]$AllowUnhashedDeps
 )
 
 # Execution Policy guard - detect Restricted/AllSigned before anything else
@@ -27,11 +36,19 @@ function Write-Err($Text)  { Write-Host "FAIL $Text" -ForegroundColor Red; exit 
 # D-65: strict checksum gate. Throws when the file is empty, has an unexpected
 # entry, omits an expected binary, or any SHA-256 does not match. Kept as a
 # standalone function so tests can execute it without running the installer.
+#
+# P1 installer (TL order 2026-11-10): releases now ship guilds/ inside the
+# tarball and checksums.txt covers `guilds/**` as well as the two binaries.
+# Those entries are accepted ONLY through $AllowedPrefix (never "whatever the
+# file happens to list"), and every accepted name still has to be a relative,
+# traversal-free path under the extraction root: the entry list comes from the
+# same archive it verifies, so it must never be able to point outside of it.
 function Test-TylluanReleaseChecksums {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$ChecksPath,
-        [Parameter(Mandatory = $true)][string[]]$ExpectedFiles
+        [Parameter(Mandatory = $true)][string[]]$ExpectedFiles,
+        [string]$AllowedPrefix = "guilds/"
     )
 
     if (-not (Test-Path -LiteralPath $ChecksPath -PathType Leaf)) {
@@ -50,7 +67,18 @@ function Test-TylluanReleaseChecksums {
         $entries++
         $want = $Matches[1].ToLowerInvariant()
         $name = $Matches[2].Trim()
-        if ($ExpectedFiles -notcontains $name) {
+        $isExpected = $ExpectedFiles -contains $name
+        $isShippedExtra = $false
+        if ($AllowedPrefix -and $name.StartsWith($AllowedPrefix, [System.StringComparison]::Ordinal)) {
+            # Relative path, '/' separated, no drive letter, no '.', no '..'
+            # segment, no backslashes (a Windows separator inside a name would
+            # let a corrupted manifest address an unrelated file).
+            if ($name -notmatch '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+$' -or $name -match '(^|/)\.\.?(/|$)') {
+                throw "checksums.txt contains an unsafe entry: $name"
+            }
+            $isShippedExtra = $true
+        }
+        if (-not ($isExpected -or $isShippedExtra)) {
             throw "checksums.txt contains an unexpected entry: $name"
         }
         if ($seen.ContainsKey($name)) {
@@ -58,7 +86,7 @@ function Test-TylluanReleaseChecksums {
         }
         $file = Join-Path $root $name
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-            throw "checksums.txt names a missing binary: $name"
+            throw "checksums.txt names a missing file: $name"
         }
         $got = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
         if ($got -ne $want) {
@@ -219,6 +247,102 @@ if ($PathEntries -notcontains $BinDir) {
     Write-Host "   Open a NEW terminal for PATH to take effect in other apps." -ForegroundColor Yellow
 }
 
+# -- Python guilds (the 45 Python tool plugins) --------------------------
+# Policy: NEVER pip-install into the user's system Python from an installer
+# (it mutates the user's environment without consent, and PEP 668 blocks it on
+# major Linux distros anyway). The operator's Python only *creates* a venv;
+# dependencies go into <DataDir>\.venv, which the kernel already prefers over
+# the system interpreter (registry/guild_process.rs, find_python()).
+Write-Host "Python guilds (45 tools):" -ForegroundColor White
+$VenvDir = Join-Path $DataDir ".venv"
+$VenvPy = Join-Path $VenvDir "Scripts\python.exe"
+$GuildReq = Join-Path $BinDir "guilds"
+if (-not (Test-Path (Join-Path $GuildReq "requirements.txt"))) { $GuildReq = "guilds" }
+$ReqHashes = Join-Path $GuildReq "requirements-hashes.txt"
+$ReqPlain = Join-Path $GuildReq "requirements.txt"
+$GuildImport = 'import mcp, fastmcp, psutil'
+
+function Write-GuildDepsManualHint {
+    if (Test-Path $ReqHashes) {
+        Write-Host "  Install them later with:" -ForegroundColor Yellow
+        Write-Host "    `"$VenvPy`" -m pip install --require-hashes -r `"$ReqHashes`"" -ForegroundColor Yellow
+    } else {
+        Write-Host "  SIN VERIFICACION DE HASHES: este release no trae requirements-hashes.txt." -ForegroundColor Red
+        Write-Host "  No hay un comando verificado que darte: vuelve a descargar el release" -ForegroundColor Red
+        Write-Host "  (deberia incluir guilds/requirements-hashes.txt) o revisa la cadena de suministro." -ForegroundColor Red
+    }
+}
+
+if ($SkipGuildDeps) {
+    Write-Host "  Skipped (-SkipGuildDeps)." -ForegroundColor Yellow
+    Write-GuildDepsManualHint
+} else {
+    $GuildPy = $null
+    foreach ($Cand in @("python", "python3")) {
+        $Cmd = Get-Command $Cand -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($Cmd) { $GuildPy = $Cmd.Source; break }
+    }
+    $VenvReady = $false
+    if (Test-Path -LiteralPath $VenvPy -PathType Leaf) {
+        & $VenvPy -c $GuildImport 2>$null | Out-Null
+        $VenvReady = ($LASTEXITCODE -eq 0)
+    }
+    if ($VenvReady) {
+        Write-Host "  guild deps OK in $VenvDir" -ForegroundColor Green
+    } elseif (-not $GuildPy) {
+        Write-Host "  Python 3.12+ not found - Python guilds won't run (kernel + MCP memory unaffected)." -ForegroundColor Yellow
+        Write-Host "  Install Python 3.12+: https://www.python.org/downloads/" -ForegroundColor Yellow
+        if (Test-Path -LiteralPath $VenvPy -PathType Leaf) { Write-GuildDepsManualHint }
+    } else {
+        $VerOk = $false
+        $Ver = ""
+        try {
+            & $GuildPy -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)" 2>$null | Out-Null
+            $VerOk = ($LASTEXITCODE -eq 0)
+            $Ver = ((& $GuildPy --version 2>&1) | Out-String).Trim()
+        } catch {
+            $Ver = ""
+        }
+        if (-not $VerOk) {
+            if ($Ver -notmatch '^Python \d') { $Ver = "Python not usable" }
+            Write-Host "  $Ver - guilds need Python 3.12+. Upgrade: https://www.python.org/downloads/" -ForegroundColor Yellow
+        } else {
+            if (-not (Test-Path -LiteralPath $VenvPy -PathType Leaf)) {
+                Write-Host "  Creating $VenvDir with $Ver ..." -ForegroundColor White
+                try {
+                    & $GuildPy -m venv $VenvDir
+                } catch {
+                    $LASTEXITCODE = 1
+                }
+            }
+            if (-not (Test-Path -LiteralPath $VenvPy -PathType Leaf)) {
+                Write-Host "  Could not create $VenvDir." -ForegroundColor Yellow
+                Write-GuildDepsManualHint
+            } else {
+                Write-Host "  Installing guild dependencies into $VenvDir (one time, this can take a few minutes)..." -ForegroundColor White
+                if (Test-Path $ReqHashes) {
+                    & $VenvPy -m pip install --require-hashes --disable-pip-version-check -r $ReqHashes
+                } elseif ($AllowUnhashedDeps) {
+                    Write-Host "  AVISO: SIN VERIFICACION DE HASHES (el release no trae requirements-hashes.txt)." -ForegroundColor Red
+                    Write-Host "  Sigues con -AllowUnhashedDeps: se instalan rangos sin comprobar." -ForegroundColor Red
+                    & $VenvPy -m pip install --disable-pip-version-check -r $ReqPlain
+                } else {
+                    Write-Host "  SIN VERIFICACION DE HASHES: el release no trae requirements-hashes.txt." -ForegroundColor Red
+                    Write-Host "  NO instalo dependencias Python sin hashes (falla cerrado)." -ForegroundColor Red
+                    Write-Host "  Si aceptas el riesgo, repite con -AllowUnhashedDeps." -ForegroundColor Red
+                }
+                & $VenvPy -c $GuildImport 2>$null | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "  guild deps OK in $VenvDir" -ForegroundColor Green
+                } else {
+                    Write-Host "  Guild dependencies are NOT installed (pip did not finish)." -ForegroundColor Yellow
+                    Write-GuildDepsManualHint
+                }
+            }
+        }
+    }
+}
+Write-Host ""
 # `install --profile portable` writes tylluan.toml AND boots the kernel
 # itself (chdir's to the config dir first so the kernel finds it). If a
 # config already exists it refuses without --force, so start directly --
@@ -237,7 +361,11 @@ if ($NoStart) {
         Write-Step "Existing tylluan.toml found - keeping it. Kernel not started (--no-start)."
     } else {
         Write-Step "Installing portable profile (writes tylluan.toml, no start)..."
-        & "$BinDir\tylluan-cli" install --profile portable --no-start
+        # P1 installer: --dir fija el destino. Sin el, el CLI resuelve HOME
+        # antes que USERPROFILE y podria escribir el tylluan.toml en otro home
+        # que el $BinDir/$DataDir de este instalador (y el .venv quedaria
+        # huerfano: los guilds caerian al Python del sistema).
+        & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir"
         if ($LASTEXITCODE -ne 0) {
             Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
         }
@@ -253,7 +381,7 @@ if ($NoStart) {
         }
     } else {
         Write-Step "Installing portable profile (writes tylluan.toml + starts kernel)..."
-        & "$BinDir\tylluan-cli" install --profile portable
+        & "$BinDir\tylluan-cli" install --profile portable --dir "$DataDir"
         if ($LASTEXITCODE -ne 0) {
             Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
         }
@@ -338,46 +466,6 @@ Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
 Write-Host "  tylluan-cli download-models"
 Write-Host ""
 
-# -- Python guilds (optional - the 45 Python tool plugins) --------------
-# Detection only: NEVER pip-install into the user's system Python from an
-# installer (it mutates the user's environment without consent, and PEP 668
-# blocks it on major Linux distros anyway). Print the exact command instead.
-Write-Host "Python guilds (45 tools, optional):" -ForegroundColor White
-$GuildPy = $null
-foreach ($Cand in @("python", "python3")) {
-    $Cmd = Get-Command $Cand -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($Cmd) { $GuildPy = $Cmd.Source; break }
-}
-if (-not $GuildPy) {
-    Write-Host "  Python 3.12+ not found - Python guilds won't run (kernel + MCP memory unaffected)." -ForegroundColor Yellow
-    Write-Host "  Install Python 3.12+: https://www.python.org/downloads/" -ForegroundColor Yellow
-} else {
-    $VerOk = $false
-    $Ver = ""
-    try {
-        & $GuildPy -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)" 2>$null | Out-Null
-        $VerOk = ($LASTEXITCODE -eq 0)
-        $Ver = ((& $GuildPy --version 2>&1) | Out-String).Trim()
-    } catch {
-        $Ver = ""
-    }
-    if (-not $VerOk) {
-        if ($Ver -notmatch '^Python \d') { $Ver = "Python not usable" }
-        Write-Host "  $Ver - guilds need Python 3.12+. Upgrade: https://www.python.org/downloads/" -ForegroundColor Yellow
-    } else {
-        & $GuildPy -c "import mcp, fastmcp, psutil" 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  $Ver + guild deps OK" -ForegroundColor Green
-        } else {
-            $ReqDir = Join-Path $BinDir "guilds"
-            if (-not (Test-Path (Join-Path $ReqDir "requirements.txt"))) { $ReqDir = "guilds" }
-            Write-Host "  $Ver found, guild deps missing. Install them with:" -ForegroundColor Yellow
-            Write-Host "    $GuildPy -m pip install --require-hashes -r $ReqDir/requirements-hashes.txt" -ForegroundColor Yellow
-            Write-Host "    (fallback if the release lacks that file: $GuildPy -m pip install -r $ReqDir/requirements.txt)" -ForegroundColor Yellow
-        }
-    }
-}
-Write-Host ""
 # A handled "guild deps missing" probe above leaves $LASTEXITCODE = 1. The install itself
 # succeeded, so do not leak that code to callers (CI wrappers treat it as failure).
 $global:LASTEXITCODE = 0

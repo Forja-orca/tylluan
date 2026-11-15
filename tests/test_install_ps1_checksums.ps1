@@ -70,6 +70,131 @@ try {
     }
     if (-not $partialFailed) { throw 'partial checksums.txt must fail' }
     Write-Host 'OK partial checksums rejected'
+
+    # P1 installer (TL order 2026-11-10): releases ship guilds/ inside the
+    # tarball and checksums.txt covers `guilds/**` too. These cases pin the
+    # relaxation: guild entries are verified, not ignored, and nothing outside
+    # the binaries + the `guilds/` prefix (and nothing that could escape the
+    # extraction root) may ever be accepted.
+    $guildFiles = @('guilds/requirements.txt', 'guilds/core/bash.py', 'guilds/core/memory.py')
+    foreach ($rel in $guildFiles) {
+        $abs = Join-Path $root ($rel -replace '/', '\')
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $abs) | Out-Null
+        [System.IO.File]::WriteAllBytes($abs, [System.Text.Encoding]::UTF8.GetBytes("payload-of-$rel"))
+    }
+
+    $withGuilds = Join-Path $root 'with-guilds.txt'
+    Write-Checksums $withGuilds (@('tylluan-nexus.exe', 'tylluan-cli.exe') + $guildFiles)
+    if (-not (Test-TylluanReleaseChecksums -ChecksPath $withGuilds -ExpectedFiles @('tylluan-nexus.exe', 'tylluan-cli.exe'))) {
+        throw 'checksums.txt covering guilds/ should pass'
+    }
+    Write-Host 'OK guilds/ entries are verified'
+
+    # A tampered guild file must fail: the whole point of covering guilds is
+    # that the bytes on disk are the bytes that were built.
+    $tampered = Join-Path $root 'guilds\core\bash.py'
+    [System.IO.File]::WriteAllBytes($tampered, [System.Text.Encoding]::UTF8.GetBytes('tampered'))
+    $tamperFailed = $false
+    try {
+        Test-TylluanReleaseChecksums -ChecksPath $withGuilds -ExpectedFiles @('tylluan-nexus.exe', 'tylluan-cli.exe') | Out-Null
+    } catch {
+        $tamperFailed = $true
+    }
+    if (-not $tamperFailed) { throw 'a modified guilds/ file must fail verification' }
+    [System.IO.File]::WriteAllBytes($tampered, [System.Text.Encoding]::UTF8.GetBytes('payload-of-guilds/core/bash.py'))
+    Write-Host 'OK tampered guilds/ file rejected'
+
+    # Entries outside the whitelist stay rejected (no blanket "trust the list").
+    $outside = Join-Path $root 'outside.txt'
+    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $nexus).Hash.ToLowerInvariant()
+    [System.IO.File]::WriteAllLines($outside, [string[]]@(
+        "$hash  tylluan-nexus.exe",
+        "$hash  tylluan-cli.exe",
+        "$hash  guilds-evil/requirements.txt",
+        "$hash  setup.exe"
+    ))
+    $outsideFailed = $false
+    try {
+        Test-TylluanReleaseChecksums -ChecksPath $outside -ExpectedFiles @('tylluan-nexus.exe', 'tylluan-cli.exe') | Out-Null
+    } catch {
+        $outsideFailed = $true
+    }
+    if (-not $outsideFailed) { throw 'entries outside the guilds/ prefix must fail' }
+    Write-Host 'OK entries outside guilds/ rejected'
+
+    # Traversal / separator smuggling inside the allowed prefix must fail, and
+    # the ONLY thing allowed to reject it is the name check: every entry below
+    # resolves to a file that EXISTS with the CORRECT hash, so a case that
+    # passes because of a missing file (or a hash mismatch) would be worthless.
+    # Mutation check (TL T3907): removing the `..` guard must turn this red.
+    $escapeFile = Join-Path $root 'escape.txt'
+    [System.IO.File]::WriteAllBytes($escapeFile, [System.Text.Encoding]::UTF8.GetBytes('escape-payload'))
+    $escapeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $escapeFile).Hash.ToLowerInvariant()
+    $innerFile = Join-Path $root 'guilds\x.txt'
+    [System.IO.File]::WriteAllBytes($innerFile, [System.Text.Encoding]::UTF8.GetBytes('inner-payload'))
+    $innerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $innerFile).Hash.ToLowerInvariant()
+    # Ojo: `$hash` es el del nexus. Usar el suyo para cada binario, o el caso
+    # "pasa" por un mismatch de hash en vez de por la comprobacion que prueba.
+    $cliHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $cli).Hash.ToLowerInvariant()
+
+    # Control positivo: el MISMO fichero con nombre limpio pasa, asi que el
+    # rechazo de abajo no puede venir del hash ni de la existencia.
+    $cleanCase = Join-Path $root 'clean-inner.txt'
+    [System.IO.File]::WriteAllLines($cleanCase, [string[]]@(
+        "$hash  tylluan-nexus.exe",
+        "$cliHash  tylluan-cli.exe",
+        "$innerHash  guilds/x.txt"
+    ))
+    if (-not (Test-TylluanReleaseChecksums -ChecksPath $cleanCase -ExpectedFiles @('tylluan-nexus.exe', 'tylluan-cli.exe'))) {
+        throw 'fixture roto: guilds/x.txt con hash correcto debe pasar'
+    }
+    Write-Host 'OK control positivo guilds/x.txt (hash correcto, fichero existe)'
+
+    $evilCases = @(
+        @{ name = 'guilds/../escape.txt'; hash = $escapeHash },
+        @{ name = 'guilds/..\escape.txt'; hash = $escapeHash },
+        @{ name = 'guilds/./x.txt';       hash = $innerHash },
+        @{ name = 'guilds//x.txt';        hash = $innerHash }
+    )
+    foreach ($evil in $evilCases) {
+        $evilPath = Join-Path $root 'evil.txt'
+        [System.IO.File]::WriteAllLines($evilPath, [string[]]@(
+            "$hash  tylluan-nexus.exe",
+            "$cliHash  tylluan-cli.exe",
+            "$($evil.hash)  $($evil.name)"
+        ))
+        $evilFailed = $false
+        $reason = ''
+        try {
+            Test-TylluanReleaseChecksums -ChecksPath $evilPath -ExpectedFiles @('tylluan-nexus.exe', 'tylluan-cli.exe') | Out-Null
+        } catch {
+            $evilFailed = $true
+            $reason = "$_"
+        }
+        if (-not $evilFailed) { throw "unsafe entry must fail: $($evil.name)" }
+        if ($reason -notmatch 'unsafe entry') {
+            throw "unsafe entry rejected for the WRONG reason ($($evil.name)): $reason"
+        }
+    }
+    Write-Host 'OK path traversal inside guilds/ rejected by the name check (not by a missing file)'
+
+    # Duplicates stay rejected even when both are inside the prefix.
+    $dup = Join-Path $root 'duplicate.txt'
+    $reqHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $root 'guilds\requirements.txt')).Hash.ToLowerInvariant()
+    [System.IO.File]::WriteAllLines($dup, [string[]]@(
+        "$hash  tylluan-nexus.exe",
+        "$hash  tylluan-cli.exe",
+        "$reqHash  guilds/requirements.txt",
+        "$reqHash  guilds/requirements.txt"
+    ))
+    $dupFailed = $false
+    try {
+        Test-TylluanReleaseChecksums -ChecksPath $dup -ExpectedFiles @('tylluan-nexus.exe', 'tylluan-cli.exe') | Out-Null
+    } catch {
+        $dupFailed = $true
+    }
+    if (-not $dupFailed) { throw 'duplicate entry must fail' }
+    Write-Host 'OK duplicate guilds/ entry rejected'
 } finally {
     Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
 }

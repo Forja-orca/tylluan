@@ -113,6 +113,29 @@ jobs:
             archive="tylluan-${platform}.tar.gz"
             cd "$dir"
             sha256sum tylluan-nexus* tylluan-cli* > checksums.txt
+            # TL order 2026-11-10 (P1 installer): guilds/ travels inside the
+            # tarball, so the tarball's OWN checksums.txt must cover it too.
+            # install.sh runs `sha256sum -c` over every line and install.ps1
+            # verifies every entry it accepts, so listing guilds here is what
+            # turns "guilds/ happens to be in the archive" into "guilds/ is
+            # verified before it is copied into the user's bin dir".
+            # Sorted for byte-stable output; LC_ALL=C keeps the order stable.
+            find guilds -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum >> checksums.txt
+            # Coverage gate: no file may travel unverified. A silent `find`
+            # failure (or a later edit that drops the line above) would leave
+            # guilds/ uncovered while CI stayed green, so compare what got
+            # checksummed against what is actually on disk. `cut -c67-` strips
+            # the 66-char prefix of each line: "64 hex + two spaces" in text
+            # mode, "64 hex + space + *" in binary mode (coreutils on Windows
+            # emits the `*`), which is why the pattern accepts both.
+            listed="$(grep -E '^[0-9a-f]{64} [ *]guilds/' checksums.txt | cut -c67- | LC_ALL=C sort || true)"
+            ondisk="$(find guilds -type f | LC_ALL=C sort || true)"
+            if [ -z "$listed" ] || [ "$listed" != "$ondisk" ]; then
+              echo "::error::checksums.txt does not cover every guilds/ file"
+              diff <(printf '%s\n' "$listed") <(printf '%s\n' "$ondisk") | head -20 || true
+              exit 1
+            fi
+            echo "::notice::checksums.txt covers $(printf '%s\n' "$listed" | wc -l) guilds/ files + the binaries"
             # upload/download-artifact@v4 do not preserve the executable bit,
             # so the binaries would reach users as mode 0644 and a plain
             # `tar -xzf && ./tylluan-nexus` would fail with "Permission

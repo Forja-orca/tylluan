@@ -8,13 +8,23 @@ CONFIG_FILE="${DATA_DIR}/config.toml"
 
 say() { printf "\033[1;32m%s\033[0m\n" "$*" >&2; }
 info() { printf "\033[1;34m%s\033[0m\n" "$*" >&2; }
+warn() { printf "\033[1;31m%s\033[0m\n" "$*" >&2; }
 err() { printf "\033[1;31m%s\033[0m\n" "$*" >&2; exit 1; }
 
 NO_START=0
+SKIP_GUILD_DEPS=0
+ALLOW_UNHASHED_DEPS=0
 for arg in "$@"; do
   case "$arg" in
     --no-start) NO_START=1 ;;
-    *) err "Unknown option: $arg. Usage: install.sh [--no-start]" ;;
+    # P1 installer: skip creating ${DATA_DIR}/.venv and installing the Python
+    # guild dependencies there (installed by default; the operator's system
+    # Python is never touched).
+    --skip-guild-deps) SKIP_GUILD_DEPS=1 ;;
+    # P1 (TL T3907): installing guild deps WITHOUT the hash lock is opt-in.
+    # Default is fail-closed: no requirements-hashes.txt means no pip run.
+    --allow-unhashed-deps) ALLOW_UNHASHED_DEPS=1 ;;
+    *) err "Unknown option: $arg. Usage: install.sh [--no-start] [--skip-guild-deps] [--allow-unhashed-deps]" ;;
   esac
 done
 
@@ -171,6 +181,85 @@ OLD_PID=""
 if [ -f "$PID_FILE" ]; then
   OLD_PID=$(cat "$PID_FILE" 2>/dev/null || true)
 fi
+# ── Python guilds (the 45 Python tool plugins) ─────────────────────────
+# Policy: NEVER pip-install into the user's system Python from an installer
+# (PEP 668 blocks it on Debian/Ubuntu/Fedora and it mutates the user's
+# environment without consent). The operator's Python only *creates* a venv;
+# the dependencies go into ${DATA_DIR}/.venv, which the kernel already prefers
+# over the system interpreter (registry/guild_process.rs, find_python()).
+say "Python guilds (45 tools):"
+GUILD_REQ="${BIN_DIR}/guilds"
+if [ ! -f "${GUILD_REQ}/requirements.txt" ]; then
+  GUILD_REQ="guilds"
+fi
+VENV_DIR="${DATA_DIR}/.venv"
+VENV_PY="${VENV_DIR}/bin/python"
+REQ_HASHES="${GUILD_REQ}/requirements-hashes.txt"
+REQ_PLAIN="${GUILD_REQ}/requirements.txt"
+
+guild_deps_hint() {
+  if [ -f "${REQ_HASHES}" ]; then
+    info "  Install them later with:"
+    info "    ${VENV_PY} -m pip install --require-hashes -r ${REQ_HASHES}"
+  else
+    warn "  SIN VERIFICACION DE HASHES: este release no trae requirements-hashes.txt."
+    warn "  No hay un comando verificado que darte: vuelve a descargar el release"
+    warn "  (deberia incluir guilds/requirements-hashes.txt) o revisa la cadena de suministro."
+  fi
+}
+
+if [ "$SKIP_GUILD_DEPS" -eq 1 ]; then
+  info "  Skipped (--skip-guild-deps)."
+  guild_deps_hint
+elif [ -x "${VENV_PY}" ] && "${VENV_PY}" -c 'import mcp, fastmcp, psutil' >/dev/null 2>&1; then
+  say "  guild deps OK in ${VENV_DIR}"
+else
+  GUILD_PY=""
+  for c in python3 python; do
+    if command -v "$c" >/dev/null 2>&1; then
+      GUILD_PY="$c"
+      break
+    fi
+  done
+  if [ -z "$GUILD_PY" ]; then
+    info "  Python 3.12+ not found — Python guilds won't run (kernel + MCP memory unaffected)."
+    info "  Install Python 3.12+: https://www.python.org/downloads/"
+    [ -x "${VENV_PY}" ] && guild_deps_hint || true
+  elif ! "$GUILD_PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
+    info "  $("$GUILD_PY" --version 2>&1) found — guilds need Python 3.12+."
+    info "  Upgrade: https://www.python.org/downloads/"
+  else
+    if [ ! -x "${VENV_PY}" ]; then
+      info "  Creating ${VENV_DIR} with $("$GUILD_PY" --version 2>&1)..."
+      "$GUILD_PY" -m venv "${VENV_DIR}" || true
+    fi
+    if [ ! -x "${VENV_PY}" ]; then
+      info "  Could not create ${VENV_DIR}."
+      info "  Create it yourself with: ${GUILD_PY} -m venv ${VENV_DIR}"
+      guild_deps_hint
+    else
+      info "  Installing guild dependencies into ${VENV_DIR} (one time, this can take a few minutes)..."
+      if [ -f "${REQ_HASHES}" ]; then
+        "${VENV_PY}" -m pip install --require-hashes --disable-pip-version-check -r "${REQ_HASHES}" || true
+      elif [ "$ALLOW_UNHASHED_DEPS" -eq 1 ]; then
+        warn "  AVISO: SIN VERIFICACION DE HASHES (el release no trae requirements-hashes.txt)."
+        warn "  Sigues con --allow-unhashed-deps: se instalan rangos sin comprobar."
+        "${VENV_PY}" -m pip install --disable-pip-version-check -r "${REQ_PLAIN}" || true
+      else
+        warn "  SIN VERIFICACION DE HASHES: el release no trae requirements-hashes.txt."
+        warn "  NO instalo dependencias Python sin hashes (falla cerrado)."
+        warn "  Si aceptas el riesgo, repite con --allow-unhashed-deps."
+      fi
+      if "${VENV_PY}" -c 'import mcp, fastmcp, psutil' >/dev/null 2>&1; then
+        say "  guild deps OK in ${VENV_DIR}"
+      else
+        info "  Guild dependencies are NOT installed (pip did not finish)."
+        guild_deps_hint
+      fi
+    fi
+  fi
+fi
+say ""
 # `install --profile portable` writes tylluan.toml AND boots the kernel
 # itself (chdir's to the config dir first so the kernel finds it). If a
 # config already exists it refuses without --force, so boot directly --
@@ -180,7 +269,10 @@ if [ "$NO_START" -eq 1 ]; then
     say "Existing tylluan.toml found - keeping it. Kernel not started (--no-start)."
   else
     say "Installing portable profile (writes tylluan.toml, no start)..."
-    "${BIN_DIR}/tylluan" install --profile portable --no-start
+    # --dir: el CLI resolvia HOME (antes que nada) y podia escribir el
+    # tylluan.toml en un home distinto del DATA_DIR de este instalador, dejando
+    # huerfano el .venv que creamos aqui. Fijarlo mantiene todo junto.
+    "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}"
   fi
 else
   if [ -f "${DATA_DIR}/tylluan.toml" ]; then
@@ -188,7 +280,7 @@ else
     (cd "${DATA_DIR}" && "${BIN_DIR}/tylluan" start) &
   else
     say "Installing portable profile (writes tylluan.toml + starts kernel)..."
-    "${BIN_DIR}/tylluan" install --profile portable
+    "${BIN_DIR}/tylluan" install --profile portable --dir "${DATA_DIR}"
   fi
 
   say "Waiting for kernel to be ready..."
@@ -254,36 +346,6 @@ say "For better retrieval (BGE-M3):"
 info "  tylluan download-models"
 say ""
 
-# ── Python guilds (optional — the 45 Python tool plugins) ──────────────
-# Detection only: NEVER pip-install into the user's system Python from an
-# installer (PEP 668 blocks it on Debian/Ubuntu/Fedora and it mutates the
-# user's environment without consent). Print the exact command instead.
-say "Python guilds (45 tools, optional):"
-GUILD_PY=""
-for c in python3 python; do
-  if command -v "$c" >/dev/null 2>&1; then
-    GUILD_PY="$c"
-    break
-  fi
-done
-if [ -z "$GUILD_PY" ]; then
-  info "  Python 3.12+ not found — Python guilds won't run (kernel + MCP memory unaffected)."
-  info "  Install Python 3.12+: https://www.python.org/downloads/"
-elif ! "$GUILD_PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
-  info "  $("$GUILD_PY" --version 2>&1) found — guilds need Python 3.12+."
-  info "  Upgrade: https://www.python.org/downloads/"
-elif "$GUILD_PY" -c 'import mcp, fastmcp, psutil' >/dev/null 2>&1; then
-  say "  $("$GUILD_PY" --version 2>&1) + guild deps OK"
-else
-  REQ_DIR="${BIN_DIR}/guilds"
-  if [ ! -f "${REQ_DIR}/requirements.txt" ]; then
-    REQ_DIR="guilds"
-  fi
-  info "  $("$GUILD_PY" --version 2>&1) found, guild deps missing. Install them with:"
-  info "    $GUILD_PY -m pip install --require-hashes -r ${REQ_DIR}/requirements-hashes.txt"
-  info "    (fallback if the release lacks that file: ${GUILD_PY} -m pip install -r ${REQ_DIR}/requirements.txt)"
-fi
-say ""
 
 if [ -n "$LATEST" ]; then
   say "Tylluan v${LATEST} installed to ${BIN_DIR}/"

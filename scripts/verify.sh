@@ -272,6 +272,20 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "REGLA 13: python no encontrado (el gate lo necesita)"
     fi
 
+    # P1c (2026-11-11): el venv de guilds se crea ANTES de instalar el perfil y
+    # arrancar el kernel, o la primera instalacion limpia arranca guilds Python
+    # sin dependencias (ModuleNotFoundError) y solo se recuperan con el
+    # reintento lento del supervisor.
+    if command -v "$PY_CFG" >/dev/null 2>&1 || [ -x "$PY_CFG" ]; then
+        if "$PY_CFG" scripts/check_installer_order.py; then
+            ok "instaladores: venv antes que kernel (check_installer_order.py)"
+        else
+            fail "instaladores: el venv de guilds corre DESPUES del arranque - ver scripts/check_installer_order.py"
+        fi
+    else
+        fail "instaladores: python no encontrado (el gate lo necesita)"
+    fi
+
     # Catalog of downloadable models (Jose 2026-11-10, TL T3913): the download
     # registry comes from the manifest and carries only minimal roles. This gate
     # fails if a chat family or a HuggingFace URL comes back into Rust code.

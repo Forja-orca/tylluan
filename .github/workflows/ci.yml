@@ -545,3 +545,45 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
       - name: Check Desktop Tauri crate
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+
+  installer-checksum-verifier:
+    name: Installer - release checksum verifier (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # P1 installer (TL order 2026-11-10): checksums.txt inside the tarball now
+      # also covers guilds/**, and accepting that prefix in install.ps1 is a
+      # deliberate RELAXATION of the D-65 gate. It is pinned by negative cases
+      # (tampered guild file, entry outside guilds/, path traversal, duplicate)
+      # instead of by trust, so it runs on every push rather than by hand.
+      - name: Verify install.ps1 checksum gate (binaries + guilds/)
+        shell: pwsh
+        run: ./tests/test_install_ps1_checksums.ps1
+
+  model-catalog-gate:
+    name: Models - download catalog has no chat weights
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Order of Jose 2026-11-10 (TL T3913): the download registry stops being a
+      # hardcoded list in Rust and comes from the manifest, carrying only the
+      # minimal roles (embedding, reranker). This job fails if a chat family or a
+      # HuggingFace URL reappears in kernel code -- with a mutation self-test so
+      # the gate itself cannot rot.
+      - name: Model catalog gate (self-test + repo)
+        run: |
+          python3 scripts/check_model_catalog.py --self-test
+          python3 scripts/check_model_catalog.py
+
+  installer-order-gate:
+    name: Installer - venv before kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # P1c (2026-11-11): en la ruta por defecto el instalador arranca el kernel.
+      # Si eso ocurre antes de crear <DataDir>/.venv, el primer arranque de una
+      # instalacion limpia deja los guilds Python sin dependencias
+      # (ModuleNotFoundError) y solo se recuperan con el reintento lento del
+      # supervisor. Este gate fija el orden en los dos instaladores.
+      - name: Installer order gate (venv before kernel)
+        run: python3 scripts/check_installer_order.py
