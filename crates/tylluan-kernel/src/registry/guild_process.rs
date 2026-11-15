@@ -2318,6 +2318,58 @@ fn venv_final_path(path: &std::path::Path) -> String {
         .to_string()
 }
 
+/// Interpreter of a `.venv` rooted at `root` (platform layout, not a check
+/// that the file exists).
+fn venv_python_for(root: &std::path::Path) -> PathBuf {
+    if cfg!(target_os = "windows") {
+        root.join(".venv").join("Scripts").join("python.exe")
+    } else {
+        root.join(".venv").join("bin").join("python")
+    }
+}
+
+/// Look for a `.venv` interpreter in `start` and up to `levels - 1` parents.
+///
+/// Pure on purpose: `find_python()` has to walk two different chains (the
+/// kernel's cwd and the executable's directory) and this is the part worth
+/// testing without a real venv.
+/// Orden de búsqueda del `.venv`: **primero el directorio del ejecutable**,
+/// después el cwd (T4112, TL).
+///
+/// El sitio de instalación es de confianza; el cwd no: un operador puede tener
+/// abierto un repo descargado con su propio `.venv/bin/python`, y ese intérprete
+/// pasaba por delante del venv que creó el instalador. Puro para poder invertir
+/// el orden en una mutación y comprobar que el test cae.
+fn venv_search_starts(cwd: &std::path::Path, exe_dir: Option<&std::path::Path>) -> Vec<PathBuf> {
+    let mut starts: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = exe_dir {
+        starts.push(dir.to_path_buf());
+    }
+    if !starts.iter().any(|known| known == cwd) {
+        starts.push(cwd.to_path_buf());
+    }
+    starts
+}
+
+/// Primer `.venv` de la lista de cadenas, en orden.
+fn first_venv_in_chains(starts: &[PathBuf], levels: usize) -> Option<PathBuf> {
+    starts
+        .iter()
+        .find_map(|start| find_venv_python_from(start, levels))
+}
+
+fn find_venv_python_from(start: &std::path::Path, levels: usize) -> Option<PathBuf> {
+    let mut root = start.to_path_buf();
+    for _ in 0..levels {
+        let candidate = venv_python_for(&root);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        root = root.parent()?.to_path_buf();
+    }
+    None
+}
+
 /// Detect the correct Python binary for the current platform.
 ///
 /// - Windows: tries `python` then `python3`
@@ -2326,30 +2378,17 @@ fn venv_final_path(path: &std::path::Path) -> String {
 /// Validates that the found binary is Python 3.x (not 2.x).
 pub async fn find_python() -> Result<String> {
     // 0. Try local .venv with robust ABSOLUTE check (Sovereign priority)
+    //
+    // P1 installer (TL order 2026-11-10): the installers put the guild deps in
+    // `<DataDir>/.venv` (next to the binaries, never in the operator's system
+    // Python). The kernel's cwd is whatever shell started it, so the cwd chain
+    // alone would miss that venv: search from the executable's own directory
+    // too (`…/.tylluan/bin/tylluan-nexus` -> `…/.tylluan/.venv`).
     let current_dir = std::env::current_dir()?;
-    
-    // Find workspace root by looking for Cargo.toml upwards or using a known structure
-    // rústico: try current, then parent, then parent's parent
-    let mut root = current_dir.clone();
-    let mut venv_python = None;
-
-    for _ in 0..3 {
-        let candidate = if cfg!(target_os = "windows") {
-            root.join(".venv").join("Scripts").join("python.exe")
-        } else {
-            root.join(".venv").join("bin").join("python")
-        };
-
-        if candidate.exists() {
-            venv_python = Some(candidate);
-            break;
-        }
-        if let Some(parent) = root.parent() {
-            root = parent.to_path_buf();
-        } else {
-            break;
-        }
-    }
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.to_path_buf()));
+    let venv_python = first_venv_in_chains(&venv_search_starts(&current_dir, exe_dir.as_deref()), 3);
 
     if let Some(venv_path) = venv_python {
         // LINUX-FIND-PYTHON-CANONICALIZE-VENV (2026-11-13): NO se canonicaliza
@@ -2402,6 +2441,37 @@ pub async fn find_python() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P1 installer: el instalador crea `<DataDir>/.venv`, que vive junto a los
+    /// binarios y NO en el cwd del operador. `find_python()` busca tambien
+    /// desde el directorio del ejecutable, asi que el helper tiene que
+    /// encontrarlo subiendo y no inventarselo cuando no existe.
+    #[test]
+    fn p1_find_venv_python_desde_el_directorio_del_ejecutable() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+
+        // Sin .venv no hay nada que encontrar (ni panic ni ruta fantasma).
+        assert!(find_venv_python_from(&bin, 3).is_none());
+        assert!(
+            find_venv_python_from(dir.path(), 3).is_none(),
+            "un .venv hermano de bin/ solo aparece si el fichero existe"
+        );
+
+        // <data>/.venv/Scripts/python.exe (Windows) o <data>/.venv/bin/python.
+        let venv_py = venv_python_for(dir.path());
+        std::fs::create_dir_all(venv_py.parent().unwrap()).unwrap();
+        std::fs::write(&venv_py, b"").unwrap();
+
+        let found = find_venv_python_from(&bin, 3)
+            .expect("debe encontrar <data>/.venv subiendo desde <data>/bin");
+        assert_eq!(
+            found.canonicalize().unwrap(),
+            venv_py.canonicalize().unwrap(),
+            "el interprete elegido debe ser el del .venv del DATA_DIR"
+        );
+    }
 
     /// D-110: una caída de transporte debe CONTAR en el backoff (antes se
     /// reseteaba, y eso permitía morir y renacer en cada llamada sin freno).
@@ -3573,6 +3643,56 @@ mod tests {
                 "el fixture debe ser un symlink real, o el test no prueba nada"
             );
         }
+    }
+
+    /// T4112: si hay dos `.venv` —uno junto al ejecutable y otro en el cwd— gana
+    /// el del ejecutable. Mutación: invertir el orden en `venv_search_starts`
+    /// hace que este test elija el del cwd y caiga.
+    #[test]
+    fn t5b_el_venv_del_ejecutable_gana_al_del_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        let install_bin = dir.path().join("install").join("bin");
+        let cwd = dir.path().join("descargas").join("repo");
+        std::fs::create_dir_all(&install_bin).unwrap();
+        std::fs::create_dir_all(&cwd).unwrap();
+
+        let exe_venv = venv_python_for(dir.path().join("install").as_path());
+        std::fs::create_dir_all(exe_venv.parent().unwrap()).unwrap();
+        std::fs::write(&exe_venv, b"").unwrap();
+
+        let cwd_venv = venv_python_for(&cwd);
+        std::fs::create_dir_all(cwd_venv.parent().unwrap()).unwrap();
+        std::fs::write(&cwd_venv, b"").unwrap();
+
+        // 1) El orden de las cadenas: ejecutable primero.
+        let starts = venv_search_starts(&cwd, Some(&install_bin));
+        assert_eq!(starts.first(), Some(&install_bin), "el ejecutable va primero");
+        assert!(starts.iter().any(|s| s == &cwd), "el cwd sigue en la lista");
+
+        // 2) Y la selección: gana el venv del instalador, no el del cwd.
+        let elegido = first_venv_in_chains(&starts, 3).expect("debe encontrar un venv");
+        assert_eq!(
+            elegido,
+            exe_venv,
+            "debe elegir el venv del ejecutable, no el del cwd ({})",
+            cwd_venv.display()
+        );
+    }
+
+    /// Sin ejecutable conocido (o sin venv junto a él) la cadena del cwd sigue
+    /// funcionando: el cambio de orden no rompe el flujo de desarrollo.
+    #[test]
+    fn t5b_sin_venv_de_instalacion_se_usa_el_del_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("repo");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let cwd_venv = venv_python_for(&cwd);
+        std::fs::create_dir_all(cwd_venv.parent().unwrap()).unwrap();
+        std::fs::write(&cwd_venv, b"").unwrap();
+
+        let starts = venv_search_starts(&cwd, None);
+        assert_eq!(starts, vec![cwd.clone()]);
+        assert_eq!(first_venv_in_chains(&starts, 3), Some(cwd_venv));
     }
 }
 

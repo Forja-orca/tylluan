@@ -154,6 +154,14 @@ pub fn safe_relative_model_path(raw: &str) -> Option<PathBuf> {
     if raw.starts_with('\\') || raw.starts_with('/') || raw.starts_with('~') {
         return None;
     }
+    // T4153 (antigravity): `Path::components()` colapsa `a//b` en `a/b`, así que
+    // el docstring «sin componentes vacíos» no era cierto. Se rechaza aquí:
+    // separador final, separadores repetidos, y cualquier barra invertida (en
+    // Windows es separador; en Linux sería parte del nombre y luego no coincide
+    // con el fichero que el instalador verificó).
+    if raw.ends_with('/') || raw.contains("//") || raw.contains('\\') {
+        return None;
+    }
     let parsed = Path::new(raw);
     if parsed.is_absolute() {
         return None;
@@ -681,6 +689,23 @@ mod t3_download_guards_tests {
                 "debe rechazar '{raw}'"
             );
         }
+    }
+
+    /// T4153 (antigravity): separadores repetidos o al final son «componentes
+    /// vacíos» y se rechazan (antes `a//b` pasaba como `a/b`).
+    #[test]
+    fn separadores_vacios_o_barra_invertida_se_rechazan() {
+        for raw in ["a//b", "a/", "a//b/c", "a\\b", "a/b\\c"] {
+            assert!(
+                safe_relative_model_path(raw).is_none(),
+                "debe rechazar '{raw}'"
+            );
+        }
+        // Y los nombres reales del repo siguen pasando.
+        assert_eq!(
+            safe_relative_model_path("guilds/core/memory.py"),
+            Some(PathBuf::from("guilds/core/memory.py"))
+        );
     }
 
     /// Una ruta relativa limpia se acepta y se resuelve dentro de models_dir.
