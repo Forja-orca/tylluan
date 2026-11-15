@@ -14,28 +14,42 @@ import argparse
 import sys
 from pathlib import Path
 
-# (fichero, marcador del bloque de guilds, marcadores que NO pueden ir antes)
+# (fichero, marcador de la CREACION del venv, marcadores que NO pueden ir antes)
+#
+# T4130: antes el marcador era «Python guilds», que es una cabecera/comentario.
+# Una mutación lo demostró: mover la cabecera dejaba el gate en verde con el
+# venv creado después del arranque. Ahora se busca la línea que realmente crea
+# el venv.
 CHECKS = [
     (
         "install.ps1",
-        "Python guilds",
+        "& $GuildPy -m venv $VenvDir",
         [
-            ("instalar el perfil portable", 'install --profile portable'),
+            ("instalar el perfil portable", "install --profile portable"),
             ("arrancar el kernel", "Start-Process -FilePath"),
         ],
     ),
     (
         "install.sh",
-        "Python guilds",
+        '-m venv "${VENV_DIR}" || true',
         [
-            ("instalar el perfil portable", 'install --profile portable'),
+            ("instalar el perfil portable", "install --profile portable"),
         ],
     ),
 ]
 
 
 def line_of(text: str, needle: str) -> int | None:
+    """Primera linea REAL (no comentario) que contiene `needle`.
+
+    T4130: antes casaba la primera aparicion, y un comentario que mencionara
+    «Python guilds» antes del bloque real daba por buena una posicion falsa.
+    `#` es comentario tanto en sh como en PowerShell.
+    """
     for number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
         if needle in line:
             return number
     return None

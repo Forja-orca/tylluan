@@ -195,6 +195,33 @@ try {
     }
     if (-not $dupFailed) { throw 'duplicate entry must fail' }
     Write-Host 'OK duplicate guilds/ entry rejected'
+    # T4130 (TL): la comprobacion de nombres de install.ps1 debe aceptar TODO
+    # nombre real que el repo empaca en guilds/. Se toma la regex del propio
+    # install.ps1 (no una copia que pueda divergir) y se aplica a la salida real
+    # de `git ls-files -- guilds`.
+    $installText = Get-Content -Raw -LiteralPath $install
+    # Ojo: `-notmatch '...'` aparece antes para el checksum de 64 hex, así que
+    # se busca la línea de la regex de nombres (la que contiene A-Za-z0-9).
+    $nameLine = ($installText -split "`n" | Where-Object { $_ -match 'A-Za-z0-9\._\-' } | Select-Object -First 1)
+    if (-not $nameLine) {
+        throw 'no se encontro la linea de la regex de nombres en install.ps1'
+    }
+    $regexMatch = [regex]::Match($nameLine, "-notmatch '([^']+)'")
+    if (-not $regexMatch.Success) {
+        throw 'no se encontro la regex de nombres en install.ps1'
+    }
+    $nameRegex = [regex]::new($regexMatch.Groups[1].Value)
+    $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+    $realFiles = @(& git -C $repoRoot ls-files -- guilds)
+    if ($realFiles.Count -eq 0) {
+        throw 'git ls-files no devolvio ficheros de guilds/'
+    }
+    $rechazados = @($realFiles | Where-Object { -not $nameRegex.IsMatch($_) })
+    if ($rechazados.Count -gt 0) {
+        throw ("la regex de nombres rechaza ficheros REALES de guilds/: {0}" -f ($rechazados -join ', '))
+    }
+    Write-Host ("OK la regex de nombres acepta los {0} ficheros reales de guilds/" -f $realFiles.Count)
+
 } finally {
     Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
 }
