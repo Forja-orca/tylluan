@@ -230,4 +230,24 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
     expect(screen.getByText('No hay acciones esperando tu permiso.')).toBeInTheDocument();
     expect(screen.queryByText(/HITL|Autorización Máxima/i)).not.toBeInTheDocument();
   });
+
+  it('muestra qué falta por configurar cuando embeddings_loaded es false y navega a Ajustes', () => {
+    useAppStore.getState().setActiveTab('overview');
+    currentAgentProfiles = mockProfiles;
+    const memoryStats: MemoryStats = { document_count: 1, disk_usage_bytes: 1024, node_count: 5, edge_count: 2 };
+
+    render(
+      <OverviewTab
+        {...baseProps}
+        memoryStats={memoryStats}
+        sysStatus={{ embeddings_loaded: false }}
+        guilds={[]}
+      />
+    );
+
+    expect(screen.getByText(/Falta por configurar:/i)).toBeInTheDocument();
+    expect(screen.getByText(/modelo de búsqueda semántica/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Revisar en Ajustes/i }));
+    expect(useAppStore.getState().activeTab).toBe('settings');
+  });
 });

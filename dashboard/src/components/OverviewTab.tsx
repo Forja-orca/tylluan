@@ -395,8 +395,35 @@ export function OverviewTab({
     tylluanStatus = { text: 'En espera', subtext: 'Sin agentes conectados en este momento. El sustrato permanece en reposo.', color: 'bg-white dark:bg-card border-[#ACA899] dark:border-border text-[#444444] dark:text-muted-foreground', pulse: false };
   }
 
+  const missingInstallItems: string[] = [];
+  if (sysStatus?.embeddings_loaded === false) {
+    missingInstallItems.push('modelo de búsqueda semántica (embeddings)');
+  }
+  if (guilds.length === 0) {
+    missingInstallItems.push('herramientas activas');
+  }
+
   return (
     <div className="space-y-3 font-sans">
+      {missingInstallItems.length > 0 && (
+        <div
+          role="status"
+          className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-2"
+        >
+          <div className="text-xs text-foreground">
+            <span className="font-bold text-amber-700 dark:text-amber-300">Falta por configurar: </span>
+            <span>{missingInstallItems.join(' y ')}.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => useAppStore.getState().setActiveTab('settings')}
+            className="px-2.5 py-1 rounded text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 border border-amber-500/40 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+          >
+            Revisar en Ajustes
+          </button>
+        </div>
+      )}
+
       {/* What is Tylluan doing now — human-readable status */}
       <fieldset className="border border-border p-3 bg-card rounded-lg shadow-sm">
         <legend className="text-[11px] font-bold text-primary px-1.5">Estado de Actividad del Sustrato</legend>

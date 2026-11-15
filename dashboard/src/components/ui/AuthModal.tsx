@@ -16,12 +16,14 @@ export function AuthModal({
 }: AuthModalProps) {
   const [tokenInput, setTokenInput] = useState('');
   const [showToken, setShowToken] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       const stored = initialToken || localStorage.getItem('tylluan_token') || '';
       setTokenInput(stored);
+      setCopiedToken(false);
       setError(null);
     }
   }, [isOpen, initialToken]);
@@ -58,6 +60,20 @@ export function AuthModal({
           setTokenInput(text.trim());
           setError(null);
         }
+      }
+    } catch {
+      // Clipboard access denied or unsupported
+    }
+  };
+
+  const handleCopyToken = async () => {
+    const trimmed = tokenInput.trim();
+    if (!trimmed) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(trimmed);
+        setCopiedToken(true);
+        setTimeout(() => setCopiedToken(false), 2000);
       }
     } catch {
       // Clipboard access denied or unsupported
@@ -101,14 +117,27 @@ export function AuthModal({
               <label htmlFor="bearer-token-input" className="text-xs font-medium text-slate-300">
                 Bearer Token
               </label>
-              <button
-                type="button"
-                onClick={handlePasteClipboard}
-                className="text-[11px] text-teal-400 hover:text-teal-300 flex items-center gap-1 transition-colors"
-              >
-                <Clipboard className="w-3 h-3" />
-                Pegar portapapeles
-              </button>
+              <div className="flex items-center gap-3">
+                {tokenInput.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCopyToken}
+                    aria-label="Copiar token al portapapeles"
+                    className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Check className="w-3 h-3" aria-hidden="true" />
+                    {copiedToken ? 'Copiado' : 'Copiar token'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handlePasteClipboard}
+                  className="text-[11px] text-teal-400 hover:text-teal-300 flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Clipboard className="w-3 h-3" aria-hidden="true" />
+                  Pegar portapapeles
+                </button>
+              </div>
             </div>
 
             <div className="relative">
