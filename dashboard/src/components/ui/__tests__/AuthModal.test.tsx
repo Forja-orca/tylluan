@@ -29,9 +29,10 @@ describe('AuthModal — Copiar token de conexión', () => {
     });
   });
 
-  it('no muestra el botón Copiar token si el campo está vacío', () => {
+  it('no muestra el botón Copiar token si el campo está vacío y avisa al operador', () => {
     localStorage.removeItem('tylluan_token');
     render(<AuthModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} initialToken="" />);
     expect(screen.queryByRole('button', { name: /Copiar token al portapapeles/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Sin token guardado en este navegador/i)).toBeInTheDocument();
   });
 });

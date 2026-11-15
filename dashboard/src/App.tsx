@@ -467,12 +467,13 @@ function App() {
           {/* Bearer Token Config Button */}
           <button
             type="button"
-            aria-label="Configurar Bearer Token"
+            aria-label="Configurar o copiar Bearer Token"
             onClick={() => setAuthModalOpen(true)}
-            className="p-2 rounded border bg-card border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none"
-            title="Configurar Bearer Token"
+            className="px-2.5 py-1.5 rounded border bg-card border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none inline-flex items-center gap-1.5 text-xs font-medium"
+            title="Configurar o copiar Bearer Token"
           >
-            <Key className="w-4 h-4" aria-hidden="true" />
+            <Key className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <span className="hidden sm:inline">Token</span>
           </button>
 
           {/* Integrated Reload / Sync Button (Replaces legacy #tylluan-desktop-reload-btn JS injection) */}

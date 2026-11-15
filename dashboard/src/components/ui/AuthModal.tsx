@@ -118,7 +118,7 @@ export function AuthModal({
                 Bearer Token
               </label>
               <div className="flex items-center gap-3">
-                {tokenInput.trim().length > 0 && (
+                {tokenInput.trim().length > 0 ? (
                   <button
                     type="button"
                     onClick={handleCopyToken}
@@ -128,6 +128,10 @@ export function AuthModal({
                     <Check className="w-3 h-3" aria-hidden="true" />
                     {copiedToken ? 'Copiado' : 'Copiar token'}
                   </button>
+                ) : (
+                  <span className="text-[11px] text-slate-400">
+                    Sin token guardado en este navegador
+                  </span>
                 )}
                 <button
                   type="button"
