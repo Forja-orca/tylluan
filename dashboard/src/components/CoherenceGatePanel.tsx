@@ -9,8 +9,6 @@ export interface CoherenceGatePanelProps {
   bridge: NexusBridge | null;
 }
 
-const POLL_INTERVAL_MS = 15_000;
-
 export function calculateProgressPct(resolved: number, threshold: number): number {
   if (!threshold || threshold <= 0) return 0;
   return Math.min(100, Math.max(0, (resolved / threshold) * 100));

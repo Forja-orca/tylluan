@@ -1,5 +1,5 @@
 import React, { useState, lazy, Suspense } from 'react';
-import { Cpu, Link2, Plug, Network, Loader2, FolderArchive } from 'lucide-react';
+import { Cpu, Link2, Plug, Network, Loader2 } from 'lucide-react';
 import type { NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 
 const GuildsTab = lazy(() => import('./GuildsTab').then(m => ({ default: m.GuildsTab })));

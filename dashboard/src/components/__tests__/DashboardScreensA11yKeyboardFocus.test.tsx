@@ -206,8 +206,13 @@ describe('Dashboard Screens — Keyboard & Focus Accessibility (AG-27)', () => {
       expect(securityTab).toHaveAttribute('aria-selected', 'true');
       expect(document.activeElement).toBe(securityTab);
 
+      // ArrowRight switches to connectors
+      fireEvent.keyDown(securityTab, { key: 'ArrowRight' });
+      expect(connectorsTab).toHaveAttribute('aria-selected', 'true');
+      expect(document.activeElement).toBe(connectorsTab);
+
       // End switches to maintenance
-      fireEvent.keyDown(securityTab, { key: 'End' });
+      fireEvent.keyDown(connectorsTab, { key: 'End' });
       expect(maintenanceTab).toHaveAttribute('aria-selected', 'true');
       expect(document.activeElement).toBe(maintenanceTab);
 
