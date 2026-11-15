@@ -211,6 +211,9 @@ impl super::TylluanServer {
                         "metadata": { "type": "object", "description": "Optional tags or context." },
                         "agent_id": { "type": "string", "description": "Optional. Tag this memory with your agent identity so it appears in your session history." },
                         "expires_in_days": { "type": "integer", "description": "Optional. Number of days until this memory expires. After expiry, retrieval score is penalized ×0.1.", "minimum": 1, "maximum": 3650 },
+                        "kind":  { "type": "string", "description": "Optional. Memory kind (e.g. 'state'). Shorthand for metadata.kind; metadata wins if both are given." },
+                        "space": { "type": "string", "description": "Optional. Space the memory belongs to (e.g. 'sesion'). Shorthand for metadata.space; for a 'state' note it is the key, so a later note for the same space supersedes the previous one." },
+                        "topic": { "type": "string", "description": "Optional. State key for a 'state' note; takes precedence over space. Shorthand for metadata.topic." },
                     },
                     "required": ["content"]
                 }),

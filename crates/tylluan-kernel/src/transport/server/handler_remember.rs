@@ -145,6 +145,39 @@ pub(crate) fn dcr_is_state_note(metadata: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// MEM-7: `kind`, `space` y `topic` pueden venir como parámetros de primer
+/// nivel. Antes se ignoraban en silencio: una llamada con `kind="state"` y
+/// `space="X"` pero sin `metadata` no marcaba la nota como estado, así que el
+/// DCR la fusionaba (append) en vez de superseder la versión anterior.
+///
+/// Se copian a `metadata` **solo si no están ya** ahí: la metadata explícita
+/// manda. Devuelve cuántos campos se han inyectado (0 = nada que hacer).
+pub(crate) fn merge_state_fields_into_metadata(
+    arguments: &serde_json::Map<String, serde_json::Value>,
+    metadata: &mut serde_json::Value,
+) -> usize {
+    const CLAVES: [&str; 3] = ["kind", "space", "topic"];
+    let Some(obj) = metadata.as_object_mut() else {
+        return 0;
+    };
+    let mut inyectados = 0;
+    for clave in CLAVES {
+        let Some(valor) = arguments.get(clave).and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let valor = valor.trim();
+        if valor.is_empty() || obj.contains_key(clave) {
+            continue;
+        }
+        obj.insert(
+            clave.to_string(),
+            serde_json::Value::String(valor.to_string()),
+        );
+        inyectados += 1;
+    }
+    inyectados
+}
+
 /// MEM-4: ¿el candidato del DCR sigue existiendo?
 ///
 /// `search_vector` devuelve una **foto** del nodo. Entre esa foto y la fusión el
@@ -336,6 +369,15 @@ pub async fn handle_tylluan_remember(
             && let Some(obj) = m.as_object_mut() {
                 obj.insert("agent_id".to_string(), serde_json::Value::String(aid.clone()));
             }
+        // MEM-7: `kind`/`space`/`topic` de primer nivel se mapean a metadata.
+        if let Some(args) = arguments.as_ref() {
+            let inyectados = merge_state_fields_into_metadata(args, &mut m);
+            if inyectados > 0 {
+                tracing::debug!(
+                    "tylluan_remember: {inyectados} campo(s) de estado mapeados de primer nivel a metadata"
+                );
+            }
+        }
         m.to_string()
     };
 
@@ -1713,6 +1755,107 @@ mod embedding_failure_tests {
         );
     }
 
+    /// MEM-7 E2E: `kind` y `space` en primer nivel (sin `metadata`) marcan la nota
+    /// como estado y permiten `supersede`, y `metadata` explícita tiene prioridad.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mem7_e2e_primer_nivel_supersede_y_metadata_explicita_manda() {
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use crate::memory::mailbox::Mailbox;
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let (tx, _) = broadcast::channel(16);
+        let silva = Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap());
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(
+                crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap(),
+            )),
+        ));
+        let server = TylluanServer::new(
+            test_reg,
+            Arc::new(GuildMatcher::new(builtin_catalog())),
+            silva.clone(),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            AgentNodeRouter::new(tx),
+        );
+
+        let mut args1 = serde_json::Map::new();
+        args1.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado MEM-7: version A".to_string()),
+        );
+        args1.insert("kind".to_string(), serde_json::Value::String("state".to_string()));
+        args1.insert(
+            "space".to_string(),
+            serde_json::Value::String("mem7-space".to_string()),
+        );
+        let r1 = handle_tylluan_remember(&server, Some(args1))
+            .await
+            .expect("primera nota MEM-7");
+        let t1 = r1.content[0].as_text().unwrap().text.clone();
+        assert!(t1.contains("action=nuevo"), "la primera nota es nueva: {t1}");
+
+        tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+
+        let mut args2 = serde_json::Map::new();
+        args2.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado MEM-7: version B".to_string()),
+        );
+        args2.insert("kind".to_string(), serde_json::Value::String("state".to_string()));
+        args2.insert(
+            "space".to_string(),
+            serde_json::Value::String("mem7-space".to_string()),
+        );
+        let r2 = handle_tylluan_remember(&server, Some(args2))
+            .await
+            .expect("segunda nota MEM-7");
+        let t2 = r2.content[0].as_text().unwrap().text.clone();
+        assert!(
+            t2.contains("action=supersede"),
+            "sin metadata, kind/space de primer nivel deben superseder: {t2}"
+        );
+        assert!(
+            t2.contains("previous version"),
+            "debe referenciar la version anterior: {t2}"
+        );
+
+        tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+
+        let mut args3 = serde_json::Map::new();
+        args3.insert(
+            "content".to_string(),
+            serde_json::Value::String("estado MEM-7: version C".to_string()),
+        );
+        args3.insert("kind".to_string(), serde_json::Value::String("state".to_string()));
+        args3.insert(
+            "space".to_string(),
+            serde_json::Value::String("otro-space".to_string()),
+        );
+        args3.insert(
+            "metadata".to_string(),
+            serde_json::json!({"kind": "state", "space": "mem7-space"}),
+        );
+        let r3 = handle_tylluan_remember(&server, Some(args3))
+            .await
+            .expect("tercera nota MEM-7 con metadata explicita");
+        let t3 = r3.content[0].as_text().unwrap().text.clone();
+        assert!(
+            t3.contains("action=supersede"),
+            "metadata explicita debe ganar sobre space de primer nivel: {t3}"
+        );
+    }
+
     /// AG-6: tylluan_remember accepts 'intent' as an ergonomic fallback alias when 'content' is omitted.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_remember_accepts_intent_alias() {
@@ -1752,4 +1895,42 @@ mod embedding_failure_tests {
         let text = res.content[0].as_text().unwrap();
         assert!(text.text.contains("Stored node"), "Debe guardar con éxito pasando 'intent': {text:?}");
     }
+
+    /// MEM-7: `kind`/`space` de primer nivel llegan a metadata y la nota se
+    /// reconoce como estado (antes se ignoraban y el DCR fusionaba).
+    #[test]
+    fn mem7_kind_y_space_de_primer_nivel_marcan_nota_de_estado() {
+        let mut args = serde_json::Map::new();
+        args.insert("kind".into(), serde_json::json!("state"));
+        args.insert("space".into(), serde_json::json!("  sesion  "));
+        let mut metadata = serde_json::json!({});
+        assert_eq!(merge_state_fields_into_metadata(&args, &mut metadata), 2);
+        assert_eq!(metadata["kind"], serde_json::json!("state"));
+        assert_eq!(metadata["space"], serde_json::json!("sesion"));
+        // Y ahora sí es una nota de estado con clave propia.
+        assert_eq!(dcr_state_key(&metadata.to_string()), Some("state:sesion".to_string()));
+    }
+
+    /// La metadata explícita manda: el campo de primer nivel no la pisa.
+    #[test]
+    fn mem7_la_metadata_explicita_gana() {
+        let mut args = serde_json::Map::new();
+        args.insert("space".into(), serde_json::json!("otro"));
+        let mut metadata = serde_json::json!({"kind": "state", "space": "sesion"});
+        assert_eq!(merge_state_fields_into_metadata(&args, &mut metadata), 0);
+        assert_eq!(metadata["space"], serde_json::json!("sesion"));
+        assert_eq!(dcr_state_key(&metadata.to_string()), Some("state:sesion".to_string()));
+    }
+
+    /// Valores vacíos o que no son texto no cuentan.
+    #[test]
+    fn mem7_valores_invalidos_no_se_inyectan() {
+        let mut args = serde_json::Map::new();
+        args.insert("kind".into(), serde_json::json!(42));
+        args.insert("space".into(), serde_json::json!("   "));
+        let mut metadata = serde_json::json!({});
+        assert_eq!(merge_state_fields_into_metadata(&args, &mut metadata), 0);
+        assert_eq!(metadata, serde_json::json!({}));
+    }
+
 }
