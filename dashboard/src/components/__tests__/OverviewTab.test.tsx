@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { OverviewTab } from '../OverviewTab';
+import { useAppStore } from '../../stores/useAppStore';
 import type { AgentProfile, NexusBridge } from '../../lib/api-client';
 import type { MemoryStats } from '../../hooks/useNexus';
 
@@ -187,5 +188,46 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
     expect(screen.queryByText(/Lista de Inicio/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('mock-homeostasis-widget')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: /Tylluan is/i })).toBeInTheDocument();
+  });
+
+  it('al pulsar GESTIONAR APROBACIONES navega a la pestaña approvals', () => {
+    useAppStore.getState().setActiveTab('overview');
+    currentAgentProfiles = mockProfiles;
+    const memoryStats: MemoryStats = { document_count: 1, disk_usage_bytes: 1024, node_count: 5, edge_count: 2 };
+
+    render(
+      <OverviewTab
+        {...baseProps}
+        memoryStats={memoryStats}
+        approvals={[{ id: 'req-1', tool: 'filesystem', status: 'pending' }]}
+      />
+    );
+
+    expect(screen.getByText('Permisos pendientes')).toBeInTheDocument();
+    expect(screen.getByText('1 ACCIÓN ESPERANDO PERMISO')).toBeInTheDocument();
+    expect(screen.queryByText(/HITL|ACCIONES BLOQUEADAS/i)).not.toBeInTheDocument();
+
+    const manageBtn = screen.getByRole('button', { name: /GESTIONAR APROBACIONES/i });
+    fireEvent.click(manageBtn);
+
+    expect(useAppStore.getState().activeTab).toBe('approvals');
+  });
+
+  it('muestra la tarjeta de permisos en lenguaje llano cuando no hay pendientes', () => {
+    currentAgentProfiles = mockProfiles;
+    const memoryStats: MemoryStats = { document_count: 1, disk_usage_bytes: 1024, node_count: 5, edge_count: 2 };
+
+    render(
+      <OverviewTab
+        {...baseProps}
+        memoryStats={memoryStats}
+        approvals={[]}
+      />
+    );
+
+    expect(screen.getByText('Permisos pendientes')).toBeInTheDocument();
+    expect(screen.getByText('Todo al día')).toBeInTheDocument();
+    expect(screen.getByText('No hay acciones esperando tu permiso.')).toBeInTheDocument();
+    expect(screen.queryByText(/HITL|Autorización Máxima/i)).not.toBeInTheDocument();
   });
 });

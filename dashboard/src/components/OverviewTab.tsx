@@ -19,6 +19,7 @@ import type {
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
 import type { MemoryStats } from '../hooks/useNexus';
+import { useAppStore } from '../stores/useAppStore';
 import { cn } from '../lib/utils';
 import { MetricCard, RelativeTime, MiniSparkline } from './ui/MetricPrimitives';
 import { HomeostasisWidget } from './HomeostasisWidget';
@@ -777,17 +778,19 @@ export function OverviewTab({
 
         <div className="rounded bg-card border border-border overflow-hidden flex flex-col font-sans">
           <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
-            <span className="text-xs font-bold text-foreground">Puerta HITL</span>
+            <span className="text-xs font-bold text-foreground">Permisos pendientes</span>
           </div>
           <div className="flex-1 p-4 flex flex-col items-center justify-center text-center">
             {approvals.length === 0 ? (
               <>
-                <p className="text-xs font-semibold text-foreground">Autorización Máxima</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Sin aprobaciones pendientes requeridas.</p>
+                <p className="text-xs font-semibold text-foreground">Todo al día</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">No hay acciones esperando tu permiso.</p>
               </>
             ) : (
               <div className="w-full space-y-2">
-                <p className="text-xs font-bold text-amber-600 mb-2">{approvals.length} ACCIONES BLOQUEADAS</p>
+                <p className="text-xs font-bold text-amber-600 mb-2">
+                  {approvals.length === 1 ? '1 ACCIÓN ESPERANDO PERMISO' : `${approvals.length} ACCIONES ESPERANDO PERMISO`}
+                </p>
                 {approvals.slice(0, 3).map((a) => (
                   <div key={a.id} className="p-2 bg-amber-500/10 border border-amber-500/30 rounded text-left overflow-hidden">
                     <div className="text-[11px] font-mono text-amber-600 truncate">{a.id}</div>
@@ -796,6 +799,7 @@ export function OverviewTab({
                 ))}
                 <button
                   type="button"
+                  onClick={() => useAppStore.getState().setActiveTab('approvals')}
                   className="w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 rounded text-xs font-bold border border-amber-500/40 mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   GESTIONAR APROBACIONES

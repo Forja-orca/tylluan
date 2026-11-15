@@ -638,7 +638,7 @@ function App() {
               {/* 3. Aprobaciones y Seguridad */}
               {(activeTab === 'approvals' || activeTab === 'audit') && (
                 <ErrorBoundary>
-                  <ApprovalsAndSecurityTab bridge={bridge} />
+                  <ApprovalsAndSecurityTab bridge={bridge} approvals={approvals} />
                 </ErrorBoundary>
               )}
 
