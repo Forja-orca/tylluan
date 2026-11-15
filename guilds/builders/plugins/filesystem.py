@@ -22,6 +22,51 @@ MAX_SEARCH_RESULTS = 50
 # Default root — kernel CWD, overridable via env var
 _FS_ROOT = os.environ.get("TYLLUAN_ROOT", os.getcwd())
 
+# ─── FS-FIND-FILES-IGNORA-RUTA-DEL-INTENT (encargo TL T4147) ────────────────
+# A natural-language intent can name the very directory that has to be listed
+# ("lista los ficheros de E:\tylluan\docs"). `find_files` used to look only at
+# the `directory` parameter (default "."), so the path in the intent was
+# dropped and the guild listed the kernel's CWD instead — in production that is
+# the Tylluan root, and the listing exposed `data/`, `bin/` and the NAMES of
+# `.tylluan-token` and `identity.key` (Hermes-Linux report, T4147). These three
+# helpers carry the extraction; see `_directory_from_text`.
+_PATH_TOKEN_RE = re.compile(
+    r"(?:(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s\"'`]*"  # C:\ruta, D:/ruta (nunca `https:`)
+    r"|~[\\/][^\s\"'`]*"  # ~/ruta
+    r"|[\\/]{2}[^\s\"'`\\/]+(?:[\\/][^\s\"`]*)*"  # \\host\share, //host/share
+    r"|/[A-Za-z0-9._][^\s\"'`]*)"  # /ruta/absoluta
+)
+# Trailing prose punctuation must not become part of the path.
+_PATH_TRAILING = ".,;:!?)]}'\"`"
+
+
+def _directory_from_text(source: str) -> str | None:
+    """Return the absolute path named in `source`, or None.
+
+    Purely lexical: it never touches the disk. A UNC path is returned as-is on
+    purpose so that `validate_path` rejects it with a clear message (B-32/H2)
+    instead of paying a name resolution for it.
+    """
+    if not source:
+        return None
+    for m in _PATH_TOKEN_RE.finditer(source):
+        prev = source[m.start() - 1] if m.start() else ""
+        if prev in ":/\\":  # `http://host/x`, or the tail of a longer token
+            continue
+        candidate = m.group(0).rstrip(_PATH_TRAILING)
+        if len(candidate) >= 2:
+            return candidate
+    return None
+
+
+def _strip_path_tokens(source: str) -> str:
+    """Remove paths from the text so they cannot be mistaken for a pattern.
+
+    Without this, `C:\\Users\\x\\.cache\\tylluan` reached the extension regex in
+    `find_files` and produced the pattern `*.cache`.
+    """
+    return _PATH_TOKEN_RE.sub(" ", source)
+
 
 @mcp.tool()
 async def file_read(
@@ -179,11 +224,23 @@ async def find_files(
 
     Args:
         pattern: Glob pattern like '*.py', '*.toml', or a filename
-        directory: Directory to search in (default: current)
-        intent: Natural language intent for pattern extraction
+        directory: Directory to search in. If omitted, an absolute path named in
+            `intent`/`query` is used; it is never silently replaced by the
+            kernel's working directory.
+        intent: Natural language intent for pattern and directory extraction
         query: Alternative query string
         max_results: Maximum files to return
     """
+    text = intent or query or ""
+    # A path taken from the request only counts when the caller did not pass an
+    # explicit `directory` — an explicit parameter is the caller's own choice.
+    explicit_dir = bool(directory and directory.strip() not in (".", ""))
+    named_dir: str | None = None
+    if not explicit_dir:
+        named_dir = _directory_from_text(text)
+        if named_dir:
+            directory = named_dir
+
     # Words that look like they precede "files" in English but are NOT extensions
     _NON_EXT = frozenset({
         "list", "all", "the", "any", "some", "my", "your", "our", "new",
@@ -191,7 +248,10 @@ async def find_files(
         "what", "which", "show", "find", "get", "read", "open",
     })
     if not pattern:
-        source = intent or query or ""
+        # A path named in the request must not be read again as a glob or
+        # extension: the old chain turned `C:\Users\x\.cache` into `*.cache` and
+        # `https://host/docs` into `*.com` (see `_strip_path_tokens`).
+        source = _strip_path_tokens(text)
         import re as _re
         m = _re.search(r'["\']([^"\']+)["\']', source)
         if m:
@@ -220,10 +280,18 @@ async def find_files(
 
     try:
         root = Path(directory).resolve()
+        named = " (named in your request)" if named_dir else ""
         if not validate_path(_FS_ROOT, str(root)):
-            return f"🚫 BLOCKED: Directory '{directory}' is outside the allowed root '{_FS_ROOT}'."
+            return (
+                f"🚫 BLOCKED: Directory '{directory}'{named} is outside the allowed root "
+                f"'{_FS_ROOT}'. The search did NOT fall back to the kernel's working "
+                f"directory — name a path inside the allowed root."
+            )
         if not root.is_dir():
-            return f"❌ Directory not found: {directory}"
+            return (
+                f"❌ Directory not found: {directory}{named}. It was not replaced by the "
+                f"kernel's working directory ('{_FS_ROOT}')."
+            )
 
         files: list[str] = []
         for f in root.rglob(pattern):
@@ -240,7 +308,12 @@ async def find_files(
 
         if not files:
             return f"🔍 No files found matching '{pattern}' in {root}"
-        return f"📁 Found {len(files)} files matching '{pattern}':\n\n" + "\n".join(files[:max_results])
+        # The searched directory is named in the header: a listing of the kernel's
+        # working directory must never be an unlabelled surprise.
+        return (
+            f"📁 Found {len(files)} files matching '{pattern}' in {root}:\n\n"
+            + "\n".join(files[:max_results])
+        )
     except Exception as e:
         return f"❌ Find failed: {e}"
 
