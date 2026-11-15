@@ -28,28 +28,34 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchCanary = useCallback(async () => {
+  const fetchCanary = useCallback(async (signal?: AbortSignal) => {
     if (!bridge || document.visibilityState === 'hidden') return;
     setRefreshing(true);
     try {
-      const raw = await bridge.fetchRaw('/api/v1/canary', {}) as CanaryData;
+      const raw = await bridge.fetchRaw('/api/v1/canary', signal ? { signal } : {}) as CanaryData;
+      if (signal?.aborted) return;
       if (raw && raw.status) {
         setCanary(raw);
       }
     } catch (e: unknown) {
+      if (signal?.aborted || (e instanceof DOMException && e.name === 'AbortError')) return;
       console.error('Failed to fetch canary status:', e);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [bridge]);
 
   useEffect(() => {
-    fetchCanary();
+    const controller = new AbortController();
+    fetchCanary(controller.signal);
+    return () => controller.abort();
   }, [fetchCanary]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
-  usePolling('canary-status', fetchCanary, { interval: 'slow', enabled: !!bridge });
+  usePolling('canary-status', () => fetchCanary(), { interval: 'slow', enabled: !!bridge });
 
   if (loading && !canary) {
     return (
@@ -96,7 +102,7 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
             Afirmaciones Canario
           </div>
           <button 
-            onClick={fetchCanary}
+            onClick={() => fetchCanary()}
             disabled={refreshing}
             aria-label="Actualizar afirmaciones canario"
             className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"

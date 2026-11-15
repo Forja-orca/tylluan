@@ -250,4 +250,21 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
     fireEvent.click(screen.getByRole('button', { name: /Revisar en Ajustes/i }));
     expect(useAppStore.getState().activeTab).toBe('settings');
   });
+
+  it('muestra estado explícito de configuración inicial cuando todo está listo', () => {
+    currentAgentProfiles = mockProfiles;
+    const memoryStats: MemoryStats = { document_count: 1, disk_usage_bytes: 1024, node_count: 5, edge_count: 2 };
+
+    render(
+      <OverviewTab
+        {...baseProps}
+        memoryStats={memoryStats}
+        sysStatus={{ embeddings_loaded: true }}
+        guilds={[{ name: 'filesystem', status: 'running' }] as unknown as typeof baseProps.guilds}
+      />
+    );
+
+    expect(screen.getByText(/Configuración inicial:/i)).toBeInTheDocument();
+    expect(screen.getByText(/todo listo \(embeddings cargados y 1 herramientas activas\)/i)).toBeInTheDocument();
+  });
 });

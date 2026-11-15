@@ -405,19 +405,36 @@ export function OverviewTab({
 
   return (
     <div className="space-y-3 font-sans">
-      {missingInstallItems.length > 0 && (
+      {sysStatus && (
         <div
           role="status"
-          className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-2"
+          className={
+            missingInstallItems.length > 0
+              ? 'p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-2'
+              : 'p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-2'
+          }
         >
           <div className="text-xs text-foreground">
-            <span className="font-bold text-amber-700 dark:text-amber-300">Falta por configurar: </span>
-            <span>{missingInstallItems.join(' y ')}.</span>
+            {missingInstallItems.length > 0 ? (
+              <>
+                <span className="font-bold text-amber-700 dark:text-amber-300">Falta por configurar: </span>
+                <span>{missingInstallItems.join(' y ')}.</span>
+              </>
+            ) : (
+              <>
+                <span className="font-bold text-emerald-700 dark:text-emerald-300">Configuración inicial: </span>
+                <span>todo listo (embeddings cargados y {guilds.length} herramientas activas).</span>
+              </>
+            )}
           </div>
           <button
             type="button"
             onClick={() => useAppStore.getState().setActiveTab('settings')}
-            className="px-2.5 py-1 rounded text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 border border-amber-500/40 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            className={
+              missingInstallItems.length > 0
+                ? 'px-2.5 py-1 rounded text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 border border-amber-500/40 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none'
+                : 'px-2.5 py-1 rounded text-[11px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none'
+            }
           >
             Revisar en Ajustes
           </button>

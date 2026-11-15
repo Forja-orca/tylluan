@@ -32,10 +32,12 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchDreamStatus = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
       try {
-        const raw = (await bridge.fetchRaw('/api/v1/dream/status', {})) as DreamStatusData;
+        const raw = (await bridge.fetchRaw('/api/v1/dream/status', { signal: controller.signal })) as DreamStatusData;
+        if (controller.signal.aborted) return;
         if (raw && raw.status === 'ok') {
           setDreamStatus(raw);
           if (raw.night_consolidation && raw.night_consolidation.next_run_in_secs !== undefined) {
@@ -43,13 +45,17 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
           }
         }
       } catch (e) {
+        if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) return;
         console.error('Failed to fetch dream status:', e);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
     
     fetchDreamStatus();
+    return () => controller.abort();
   }, [bridge]);
 
   // Polling via centralized coordinator (replaces 2 scattered setInterval calls)
