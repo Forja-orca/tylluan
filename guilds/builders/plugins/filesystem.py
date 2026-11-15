@@ -423,21 +423,53 @@ async def file_search(
 
 
 @mcp.tool()
-async def file_list(directory: str, depth: int = 2) -> str:
+async def file_list(
+    directory: str = ".",
+    depth: int = 2,
+    intent: str = "",
+    query: str = "",
+) -> str:
     """List files and directories with a tree-like format.
 
     Args:
-        directory: Directory to list.
+        directory: Directory to list. If omitted, an absolute path named in
+            `intent`/`query` is used; it is never silently replaced by the
+            kernel's working directory.
         depth: Maximum depth to recurse (default: 2).
+        intent: Natural language intent; it may name the directory to list.
+        query: Alternative query string.
 
     Returns:
         Tree-formatted directory listing.
     """
+    # FS-FIND-FILES-IGNORA-RUTA-DEL-INTENT, parte `file_list` (encargo TL T4183).
+    # Hasta aqui `directory` era obligatorio y no existia `intent`: un
+    # `tylluan_do` que solo nombra la ruta en el texto reventaba con
+    # «Field required» (Hermes-Linux) y, si el llamante mandaba ".", el arbol
+    # salia del CWD del kernel. Misma regla que en `find_files`: un
+    # `directory` explicito manda; si no, se usa la ruta nombrada en el texto;
+    # y si esa ruta no vale, se dice, no se cae al cwd en silencio.
+    text = intent or query or ""
+    explicit_dir = bool(directory and directory.strip() not in (".", ""))
+    named_dir: str | None = None
+    if not explicit_dir:
+        named_dir = _directory_from_text(text)
+        if named_dir:
+            directory = named_dir
+
     dir_path = Path(directory).resolve()
+    named = " (named in your request)" if named_dir else ""
     if not validate_path(_FS_ROOT, str(dir_path)):
-        return f"🚫 BLOCKED: Directory '{directory}' is outside the allowed root '{_FS_ROOT}'."
+        return (
+            f"🚫 BLOCKED: Directory '{directory}'{named} is outside the allowed root "
+            f"'{_FS_ROOT}'. The listing did NOT fall back to the kernel's working "
+            f"directory — name a path inside the allowed root."
+        )
     if not dir_path.is_dir():
-        return f"❌ Not a directory: {dir_path}"
+        return (
+            f"❌ Not a directory: {directory}{named}. It was not replaced by the "
+            f"kernel's working directory ('{_FS_ROOT}')."
+        )
 
     lines: list[str] = [f"📁 {dir_path}/"]
     _tree(dir_path, lines, depth=depth, prefix="")
