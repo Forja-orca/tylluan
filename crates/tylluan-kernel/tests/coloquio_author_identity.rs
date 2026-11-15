@@ -72,8 +72,8 @@ async fn post_as(
     let app = support::build_test_app(state);
     match kind {
         None => {
-            let (status, turn) = post(&app, requested).await;
-            (status, turn.and_then(|_| None))
+            let (status, _) = post(&app, requested).await;
+            (status, None)
         }
         Some(kind) => {
             let bound_owned = bound.map(|b| b.to_string()).unwrap_or_default();
