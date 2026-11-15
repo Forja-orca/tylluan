@@ -482,6 +482,7 @@ jobs:
           cargo test -p tylluan-kernel --test whoami_endpoint_test
           cargo test -p tylluan-kernel --test cycle_closeout_memory
           cargo test -p tylluan-kernel --test mojibake_tripwire_test
+          cargo test -p tylluan-kernel --test coloquio_author_identity
 
   integration-tests:
     name: Rust — integration test binaries (MD-10, TL T2626-2/T2627)
