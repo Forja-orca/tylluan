@@ -369,6 +369,12 @@ make_sandbox() {
     # que el descubrimiento "check_*.sh" no ve; sin arbol crates/ en el sandbox,
     # neutral pass stub. Su semantica real la prueba su propio --self-test.
     printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_cfg_test_gate.py"
+    # D177 (TL, 2026-11-15): check_model_catalog.py y check_installer_order.py son
+    # gates .py bloqueantes de verify.sh que el descubrimiento "check_*.sh" no ve y
+    # que necesitan el arbol crates/ e instaladores reales; en el sandbox, stub neutro
+    # (su semantica real la prueban sus propios --self-test y el job de CI).
+    printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_model_catalog.py"
+    printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_installer_order.py"
 }
 
 # splice_broken_wiring <verify.sh copy> <gate>
