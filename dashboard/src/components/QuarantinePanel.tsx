@@ -46,6 +46,61 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
   const [releaseFeedback, setReleaseFeedback] = useState<{ id: string; success: boolean; msg: string } | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const confirmDialogRef = useRef<HTMLDivElement | null>(null);
+  const confirmCancelBtnRef = useRef<HTMLButtonElement | null>(null);
+  const previousConfirmFocusRef = useRef<HTMLElement | null>(null);
+  const wasConfirmOpenRef = useRef(false);
+
+  useEffect(() => {
+    const isOpen = confirmNode !== null;
+    if (isOpen && !wasConfirmOpenRef.current) {
+      previousConfirmFocusRef.current = document.activeElement as HTMLElement | null;
+      wasConfirmOpenRef.current = true;
+      confirmCancelBtnRef.current?.focus();
+    } else if (!isOpen && wasConfirmOpenRef.current) {
+      wasConfirmOpenRef.current = false;
+      const prev = previousConfirmFocusRef.current;
+      previousConfirmFocusRef.current = null;
+      if (prev && typeof prev.focus === 'function' && document.contains(prev)) {
+        prev.focus();
+      }
+    }
+  }, [confirmNode]);
+
+  useEffect(() => {
+    if (!confirmNode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && releasingId !== confirmNode.id) {
+        setConfirmNode(null);
+        return;
+      }
+      if (e.key === 'Tab') {
+        const container = confirmDialogRef.current;
+        if (!container) return;
+        const focusables = Array.from(
+          container.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex]:not([tabindex="-1"])')
+        );
+        if (focusables.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey) {
+          if (active === first || !container.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (active === last || !container.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [confirmNode, releasingId]);
 
   useEffect(() => {
     return () => {
@@ -463,7 +518,10 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
           aria-labelledby="confirm-release-title"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70"
         >
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded max-w-md w-full p-6 shadow-none space-y-4 text-slate-900 dark:text-slate-100">
+          <div
+            ref={confirmDialogRef}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded max-w-md w-full p-6 shadow-none space-y-4 text-slate-900 dark:text-slate-100"
+          >
             <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
               <AlertTriangle className="w-6 h-6 shrink-0" aria-hidden="true" />
               <h3 id="confirm-release-title" className="text-base font-bold">
@@ -492,6 +550,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
 
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
+                ref={confirmCancelBtnRef}
                 type="button"
                 onClick={() => setConfirmNode(null)}
                 disabled={releasingId === confirmNode.id}

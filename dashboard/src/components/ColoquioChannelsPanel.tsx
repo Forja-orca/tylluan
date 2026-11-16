@@ -101,20 +101,37 @@ export function ColoquioChannelsPanel({
     const u = unreadMap.get(ch.channel_id) ?? 0;
     const active = selectedId === ch.channel_id;
     return (
-      <div key={ch.channel_id} onClick={() => selectChannel(ch.channel_id)}
-        className={cn('group/ch relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer rounded-md mx-1 my-0.5 transition-colors',
-          active ? 'bg-card shadow-sm text-primary border-l-2 border-primary font-bold' : 'text-muted-foreground hover:text-foreground hover:bg-card/60 font-medium')}>
-        <Hash className="w-3.5 h-3.5 shrink-0 opacity-60" />
-        <span className="flex-1 text-[11.5px] truncate">{ch.name}</span>
-        {u > 0 && <span className="px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] font-bold leading-none">{u}</span>}
+      <div
+        key={ch.channel_id}
+        className={cn(
+          'group/ch relative flex items-center gap-1 px-2 py-1 rounded-md mx-1 my-0.5 transition-colors',
+          active
+            ? 'bg-card shadow-sm text-primary border-l-2 border-primary font-bold'
+            : 'text-muted-foreground hover:text-foreground hover:bg-card/60 font-medium'
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => selectChannel(ch.channel_id)}
+          aria-current={active ? 'true' : undefined}
+          className="flex-1 min-w-0 flex items-center gap-2 py-0.5 text-left cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
+          <Hash className="w-3.5 h-3.5 shrink-0 opacity-60" aria-hidden="true" />
+          <span className="flex-1 text-[11.5px] truncate">{ch.name}</span>
+          {u > 0 && (
+            <span className="px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] font-bold leading-none">
+              {u}
+            </span>
+          )}
+        </button>
         <button
           type="button"
           onClick={e => { e.stopPropagation(); setDeleteTarget(ch); }}
           aria-label={`Eliminar canal ${ch.name}`}
           title="Eliminar canal"
-          className="opacity-0 group-hover/ch:opacity-100 p-0.5 text-muted-foreground hover:text-rose-500 transition-all rounded cursor-pointer focus:opacity-100"
+          className="opacity-0 group-hover/ch:opacity-100 p-0.5 text-muted-foreground hover:text-rose-500 transition-all rounded cursor-pointer focus:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="w-3 h-3" aria-hidden="true" />
         </button>
       </div>
     );

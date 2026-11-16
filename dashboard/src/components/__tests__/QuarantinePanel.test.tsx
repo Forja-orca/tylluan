@@ -264,5 +264,37 @@ describe('QuarantinePanel (LOTE AE — ASI06 Judge & D-12 Contract)', () => {
       expect(releaseBtn.closest('td')?.className).toContain('sticky');
       expect(releaseBtn.closest('td')?.className).toContain('right-0');
     });
+
+    it('mueve foco al abrir el modal de confirmación, atrapa Tab y devuelve foco al cerrar con Escape', async () => {
+      const bridge = createMockBridge({
+        getQuarantine: vi.fn().mockResolvedValue({
+          total: 2,
+          nodes: mockQuarantineNodes,
+        }),
+      });
+      render(<QuarantinePanel bridge={bridge} />);
+      await waitFor(() => expect(screen.getByText(/quar-node-1/)).toBeInTheDocument());
+
+      const releaseBtn = screen.getByRole('button', { name: /Liberar nodo quar-node-1/i });
+      releaseBtn.focus();
+      expect(document.activeElement).toBe(releaseBtn);
+
+      fireEvent.click(releaseBtn);
+      const cancelBtn = screen.getByRole('button', { name: /Cancelar/i });
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar liberación/i });
+      expect(document.activeElement).toBe(cancelBtn);
+
+      fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+      expect(document.activeElement).toBe(confirmBtn);
+
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(document.activeElement).toBe(cancelBtn);
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(document.activeElement).toBe(releaseBtn);
+      });
+    });
   });
 });
