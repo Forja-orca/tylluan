@@ -70,6 +70,20 @@ pub struct PendingPlan {
     /// como recién creado al cargar, no se descarta.
     #[serde(default)]
     pub created_at_unix: i64,
+    /// Jose 2026-11-15: un plan puede quedar **en duda** (`hold`) sin aprobarse
+    /// ni rechazarse. No consume el plan: sigue pendiente y escala al humano con
+    /// lo que falta. `None` = nadie ha dudado de él.
+    #[serde(default)]
+    pub held: Option<HeldNote>,
+}
+
+/// Marca de duda sobre un plan pendiente.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct HeldNote {
+    /// Qué falta para poder juzgarlo (texto del agente o del revisor).
+    pub reason: String,
+    /// Segundos Unix en que se puso en duda.
+    pub at_unix: i64,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -81,6 +95,15 @@ struct PendingPlansFile {
 /// Serializa las escrituras del fichero de planes (dos aprobaciones a la vez
 /// compartirían el `.tmp` y una podría perder la otra).
 static PLAN_PERSIST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Jose 2026-11-15: contadores de **criterio**, no de aprobación.
+///
+/// Si el único número que existe es «aprobaciones», el sistema empuja a aprobar.
+/// Estos dos cuentan lo contrario: planes que alguien puso en duda y planes que
+/// su propio autor retiró antes de que nadie los aprobara (eso es acierto, no
+/// trabajo perdido).
+static PLANS_HELD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static PLANS_WITHDRAWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
@@ -220,6 +243,7 @@ pub async fn store_plan(id: &str, guild: &str, tool: &str, args: &serde_json::Va
             agent_id: agent_id.to_string(),
             intent: intent.to_string(),
             created_at_unix: now_unix(),
+            held: None,
         });
         locked.clone()
     };
@@ -230,6 +254,101 @@ pub async fn get_plan(id: &str) -> Option<PendingPlan> {
     let store = PLAN_STORE.get()?;
     let locked = store.read().await;
     locked.get(id).cloned()
+}
+
+/// Lista los planes pendientes **sin valores de args**.
+///
+/// Jose 2026-11-15 (contrato v2): el operador tiene que poder ver lo que espera
+/// un criterio, pero un plan puede llevar una ruta o un secreto. Se publica el
+/// número de claves y un hash corto de los NOMBRES de args, nunca los valores.
+pub async fn list_plans() -> Vec<serde_json::Value> {
+    let Some(store) = PLAN_STORE.get() else { return Vec::new() };
+    let locked = store.read().await;
+    let mut out: Vec<serde_json::Value> = locked
+        .iter()
+        .map(|(id, plan)| {
+            let arrow = crate::security::grants::args_names_summary(&plan.args);
+            serde_json::json!({
+                "id": id,
+                "kind": "plan",
+                "state": if plan.held.is_some() { "held" } else { "pending" },
+                "guild": plan.guild,
+                "tool_name": plan.tool,
+                "agent_id": plan.agent_id,
+                "intent": plan.intent,
+                "summary": arrow,
+                "held": plan.held,
+                "created_at_unix": plan.created_at_unix,
+            })
+        })
+        .collect();
+    out.sort_by_key(|v| v.get("created_at_unix").and_then(|c| c.as_i64()).unwrap_or(0));
+    out
+}
+
+/// Nombres de los args + hash corto. **Nunca** los valores.
+pub fn args_names_summary(args: &serde_json::Map<String, serde_json::Value>) -> String {
+    use sha2::{Digest, Sha256};
+    let mut nombres: Vec<&str> = args.keys().map(|k| k.as_str()).collect();
+    nombres.sort_unstable();
+    let mut hasher = Sha256::new();
+    for n in &nombres {
+        hasher.update(n.as_bytes());
+        hasher.update(b"\n");
+    }
+    let digest = hasher.finalize();
+    let hash: String = digest[..4].iter().map(|b| format!("{b:02x}")).collect();
+    format!("{} arg(s), hash {}", nombres.len(), hash)
+}
+
+/// Pone un plan **en duda** sin consumirlo (Jose 2026-11-15).
+///
+/// Aprobar y rechazar dejan de ser las únicas salidas: un agente o un revisor
+/// que detecta que falta contexto marca `hold` y el plan sigue pendiente, con el
+/// motivo a la vista. Devuelve `false` si el plan no existe (o ya se resolvió).
+pub async fn hold_plan(id: &str, reason: &str) -> bool {
+    let Some(store) = PLAN_STORE.get() else { return false };
+    let (held, snapshot) = {
+        let mut locked = store.write().await;
+        match locked.get_mut(id) {
+            Some(plan) => {
+                plan.held = Some(HeldNote {
+                    reason: reason.trim().to_string(),
+                    at_unix: now_unix(),
+                });
+                (true, locked.clone())
+            }
+            None => (false, HashMap::new()),
+        }
+    };
+    if held {
+        PLANS_HELD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        persist_plans(&snapshot);
+        tracing::info!("plan store: plan '{id}' en duda — {}", reason.trim());
+    }
+    held
+}
+
+/// Retira un plan **por su propio autor** antes de que nadie lo apruebe.
+///
+/// Jose 2026-11-15: darse cuenta de que el plan está mal y retirarlo es un
+/// acierto del sistema, así que se cuenta aparte de aprobaciones y rechazos.
+pub async fn withdraw_plan(id: &str) -> bool {
+    if remove_plan(id).await {
+        PLANS_WITHDRAWN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        tracing::info!("plan store: plan '{id}' retirado por su autor");
+        true
+    } else {
+        false
+    }
+}
+
+/// Contadores de criterio: `held` y `withdrawn` (nunca «aprobaciones/hora»).
+pub fn judgement_counters() -> serde_json::Value {
+    serde_json::json!({
+        "held": PLANS_HELD.load(std::sync::atomic::Ordering::Relaxed),
+        "withdrawn": PLANS_WITHDRAWN.load(std::sync::atomic::Ordering::Relaxed),
+    })
 }
 
 pub async fn remove_plan(id: &str) -> bool {
@@ -558,4 +677,58 @@ mod tests {
         });
         assert!(future_still_present, "future grant must survive reaping");
     }
+
+    /// Jose 2026-11-15: `hold` deja el plan pendiente (no lo consume) y cuenta
+    /// como criterio, no como aprobación.
+    #[tokio::test]
+    async fn hold_marca_en_duda_sin_consumir_y_no_cuenta_como_aprobacion() {
+        init_plan_store();
+        let id = format!("hold-test-{}", uuid::Uuid::new_v4().simple());
+        store_plan(&id, "bash", "run", &serde_json::json!({"cmd": "ls"}), "deep", "listar").await;
+
+        let antes = judgement_counters();
+        assert!(hold_plan(&id, "falta saber si el directorio es el correcto").await);
+
+        let plan = get_plan(&id).await.expect("el plan debe seguir pendiente tras hold");
+        let nota = plan.held.expect("hold debe dejar nota");
+        assert_eq!(nota.reason, "falta saber si el directorio es el correcto");
+
+        let despues = judgement_counters();
+        assert_eq!(
+            despues["held"].as_u64().unwrap(),
+            antes["held"].as_u64().unwrap() + 1,
+            "hold cuenta como criterio"
+        );
+        // El contrato no premia aprobar: no existe contador de aprobaciones que
+        // este cambio infle, y el test falla si alguien mete «hold» como aprobado.
+        assert!(despues.get("approved").is_none(), "hold no es aprobación");
+
+        remove_plan(&id).await;
+    }
+
+    /// Retirar el propio plan lo borra y se cuenta aparte.
+    #[tokio::test]
+    async fn withdraw_borra_el_plan_y_se_cuenta_aparte() {
+        init_plan_store();
+        let id = format!("withdraw-test-{}", uuid::Uuid::new_v4().simple());
+        store_plan(&id, "bash", "run", &serde_json::json!({}), "deep", "algo").await;
+
+        let antes = judgement_counters();
+        assert!(withdraw_plan(&id).await);
+        assert!(get_plan(&id).await.is_none(), "retirado = ya no está");
+        assert_eq!(
+            judgement_counters()["withdrawn"].as_u64().unwrap(),
+            antes["withdrawn"].as_u64().unwrap() + 1
+        );
+        // Retirar dos veces no inventa cuenta.
+        assert!(!withdraw_plan(&id).await);
+    }
+
+    /// `hold` sobre un id inexistente no miente.
+    #[tokio::test]
+    async fn hold_de_id_inexistente_devuelve_false() {
+        init_plan_store();
+        assert!(!hold_plan("no-existe-este-plan", "x").await);
+    }
+
 }

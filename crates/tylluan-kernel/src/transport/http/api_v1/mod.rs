@@ -19,6 +19,7 @@ pub mod api_guilds;
 pub mod api_outputs;
 pub mod api_admin;
 pub mod config_safe;
+pub mod api_approvals;
 pub mod api_coloquio;
 pub mod api_federation;
 pub mod api_ingest;
@@ -1544,6 +1545,10 @@ pub async fn metrics_handler(
         "dcr": {
             "candidate_pruned": crate::transport::server::handler_remember::dcr_candidate_pruned_count()
         },
+        // Jose 2026-11-15: criterio, no aprobación. `held` = planes en duda,
+        // `withdrawn` = planes retirados por su propio autor. Si solo se mide
+        // "aprobaciones/hora", el sistema empuja a aprobar.
+        "judgement": crate::security::grants::judgement_counters(),
         // D-147: peticiones con `Host` no permitido servidas porque el binding no es
         // loopback y el endurecimiento está apagado (modo aviso). Si crece sin que nadie
         // haya usado un `Host` raro a propósito, hay rebinding en la red.

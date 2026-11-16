@@ -178,6 +178,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/collective/heatmap", get(collective_heatmap_handler))
         .route("/api/v1/collective/reputation", get(collective_reputation_handler))
         .route("/api/v1/metrics", get(metrics_handler))
+        // Jose 2026-11-15: lectura de lo que espera un criterio (grants + planes).
+        .route("/api/v1/approvals", get(api_approvals::list_approvals_handler))
         .route("/api/v1/agents", get(agents_list_handler))
         .route("/api/v1/collective/suggest", get(collective_suggest_handler))
 

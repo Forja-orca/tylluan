@@ -194,6 +194,44 @@ impl TylluanServer {
             "approve_action" => {
                 let request_id = arguments.as_ref().and_then(|a| a.get("requestId")).and_then(|v| v.as_str()).unwrap_or("");
                 let approved = arguments.as_ref().and_then(|a| a.get("approved")).and_then(|v| v.as_bool()).unwrap_or(false);
+                // Jose 2026-11-15: tercera salida. `decision="hold"` deja el plan
+                // PENDIENTE marcado con el motivo: ni se aprueba ni se rechaza.
+                // Aprobar deja de ser la única forma de cerrar la conversación.
+                let decision = arguments
+                    .as_ref()
+                    .and_then(|a| a.get("decision"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if decision.eq_ignore_ascii_case("hold") {
+                    let reason = arguments
+                        .as_ref()
+                        .and_then(|a| a.get("reason"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if reason.trim().is_empty() {
+                        return Ok(error_result(
+                            "hold requires a non-empty 'reason': what is missing to judge this action?",
+                        ));
+                    }
+                    let held = crate::security::grants::hold_plan(request_id, reason).await;
+                    return Ok(CallToolResult {
+                        content: vec![Content::text(
+                            serde_json::json!({
+                                "status": if held { "held" } else { "not_found" },
+                                "request_id": request_id,
+                                "reason": reason.trim(),
+                                "note": if held {
+                                    "el plan sigue pendiente: no se ha ejecutado ni rechazado"
+                                } else {
+                                    "no hay ningún plan pendiente con ese id"
+                                },
+                            })
+                            .to_string(),
+                        )],
+                        // `hold` no es un error: es una decisión válida.
+                        is_error: Some(!held),
+                    });
+                }
                 let grant_level = arguments.as_ref()
                     .and_then(|a| a.get("grant_level"))
                     .and_then(|v| v.as_str())
@@ -1095,4 +1133,66 @@ mod tests {
             "scheduler must declare its rollback contract"
         );
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_hold_deja_el_plan_pendiente_y_cuenta_criterio() {
+        let server = test_server().await;
+        seed_plan("hold-d184", Some("agent-a"), "d184:hold").await;
+
+        let antes = crate::security::grants::judgement_counters();
+        let mut args = serde_json::Map::new();
+        args.insert("requestId".to_string(), serde_json::json!("hold-d184"));
+        args.insert("decision".to_string(), serde_json::json!("hold"));
+        args.insert("reason".to_string(), serde_json::json!("falta saber si es produccion"));
+        args.insert("agent_id".to_string(), serde_json::json!("agent-b"));
+        let result = server
+            .handle_kernel_tool("approve_action", Some(args))
+            .await
+            .expect("hold no debe fallar a nivel de transporte");
+
+        assert_eq!(result.is_error, Some(false), "hold no es un error");
+        let text = tool_text(&result);
+        assert!(text.contains("held"), "debe decir held: {text}");
+        assert!(
+            text.contains("sigue pendiente"),
+            "debe dejar claro que no se ejecutó: {text}"
+        );
+
+        // El plan sigue ahí, con el motivo.
+        let plan = crate::security::grants::get_plan("hold-d184")
+            .await
+            .expect("hold NO consume el plan");
+        let nota = plan.held.expect("hold debe dejar nota");
+        assert_eq!(nota.reason, "falta saber si es produccion");
+
+        // Y cuenta como criterio, no como aprobación.
+        let despues = crate::security::grants::judgement_counters();
+        assert_eq!(
+            despues["held"].as_u64().unwrap(),
+            antes["held"].as_u64().unwrap() + 1
+        );
+        crate::security::grants::remove_plan("hold-d184").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_hold_sin_motivo_es_error() {
+        let server = test_server().await;
+        seed_plan("hold-d184-sinmotivo", Some("agent-a"), "d184:hold:sinmotivo").await;
+
+        let mut args = serde_json::Map::new();
+        args.insert("requestId".to_string(), serde_json::json!("hold-d184-sinmotivo"));
+        args.insert("decision".to_string(), serde_json::json!("hold"));
+        let result = server
+            .handle_kernel_tool("approve_action", Some(args))
+            .await
+            .expect("no debe fallar a nivel de transporte");
+
+        assert_eq!(result.is_error, Some(true));
+        assert!(tool_text(&result).contains("reason"), "debe pedir el motivo");
+        // Y no marca nada: el plan queda intacto y sin nota.
+        let plan = crate::security::grants::get_plan("hold-d184-sinmotivo").await;
+        assert!(plan.map(|p| p.held.is_none()).unwrap_or(true));
+        crate::security::grants::remove_plan("hold-d184-sinmotivo").await;
+    }
+
 }
