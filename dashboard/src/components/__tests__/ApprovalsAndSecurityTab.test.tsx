@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { ApprovalsAndSecurityTab } from '../ApprovalsAndSecurityTab';
+import type { NexusBridge } from '../../lib/nexus-bridge';
 import { useAppStore } from '../../stores/useAppStore';
 
 vi.mock('../TrustConsoleTab', () => ({
@@ -57,5 +58,114 @@ describe('ApprovalsAndSecurityTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Revisar planes en Coloquio/i }));
     expect(useAppStore.getState().activeTab).toBe('coloquio');
+  });
+
+  it('consulta GET /api/v1/approvals, muestra lista unificada y botones según can_approve/can_hold/can_withdraw', async () => {
+    const fetchRaw = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        approvals: [
+          {
+            id: 'g-1',
+            kind: 'grant',
+            guild: 'filesystem',
+            tool_name: 'write_file',
+            agent_id: 'deep',
+            summary: '1 arg(s), hash A1B2C3D4',
+            state: 'pending',
+            can_approve: true,
+            can_hold: false,
+            can_withdraw: false,
+          },
+          {
+            id: 'p-1',
+            kind: 'plan',
+            guild: 'bash',
+            tool: 'run_cmd',
+            agent_id: 'antigravity',
+            summary: '2 arg(s), hash E5F60708',
+            state: 'held',
+            can_approve: false,
+            can_hold: true,
+            can_withdraw: true,
+          },
+        ],
+        count: 2,
+        judgement: { held: 1, withdrawn: 0 },
+      }),
+    });
+    const bridge = { fetchRaw } as unknown as NexusBridge;
+
+    render(<ApprovalsAndSecurityTab bridge={bridge} />);
+
+    await waitFor(() => {
+      expect(fetchRaw).toHaveBeenCalledWith('/api/v1/approvals');
+      expect(screen.getByText('write_file')).toBeInTheDocument();
+      expect(screen.getByText('run_cmd')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/en duda: 1 · retirados: 0/i)).toBeInTheDocument();
+
+    const grantItem = screen.getByText('g-1').closest('li') as HTMLElement;
+    expect(within(grantItem).getByRole('button', { name: /^Aprobar$/i })).toBeInTheDocument();
+    expect(within(grantItem).queryByRole('button', { name: /Poner en duda/i })).not.toBeInTheDocument();
+    expect(within(grantItem).queryByRole('button', { name: /^Retirar$/i })).not.toBeInTheDocument();
+
+    const planItem = screen.getByText('p-1').closest('li') as HTMLElement;
+    expect(within(planItem).queryByRole('button', { name: /^Aprobar$/i })).not.toBeInTheDocument();
+    expect(within(planItem).getByRole('button', { name: /Poner en duda/i })).toBeInTheDocument();
+    expect(within(planItem).getByRole('button', { name: /^Retirar$/i })).toBeInTheDocument();
+  });
+
+  it('exige motivo obligatorio en Poner en duda (hold) antes de enviar al bridge', async () => {
+    const fetchRaw = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/approvals') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            approvals: [
+              {
+                id: 'p-9',
+                kind: 'plan',
+                guild: 'bash',
+                tool: 'run_cmd',
+                agent_id: 'deep',
+                state: 'pending',
+                can_approve: true,
+                can_hold: true,
+                can_withdraw: false,
+              },
+            ],
+            count: 1,
+            judgement: { held: 0, withdrawn: 0 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    });
+    const bridge = { fetchRaw } as unknown as NexusBridge;
+
+    render(<ApprovalsAndSecurityTab bridge={bridge} />);
+
+    await waitFor(() => expect(screen.getByText('p-9')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Poner en duda/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar duda/i }));
+
+    expect(screen.getByText(/El motivo es obligatorio para poner en duda/i)).toBeInTheDocument();
+    expect(fetchRaw).not.toHaveBeenCalledWith('/api/v1/approvals/p-9/hold', expect.anything());
+
+    const reasonInput = screen.getByLabelText(/Motivo obligatorio para poner en duda/i);
+    fireEvent.change(reasonInput, { target: { value: 'Falta verificación previa' } });
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar duda/i }));
+
+    await waitFor(() => {
+      expect(fetchRaw).toHaveBeenCalledWith('/api/v1/approvals/p-9/hold', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ reason: 'Falta verificación previa' }),
+      }));
+    });
   });
 });
