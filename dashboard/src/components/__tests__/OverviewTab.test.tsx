@@ -267,4 +267,18 @@ describe('OverviewTab — Z1 Onboarding Checklist & Populated Kernel Handling', 
     expect(screen.getByText(/Configuración inicial:/i)).toBeInTheDocument();
     expect(screen.getByText(/todo listo \(embeddings cargados y 1 herramientas activas\)/i)).toBeInTheDocument();
   });
+
+  it('usa flex-wrap en cabeceras de Resumen para evitar desbordamiento a 375px', () => {
+    currentAgentProfiles = mockProfiles;
+    const memoryStats: MemoryStats = { document_count: 1, disk_usage_bytes: 1024, node_count: 5, edge_count: 2 };
+    render(<OverviewTab {...baseProps} memoryStats={memoryStats} />);
+
+    const pulsoHeading = screen.getByText('Pulso del Kernel Soberano');
+    const pulsoCard = pulsoHeading.closest('.rounded-lg');
+    expect(pulsoCard?.className).toContain('flex-wrap');
+
+    const flujoHeading = screen.getByText('Flujo de Actividad Soberana');
+    const flujoHeader = flujoHeading.closest('.border-b');
+    expect(flujoHeader?.className).toContain('flex-wrap');
+  });
 });

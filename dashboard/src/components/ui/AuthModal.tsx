@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Key, X, Check, ShieldAlert, Eye, EyeOff, Clipboard } from 'lucide-react';
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -18,6 +21,25 @@ export function AuthModal({
   const [showToken, setShowToken] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      wasOpenRef.current = true;
+      inputRef.current?.focus();
+    } else if (!isOpen && wasOpenRef.current) {
+      wasOpenRef.current = false;
+      const prev = previousFocusRef.current;
+      previousFocusRef.current = null;
+      if (prev && typeof prev.focus === 'function' && document.contains(prev)) {
+        prev.focus();
+      }
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -33,6 +55,30 @@ export function AuthModal({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const container = dialogRef.current;
+        if (!container) return;
+        const focusables = Array.from(
+          container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+        ).filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1);
+        if (focusables.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey) {
+          if (active === first || !container.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (active === last || !container.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -87,7 +133,10 @@ export function AuthModal({
       aria-labelledby="auth-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded shadow-none overflow-hidden p-6 space-y-5">
+      <div
+        ref={dialogRef}
+        className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded shadow-none overflow-hidden p-6 space-y-5"
+      >
         <button
           onClick={onClose}
           aria-label="Cerrar modal de autenticación"
@@ -146,6 +195,7 @@ export function AuthModal({
 
             <div className="relative">
               <input
+                ref={inputRef}
                 id="bearer-token-input"
                 type={showToken ? 'text' : 'password'}
                 value={tokenInput}
@@ -155,7 +205,6 @@ export function AuthModal({
                 }}
                 placeholder="Pega aquí el contenido de .tylluan-token..."
                 className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded px-3 py-2.5 pr-10 text-xs font-mono text-slate-200 placeholder-slate-600 outline-none transition-colors"
-                autoFocus
                 autoComplete="off"
                 spellCheck={false}
               />

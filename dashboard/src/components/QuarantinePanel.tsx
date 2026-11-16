@@ -373,7 +373,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
                 <th className="py-2.5 px-3">Origen / Procedencia</th>
                 <th className="py-2.5 px-3">Agente</th>
                 <th className="py-2.5 px-3">Fecha de Aislamiento</th>
-                <th className="py-2.5 px-3 text-right">Acción</th>
+                <th className="py-2.5 px-3 text-right sticky right-0 bg-slate-50/95 dark:bg-slate-950/95">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-sans">
@@ -427,7 +427,7 @@ export function QuarantinePanel({ bridge, className }: QuarantinePanelProps) {
                   </td>
 
                   {/* Action: Release with Confirmation */}
-                  <td className="py-3 px-3 text-right whitespace-nowrap">
+                  <td className="py-3 px-3 text-right whitespace-nowrap sticky right-0 bg-card/95 backdrop-blur-sm">
                     <button
                       type="button"
                       onClick={() => setConfirmNode(node)}

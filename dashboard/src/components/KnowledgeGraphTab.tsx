@@ -246,18 +246,18 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-4 h-full">
       {/* Top Selector Bar */}
-      <div className="flex items-center justify-between border-b border-border pb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Network className="w-5 h-5 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground">Cortex Knowledge</h2>
             <p className="text-[11px] text-muted-foreground">SilvaDB visualizer & search engine</p>
           </div>
         </div>
 
-        <div role="tablist" aria-label="Knowledge View Modes" className="flex bg-muted/80 border border-border rounded-lg p-1 gap-1 items-center shrink-0">
+        <div role="tablist" aria-label="Knowledge View Modes" className="flex flex-wrap bg-muted/80 border border-border rounded-lg p-1 gap-1 items-center max-w-full">
           <button 
             type="button" 
             role="tab"
@@ -330,12 +330,12 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col space-y-3 font-sans">
-          <div className="flex items-center justify-between gap-3 bg-card border border-border p-2.5 rounded-lg shadow-sm">
-            <div className="flex gap-2 flex-1 max-w-3xl items-center">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 bg-card border border-border p-2.5 rounded-lg shadow-sm">
+            <div className="flex flex-wrap gap-2 flex-1 min-w-0 max-w-3xl items-center">
               {results.length > 0 && (
                 <span className="text-xs font-bold text-primary whitespace-nowrap">{results.length} recuerdos</span>
               )}
-              <div className="flex-1 relative">
+              <div className="flex-1 min-w-[140px] relative">
                 <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
                 <input
                   type="text"
@@ -395,7 +395,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 {searching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Database className="w-3.5 h-3.5" aria-hidden="true" />} Explorar
               </button>
             </div>
-            <div className="flex bg-muted/60 border border-border rounded-md p-0.5 shrink-0 gap-0.5 items-center">
+            <div className="flex flex-wrap bg-muted/60 border border-border rounded-md p-0.5 gap-0.5 items-center max-w-full">
               <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none", view === 'grid' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Cuadrícula</button>
               <button type="button" aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn("px-2.5 py-1 rounded-sm text-[11px] font-semibold cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none", view === 'table' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Tabla</button>
               <div className="w-px bg-border self-stretch my-0.5 mx-0.5"></div>
@@ -509,7 +509,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded bg-slate-900/60 border border-slate-800/80">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-muted-foreground">Lifecycle:</span>
-              <div role="group" aria-label="Lifecycle Filter" className="flex items-center gap-1 bg-slate-950/60 p-0.5 rounded border border-slate-800">
+              <div role="group" aria-label="Lifecycle Filter" className="flex flex-wrap items-center gap-1 bg-slate-950/60 p-0.5 rounded border border-slate-800 max-w-full">
                 {(['all', 'active', 'quiet', 'consolidated', 'archived'] as const).map((filterKey) => {
                   const count = lifecycleCounts[filterKey];
                   const isActive = lifecycleFilter === filterKey;

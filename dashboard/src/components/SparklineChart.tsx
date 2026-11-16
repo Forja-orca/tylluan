@@ -121,13 +121,23 @@ export function SparklineChart({
     draw();
   }, [draw]);
 
-  // ResizeObserver for responsive redraws
+  // ResizeObserver for responsive redraws (scheduled via rAF to avoid ResizeObserver loop errors)
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => draw());
+    let rafId: number | null = null;
+    const ro = new ResizeObserver(() => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        draw();
+      });
+    });
     ro.observe(container);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, [draw]);
 
   const lastVal = data.length > 0 ? data[data.length - 1] : null;

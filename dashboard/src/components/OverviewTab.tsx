@@ -593,8 +593,8 @@ export function OverviewTab({
           </span>
         </div>
       )}
-      <div className="flex items-center justify-between bg-card border border-border rounded-lg shadow-sm p-4 relative font-sans">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border rounded-lg shadow-sm p-4 relative font-sans">
+        <div className="flex items-center gap-4 min-w-0">
           <div className="relative">
             <div className="w-12 h-12 rounded-md border border-primary/30 flex items-center justify-center bg-primary/10">
               <Activity className="w-6 h-6 text-primary" aria-hidden="true" />
@@ -677,7 +677,7 @@ export function OverviewTab({
 
       {/* Multi-Agent Activity */}
       <div className="rounded bg-card border border-border overflow-hidden font-sans">
-        <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+        <div className="px-4 py-2.5 border-b border-border flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-foreground">Flujo de Actividad Soberana</span>
           </div>
@@ -941,7 +941,7 @@ export function OverviewTab({
 
       {/* Recent Sessions (Digests) */}
       <div className="rounded bg-card border border-border overflow-hidden font-sans">
-        <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+        <div className="px-4 py-2.5 border-b border-border flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-bold text-foreground">Sesiones Recientes</span>
         </div>
         <RecentSessions bridge={bridge} />

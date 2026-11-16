@@ -543,12 +543,12 @@ export function ColoquioMessagesPanel({
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b border-border bg-muted/40 shrink-0">
+      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b border-border bg-muted/40 shrink-0 min-w-0">
         {onBackToChannels && (
           <button
             type="button"
             onClick={onBackToChannels}
-            className="md:hidden p-2.5 -ml-2.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
+            className="md:hidden p-2.5 -ml-2.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded shrink-0"
             title="Volver a lista de canales"
             aria-label="Volver a lista de canales"
           >
@@ -556,13 +556,13 @@ export function ColoquioMessagesPanel({
           </button>
         )}
         <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <span className="text-xs font-bold text-foreground truncate">{selectedChannel?.name ?? selectedId}</span>
-        <span className="text-[11px] text-muted-foreground font-mono hidden sm:inline">{allMessages.length} mensajes</span>
+        <span className="text-xs font-bold text-foreground truncate min-w-0">{selectedChannel?.name ?? selectedId}</span>
+        <span className="text-[11px] text-muted-foreground font-mono hidden sm:inline shrink-0">{allMessages.length} mensajes</span>
         <button
           type="button"
           onClick={() => setCompactMode(v => !v)}
           className={cn(
-            "ml-auto text-[11px] px-2.5 py-0.5 rounded border font-semibold transition-all cursor-pointer mr-1.5",
+            "ml-auto text-[11px] px-2.5 py-0.5 rounded border font-semibold transition-all cursor-pointer shrink-0 sm:mr-1.5",
             compactMode 
               ? "border-primary bg-primary/10 text-primary" 
               : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -572,10 +572,10 @@ export function ColoquioMessagesPanel({
         >
           Compacto
         </button>
-        <div className="flex items-center gap-1.5 bg-card border border-input rounded px-2 py-0.5 shadow-sm">
+        <div className="flex items-center gap-1.5 bg-card border border-input rounded px-2 py-0.5 shadow-sm min-w-0 basis-full sm:basis-auto sm:flex-none">
           <Search className="w-3 h-3 text-muted-foreground shrink-0" />
           <input
-            className="w-32 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="w-full sm:w-32 min-w-0 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none"
             placeholder="Buscar en el canal..."
             aria-label="Buscar mensajes en el canal"
             value={msgSearch}

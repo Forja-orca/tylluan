@@ -578,7 +578,7 @@ function App() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 min-h-0 flex flex-col overflow-hidden bg-slate-950">
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-slate-950">
           {error && (error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('token')) ? (
             <MissingTokenBanner onOpenAuthModal={() => setAuthModalOpen(true)} />
           ) : (!online || error) ? (

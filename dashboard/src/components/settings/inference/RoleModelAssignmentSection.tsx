@@ -143,12 +143,12 @@ export function RoleModelAssignmentSection({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 max-w-md">
             <select
               aria-label="Modelo para Decisión"
               value={currentDecisionModel}
               onChange={e => onUpdatePoint('decision', { model: e.target.value })}
-              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 min-w-0 w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={fallbackDecisionOptions.length === 0}
             >
               {fallbackDecisionOptions.length > 0 ? (
@@ -185,12 +185,12 @@ export function RoleModelAssignmentSection({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 max-w-md">
             <select
               aria-label="Modelo para Embeddings"
               value={activeEmbedding}
               disabled
-              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-muted/30 text-foreground cursor-not-allowed opacity-90"
+              className="flex-1 min-w-0 w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-muted/30 text-foreground cursor-not-allowed opacity-90"
               title="Anclado por arquitectura SilvaDB a 1024 dimensiones"
             >
               <option value="mxbai-embed-large">mxbai-embed-large (1024d)</option>
@@ -221,13 +221,13 @@ export function RoleModelAssignmentSection({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 max-w-md">
             <input
               type="text"
               readOnly
               aria-label="Modelo para Reranker"
               value={rerankerModelName}
-              className="w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-muted/30 text-foreground cursor-not-allowed opacity-90"
+              className="flex-1 min-w-0 w-full px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-muted/30 text-foreground cursor-not-allowed opacity-90"
               title="Motor de rerank bajo demanda de SilvaDB"
             />
 

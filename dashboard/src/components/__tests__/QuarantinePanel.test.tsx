@@ -247,5 +247,22 @@ describe('QuarantinePanel (LOTE AE — ASI06 Judge & D-12 Contract)', () => {
       expect(lightCrit).toEqual([]);
       u2();
     });
+
+    it('fija la columna Acción con sticky right-0 para mantener Liberar visible en 375px', async () => {
+      const bridge = createMockBridge({
+        getQuarantine: vi.fn().mockResolvedValue({
+          total: 2,
+          nodes: mockQuarantineNodes,
+        }),
+      });
+      render(<QuarantinePanel bridge={bridge} />);
+      await waitFor(() => expect(screen.getByText(/quar-node-1/)).toBeInTheDocument());
+      const actionHeader = screen.getByRole('columnheader', { name: /Acción/i });
+      expect(actionHeader.className).toContain('sticky');
+      expect(actionHeader.className).toContain('right-0');
+      const releaseBtn = screen.getByRole('button', { name: /Liberar nodo quar-node-1/i });
+      expect(releaseBtn.closest('td')?.className).toContain('sticky');
+      expect(releaseBtn.closest('td')?.className).toContain('right-0');
+    });
   });
 });

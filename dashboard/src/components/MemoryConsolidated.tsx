@@ -40,7 +40,7 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-3 h-full font-sans">
       {/* Sub Navigation - Sovereign Palette Tabs */}
-      <div className="flex max-w-full overflow-x-auto border-b border-border pb-2 gap-1.5 flex-shrink-0" role="tablist" aria-label="Vistas de memoria SilvaDB">
+      <div className="flex flex-wrap max-w-full border-b border-border pb-2 gap-1.5 flex-shrink-0" role="tablist" aria-label="Vistas de memoria SilvaDB">
         <button
           ref={(el) => { tabRefs.current.graph = el; }}
           type="button"

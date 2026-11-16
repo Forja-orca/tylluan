@@ -152,5 +152,17 @@ describe('Coloquio VirtualMessageList (@tanstack/react-virtual) — Lote AC', ()
     const btn = screen.getByRole('button', { name: /cargando mensajes anteriores/i });
     expect(btn).toBeDisabled();
   });
+
+  it('envuelve el buscador del canal de forma responsiva para no desbordar en 375px', () => {
+    renderColoquioPanel({ messages: generateMessages(5) });
+    const searchInput = screen.getByLabelText(/Buscar mensajes en el canal/i);
+    expect(searchInput.className).toContain('w-full');
+    expect(searchInput.className).toContain('sm:w-32');
+    expect(searchInput.className).toContain('min-w-0');
+    const searchWrapper = searchInput.parentElement;
+    expect(searchWrapper?.className).toContain('basis-full');
+    expect(searchWrapper?.className).toContain('sm:basis-auto');
+    expect(searchWrapper?.parentElement?.className).toContain('flex-wrap');
+  });
 });
 

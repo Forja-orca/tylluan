@@ -35,4 +35,46 @@ describe('AuthModal — Copiar token de conexión', () => {
     expect(screen.queryByRole('button', { name: /Copiar token al portapapeles/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Sin token guardado en este navegador/i)).toBeInTheDocument();
   });
+
+  it('atrapa el foco con Tab y Shift+Tab dentro del modal', () => {
+    render(<AuthModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} initialToken="" />);
+    const closeBtn = screen.getByRole('button', { name: /Cerrar modal de autenticación/i });
+    const submitBtn = screen.getByRole('button', { name: /Guardar y Conectar/i });
+
+    submitBtn.focus();
+    expect(document.activeElement).toBe(submitBtn);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(closeBtn);
+
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(submitBtn);
+  });
+
+  it('devuelve el foco al botón disparador al cerrarse', async () => {
+    function Harness() {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setOpen(true)}>
+            Abrir Token
+          </button>
+          <AuthModal isOpen={open} onClose={() => setOpen(false)} onSave={vi.fn()} initialToken="" />
+        </div>
+      );
+    }
+
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: /Abrir Token/i });
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
 });
