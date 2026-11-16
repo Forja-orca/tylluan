@@ -326,7 +326,7 @@ _FS_SKIP_EXTS = SKIP_EXTENSIONS
 
 @mcp.tool()
 async def file_search(
-    directory: str,
+    directory: str = ".",
     pattern: str = "",
     intent: str = "",
     query: str = "",
@@ -341,9 +341,11 @@ async def file_search(
     For finding files by NAME or EXTENSION, use find_files instead.
 
     Args:
-        directory: Directory to search in.
+        directory: Directory to search in. If omitted, an absolute path named in
+            `intent`/`query` is used; it is never silently replaced by the
+            kernel's working directory.
         pattern: Text or regex pattern to find inside files.
-        intent: Natural language intent for fallback pattern extraction.
+        intent: Natural language intent for fallback pattern and directory extraction.
         query: Alternative query string for pattern extraction.
         file_glob: Glob pattern for files to include (e.g., '*.py', '*.ts').
         max_results: Maximum number of matches to return.
@@ -351,13 +353,29 @@ async def file_search(
     Returns:
         Matching lines with file paths and line numbers.
     """
+    # FS-FIND-FILES-IGNORA-RUTA-DEL-INTENT, parte `file_search` (propuesta (c) de
+    # mi nota T4190, en marcha tras «sigue con tu cola» del TL en T4210; el hueco
+    # lo señalo Antigravity en T4182). Dos defectos: `directory` era obligatorio
+    # (un intent que solo nombra la ruta ni ejecutaba la tool) y con "." se busca
+    # en el CWD del kernel en silencio. Misma regla que `find_files`/`file_list`.
+    text = intent or query or ""
+    explicit_dir = bool(directory and directory.strip() not in (".", ""))
+    named_dir: str | None = None
+    if not explicit_dir:
+        named_dir = _directory_from_text(text)
+        if named_dir:
+            directory = named_dir
+
     if not pattern:
+        # La ruta ya consumida como `directory` no debe volver a leerse como glob
+        # ni como patron (ver `_strip_path_tokens`).
+        source = _strip_path_tokens(text)
         import re as _re
-        m = _re.search(r'["\']([^"\']+)["\']', intent or query or "")
+        m = _re.search(r'["\']([^"\']+)["\']', source)
         if m:
             pattern = m.group(1)
         else:
-            m = _re.search(r'(\*\.[a-zA-Z0-9]+|\*)', intent or query or "")
+            m = _re.search(r'(\*\.[a-zA-Z0-9]+|\*)', source)
             if m:
                 pattern = m.group(1)
                 if file_glob == "*":
@@ -366,16 +384,24 @@ async def file_search(
             else:
                 stopwords = {"search", "find", "for", "the", "in", "all", "files",
                              "content", "pattern", "grep", "look", "inside"}
-                words = [w for w in (intent or query or "").split()
+                words = [w for w in source.split()
                          if w.lower() not in stopwords and len(w) > 2]
                 pattern = words[0] if words else "."
 
     directory = os.path.abspath(directory) if directory else os.path.abspath(".")
     dir_path = Path(directory).resolve()
+    named = " (named in your request)" if named_dir else ""
     if not validate_path(_FS_ROOT, str(dir_path)):
-        return f"🚫 BLOCKED: Directory '{directory}' is outside the allowed root '{_FS_ROOT}'."
+        return (
+            f"🚫 BLOCKED: Directory '{directory}'{named} is outside the allowed root "
+            f"'{_FS_ROOT}'. The search did NOT fall back to the kernel's working "
+            f"directory — name a path inside the allowed root."
+        )
     if not dir_path.is_dir():
-        return f"❌ Not a directory: {dir_path}"
+        return (
+            f"❌ Not a directory: {directory}{named}. It was not replaced by the "
+            f"kernel's working directory ('{_FS_ROOT}')."
+        )
 
     try:
         regex = re.compile(pattern, re.IGNORECASE)
@@ -417,9 +443,14 @@ async def file_search(
             break
 
     if not results:
-        return f"🔍 No matches for '{pattern}' in {files_searched} files."
+        return f"🔍 No matches for '{pattern}' in {files_searched} files under {dir_path}."
 
-    return f"🔍 {len(results)} matches in {files_searched} files:\n\n" + "\n".join(results)
+    # El directorio buscado sale en la cabecera: una busqueda en el cwd del
+    # kernel nunca debe ser una sorpresa para quien pregunta en lenguaje llano.
+    return (
+        f"🔍 {len(results)} matches in {files_searched} files under {dir_path}:\n\n"
+        + "\n".join(results)
+    )
 
 
 @mcp.tool()
