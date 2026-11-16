@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Approval, NexusBridge } from '../lib/nexus-bridge';
-import { ShieldCheck, Clock, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppStore } from '../stores/useAppStore';
 import { TrustConsoleTab } from './TrustConsoleTab';
@@ -56,6 +56,30 @@ export function ApprovalsAndSecurityTab({
   const [holdError, setHoldError] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [devModeActive, setDevModeActive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!bridge) {
+      setDevModeActive(false);
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await bridge.fetchRaw('/api/v1/setup-hint');
+        if (!res || !res.ok) return;
+        const data = (await res.json()) as { auth_required?: boolean };
+        if (!cancelled && typeof data?.auth_required === 'boolean') {
+          setDevModeActive(data.auth_required === false);
+        }
+      } catch {
+        // Ignorar fallo de lectura auxiliar
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge]);
 
   const handleOpenTokenModal = () => {
     if (onOpenAuthModal) {
@@ -194,6 +218,25 @@ export function ApprovalsAndSecurityTab({
           })}
         </div>
       </div>
+
+      {/* Aviso de solo lectura cuando dev_mode=true (auth_required === false en /api/v1/setup-hint) */}
+      {devModeActive && (
+        <div
+          role="status"
+          aria-label="Aviso de modo desarrollo"
+          className="p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 flex items-start gap-2.5 text-xs"
+        >
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="space-y-0.5">
+            <p className="font-semibold text-amber-800 dark:text-amber-200">
+              Modo desarrollo activo (dev_mode = true)
+            </p>
+            <p className="text-amber-700 dark:text-amber-300">
+              Este kernel acepta peticiones sin token Bearer. No uses esta configuración en un entorno compartido o expuesto.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Pendiente de aprobación (HITL / acciones bloqueadas) */}
       <section
