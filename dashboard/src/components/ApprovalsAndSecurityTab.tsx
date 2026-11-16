@@ -35,31 +35,53 @@ interface ApprovalsApiResponse {
 interface ApprovalsAndSecurityTabProps {
   bridge: NexusBridge | null;
   approvals?: UnifiedApprovalItem[];
+  onOpenAuthModal?: () => void;
 }
 
 type SubSection = 'all' | 'trust' | 'quarantine' | 'audit' | 'decision';
 
-export function ApprovalsAndSecurityTab({ bridge, approvals = [] }: ApprovalsAndSecurityTabProps) {
+export function ApprovalsAndSecurityTab({
+  bridge,
+  approvals = [],
+  onOpenAuthModal,
+}: ApprovalsAndSecurityTabProps) {
   const [activeSection, setActiveSection] = useState<SubSection>('all');
   const [remoteApprovals, setRemoteApprovals] = useState<UnifiedApprovalItem[] | null>(null);
   const [judgement, setJudgement] = useState<{ held?: number; withdrawn?: number } | null>(null);
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
   const [holdTargetId, setHoldTargetId] = useState<string | null>(null);
   const [holdReason, setHoldReason] = useState('');
   const [holdError, setHoldError] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
+  const handleOpenTokenModal = () => {
+    if (onOpenAuthModal) {
+      onOpenAuthModal();
+      return;
+    }
+    const headerBtn = document.querySelector<HTMLButtonElement>('[aria-label="Configurar o copiar Bearer Token"]');
+    headerBtn?.click();
+  };
+
   const loadApprovals = useCallback(async () => {
     if (!bridge) {
       setRemoteApprovals(null);
+      setAuthRequired(false);
       return;
     }
     setLoadingApprovals(true);
     setFetchError(null);
+    setAuthRequired(false);
     try {
       const res = await bridge.fetchRaw('/api/v1/approvals');
+      if (res.status === 401) {
+        setAuthRequired(true);
+        setFetchError('Autenticación requerida (HTTP 401): configura tu Bearer Token para consultar las aprobaciones pendientes.');
+        return;
+      }
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} al consultar /api/v1/approvals`);
       }
@@ -94,7 +116,13 @@ export function ApprovalsAndSecurityTab({ bridge, approvals = [] }: ApprovalsAnd
         body: body ? JSON.stringify(body) : undefined,
       });
       if (!res.ok) {
-        setActionFeedback(`Error HTTP ${res.status} al ejecutar ${action} sobre ${id}.`);
+        if (res.status === 403) {
+          setActionFeedback(`Permiso denegado (HTTP 403) al ejecutar ${action} sobre ${id}.`);
+        } else if (res.status === 409) {
+          setActionFeedback(`Conflicto de estado (HTTP 409) al ejecutar ${action} sobre ${id}: la acción ya fue procesada o cambió de estado.`);
+        } else {
+          setActionFeedback(`Error HTTP ${res.status} al ejecutar ${action} sobre ${id}.`);
+        }
         return;
       }
       if (action === 'hold') {
@@ -209,9 +237,21 @@ export function ApprovalsAndSecurityTab({ bridge, approvals = [] }: ApprovalsAnd
         </div>
 
         {fetchError && (
-          <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
-            {fetchError}
-          </p>
+          <div
+            role="alert"
+            className="p-2.5 rounded-md border border-rose-500/30 bg-rose-500/10 flex flex-wrap items-center justify-between gap-2"
+          >
+            <p className="text-xs text-rose-700 dark:text-rose-300">{fetchError}</p>
+            {authRequired && (
+              <button
+                type="button"
+                onClick={handleOpenTokenModal}
+                className="px-2.5 py-1 rounded text-[11px] font-semibold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none shrink-0"
+              >
+                Configurar Token
+              </button>
+            )}
+          </div>
         )}
         {actionFeedback && (
           <p role="status" className="text-xs text-amber-700 dark:text-amber-300">
@@ -220,9 +260,20 @@ export function ApprovalsAndSecurityTab({ bridge, approvals = [] }: ApprovalsAnd
         )}
 
         {items.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Sin acciones pendientes de aprobación en este momento.
-          </p>
+          <div className="p-3 rounded-md border border-border bg-muted/30 space-y-1.5 text-xs">
+            <p className="font-semibold text-foreground">
+              Sin acciones pendientes de aprobación en este momento.
+            </p>
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">Qué es:</strong> aquí aparecen permisos puntuales (grants) y planes de trabajo (plans) que requieren revisión humana antes de ejecutarse.
+            </p>
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">Cómo aparece uno:</strong> cuando un agente solicita una acción sensible vía <code className="font-mono text-[11px]">tylluan_do</code> o deja un plan en espera.
+            </p>
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">Qué hacer:</strong> pulsa Refrescar cuando un agente pida permiso, o abre Coloquio para revisar los planes de la flota.
+            </p>
+          </div>
         ) : (
           <ul className="space-y-2" aria-label="Lista de acciones pendientes de aprobación">
             {items.map((a) => {

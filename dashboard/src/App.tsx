@@ -639,7 +639,11 @@ function App() {
               {/* 3. Aprobaciones y Seguridad */}
               {(activeTab === 'approvals' || activeTab === 'audit') && (
                 <ErrorBoundary>
-                  <ApprovalsAndSecurityTab bridge={bridge} approvals={approvals} />
+                  <ApprovalsAndSecurityTab
+                    bridge={bridge}
+                    approvals={approvals}
+                    onOpenAuthModal={() => setAuthModalOpen(true)}
+                  />
                 </ErrorBoundary>
               )}
 

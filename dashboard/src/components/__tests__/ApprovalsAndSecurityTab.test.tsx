@@ -32,6 +32,9 @@ describe('ApprovalsAndSecurityTab', () => {
     expect(screen.queryByText(/HITL|ASI06/i)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Pendiente de tu aprobación/i })).toBeInTheDocument();
     expect(screen.getByText(/Sin acciones pendientes de aprobación en este momento/i)).toBeInTheDocument();
+    expect(screen.getByText(/Qué es:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cómo aparece uno:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Qué hacer:/i)).toBeInTheDocument();
   });
 
   it('renderiza la lista de approvals recibidos y permite ir a Coloquio', () => {
@@ -167,5 +170,83 @@ describe('ApprovalsAndSecurityTab', () => {
         body: JSON.stringify({ reason: 'Falta verificación previa' }),
       }));
     });
+  });
+
+  it('si /api/v1/approvals devuelve 401 muestra aviso sin exponer token y abre el modal de token', async () => {
+    const fetchRaw = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ code: 'missing_token' }),
+    });
+    const onOpenAuthModal = vi.fn();
+    const bridge = { fetchRaw } as unknown as NexusBridge;
+
+    render(<ApprovalsAndSecurityTab bridge={bridge} onOpenAuthModal={onOpenAuthModal} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/HTTP 401/i);
+    });
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/Bearer\s+[A-Za-z0-9_-]{8,}/);
+
+    const tokenBtn = screen.getByRole('button', { name: /Configurar Token/i });
+    fireEvent.click(tokenBtn);
+    expect(onOpenAuthModal).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { action: 'approve' as const, label: /^Aprobar$/i, status: 403, expected: /HTTP 403/i },
+    { action: 'approve' as const, label: /^Aprobar$/i, status: 409, expected: /HTTP 409/i },
+    { action: 'hold' as const, label: /Poner en duda/i, status: 403, expected: /HTTP 403/i },
+    { action: 'hold' as const, label: /Poner en duda/i, status: 409, expected: /HTTP 409/i },
+    { action: 'withdraw' as const, label: /^Retirar$/i, status: 403, expected: /HTTP 403/i },
+    { action: 'withdraw' as const, label: /^Retirar$/i, status: 409, expected: /HTTP 409/i },
+  ])('mantiene la fila, muestra mensaje claro y no expone token ante $status en $action', async ({ action, label, status, expected }) => {
+    const fetchRaw = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/approvals') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            approvals: [
+              {
+                id: 'p-err-1',
+                kind: 'plan',
+                guild: 'bash',
+                tool: 'run_cmd',
+                agent_id: 'deep',
+                state: 'pending',
+                can_approve: true,
+                can_hold: true,
+                can_withdraw: true,
+              },
+            ],
+            count: 1,
+            judgement: { held: 0, withdrawn: 0 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status, json: async () => ({}) });
+    });
+    const bridge = { fetchRaw } as unknown as NexusBridge;
+
+    render(<ApprovalsAndSecurityTab bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText('p-err-1')).toBeInTheDocument());
+
+    if (action === 'hold') {
+      fireEvent.click(screen.getByRole('button', { name: label }));
+      fireEvent.change(screen.getByLabelText(/Motivo obligatorio para poner en duda/i), {
+        target: { value: 'Revisión pendiente' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Confirmar duda/i }));
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: label }));
+    }
+
+    await waitFor(() => {
+      const statusMsg = screen.getByRole('status');
+      expect(statusMsg).toHaveTextContent(expected);
+      expect(statusMsg).not.toHaveTextContent(/Bearer\s+[A-Za-z0-9_-]{8,}/);
+    });
+    expect(screen.getByText('p-err-1')).toBeInTheDocument();
   });
 });
