@@ -95,9 +95,29 @@ out="$(bash "$SCRIPT" release el-bueno 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] && ok "release del bueno funciona" || mal "release el-bueno exit=$rc: $out"
 [ ! -d "$TYLLUAN_BUILD_LOCK" ] && ok "y limpia los dos nombres" || mal "quedo algo: $(ls "$TYLLUAN_BUILD_LOCK")"
 
+echo "10) release por un NO-dueno rechaza (exit 3) y NO toca el cerrojo"
+# Regresion real (2026-11-16, run_d182.sh del TL, T4289): un script ad-hoc soltaba el cerrojo con
+# `rm -f owner; rmdir` sin comparar dueno y borraba el del dueno real. Este caso fija
+# el contrato: el intruso recibe exit 3 y el cerrojo sigue siendo del dueno.
+rm -rf "$TYLLUAN_BUILD_LOCK"
+bash "$SCRIPT" take dueno-real >/dev/null 2>&1
+out="$(bash "$SCRIPT" release intruso 2>&1)"; rc=$?
+[ "$rc" -eq 3 ] && ok "exit 3" || mal "exit=$rc (esperado 3): $out"
+[ -d "$TYLLUAN_BUILD_LOCK" ] && ok "el cerrojo sigue en pie" || mal "el intruso lo borro"
+if [ -f "$TYLLUAN_BUILD_LOCK/owner" ] && grep -q "dueno-real" "$TYLLUAN_BUILD_LOCK/owner"; then
+    ok "el owner sigue siendo el dueno real"
+else
+    mal "el owner cambio o desaparecio: $(cat "$TYLLUAN_BUILD_LOCK/owner" 2>/dev/null)"
+fi
+
+echo "11) y el dueno real SI puede soltarlo"
+out="$(bash "$SCRIPT" release dueno-real 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && ok "release exit 0" || mal "release exit=$rc: $out"
+[ ! -d "$TYLLUAN_BUILD_LOCK" ] && ok "cerrojo liberado" || mal "sigue ahi"
+
 echo ""
 if [ "$fallos" -eq 0 ]; then
-    echo "OK: el cerrojo respeta la ventana de PARE y entiende los ad-hoc (8/8 casos)"
+    echo "OK: el cerrojo respeta la ventana de PARE y entiende los ad-hoc (10 casos)"
     exit 0
 fi
 echo "FALLO: $fallos caso(s) mal"
