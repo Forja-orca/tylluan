@@ -199,12 +199,9 @@ pub(super) async fn resolve_and_prepare_tool_call(
             p.trim_matches('-').to_string()
         };
         if let Some(obj) = tool_args.as_object_mut() {
-            obj.insert("directory".to_string(), serde_json::Value::String(safe_path.to_string()));
-            obj.insert("cwd".to_string(), serde_json::Value::String(safe_path.to_string()));
-            obj.insert("path".to_string(), serde_json::Value::String(path_hint.clone()));
-            obj.insert("file_path".to_string(), serde_json::Value::String(path_hint.clone()));
-            obj.insert("repo_path".to_string(), serde_json::Value::String(path_hint.clone()));
-            obj.insert("project".to_string(), serde_json::Value::String(project_hint));
+            for (clave, valor) in path_derived_fields(&path_hint, safe_path, &project_hint) {
+                obj.insert(clave, serde_json::Value::String(valor));
+            }
         }
     }
 
@@ -414,6 +411,41 @@ pub(super) async fn resolve_and_prepare_tool_call(
     info!("🔀 tylluan_do: intent={} → guild='{}' → tool='{}'", crate::logging::redacted("do_prepare", intent), guild_name, tool_name);
 
     Ok(ResolvedToolCall { guild_name, tool_name, tool_args, routing_trace, call_params })
+}
+
+/// D199 (ADR-033 R1, medido en D198): campos del borrador que salen de la pista
+/// de ruta del intent.
+///
+/// El router ya extraía la ruta; solo la publicaba con 6 nombres. Las tools de
+/// imagen, audio, SQLite, semilla y repo la piden con otros cinco
+/// (`image_path`, `audio_path`, `db_path`, `seed_path`, `root_path`): 12 de las
+/// 27 tools medidas en D198 quedaban inalcanzables por lenguaje natural.
+///
+/// `safe_path` es la ruta solo si es un directorio (si no, `.`), que es el
+/// contrato que ya tenían `directory`/`cwd`: nunca apuntar a un fichero donde se
+/// espera un directorio de proyecto.
+///
+/// Pura a propósito: los tests fijan el mapa de nombres sin servidor ni guilds.
+fn path_derived_fields(
+    path_hint: &str,
+    safe_path: &str,
+    project_hint: &str,
+) -> Vec<(String, String)> {
+    let mut campos = Vec::with_capacity(12);
+    let mut push = |clave: &str, valor: &str| campos.push((clave.to_string(), valor.to_string()));
+    // Directorio de trabajo/proyecto: solo si el hint es un directorio de verdad.
+    push("directory", safe_path);
+    push("cwd", safe_path);
+    // La ruta tal cual la dijo el intent.
+    for clave in ["path", "file_path", "repo_path", "root_path"] {
+        push(clave, path_hint);
+    }
+    // D199: los nombres de las tools de imagen/audio/SQLite/semilla.
+    for clave in ["image_path", "audio_path", "db_path", "seed_path"] {
+        push(clave, path_hint);
+    }
+    push("project", project_hint);
+    campos
 }
 
 /// Stage 2: execute the guild tool call with a progress ticker and safety timeout.
@@ -644,5 +676,51 @@ mod d198_explicit_args_tests {
             }
             _ => panic!("esperaba argumentos declarados"),
         }
+    }
+}
+
+#[cfg(test)]
+mod d199_path_hints_tests {
+    use super::*;
+
+    /// D199: la pista de ruta publica también los nombres de las tools de
+    /// imagen/audio/DB/semilla/repo. Mutación: quitar el bucle de
+    /// `image_path`/`audio_path`/`db_path`/`seed_path` deja este test en rojo y
+    /// esas 12 tools vuelven a ser inalcanzables por lenguaje natural.
+    #[test]
+    fn d199_la_pista_de_ruta_cubre_los_cinco_nombres_nuevos() {
+        let campos: std::collections::HashMap<String, String> =
+            path_derived_fields("/tmp/foto.png", ".", "tmp-foto-png")
+                .into_iter()
+                .collect();
+        for clave in ["image_path", "audio_path", "db_path", "seed_path", "root_path"] {
+            assert_eq!(
+                campos.get(clave).map(String::as_str),
+                Some("/tmp/foto.png"),
+                "{clave} debe llevar la ruta del intent"
+            );
+        }
+        // Los que ya existían siguen igual.
+        for clave in ["path", "file_path", "repo_path"] {
+            assert_eq!(campos.get(clave).map(String::as_str), Some("/tmp/foto.png"));
+        }
+        assert_eq!(campos.get("project").map(String::as_str), Some("tmp-foto-png"));
+    }
+
+    /// `directory`/`cwd` solo llevan la ruta si es un directorio: apuntar a un
+    /// fichero donde se espera un proyecto es peor que no rellenarlo.
+    #[test]
+    fn d199_directory_y_cwd_respetan_el_contrato_de_directorio() {
+        let fichero: std::collections::HashMap<String, String> =
+            path_derived_fields("/tmp/foto.png", ".", "x").into_iter().collect();
+        assert_eq!(fichero.get("directory").map(String::as_str), Some("."));
+        assert_eq!(fichero.get("cwd").map(String::as_str), Some("."));
+
+        let directorio: std::collections::HashMap<String, String> =
+            path_derived_fields("/tmp/proyecto", "/tmp/proyecto", "x")
+                .into_iter()
+                .collect();
+        assert_eq!(directorio.get("directory").map(String::as_str), Some("/tmp/proyecto"));
+        assert_eq!(directorio.get("cwd").map(String::as_str), Some("/tmp/proyecto"));
     }
 }
