@@ -10,7 +10,7 @@ yanked = "deny"
 # no aplica, se borra la entrada. Si el motivo ya no es cierto y el aviso sigue,
 # es un fallo, no deuda.
 #
-# Última revisión global: 2026-11-16 (Deep) — 8 avisos, motivos verificados uno a
+# Última revisión global: 2026-11-17 (Deep) — 10 avisos, motivos verificados uno a
 # uno contra el código citado; ninguno se cae por sí solo.
 ignore = [
     # fxhash — transitive via mdns-sd; no longer maintained but functional for our use
@@ -66,6 +66,24 @@ ignore = [
     # one. Revisit if `mainline` ever relaxes its lru requirement.
     # Revisión: 2026-11-16 · Dueño: Deep (dependencias). Reabrir si `mainline` acepta lru >=0.16.3.
     "RUSTSEC-2026-0253",
+    # chrono 0.4.45 — RUSTSEC-2026-0543: **unmaintained** (todas las versiones), NO es una
+    # vulnerabilidad. No se puede quitar barato: entra de forma transitiva por `rmcp 0.1.5`
+    # (dependencia ajena; tylluan-kernel la usa como cliente MCP) y además la usan
+    # directamente tylluan-kernel y tylluan-cli en ~30 módulos (`cargo tree -i chrono`).
+    # El aviso recomienda `jiff` o `time`: es una migración de fechas en todo el workspace.
+    # Mientras `rmcp` la arrastre, quitarla del todo sigue dejando el aviso.
+    # Revisión: 2026-11-17 — Dueño: Deep (triaje de dependencias). Reabrir cuando `rmcp`
+    # publique una versión sin chrono, o al planificar la migración a `jiff`/`time`.
+    "RUSTSEC-2026-0543",
+    # chrono-tz 0.10.4 — RUSTSEC-2026-0555: **unmaintained** (todas las versiones), NO es una
+    # vulnerabilidad, y el aviso no recomienda sustituto. Es dependencia directa de
+    # tylluan-kernel pero solo se usa en 3 sitios: las 6 zonas del reloj del mundo
+    # (transport/http/api_v1/mcp.rs:501-507) y el parseo de un nombre de zona
+    # (transport/server/handlers.rs:555/565). Sustituirla = meter otra base de datos de zonas
+    # con DST (jiff, o `time` + tz): cambiar una dependencia por otra, no eliminarla.
+    # Revisión: 2026-11-17 — Dueño: Deep (triaje de dependencias). Reabrir si se migra el
+    # calendario a `jiff` (que trae zonas) o si el reloj de zonas se retira.
+    "RUSTSEC-2026-0555",
 ]
 
 [licenses]
