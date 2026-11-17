@@ -5,7 +5,7 @@
 param(
     [string]$Version = "latest",
     [switch]$NoStart,
-    # P1 installer: skip creating <DataDir>\.venv and installing the Python
+    # P1 installer: skip creating <TylluanHome>\.venv and installing the Python
     # guild dependencies there (they are installed by default; the operator's
     # system Python is never touched).
     [switch]$SkipGuildDeps,
@@ -13,7 +13,11 @@ param(
     # opt-in. Default is fail-closed: no requirements-hashes.txt in the release
     # means no pip run, because "install these ranges from PyPI" is a
     # supply-chain gamble nobody was asked to take.
-    [switch]$AllowUnhashedDeps
+    [switch]$AllowUnhashedDeps,
+    # D192: instala una instancia con nombre en vez de `default`.
+    [string]$Instance = "default",
+    # D192: reinstalar encima de una instancia YA declarada es explicito.
+    [switch]$Upgrade
 )
 
 # Execution Policy guard - detect Restricted/AllSigned before anything else
@@ -26,8 +30,11 @@ if ($execPolicy -in 'Restricted', 'AllSigned') {
 }
 
 $Repo = "Forja-orca/tylluan"
-$BinDir = "$env:USERPROFILE\.tylluan\bin"
-$DataDir = "$env:USERPROFILE\.tylluan"
+$TylluanHome = "$env:USERPROFILE\.tylluan"
+$BinDir = "$TylluanHome\bin"
+$DataDir = $TylluanHome
+# D192: registro de instancias con nombre (el mismo que lee `tylluan --instance`).
+$RegistryFile = if ($env:TYLLUAN_INSTANCES_FILE) { $env:TYLLUAN_INSTANCES_FILE } else { Join-Path $TylluanHome "instances.toml" }
 
 function Write-Step($Text) { Write-Host "Tylluan $Text" -ForegroundColor Cyan }
 function Write-OK($Text)   { Write-Host "OK $Text" -ForegroundColor Green }
@@ -247,14 +254,130 @@ if ($PathEntries -notcontains $BinDir) {
     Write-Host "   Open a NEW terminal for PATH to take effect in other apps." -ForegroundColor Yellow
 }
 
+# -- Instancias con nombre (D192) ---------------------------------------
+# `default` es la de siempre (%USERPROFILE%\.tylluan, 47004). Cualquier otro
+# nombre vive en .tylluan\instances\<nombre>, con su propio DATA_DIR y su
+# propio puerto, y queda declarado en $RegistryFile. El registro se escribe en
+# modo append-only: instalar una instancia NUNCA reescribe los bloques
+# existentes, y en particular nunca toca el de `default`.
+$DefaultInstancePort = 47004
+
+if ($Instance -notmatch '^[A-Za-z0-9_-]+$') {
+    Write-Err "Nombre de instancia invalido: '$Instance' (usa letras, numeros, '-' o '_')"
+}
+
+New-Item -ItemType Directory -Force -Path $TylluanHome | Out-Null
+if (-not (Test-Path -LiteralPath $RegistryFile -PathType Leaf)) {
+    New-Item -ItemType File -Force -Path $RegistryFile | Out-Null
+}
+
+function Get-InstanceBlock([string]$Name) {
+    $out = New-Object System.Collections.Generic.List[string]
+    $inside = $false
+    foreach ($line in (Get-Content -LiteralPath $RegistryFile -ErrorAction SilentlyContinue)) {
+        $trim = $line.Trim()
+        if ($trim -match '^\[instances\.([A-Za-z0-9_-]+)\]$') {
+            $inside = ($Matches[1] -eq $Name)
+            continue
+        }
+        if ($trim.StartsWith('[')) { $inside = $false; continue }
+        if ($inside) { $out.Add($line) }
+    }
+    return ($out -join "`n")
+}
+
+function Test-InstanceDeclared([string]$Name) {
+    $b = Get-InstanceBlock $Name
+    return -not [string]::IsNullOrWhiteSpace($b)
+}
+
+function Get-InstancePort([string]$Name) {
+    $b = Get-InstanceBlock $Name
+    if ($b -match '(?m)^\s*port\s*=\s*(\d+)') { return [int]$Matches[1] }
+    return 0
+}
+
+function Add-RegistryBlock([string]$Text) {
+    $existing = ""
+    if (Test-Path -LiteralPath $RegistryFile) {
+        $existing = Get-Content -LiteralPath $RegistryFile -Raw -ErrorAction SilentlyContinue
+    }
+    # Un TOML valido puede no acabar en salto de linea: sin esto el bloque nuevo
+    # se pegaria a la ultima linea del anterior.
+    if ($existing -and -not $existing.EndsWith("`n")) { Add-Content -LiteralPath $RegistryFile -Value "" }
+    Add-Content -LiteralPath $RegistryFile -Value $Text
+}
+
+function Test-PortFree([int]$Port) {
+    $listener = $null
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+        $listener.Start()
+        return $true
+    } catch { return $false }
+    finally { if ($listener) { try { $listener.Stop() } catch { } } }
+}
+
+function Get-NextFreePort {
+    $declared = @()
+    foreach ($line in (Get-Content -LiteralPath $RegistryFile -ErrorAction SilentlyContinue)) {
+        if ($line -match '^\s*port\s*=\s*(\d+)') { $declared += [int]$Matches[1] }
+    }
+    for ($candidate = 47005; $candidate -lt 47100; $candidate++) {
+        if (($declared -notcontains $candidate) -and (Test-PortFree $candidate)) { return $candidate }
+    }
+    return 0
+}
+
+# Sin `[instances.default]`, un registro que solo declare otra instancia hace que
+# `tylluan` (sin -Instance) falle cerrado. Se deja SIEMPRE declarado.
+if (-not (Test-InstanceDeclared "default")) {
+    Add-RegistryBlock "`n[instances.default]`nport = $DefaultInstancePort"
+    Write-Host "Declarada [instances.default] port = $DefaultInstancePort en $RegistryFile" -ForegroundColor DarkGray
+}
+
+if ($Instance -eq "default") {
+    $DataDir = $TylluanHome
+    $Port = Get-InstancePort "default"
+    if (-not $Port) { $Port = $DefaultInstancePort }
+    Write-Host "Instancia: default ($DataDir, puerto $Port)" -ForegroundColor Cyan
+} else {
+    $DataDir = Join-Path $TylluanHome "instances\$Instance"
+    if (Test-InstanceDeclared $Instance) {
+        if (-not $Upgrade) {
+            Write-Err "La instancia '$Instance' ya existe en $RegistryFile. Reinstalar encima es explicito: repite con -Upgrade."
+        }
+        $Port = Get-InstancePort $Instance
+        if (-not $Port) { Write-Err "La instancia '$Instance' esta declarada sin puerto en $RegistryFile." }
+        Write-Host "Instancia: $Instance (-Upgrade) -> $DataDir, puerto $Port" -ForegroundColor Cyan
+    } else {
+        if ($Upgrade) {
+            Write-Err "No existe la instancia '$Instance': -Upgrade solo reinstala una ya declarada."
+        }
+        $Port = Get-NextFreePort
+        if (-not $Port) { Write-Err "No hay puerto libre a partir de 47005." }
+        # TOML: las barras invertidas son secuencias de escape, asi que la ruta se
+        # escribe con '/' (PathBuf la acepta igual en Windows).
+        $DataDirToml = $DataDir.Replace('\', '/')
+        Add-RegistryBlock "`n[instances.$Instance]`nport = $Port`ndata_dir = `"$DataDirToml/data`""
+        Write-OK "Instancia '$Instance' declarada en $RegistryFile (puerto $Port)."
+    }
+}
+Write-Host ""
+
 # -- Python guilds (the 45 Python tool plugins) --------------------------
 # Policy: NEVER pip-install into the user's system Python from an installer
 # (it mutates the user's environment without consent, and PEP 668 blocks it on
 # major Linux distros anyway). The operator's Python only *creates* a venv;
-# dependencies go into <DataDir>\.venv, which the kernel already prefers over
-# the system interpreter (registry/guild_process.rs, find_python()).
+# dependencies go into <TylluanHome>\.venv, which the kernel already prefers
+# over the system interpreter (registry/guild_process.rs, find_python()).
+#
+# D192: una sola .venv para todas las instancias, a proposito. `find_python()`
+# busca `.venv` primero en la cadena del **ejecutable** (guild_process.rs:2391)
+# y `<home>\.tylluan\.venv` es el segundo eslabon de `<home>\.tylluan\bin\
+# tylluan-nexus.exe`: si existiera, ganaria siempre a la de la instancia.
 Write-Host "Python guilds (45 tools):" -ForegroundColor White
-$VenvDir = Join-Path $DataDir ".venv"
+$VenvDir = Join-Path $TylluanHome ".venv"
 $VenvPy = Join-Path $VenvDir "Scripts\python.exe"
 $GuildReq = Join-Path $BinDir "guilds"
 if (-not (Test-Path (Join-Path $GuildReq "requirements.txt"))) { $GuildReq = "guilds" }
@@ -365,7 +488,9 @@ if ($NoStart) {
         # antes que USERPROFILE y podria escribir el tylluan.toml en otro home
         # que el $BinDir/$DataDir de este instalador (y el .venv quedaria
         # huerfano: los guilds caerian al Python del sistema).
-        & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir"
+        # --port (D192): el config generado tiene que declarar el puerto de ESTA
+        # instancia; si no, el kernel arrancaria en 47004 (el de `default`).
+        & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir" --port "$Port"
         if ($LASTEXITCODE -ne 0) {
             Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
         }
@@ -375,15 +500,27 @@ if ($NoStart) {
     if (Test-Path $ConfigPath) {
         Write-Step "Existing tylluan.toml found - keeping it. Starting kernel..."
         try {
-            $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start" -WorkingDirectory $DataDir -NoNewWindow -PassThru -ErrorAction Stop
+            $StartArgs = if ($Instance -eq "default") { "start" } else { "start --instance $Instance" }
+            $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList $StartArgs -WorkingDirectory $DataDir -NoNewWindow -PassThru -ErrorAction Stop
         } catch {
             Write-Err "Failed to start Tylluan: $_"
         }
     } else {
         Write-Step "Installing portable profile (writes tylluan.toml + starts kernel)..."
-        & "$BinDir\tylluan-cli" install --profile portable --dir "$DataDir"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
+        if ($Instance -eq "default") {
+            & "$BinDir\tylluan-cli" install --profile portable --dir "$DataDir" --port "$Port"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
+            }
+        } else {
+            # En modo instancia el config se escribe sin arrancar y el arranque va
+            # por `start --instance`: es el unico camino que le pasa al kernel su
+            # TYLLUAN_DATA_DIR (si no, usaria .\data-port-<puerto>).
+            & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir" --port "$Port"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
+            }
+            $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start --instance $Instance" -WorkingDirectory $DataDir -NoNewWindow -PassThru -ErrorAction Stop
         }
     }
 
@@ -410,12 +547,12 @@ if ($NoStart) {
     $ErrorCount = 0
     for ($i = 0; $i -lt 30; $i++) {
         try {
-            $Response = Invoke-WebRequest -Uri "http://127.0.0.1:47004/health" -UseBasicParsing -ErrorAction Stop
+            $Response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -ErrorAction Stop
             if ($Response.StatusCode -eq 200) {
                 if (-not (Get-Process -Id $KernelPid -ErrorAction SilentlyContinue)) {
-                    Write-Err "Port 47004 answers but PID $KernelPid is not alive: another kernel is occupying it."
+                    Write-Err "Port $Port answers but PID $KernelPid is not alive: another kernel is occupying it."
                 }
-                Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:47004 (PID $KernelPid)"
+                Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:$Port (PID $KernelPid)"
                 $Ready = $true
                 break
             }
@@ -449,18 +586,18 @@ Write-Host "  Claude Desktop (~/.claude/claude_desktop_config.json):" -Foregroun
 Write-Host '  {'
 Write-Host '    "mcpServers": {'
 Write-Host '      "tylluan": { "type": "sse",'
-Write-Host '        "url": "http://127.0.0.1:47004/sse" }'
+Write-Host ("        `"url`": `"http://127.0.0.1:$Port/sse`" }")
 Write-Host '    }'
 Write-Host '  }'
 Write-Host ""
 Write-Host "  Claude Code:" -ForegroundColor White
-Write-Host '    /mcp add tylluan sse http://127.0.0.1:47004/sse'
+Write-Host "    /mcp add tylluan sse http://127.0.0.1:$Port/sse"
 Write-Host ""
 Write-Host "  Cursor:" -ForegroundColor White
-Write-Host "    Add MCP server: http://127.0.0.1:47004/sse"
+Write-Host "    Add MCP server: http://127.0.0.1:$Port/sse"
 Write-Host ""
 Write-Host "  curl (verify):" -ForegroundColor White
-Write-Host "    curl http://127.0.0.1:47004/health"
+Write-Host "    curl http://127.0.0.1:$Port/health"
 Write-Host ""
 Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
 Write-Host "  tylluan-cli download-models"

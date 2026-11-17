@@ -42,8 +42,43 @@ pub fn resolve_pid_data_dir(data_dir_override: Option<&Path>, port: Option<u16>)
 
 /// Reads and parses a PID file. Returns None if missing, unreadable or garbage.
 pub fn read_pid_file(path: &Path) -> Option<u32> {
+    read_pid_file_full(path).map(|(pid, _)| pid)
+}
+
+/// Lee el PID file completo: `(pid, instancia_declarada)`.
+///
+/// Formato nuevo (T4391): primera línea el PID, y opcionalmente una línea
+/// `instance=<nombre>`. Un PID file antiguo (solo el número) devuelve
+/// `(pid, None)` y sigue siendo válido.
+pub fn read_pid_file_full(path: &Path) -> Option<(u32, Option<String>)> {
     let raw = std::fs::read_to_string(path).ok()?;
-    raw.trim().parse::<u32>().ok()
+    let mut lineas = raw.lines().map(str::trim).filter(|l| !l.is_empty());
+    let pid = lineas.next()?.parse::<u32>().ok()?;
+    let instancia = lineas
+        .find_map(|l| l.strip_prefix("instance="))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    Some((pid, instancia))
+}
+
+/// Decide si la instancia declarada en el PID file permite parar.
+///
+/// C-17 (TL): si el PID file dice una instancia y no es la pedida, `stop` **aborta**
+/// con error y exige `--force`; un aviso que no frena acaba parando el kernel
+/// equivocado. Un PID file sin instancia (formato antiguo) no bloquea.
+pub fn instance_allows_stop(
+    declared: Option<&str>,
+    requested: &str,
+    force: bool,
+) -> Result<(), String> {
+    match declared {
+        Some(d) if d != requested && !force => Err(format!(
+            "el PID file pertenece a la instancia '{d}', no a '{requested}'. \
+             No se para nada. Si de verdad quieres parar '{d}', repite con \
+             `--instance {d}` o añade `--force`."
+        )),
+        _ => Ok(()),
+    }
 }
 
 /// True if a process name identifies a TylluanNexus kernel.
@@ -333,4 +368,29 @@ mod tests {
         child.kill().expect("cleanup kill");
         let _ = child.wait();
     }
+
+    /// C-17: la instancia del PID file manda. Sin `--force`, un desajuste ABORTA.
+    #[test]
+    fn c17_instancia_distinta_aborta_sin_force_y_pasa_con_force() {
+        assert!(
+            instance_allows_stop(Some("lab"), "default", false).is_err(),
+            "pedir 'default' sobre un PID file de 'lab' debe abortar"
+        );
+        assert!(
+            instance_allows_stop(Some("lab"), "default", true).is_ok(),
+            "--force es la salida explícita"
+        );
+        assert!(instance_allows_stop(Some("lab"), "lab", false).is_ok());
+        // PID file antiguo (sin instancia): no bloquea.
+        assert!(instance_allows_stop(None, "default", false).is_ok());
+    }
+
+    /// El error dice QUÉ instancia hay y qué hacer (nombra ambas y `--force`).
+    #[test]
+    fn c17_el_error_nombra_las_dos_instancias_y_force() {
+        let e = instance_allows_stop(Some("lab"), "default", false).unwrap_err();
+        assert!(e.contains("lab") && e.contains("default"), "{e}");
+        assert!(e.contains("--force"), "{e}");
+    }
+
 }

@@ -2,9 +2,12 @@
 set -euo pipefail
 
 REPO="Forja-orca/tylluan"
-BIN_DIR="${HOME}/.tylluan/bin"
-DATA_DIR="${HOME}/.tylluan"
+TYLLUAN_HOME="${HOME}/.tylluan"
+BIN_DIR="${TYLLUAN_HOME}/bin"
+DATA_DIR="${TYLLUAN_HOME}"
 CONFIG_FILE="${DATA_DIR}/config.toml"
+# D192: registro de instancias con nombre (el mismo que lee `tylluan --instance`).
+REGISTRY_FILE="${TYLLUAN_INSTANCES_FILE:-${TYLLUAN_HOME}/instances.toml}"
 
 say() { printf "\033[1;32m%s\033[0m\n" "$*" >&2; }
 info() { printf "\033[1;34m%s\033[0m\n" "$*" >&2; }
@@ -14,18 +17,26 @@ err() { printf "\033[1;31m%s\033[0m\n" "$*" >&2; exit 1; }
 NO_START=0
 SKIP_GUILD_DEPS=0
 ALLOW_UNHASHED_DEPS=0
-for arg in "$@"; do
-  case "$arg" in
+INSTANCE="default"
+UPGRADE=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --no-start) NO_START=1 ;;
-    # P1 installer: skip creating ${DATA_DIR}/.venv and installing the Python
+    # P1 installer: skip creating ${TYLLUAN_HOME}/.venv and installing the Python
     # guild dependencies there (installed by default; the operator's system
     # Python is never touched).
     --skip-guild-deps) SKIP_GUILD_DEPS=1 ;;
     # P1 (TL T3907): installing guild deps WITHOUT the hash lock is opt-in.
     # Default is fail-closed: no requirements-hashes.txt means no pip run.
     --allow-unhashed-deps) ALLOW_UNHASHED_DEPS=1 ;;
-    *) err "Unknown option: $arg. Usage: install.sh [--no-start] [--skip-guild-deps] [--allow-unhashed-deps]" ;;
+    # D192: instancia con nombre en vez de `default` (ver bloque de instancias).
+    --instance) [ "$#" -ge 2 ] || err "--instance necesita un nombre"; INSTANCE="$2"; shift ;;
+    --instance=*) INSTANCE="${1#--instance=}" ;;
+    # D192: reinstalar encima de una instancia YA declarada es explicito.
+    --upgrade) UPGRADE=1 ;;
+    *) err "Unknown option: $1. Usage: install.sh [--no-start] [--skip-guild-deps] [--allow-unhashed-deps] [--instance <nombre>] [--upgrade]" ;;
   esac
+  shift
 done
 
 ARCH=$(uname -m)
@@ -165,9 +176,17 @@ if ! echo ":$PATH:" | grep -qF ":$BIN_DIR:"; then
     */bash) SHELL_PROFILE="$HOME/.bashrc" ;;
   esac
   if [ -n "$SHELL_PROFILE" ]; then
-    echo "export PATH=\"\$PATH:${BIN_DIR}\"" >> "$SHELL_PROFILE"
-    say "Added ${BIN_DIR} to PATH in ${SHELL_PROFILE}"
-    say "   → Run: source ${SHELL_PROFILE}"
+    # D192: mirar solo `$PATH` no basta. La sesión NO tiene la línea hasta que se
+    # hace `source`, así que una segunda instalación la volvía a escribir: con
+    # instancias, instalar N veces dejaba N `export PATH` idénticos en el perfil
+    # (medido: D192_prueba_path_shell.log). Se mira también el perfil.
+    if grep -qF "PATH=\"\$PATH:${BIN_DIR}\"" "$SHELL_PROFILE" 2>/dev/null; then
+      info "PATH ya declarado en ${SHELL_PROFILE} — no lo repito."
+    else
+      echo "export PATH=\"\$PATH:${BIN_DIR}\"" >> "$SHELL_PROFILE"
+      say "Added ${BIN_DIR} to PATH in ${SHELL_PROFILE}"
+      say "   → Run: source ${SHELL_PROFILE}"
+    fi
   else
     info "Add ${BIN_DIR} to your PATH manually, or run:"
     info "   export PATH=\"\$PATH:${BIN_DIR}\""
@@ -175,6 +194,100 @@ if ! echo ":$PATH:" | grep -qF ":$BIN_DIR:"; then
 fi
 
 say ""
+# ── Instancias con nombre (D192) ───────────────────────────────────────
+# `default` es la de siempre (~/.tylluan, 47004). Cualquier otro nombre vive en
+# ~/.tylluan/instances/<nombre>, con su propio DATA_DIR y su propio puerto, y
+# queda declarado en ${REGISTRY_FILE}. El registro se escribe en modo
+# append-only: instalar una instancia NUNCA reescribe los bloques existentes, y
+# en particular nunca toca el de `default` (ni sus datos ni su config).
+DEFAULT_INSTANCE_PORT=47004
+
+case "$INSTANCE" in
+  *[!A-Za-z0-9_-]*|"") err "Nombre de instancia invalido: '${INSTANCE}' (usa letras, numeros, '-' o '_')" ;;
+esac
+
+mkdir -p "${TYLLUAN_HOME}"
+touch "${REGISTRY_FILE}"
+
+# Un TOML valido puede no acabar en salto de linea; sin esto el bloque nuevo se
+# pegaria a la ultima linea del anterior.
+ensure_trailing_newline() {
+  if [ -s "$REGISTRY_FILE" ] && [ -n "$(tail -c 1 "$REGISTRY_FILE" 2>/dev/null || true)" ]; then
+    printf '\n' >> "$REGISTRY_FILE"
+  fi
+}
+
+instance_block() {
+  awk -v name="$1" '
+    $0 ~ "^\\[instances\\." name "\\]$" { f = 1; next }
+    /^\[/ { f = 0 }
+    f { print }
+  ' "$REGISTRY_FILE"
+}
+
+instance_declared() { [ -n "$(instance_block "$1")" ]; }
+
+instance_port() {
+  instance_block "$1" \
+    | sed -n 's/^[[:space:]]*port[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' \
+    | head -1
+}
+
+# Sin `[instances.default]`, un registro que solo declare otra instancia hace que
+# `tylluan` (sin --instance) falle cerrado. Se deja SIEMPRE declarado.
+if ! instance_declared default; then
+  ensure_trailing_newline
+  printf '\n[instances.default]\nport = %s\n' "$DEFAULT_INSTANCE_PORT" >> "$REGISTRY_FILE"
+  info "Declarada [instances.default] port = ${DEFAULT_INSTANCE_PORT} en ${REGISTRY_FILE}"
+fi
+
+port_free() {
+  if (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
+next_free_port() {
+  _p=47005
+  while [ "$_p" -lt 47100 ]; do
+    if ! grep -qE "^[[:space:]]*port[[:space:]]*=[[:space:]]*${_p}([[:space:]]|$)" "$REGISTRY_FILE" \
+      && port_free "$_p"; then
+      printf '%s\n' "$_p"
+      return 0
+    fi
+    _p=$((_p + 1))
+  done
+  return 1
+}
+
+if [ "$INSTANCE" = "default" ]; then
+  DATA_DIR="${TYLLUAN_HOME}"
+  PORT="$(instance_port default)"
+  PORT="${PORT:-$DEFAULT_INSTANCE_PORT}"
+  info "Instancia: default (${DATA_DIR}, puerto ${PORT})"
+else
+  DATA_DIR="${TYLLUAN_HOME}/instances/${INSTANCE}"
+  if instance_declared "$INSTANCE"; then
+    if [ "$UPGRADE" -eq 0 ]; then
+      err "La instancia '${INSTANCE}' ya existe en ${REGISTRY_FILE}. Reinstalar encima es explicito: repite con --upgrade."
+    fi
+    PORT="$(instance_port "$INSTANCE")"
+    [ -n "$PORT" ] || err "La instancia '${INSTANCE}' esta declarada sin puerto en ${REGISTRY_FILE}."
+    info "Instancia: ${INSTANCE} (--upgrade) -> ${DATA_DIR}, puerto ${PORT}"
+  else
+    if [ "$UPGRADE" -eq 1 ]; then
+      err "No existe la instancia '${INSTANCE}': --upgrade solo reinstala una ya declarada."
+    fi
+    PORT="$(next_free_port)" || err "No hay puerto libre a partir de 47005."
+    ensure_trailing_newline
+    printf '\n[instances.%s]\nport = %s\ndata_dir = "%s"\n' \
+      "$INSTANCE" "$PORT" "${DATA_DIR}/data" >> "$REGISTRY_FILE"
+    say "Instancia '${INSTANCE}' declarada en ${REGISTRY_FILE} (puerto ${PORT})."
+  fi
+fi
+say ""
+
 KERNEL_DATA_DIR="${TYLLUAN_DATA_DIR:-${DATA_DIR}/data}"
 PID_FILE="${KERNEL_DATA_DIR}/tylluan-nexus.pid"
 OLD_PID=""
@@ -185,14 +298,21 @@ fi
 # Policy: NEVER pip-install into the user's system Python from an installer
 # (PEP 668 blocks it on Debian/Ubuntu/Fedora and it mutates the user's
 # environment without consent). The operator's Python only *creates* a venv;
-# the dependencies go into ${DATA_DIR}/.venv, which the kernel already prefers
-# over the system interpreter (registry/guild_process.rs, find_python()).
+# the dependencies go into ${TYLLUAN_HOME}/.venv, which the kernel already
+# prefers over the system interpreter (registry/guild_process.rs, find_python()).
+#
+# D192: es **una sola** .venv para todas las instancias, a propósito.
+# `find_python()` busca `.venv` primero en la cadena del **ejecutable**
+# (guild_process.rs:2391) y `~/.tylluan/.venv` es el segundo eslabón de
+# `~/.tylluan/bin/tylluan-nexus`: si existiera, ganaría siempre a la de la
+# instancia. Crear una .venv por instancia sería disco y tiempo tirados, y el
+# `.venv` que usa el kernel sería otro (el del default) sin decirlo.
 say "Python guilds (45 tools):"
 GUILD_REQ="${BIN_DIR}/guilds"
 if [ ! -f "${GUILD_REQ}/requirements.txt" ]; then
   GUILD_REQ="guilds"
 fi
-VENV_DIR="${DATA_DIR}/.venv"
+VENV_DIR="${TYLLUAN_HOME}/.venv"
 VENV_PY="${VENV_DIR}/bin/python"
 REQ_HASHES="${GUILD_REQ}/requirements-hashes.txt"
 REQ_PLAIN="${GUILD_REQ}/requirements.txt"
@@ -272,15 +392,29 @@ if [ "$NO_START" -eq 1 ]; then
     # --dir: el CLI resolvia HOME (antes que nada) y podia escribir el
     # tylluan.toml en un home distinto del DATA_DIR de este instalador, dejando
     # huerfano el .venv que creamos aqui. Fijarlo mantiene todo junto.
-    "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}"
+    # --port (D192): el config generado tiene que declarar el puerto de ESTA
+    # instancia; si no, el kernel arrancaria en 47004 (el de `default`).
+    "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}" --port "${PORT}"
   fi
 else
   if [ -f "${DATA_DIR}/tylluan.toml" ]; then
     say "Existing tylluan.toml found - keeping it. Starting kernel..."
-    (cd "${DATA_DIR}" && "${BIN_DIR}/tylluan" start) &
+    if [ "$INSTANCE" = "default" ]; then
+      (cd "${DATA_DIR}" && "${BIN_DIR}/tylluan" start) &
+    else
+      (cd "${DATA_DIR}" && "${BIN_DIR}/tylluan" start --instance "${INSTANCE}") &
+    fi
   else
     say "Installing portable profile (writes tylluan.toml + starts kernel)..."
-    "${BIN_DIR}/tylluan" install --profile portable --dir "${DATA_DIR}"
+    if [ "$INSTANCE" = "default" ]; then
+      "${BIN_DIR}/tylluan" install --profile portable --dir "${DATA_DIR}" --port "${PORT}"
+    else
+      # En modo instancia el config se escribe sin arrancar y el arranque va por
+      # `start --instance`: es el unico camino que le pasa al kernel su
+      # TYLLUAN_DATA_DIR (si no, el kernel usaria ./data-port-<puerto>).
+      "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}" --port "${PORT}"
+      (cd "${DATA_DIR}" && "${BIN_DIR}/tylluan" start --instance "${INSTANCE}") &
+    fi
   fi
 
   say "Waiting for kernel to be ready..."
@@ -301,11 +435,11 @@ else
     err "PID file still points to the previous kernel (PID ${OLD_PID}); refusing to report success."
   fi
   for i in $(seq 1 30); do
-    if curl -s "http://127.0.0.1:47004/health" >/dev/null 2>&1; then
+    if curl -s "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
       if ! kill -0 "$KERNEL_PID" 2>/dev/null; then
-        err "Port 47004 answers but PID ${KERNEL_PID} is not alive: another kernel is occupying it."
+        err "Port ${PORT} answers but PID ${KERNEL_PID} is not alive: another kernel is occupying it."
       fi
-      say "Tylluan is running at http://127.0.0.1:47004 (PID ${KERNEL_PID})"
+      say "Tylluan is running at http://127.0.0.1:${PORT} (PID ${KERNEL_PID})"
       break
     fi
     if [ "$i" -eq 30 ]; then
@@ -322,19 +456,19 @@ say ""
 say "  Claude Desktop (~/.claude/claude_desktop_config.json):"
 echo '  {'
 echo '    "mcpServers": {'
-echo '      "tylluan": { "type": "sse",'
-echo '        "url": "http://127.0.0.1:47004/sse" }'
+printf '      "tylluan": { "type": "sse",\n'
+printf '        "url": "http://127.0.0.1:%s/sse" }\n' "$PORT"
 echo '    }'
 echo '  }'
 say ""
 say "  Claude Code:"
-say '    /mcp add tylluan sse http://127.0.0.1:47004/sse'
+say "    /mcp add tylluan sse http://127.0.0.1:${PORT}/sse"
 say ""
 say "  Cursor:"
-say "    Add MCP server: http://127.0.0.1:47004/sse"
+say "    Add MCP server: http://127.0.0.1:${PORT}/sse"
 say ""
 say "  curl (verify):"
-say "    curl http://127.0.0.1:47004/health"
+say "    curl http://127.0.0.1:${PORT}/health"
 say ""
 say "Getting started:"
 say "  tylluan start    Start the Tylluan kernel"

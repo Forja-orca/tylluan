@@ -1,3 +1,5 @@
+mod instances;
+
 use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 use anyhow::{Result, Context};
 use std::process::Command;
@@ -11,7 +13,6 @@ mod stop;
 
 use stop::StopAction;
 
-const DEFAULT_PORT: u16 = 47004;
 
 /// Installation profile — determines which embedding model and default settings to use.
 #[derive(ValueEnum, Clone, Copy, PartialEq, Debug)]
@@ -38,6 +39,9 @@ impl std::fmt::Display for InstallProfile {
 #[command(name = "tylluan")]
 #[command(about = "Sovereign Agentic Hub CLI — Manage your TylluanNexus o3 hub", long_about = None)]
 struct Cli {
+    /// Instancia con nombre (registro en `~/.tylluan/instances.toml`). Por defecto `default`.
+    #[arg(long, global = true, default_value = "default")]
+    instance: String,
     #[command(subcommand)]
     command: Commands,
 }
@@ -74,6 +78,9 @@ enum Commands {
         /// Bearer token for authenticated instances (graceful shutdown)
         #[arg(long, short)]
         token: Option<String>,
+        /// Parar aunque el PID file diga que ese kernel pertenece a otra instancia
+        #[arg(long)]
+        force: bool,
     },
     /// Check the status of the hub
     Status,
@@ -125,6 +132,9 @@ enum Commands {
         /// Write the config but do not start the kernel
         #[arg(long)]
         no_start: bool,
+        /// Puerto que se escribe en el tylluan.toml (por defecto, el de la instancia)
+        #[arg(long)]
+        port: Option<u16>,
     },
     /// Check for updates and (solo con orden explicita) instalar el binario
     Update {
@@ -406,6 +416,16 @@ fn resolve_guilds_core(candidates: &[PathBuf]) -> Option<PathBuf> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    // T4391: el nombre de instancia resuelve puerto y DATA_DIR. Fail-closed: una
+    // instancia no declarada es un error, no un fallback silencioso al 47004.
+    let inst = match instances::load(&cli.instance) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("❌ {e}");
+            std::process::exit(2);
+        }
+    };
+    let inst_port = inst.port;
 
     match cli.command {
         Commands::Start { headless, port, setup } => {
@@ -426,9 +446,13 @@ async fn main() -> Result<()> {
             let mut cmd = kernel_command(
                 &exe_path,
                 headless,
-                port,
+                // Sin `--port`, manda el de la instancia (para `default` es el mismo
+                // 47004 de siempre, así que no cambia nada).
+                port.or(Some(inst_port)),
                 install_dir.as_deref(),
                 models_env.as_deref(),
+                inst.data_dir.as_deref(),
+                &inst.name,
             );
 
             let child = cmd.spawn()
@@ -439,7 +463,7 @@ async fn main() -> Result<()> {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(2))
                 .build()?;
-            let port = port.unwrap_or(DEFAULT_PORT);
+            let port = port.unwrap_or(inst_port);
             let url = format!("http://127.0.0.1:{port}/health");
 
             if wait_for_health(&client, &url, STARTUP_WAIT_SECS).await {
@@ -453,21 +477,25 @@ async fn main() -> Result<()> {
                 );
             }
         }
-        Commands::Stop { port, data_dir, token } => {
-            run_stop(port, data_dir.as_deref(), token).await?;
+        Commands::Stop { port, data_dir, token, force } => {
+            // T4391: parar la instancia que se pidió, no la de por defecto. Sin esto,
+            // `stop --instance lab` apuntaba al PID/puerto de `default`.
+            let puerto = port.or(Some(inst_port));
+            let dir = data_dir.or_else(|| inst.data_dir.clone());
+            run_stop(puerto, dir.as_deref(), token, &inst.name, force).await?;
         }
         Commands::Status => {
             println!("🔍 Checking hub status...");
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(5))
                 .build()?;
-            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/health");
+            let url = format!("http://127.0.0.1:{inst_port}/health");
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
                     println!("✅ Hub is OPERATIONAL (v{})", json["version"]);
                 }
-                _ => println!("❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{DEFAULT_PORT})"),
+                _ => println!("❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{inst_port})"),
             }
         }
         Commands::Doctor => {
@@ -580,11 +608,11 @@ async fn main() -> Result<()> {
             }
 
             // ── 6. Port free ──
-            let port_free = std::net::TcpListener::bind(("127.0.0.1", DEFAULT_PORT)).is_ok();
+            let port_free = std::net::TcpListener::bind(("127.0.0.1", inst_port)).is_ok();
             if port_free {
-                println!("[6/8] Port {DEFAULT_PORT}: available ... ✅");
+                println!("[6/8] Port {inst_port}: available ... ✅");
             } else {
-                println!("[6/8] Port {DEFAULT_PORT}: in use (kernel likely running) ... ✅");
+                println!("[6/8] Port {inst_port}: in use (kernel likely running) ... ✅");
             }
 
             // ── 7. Kernel health (online check) ──
@@ -593,14 +621,14 @@ async fn main() -> Result<()> {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(5))
                     .build()?;
-                let url = format!("http://127.0.0.1:{DEFAULT_PORT}/health");
+                let url = format!("http://127.0.0.1:{inst_port}/health");
                 match client.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         let json: serde_json::Value = resp.json().await?;
                         let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("ok");
                         println!("[7/8] Kernel: running ({status}) ... ✅");
                         // Also fetch detailed doctor report
-                        let doctor_url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/doctor");
+                        let doctor_url = format!("http://127.0.0.1:{inst_port}/api/v1/doctor");
                         if let Ok(resp) = client.get(&doctor_url).send().await
                             && let Ok(report) = resp.json::<serde_json::Value>().await {
                                 if let Some(guilds) = report["guilds"].as_array() {
@@ -640,10 +668,10 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Inference { action, port, token } => {
-            run_inference(action, port.unwrap_or(DEFAULT_PORT), token).await?;
+            run_inference(action, port.unwrap_or(inst_port), token).await?;
         }
         Commands::Sentinel { action, port, token } => {
-            run_sentinel(action, port.unwrap_or(DEFAULT_PORT), token).await?;
+            run_sentinel(action, port.unwrap_or(inst_port), token).await?;
         }
         Commands::Logs { follow } => {
             let log_file = PathBuf::from("logs/kernel.log");
@@ -705,7 +733,7 @@ async fn main() -> Result<()> {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
-            let verify_url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/audit/verify");
+            let verify_url = format!("http://127.0.0.1:{inst_port}/api/v1/audit/verify");
             match client.get(&verify_url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
@@ -728,7 +756,7 @@ async fn main() -> Result<()> {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()?;
-            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/llm-examples/export");
+            let url = format!("http://127.0.0.1:{inst_port}/api/v1/llm-examples/export");
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let stats_json = resp
@@ -760,7 +788,7 @@ async fn main() -> Result<()> {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(300))
                     .build()?;
-                let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/eval/run");
+                let url = format!("http://127.0.0.1:{inst_port}/api/v1/eval/run");
                 let body = serde_json::json!({
                     "benchmark": "longmemeval-s",
                     "num_queries": num_queries.unwrap_or(30),
@@ -797,7 +825,7 @@ async fn main() -> Result<()> {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(10))
                     .build()?;
-                let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/eval/results");
+                let url = format!("http://127.0.0.1:{inst_port}/api/v1/eval/results");
                 match client.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         let json: serde_json::Value = resp.json().await?;
@@ -824,7 +852,7 @@ async fn main() -> Result<()> {
                 }
             }
         },
-        Commands::Install { profile, dir, force, no_start } => {
+        Commands::Install { profile, dir, force, no_start, port } => {
             let install_dir = dir.unwrap_or_else(|| {
                 let home = std::env::var_os("HOME")
                     .or_else(|| std::env::var_os("USERPROFILE"))
@@ -844,7 +872,9 @@ async fn main() -> Result<()> {
                 );
             }
 
-            let toml = generate_config(profile);
+            // D192: el config de una instancia declara SU puerto. El valor por
+            // defecto sigue siendo el de la instancia del CLI (47004 para `default`).
+            let toml = generate_config(profile, port.unwrap_or(inst_port));
             std::fs::write(&config_path, &toml)
                 .with_context(|| format!("Failed to write {}", config_path.display()))?;
 
@@ -889,19 +919,19 @@ async fn main() -> Result<()> {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(2))
                 .build()?;
-            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/health");
+            let url = format!("http://127.0.0.1:{inst_port}/health");
 
             for i in 1..=30 {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 match client.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         println!();
-                        println!("🎉 Tylluan is running at http://127.0.0.1:{DEFAULT_PORT}");
+                        println!("🎉 Tylluan is running at http://127.0.0.1:{inst_port}");
                         println!();
                         println!("   Connect your MCP client:");
-                        println!("     Claude Desktop -> http://127.0.0.1:{DEFAULT_PORT}/sse");
-                        println!("     Claude Code   -> /mcp add tylluan sse http://127.0.0.1:{DEFAULT_PORT}/sse");
-                        println!("     curl          -> curl http://127.0.0.1:{DEFAULT_PORT}/health");
+                        println!("     Claude Desktop -> http://127.0.0.1:{inst_port}/sse");
+                        println!("     Claude Code   -> /mcp add tylluan sse http://127.0.0.1:{inst_port}/sse");
+                        println!("     curl          -> curl http://127.0.0.1:{inst_port}/health");
                         break;
                     }
                     _ if i == 30 => {
@@ -1124,7 +1154,7 @@ def test_{snake}_tool_registered():
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
-            let base = format!("http://127.0.0.1:{DEFAULT_PORT}");
+            let base = format!("http://127.0.0.1:{inst_port}");
             match action {
                 SandboxCommand::Status => {
                     let url = format!("{base}/api/v1/config");
@@ -1217,7 +1247,7 @@ def test_{snake}_tool_registered():
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
-            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/sessions/resume");
+            let url = format!("http://127.0.0.1:{inst_port}/api/v1/sessions/resume");
             match client.get(&url).query(&[("agent_id", &agent_id)]).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
@@ -1250,7 +1280,7 @@ def test_{snake}_tool_registered():
             backup::run_backup(&dir, &db, with_secrets)?;
         }
         Commands::Restore { dir, target_dir, port } => {
-            backup::run_restore(&dir, port.unwrap_or(DEFAULT_PORT), target_dir.as_deref()).await?;
+            backup::run_restore(&dir, port.unwrap_or(inst_port), target_dir.as_deref()).await?;
         }
         Commands::RepairFts { db, backup_dir, yes } => {
             repair_fts::run_repair_fts(&db, backup_dir.as_deref(), yes)?;
@@ -1323,7 +1353,8 @@ fn run_setup_wizard() -> Result<()> {
     let (profile, reason) = detect_recommended_profile();
     println!("   {reason}");
 
-    let toml = generate_config(profile);
+    // `--setup` no acepta --port: usa el de la instancia del CLI (47004 en `default`).
+    let toml = generate_config(profile, instances::DEFAULT_PORT);
     std::fs::write(&config_path, &toml)
         .with_context(|| format!("Failed to write {}", config_path.display()))?;
 
@@ -1332,7 +1363,7 @@ fn run_setup_wizard() -> Result<()> {
 }
 
 /// Generate a complete tylluan.toml for the given profile as a string with human-readable comments.
-fn generate_config(profile: InstallProfile) -> String {
+fn generate_config(profile: InstallProfile, port: u16) -> String {
     let (embedding_model, vector_dimensions) = match profile {
         InstallProfile::Portable => ("none", 0),
         InstallProfile::Clinic => ("bge-small", 384),
@@ -1373,7 +1404,7 @@ reranker_enabled = false
 # ── Core settings ───────────────────────────────────────────────────
 [nexus]
 host = "127.0.0.1"       # Listen address (localhost-only for security)
-port = 47004               # HTTP/MCP gateway port (architecture invariant)
+port = {port}               # HTTP/MCP gateway port (architecture invariant)
 dev_mode = false          # NEVER enable in production — disables auth
 # http+sse only: `tylluan install`/`tylluan start` spawn the kernel detached from
 # any terminal. With "stdio" in this list the kernel reads EOF on its closed stdin
@@ -1451,6 +1482,8 @@ async fn run_stop(
     port: Option<u16>,
     data_dir: Option<&std::path::Path>,
     token: Option<String>,
+    instance: &str,
+    force: bool,
 ) -> Result<()> {
     // Hallazgo #3 fix: resolve the EXACT instance instead of sweeping every
     // process whose name contains "tylluan-nexus". The PID file here is the
@@ -1458,7 +1491,17 @@ async fn run_stop(
     // removes at shutdown, resolved with the same precedence the kernel uses.
     let data_dir_resolved = stop::resolve_pid_data_dir(data_dir, port);
     let pid_file = data_dir_resolved.join(stop::PID_FILE_NAME);
-    let pid_from_file = stop::read_pid_file(&pid_file);
+    let (pid_from_file, declared_instance) = match stop::read_pid_file_full(&pid_file) {
+        Some((pid, declared)) => (Some(pid), declared),
+        // Fichero ausente/ilegible: el resto de la resolución decide (y avisa).
+        None => (None, None),
+    };
+
+    // C-17 (TL): si el PID file dice que ese kernel es de OTRA instancia, `stop`
+    // ABORTA. Un aviso que no frena acaba parando el kernel equivocado; `--force`
+    // es la salida explícita. Se comprueba antes de mirar procesos.
+    stop::instance_allows_stop(declared_instance.as_deref(), instance, force)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     let mut sys = System::new();
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
@@ -1506,7 +1549,7 @@ async fn run_stop(
             // single-candidate case where any kernel answering on the default
             // port IS that candidate.
             let graceful_port = if port.is_some() || candidates.len() == 1 {
-                Some(port.unwrap_or(DEFAULT_PORT))
+                Some(port.unwrap_or(instances::DEFAULT_PORT))
             } else {
                 None
             };
@@ -1655,6 +1698,8 @@ fn kernel_command(
     port: Option<u16>,
     install_dir: Option<&Path>,
     models_env: Option<&std::ffi::OsStr>,
+    data_dir: Option<&Path>,
+    instance: &str,
 ) -> Command {
     let mut cmd = Command::new(exe);
     if headless {
@@ -1668,6 +1713,16 @@ fn kernel_command(
     {
         cmd.env("TYLLUAN_MODELS_DIR", models_dir);
     }
+    // T4391: instancia con nombre — su DATA_DIR viaja al kernel. Sin esto, dos
+    // instancias en la misma máquina compartirían base de datos.
+    // T4391: instancia con nombre — su DATA_DIR viaja al kernel. Sin esto, dos
+    // instancias en la misma máquina compartirían base de datos.
+    if let Some(dir) = data_dir {
+        cmd.env("TYLLUAN_DATA_DIR", dir);
+    }
+    // C-17 (TL): el kernel escribe su instancia en el PID file, y para saberlo hay
+    // que decírselo al arrancar. Sin esto el PID file siempre diría `default`.
+    cmd.env("TYLLUAN_INSTANCE", instance);
     cmd
 }
 
@@ -1968,11 +2023,34 @@ mod installer_flag_tests {
 
     fn accepted_flags(subcommand: &str) -> BTreeSet<String> {
         let cmd = Cli::command();
-        cmd.find_subcommand(subcommand)
-            .unwrap_or_else(|| panic!("CLI lost its `{subcommand}` subcommand"))
+        // D192: los flags globales de la raíz (`--instance`) los acepta clap en
+        // cualquier subcomando, así que el modelo tiene que incluirlos. Antes
+        // solo miraba los argumentos del subcomando y habría rechazado
+        // `start --instance lab`, que el CLI acepta de verdad.
+        let mut flags: BTreeSet<String> = cmd
             .get_arguments()
+            .filter(|a| a.is_global_set())
             .filter_map(|a| a.get_long().map(|l| l.to_string()))
-            .collect()
+            .collect();
+        flags.extend(
+            cmd.find_subcommand(subcommand)
+                .unwrap_or_else(|| panic!("CLI lost its `{subcommand}` subcommand"))
+                .get_arguments()
+                .filter_map(|a| a.get_long().map(|l| l.to_string())),
+        );
+        flags
+    }
+
+    /// D192: `--instance` es global, y el instalador lo usa con `start`. Si
+    /// alguien le quita `global = true`, este test lo dice sin rodeos.
+    #[test]
+    fn d192_instance_es_un_flag_global_aceptado_en_start() {
+        assert!(
+            accepted_flags("start").contains("instance"),
+            "--instance debe ser aceptado por `tylluan start`: {:?}",
+            accepted_flags("start")
+        );
+        assert!(accepted_flags("install").contains("port"));
     }
 
     #[test]
@@ -2075,7 +2153,7 @@ mod installer_flag_tests {
             InstallProfile::Clinic,
             InstallProfile::Server,
         ] {
-            let cfg = generate_config(profile);
+            let cfg = generate_config(profile, instances::DEFAULT_PORT);
             let line = cfg
                 .lines()
                 .find(|l| l.trim_start().starts_with("transport"))
@@ -2088,9 +2166,26 @@ mod installer_flag_tests {
         }
     }
 
+    /// D192: el config de una instancia declara SU puerto. Mutación: volver a
+    /// un 47004 literal en la plantilla hace caer este test (y, en produccion,
+    /// el kernel de la instancia arrancaria en el puerto de `default`).
+    #[test]
+    fn d192_el_puerto_de_la_instancia_va_al_config() {
+        let cfg = generate_config(InstallProfile::Portable, 47005);
+        let line = cfg
+            .lines()
+            .find(|l| l.trim_start().starts_with("port"))
+            .expect("el config generado debe declarar el puerto");
+        assert!(line.contains("47005"), "el puerto pedido debe ir al config: {line}");
+        assert!(!line.contains("47004"), "no debe quedar el puerto de default: {line}");
+        // El valor por defecto sigue siendo el historico.
+        let default_cfg = generate_config(InstallProfile::Portable, instances::DEFAULT_PORT);
+        assert!(default_cfg.contains("47004"));
+    }
+
     #[test]
     fn test_generate_config_profiles() {
-        let portable = generate_config(InstallProfile::Portable);
+        let portable = generate_config(InstallProfile::Portable, instances::DEFAULT_PORT);
         assert!(portable.contains(r#"embedding_model = "none""#));
         assert!(portable.contains("vector_dimensions = 0"));
         // T1102(a): portable must ship with the reranker explicitly off so a
@@ -2105,7 +2200,7 @@ mod installer_flag_tests {
             "portable must disable the reranker (needs ONNX Runtime >= 1.22)"
         );
 
-        let clinic = generate_config(InstallProfile::Clinic);
+        let clinic = generate_config(InstallProfile::Clinic, instances::DEFAULT_PORT);
         assert!(clinic.contains(r#"embedding_model = "bge-small""#));
         assert!(clinic.contains("vector_dimensions = 384"));
         // Clinic/Server keep SilvaConfig's default (reranker_enabled = true);
@@ -2116,7 +2211,7 @@ mod installer_flag_tests {
             "clinic must not override the SilvaConfig reranker default"
         );
 
-        let server = generate_config(InstallProfile::Server);
+        let server = generate_config(InstallProfile::Server, instances::DEFAULT_PORT);
         assert!(server.contains(r#"embedding_model = "mxbai-embed-large""#));
         assert!(server.contains("vector_dimensions = 1024"));
         assert!(
@@ -2821,6 +2916,58 @@ mod d169_models_dir_tests {
             .map(|(_, value)| value)
     }
 
+    /// T4391: la instancia manda su `DATA_DIR` al kernel. Mutación: quitar el
+    /// `cmd.env("TYLLUAN_DATA_DIR", …)` de `kernel_command` hace caer este test.
+    #[test]
+    fn d191_exporta_el_data_dir_de_la_instancia() {
+        let instancia = Path::new(r"D:\tylluan-lab\data");
+        let cmd = kernel_command(
+            Path::new("tylluan-nexus"),
+            false,
+            Some(47009),
+            None,
+            None,
+            Some(instancia),
+            "default",
+        );
+        let envs: Vec<(String, Option<String>)> = cmd
+            .get_envs()
+            .map(|(k, v)| {
+                (
+                    k.to_string_lossy().to_string(),
+                    v.map(|v| v.to_string_lossy().to_string()),
+                )
+            })
+            .collect();
+        let data = envs.iter().find(|(k, _)| k == "TYLLUAN_DATA_DIR");
+        assert!(data.is_some(), "el kernel debe recibir TYLLUAN_DATA_DIR: {envs:?}");
+        assert_eq!(
+            data.unwrap().1.as_deref(),
+            Some(instancia.to_string_lossy().as_ref())
+        );
+    }
+
+    /// C-17 (TL): el arranque le dice al kernel a qué instancia pertenece, porque
+    /// es lo que luego escribe en el PID file. Mutación: quitar el
+    /// `cmd.env("TYLLUAN_INSTANCE", …)` hace caer este test.
+    #[test]
+    fn c17_el_kernel_recibe_su_instancia() {
+        let cmd = kernel_command(
+            Path::new("tylluan-nexus"),
+            false,
+            Some(47009),
+            None,
+            None,
+            None,
+            "lab",
+        );
+        let encontrado = envs(&cmd)
+            .into_iter()
+            .find(|(k, _)| k == "TYLLUAN_INSTANCE");
+        let (_, valor) = encontrado.expect("el kernel debe recibir TYLLUAN_INSTANCE");
+        assert_eq!(valor.as_deref(), Some("lab"));
+    }
+
     /// Sin variable del operador, el kernel recibe `<install>/models`.
     ///
     /// Mutación: quitar el `cmd.env(...)` de `kernel_command` hace caer este
@@ -2834,6 +2981,8 @@ mod d169_models_dir_tests {
             None,
             Some(install),
             None,
+            None,
+            "default",
         );
         let entry = models_entry(&cmd).expect("D-169: el kernel debe recibir TYLLUAN_MODELS_DIR");
         assert_eq!(
@@ -2854,6 +3003,8 @@ mod d169_models_dir_tests {
             None,
             Some(install),
             Some(operator),
+            None,
+            "default",
         );
         assert!(
             models_entry(&cmd).is_none(),
@@ -2877,6 +3028,8 @@ mod d169_models_dir_tests {
             Some(47151),
             Some(Path::new("/opt/tylluan")),
             None,
+            None,
+            "default",
         );
         assert!(
             cmd.get_current_dir().is_none(),
@@ -2895,7 +3048,7 @@ mod d169_models_dir_tests {
     /// el comportamiento anterior (el kernel decide, como hasta ahora).
     #[test]
     fn d169_sin_install_dir_no_exporta_nada() {
-        let cmd = kernel_command(Path::new("tylluan-nexus"), false, None, None, None);
+        let cmd = kernel_command(Path::new("tylluan-nexus"), false, None, None, None, None, "default");
         assert!(models_entry(&cmd).is_none(), "sin install dir no hay export");
     }
 }

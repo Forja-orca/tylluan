@@ -8,6 +8,7 @@ mod cleanup;
 use tylluan_kernel::config::{TylluanConfig, load_guild_config, models_dir_absolute};
 use tylluan_kernel::transport::server::TylluanServer;
 use tylluan_kernel::transport;
+use tylluan_kernel::transport::http::instance::{parse_pid_file, pid_file_body};
 use tylluan_kernel::registry::{guild_process::GuildRegistry, guild_list::LAZY_GUILDS, lifecycle, service_manager::ServiceManager, actor::RegistryActor};
 use tylluan_kernel::memory::{hybrid::HybridMemory, silva::SilvaDB, mailbox::Mailbox, coloquio::ColoquioDb, consensus::ConsensusEngine, agent_profile::AgentProfileStore, agent_memory::AgentMemoryManager};
 use tylluan_kernel::memory::agent_nodes::AgentNodeRouter;
@@ -303,7 +304,11 @@ fn decide_pid_action(
     let Some(old_pid_str) = read_pid() else {
         return (PeerDecision::NoFile, None); // missing / unreadable / empty
     };
-    let Ok(old_pid) = old_pid_str.trim().parse::<u32>() else {
+    // D192: el PID file puede traer la instancia en la segunda línea. Parsearlo
+    // con `parse::<u32>()` sobre todo el texto lo convertiría en basura y este
+    // guard concluiría "no hay fichero", sobrescribiendo el PID de un hermano
+    // vivo (el incidente del 2026-10-11 otra vez).
+    let Some((old_pid, _declared_instance)) = parse_pid_file(&old_pid_str) else {
         return (PeerDecision::NoFile, None); // garbage → nothing sane to act on
     };
     if !peer_alive(old_pid) {
@@ -399,7 +404,18 @@ fn anti_orphan_protection_and_gc(args: &[String], effective_port: Option<u16>) {
     // S2: write our own PID only when the file is not owned by a live sibling.
     let may_write = matches!(decision, PeerDecision::NoFile | PeerDecision::Stale | PeerDecision::SamePort);
     if may_write {
-        let _ = std::fs::write(&pid_file, std::process::id().to_string());
+        // T4391/C-17: el PID file dice A QUÉ INSTANCIA pertenece, para que `stop`
+        // no pare el kernel equivocado cuando hay varias en la misma máquina.
+        // Formato: primera línea el PID (compat con lectores antiguos), luego
+        // `instance=<nombre>`.
+        // Solo se declara instancia si alguien la dijo (el CLI la exporta). Un
+        // kernel arrancado a mano escribe el formato antiguo: no afirmamos
+        // `default` sobre un DATA_DIR que puede ser el de otra instancia.
+        let instancia = std::env::var("TYLLUAN_INSTANCE").ok();
+        let _ = std::fs::write(
+            &pid_file,
+            pid_file_body(std::process::id(), instancia.as_deref()),
+        );
     }
 
     cleanup::cleanup_residual_data();
@@ -2619,6 +2635,21 @@ mod anti_orphan_tests {
     fn empty_and_garbage_files_are_noop() {
         assert_eq!(decide_with(Some(47004), Some("   "), &[], &[]), (PeerDecision::NoFile, None));
         assert_eq!(decide_with(Some(47004), Some("not-a-pid"), &[], &[]), (PeerDecision::NoFile, None));
+    }
+
+    /// D192: el formato nuevo del PID file (segunda línea `instance=`) tiene que
+    /// seguir leyéndose. Si alguien vuelve a `trim().parse::<u32>()`, este test
+    /// cae con `NoFile` en vez de `Stale`.
+    #[test]
+    fn d192_pid_file_con_instancia_no_es_basura() {
+        assert_eq!(
+            decide_with(Some(47004), Some("1234\ninstance=lab\n"), &[], &[]),
+            (PeerDecision::Stale, Some(1234))
+        );
+        assert_eq!(
+            decide_with(Some(47004), Some("1234\ninstance=lab\n"), &[1234], &[(1234, Some(47004))]),
+            (PeerDecision::SamePort, Some(1234))
+        );
     }
 
     #[test]

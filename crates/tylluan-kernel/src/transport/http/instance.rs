@@ -45,9 +45,47 @@ pub fn write_active_port(path: &Path, port: u16) -> std::io::Result<()> {
     std::fs::write(path, text)
 }
 
+/// Prefijo de la línea de instancia del PID file (D192/T4391).
+pub const INSTANCE_LINE_PREFIX: &str = "instance=";
+
+/// Cuerpo del PID file: **primera línea el PID**, y `instance=<nombre>` solo si
+/// el kernel sabe a qué instancia pertenece.
+///
+/// La primera línea sigue siendo un entero a propósito: cualquier consumidor
+/// histórico que haga `kill -0 $(head -1 pid)` o `cat pid` sigue teniendo lo que
+/// espera (el segundo caso, fallando de forma ruidosa en vez de matando al azar).
+///
+/// `None` (o vacío) = nadie declaró instancia: se escribe **solo el PID**. Poner
+/// `default` por defecto sería afirmar algo que no es cierto para un kernel
+/// arrancado a mano con `TYLLUAN_DATA_DIR` de una instancia, y ese kernel luego
+/// no se podría parar con `--instance <la suya>` sin `--force`.
+pub fn pid_file_body(pid: u32, instance: Option<&str>) -> String {
+    match instance.map(str::trim).filter(|n| !n.is_empty()) {
+        Some(nombre) => format!("{pid}\n{INSTANCE_LINE_PREFIX}{nombre}\n"),
+        None => format!("{pid}\n"),
+    }
+}
+
+/// Parsea el PID file: `(pid, instancia_declarada)`.
+///
+/// La instancia es **opcional**: un fichero del formato antiguo (solo el número)
+/// sigue siendo válido y devuelve `None`. Un PID 0 tampoco vale.
+pub fn parse_pid_file(content: &str) -> Option<(u32, Option<String>)> {
+    let mut lineas = content.lines().map(str::trim).filter(|l| !l.is_empty());
+    let pid = lineas.next()?.parse::<u32>().ok().filter(|pid| *pid != 0)?;
+    let instancia = lineas
+        .find_map(|l| l.strip_prefix(INSTANCE_LINE_PREFIX))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    Some((pid, instancia))
+}
+
+/// PID del kernel según el fichero (primera línea). Un fichero con instancia
+/// **también** se lee: ver [`parse_pid_file`].
 pub fn read_pid(path: &Path) -> Option<u32> {
     let content = std::fs::read_to_string(path).ok()?;
-    content.trim().parse::<u32>().ok().filter(|pid| *pid != 0)
+    parse_pid_file(&content).map(|(pid, _)| pid)
 }
 
 /// True only when `pid` exists **and** is a tylluan-nexus process: a recycled
@@ -88,6 +126,65 @@ pub fn shutdown_target(
         return None;
     }
     Some(old_port)
+}
+
+#[cfg(test)]
+mod pid_format_tests {
+    use super::*;
+
+    /// El formato que escribe el kernel se vuelve a leer entero.
+    #[test]
+    fn d192_pid_file_ida_y_vuelta() {
+        let cuerpo = pid_file_body(4242, Some("lab"));
+        assert_eq!(cuerpo, "4242\ninstance=lab\n");
+        assert_eq!(parse_pid_file(&cuerpo), Some((4242, Some("lab".to_string()))));
+    }
+
+    /// Un PID file del formato antiguo sigue siendo válido (sin instancia).
+    #[test]
+    fn d192_pid_file_antiguo_sin_instancia() {
+        assert_eq!(parse_pid_file("4242\n"), Some((4242, None)));
+        assert_eq!(parse_pid_file("  4242  "), Some((4242, None)));
+    }
+
+    /// El segundo campo es una declaración, no una identidad verificada: un
+    /// nombre vacío no escribe línea (no inventa `default`).
+    #[test]
+    fn d192_instancia_vacia_no_declara_nada() {
+        assert_eq!(pid_file_body(7, Some("   ")), "7\n");
+    }
+
+    /// D192: un kernel arrancado a mano (sin `TYLLUAN_INSTANCE`) NO declara
+    /// instancia; su PID file es el formato antiguo y `stop --instance` no se
+    /// bloquea contra él. Mutación: volver a `unwrap_or("default")` hace caer
+    /// este test (y bloquea el stop de su propio kernel).
+    #[test]
+    fn d192_sin_instancia_no_se_declara_default() {
+        assert_eq!(pid_file_body(4242, None), "4242\n");
+        assert_eq!(parse_pid_file(&pid_file_body(4242, None)), Some((4242, None)));
+    }
+
+    /// Basura y PID 0 no se interpretan como un kernel vivo.
+    #[test]
+    fn d192_basura_y_cero_no_son_pid() {
+        assert_eq!(parse_pid_file("no soy un pid"), None);
+        assert_eq!(parse_pid_file(""), None);
+        assert_eq!(parse_pid_file("0\ninstance=lab\n"), None);
+        assert_eq!(parse_pid_file("instance=lab\n"), None);
+    }
+
+    /// `read_pid` (guard anti-huérfano) lee la primera línea aunque el fichero
+    /// lleve la instancia. Mutación: volver a `content.trim().parse::<u32>()`
+    /// hace caer este test.
+    #[test]
+    fn d192_read_pid_entiende_el_formato_nuevo() {
+        let dir = std::env::temp_dir().join(format!("tylluan-pidfmt-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tylluan-nexus.pid");
+        std::fs::write(&path, pid_file_body(4242, Some("lab"))).unwrap();
+        assert_eq!(read_pid(&path), Some(4242));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]
