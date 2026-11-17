@@ -10,6 +10,13 @@ interface HealthCommitPayload {
   version?: string;
 }
 
+interface WhoamiPayload {
+  agent_id?: string;
+  activity?: {
+    role?: string;
+  };
+}
+
 export interface HeaderInstanceBadgeProps {
   bridge: NexusBridge | null;
   buildCommit?: string;
@@ -44,6 +51,8 @@ export function HeaderInstanceBadge({
 }: HeaderInstanceBadgeProps) {
   const [kernelCommit, setKernelCommit] = useState<string>('');
   const [kernelVersion, setKernelVersion] = useState<string>('');
+  const [whoamiAgent, setWhoamiAgent] = useState<string>('');
+  const [whoamiRole, setWhoamiRole] = useState<string>('');
 
   const targetUrl = bridge?.getBaseUrl?.() || locationHref;
   const portLabel = extractPortLabel(targetUrl);
@@ -53,19 +62,41 @@ export function HeaderInstanceBadge({
     if (!bridge) {
       setKernelCommit('');
       setKernelVersion('');
+      setWhoamiAgent('');
+      setWhoamiRole('');
       return;
     }
     void (async () => {
-      try {
-        const res = await bridge.fetchRaw('/health');
-        if (!res || !res.ok) return;
-        const data = (await res.json()) as HealthCommitPayload;
-        if (!cancelled) {
-          setKernelCommit(typeof data?.commit === 'string' ? data.commit.trim() : '');
-          setKernelVersion(typeof data?.version === 'string' ? data.version.trim() : '');
+      const [healthRes, whoamiRes] = await Promise.allSettled([
+        bridge.fetchRaw('/health'),
+        bridge.fetchRaw('/api/v1/whoami'),
+      ]);
+
+      if (!cancelled && healthRes.status === 'fulfilled' && healthRes.value?.ok) {
+        try {
+          const data = (await healthRes.value.json()) as HealthCommitPayload;
+          if (!cancelled) {
+            setKernelCommit(typeof data?.commit === 'string' ? data.commit.trim() : '');
+            setKernelVersion(typeof data?.version === 'string' ? data.version.trim() : '');
+          }
+        } catch {
+          // Ignorar fallo de parseo auxiliar
         }
-      } catch {
-        // Ignorar fallo de lectura auxiliar
+      }
+
+      if (!cancelled && whoamiRes.status === 'fulfilled' && whoamiRes.value?.ok) {
+        try {
+          const wdata = (await whoamiRes.value.json()) as WhoamiPayload;
+          if (!cancelled) {
+            setWhoamiAgent(typeof wdata?.agent_id === 'string' ? wdata.agent_id.trim() : '');
+            setWhoamiRole(typeof wdata?.activity?.role === 'string' ? wdata.activity.role.trim() : '');
+          }
+        } catch {
+          // Ignorar fallo de lectura auxiliar
+        }
+      } else if (!cancelled) {
+        setWhoamiAgent('');
+        setWhoamiRole('');
       }
     })();
     return () => {
@@ -75,6 +106,10 @@ export function HeaderInstanceBadge({
 
   const hasMismatch = Boolean(buildCommit && kernelCommit && !commitsMatch(buildCommit, kernelCommit));
   const commitLabel = kernelCommit || '—';
+  const identityPrefix = whoamiAgent ? `${whoamiAgent} · ` : '';
+  const identityTitle = whoamiAgent
+    ? ` · whoami ${whoamiAgent}${whoamiRole ? ` (${whoamiRole})` : ''}`
+    : '';
 
   return (
     <div
@@ -82,8 +117,8 @@ export function HeaderInstanceBadge({
       data-testid="header-instance-badge"
       title={
         hasMismatch
-          ? `Kernel ${kernelVersion || ''} (${kernelCommit}) en ${targetUrl} difiere del dashboard (${buildCommit})`
-          : `Instancia ${targetUrl} · v${kernelVersion || '?'} (${commitLabel})`
+          ? `Kernel ${kernelVersion || ''} (${kernelCommit}) en ${targetUrl}${identityTitle} difiere del dashboard (${buildCommit})`
+          : `Instancia ${targetUrl} · v${kernelVersion || '?'} (${commitLabel})${identityTitle}`
       }
       className={cn(
         'hidden sm:flex items-center gap-1.5 px-2 py-1 rounded border text-[11px] font-mono shrink-0',
@@ -93,7 +128,7 @@ export function HeaderInstanceBadge({
       )}
     >
       <span>
-        {portLabel} · {commitLabel}
+        {identityPrefix}{portLabel} · {commitLabel}
       </span>
       {hasMismatch && (
         <span className="inline-flex items-center gap-1 font-sans font-semibold text-[10px]">

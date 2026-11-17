@@ -42,4 +42,65 @@ describe('HeaderInstanceBadge (T4368)', () => {
       expect(badge).toHaveTextContent(/Commit distinto \(90785663\)/i);
     });
   });
+
+  it('muestra agent_id y rol reales desde /api/v1/whoami en la insignia y tooltip', async () => {
+    const fetchRaw = vi.fn().mockImplementation(async (url: string) => {
+      if (url === '/health') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'ok', version: '0.17.2', commit: '621c9b44' }),
+        };
+      }
+      if (url === '/api/v1/whoami') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ agent_id: 'operator', activity: { role: 'admin' } }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+
+    const bridge = {
+      getBaseUrl: () => 'http://127.0.0.1:47005',
+      fetchRaw,
+    } as unknown as NexusBridge;
+
+    render(<HeaderInstanceBadge bridge={bridge} buildCommit="621c9b44" />);
+
+    await waitFor(() => {
+      const badge = screen.getByTestId('header-instance-badge');
+      expect(badge).toHaveTextContent('operator · :47005 · 621c9b44');
+      expect(badge).toHaveAttribute('title', expect.stringContaining('whoami operator (admin)'));
+    });
+  });
+
+  it('degrada sin romper si /api/v1/whoami devuelve 401', async () => {
+    const fetchRaw = vi.fn().mockImplementation(async (url: string) => {
+      if (url === '/health') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'ok', version: '0.17.2', commit: '621c9b44' }),
+        };
+      }
+      if (url === '/api/v1/whoami') {
+        return { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+
+    const bridge = {
+      getBaseUrl: () => 'http://127.0.0.1:47004',
+      fetchRaw,
+    } as unknown as NexusBridge;
+
+    render(<HeaderInstanceBadge bridge={bridge} buildCommit="621c9b44" />);
+
+    await waitFor(() => {
+      const badge = screen.getByTestId('header-instance-badge');
+      expect(badge).toHaveTextContent(':47004 · 621c9b44');
+    });
+  });
 });
