@@ -27,6 +27,7 @@ import { usePolling } from '../hooks/usePolling';
 import type { Guild, NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { GuildInspector } from './GuildInspector';
+import { RepoImporterMockup } from './RepoImporterMockup';
 import { CATEGORY_STYLE, DEPRECATED_GUILDS, getGuildCategory } from '../lib/guild-meta';
 import type { GuildCategory } from '../lib/guild-meta';
 
@@ -82,7 +83,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
  const [loading, setLoading] = useState<string | null>(null);
  const [dockerStatus, setDockerStatus] = useState<{ status: string; error?: string; version?: string } | null>(null);
  const [lastRestart, setLastRestart] = useState<Record<string, number>>({});
- const [subTab, setSubTab] = useState<'overview' | 'inspector'>('overview');
+ const [subTab, setSubTab] = useState<'overview' | 'inspector' | 'r5_router'>('overview');
 
  // Category filter state
  const [activeCategory, setActiveCategory] = useState<GuildCategory | 'all'>('all');
@@ -642,6 +643,20 @@ export function GuildsTab({ bridge, notify, events }: Props) {
  <Settings className="w-3.5 h-3.5" aria-hidden="true" />
  Inspector & Playground
  </button>
+ <button
+ type="button"
+ aria-pressed={subTab === 'r5_router'}
+ onClick={() => setSubTab('r5_router')}
+ className={cn(
+ 'flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-mono font-bold uppercase transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none',
+ subTab === 'r5_router'
+ ? 'border-blue-500 text-blue-400 bg-blue-500/5'
+ : 'border-transparent text-slate-400 hover:text-slate-200'
+ )}
+ >
+ <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
+ Importador R5
+ </button>
  </div>
 
  {subTab === 'overview' ? (
@@ -835,8 +850,10 @@ export function GuildsTab({ bridge, notify, events }: Props) {
  </div>
  )}
  </>
- ) : (
+ ) : subTab === 'inspector' ? (
  <GuildInspector bridge={bridge} notify={notify} guilds={guilds} />
+ ) : (
+ <RepoImporterMockup />
  )}
  </div>
  );
