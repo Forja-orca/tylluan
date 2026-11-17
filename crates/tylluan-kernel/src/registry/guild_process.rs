@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::process::Command;
 use tracing::{info, error, warn, debug};
 use std::sync::Arc;
@@ -768,7 +768,12 @@ GuildLauncher::Python { module_path } => {
                     error!("❌ find_python() failed: {}. Check .venv exists!", e);
                     e
                 })?;
-                
+                // Caso 3+10 del estudio INSTALL-PYTHON-DISCOVERY (T4346): el
+                // interprete se elige igual que antes, pero si no puede importar
+                // mcp/fastmcp/psutil hay que decirlo con ruta, version y arreglo
+                // en vez de dejar que cada guild se muera solo al arrancar.
+                warn_guild_deps_once(&python).await;
+
                 // S1: Docker sandbox — profile-based (guild-level only, no session)
                 // Strict: all guilds, Balanced: bash/code only, Permissive: none
                 // Uses resolve_docker_profile which excludes session overrides intentionally.
@@ -2438,6 +2443,107 @@ pub async fn find_python() -> Result<String> {
     )
 }
 
+/// Sonda de dependencias de los guilds: los mismos tres imports que ejecutan
+/// los instaladores (`install.sh:214` y `install.ps1:263`). Un interprete que
+/// puede con esto puede arrancar cualquier guild Python.
+const GUILD_DEPS_PROBE: &str = "import mcp, fastmcp, psutil";
+
+/// Comando de arreglo que se cita en el error (ruta relativa al release, igual
+/// que la documenta `install.sh:203`).
+const GUILD_DEPS_FIX_COMMAND: &str =
+    "-m pip install --require-hashes -r guilds/requirements-hashes.txt";
+
+/// Solo se sondea una vez por proceso: el arranque de guilds es en rafaga y no
+/// tiene sentido pagar un hijo extra por guild para saber lo mismo.
+static GUILD_DEPS_CHECKED: AtomicBool = AtomicBool::new(false);
+
+/// Mensaje de error para un interprete que no puede importar las dependencias
+/// de los guilds. Funcion pura a proposito: el mensaje es lo unico que el
+/// operador ve cuando los guilds se mueren al arrancar (caso medido 2026-11-16:
+/// python3 3.14 sin `mcp` => el guild filesystem muere a los 130 ms), asi que
+/// tiene que llevar SIEMPRE ruta del interprete, version y comando de arreglo.
+fn guild_deps_error_message(python: &str, version: &str, detail: &str) -> String {
+    let version = version.trim();
+    let detail = detail.trim();
+    let version_text = if version.is_empty() {
+        "desconocida".to_string()
+    } else {
+        version.to_string()
+    };
+    let detail_text = if detail.is_empty() {
+        "sin salida del interprete".to_string()
+    } else {
+        detail.to_string()
+    };
+    format!(
+        "El interprete de los guilds '{python}' no puede importar mcp/fastmcp/psutil \
+         (version: {version_text}). Los guilds Python no arrancaran y tylluan_do respondera \
+         'Unknown guild'. Arreglo: '{python}' {GUILD_DEPS_FIX_COMMAND} (o reinstala con \
+         el instalador, que crea <DataDir>/.venv con las dependencias). Detalle: {detail_text}"
+    )
+}
+
+/// Version de un interprete, juntando stdout y stderr porque no todas las
+/// builds de Python escriben `--version` en el mismo flujo.
+async fn python_version_line(python: &str) -> String {
+    match Command::new(python).arg("--version").output().await {
+        Ok(out) => {
+            let mut all = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            if !err.is_empty() {
+                if !all.is_empty() {
+                    all.push(' ');
+                }
+                all.push_str(&err);
+            }
+            all
+        }
+        Err(_) => String::new(),
+    }
+}
+
+/// Sondea el interprete elegido con los imports que exigen los guilds.
+///
+/// `None` = puede importarlos (o la sonda no aplica); `Some(mensaje)` = no
+/// puede, y ese mensaje es el que hay que registrar. **No cambia que
+/// interprete se elige**: solo informa, para no alterar el comportamiento de
+/// `find_python()` ni la ruta de arranque.
+async fn probe_guild_deps(python: &str) -> Option<String> {
+    match Command::new(python)
+        .arg("-c")
+        .arg(GUILD_DEPS_PROBE)
+        .output()
+        .await
+    {
+        Ok(out) if out.status.success() => None,
+        Ok(out) => {
+            let detail = if out.stderr.is_empty() {
+                String::from_utf8_lossy(&out.stdout).trim().to_string()
+            } else {
+                String::from_utf8_lossy(&out.stderr).trim().to_string()
+            };
+            let version = python_version_line(python).await;
+            Some(guild_deps_error_message(python, &version, &detail))
+        }
+        Err(e) => {
+            // El interprete ni siquiera se puede ejecutar (ruta rota, permisos).
+            Some(guild_deps_error_message(python, "", &e.to_string()))
+        }
+    }
+}
+
+/// Registra una sola vez si el interprete de los guilds puede importar sus
+/// dependencias. Se llama en la ruta de spawn, antes de lanzar el hijo.
+async fn warn_guild_deps_once(python: &str) {
+    if GUILD_DEPS_CHECKED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    match probe_guild_deps(python).await {
+        Some(message) => error!("{message}"),
+        None => debug!("Dependencias de los guilds OK en '{python}'"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3085,6 +3191,58 @@ mod tests {
         let result = find_python().await;
         // Just verify it returns Ok - path can be absolute or just "python"
         assert!(result.is_ok(), "find_python should succeed");
+    }
+
+    /// T4346: un interprete que no puede importar las dependencias de los
+    /// guilds tiene que producir un mensaje con ruta, version y comando de
+    /// arreglo. Se usa un ejecutable que no existe para que la sonda falle de
+    /// forma determinista en Windows y en Linux (no depende de si esta maquina
+    /// tiene o no `mcp` instalado en el python del sistema).
+    ///
+    /// Mutacion que debe hacerla fallar: quitar la rama `Err(e)` de
+    /// `probe_guild_deps` (devolver `None` cuando el hijo no arranca) o quitar
+    /// el `format!` y devolver un texto fijo sin la ruta.
+    #[tokio::test]
+    async fn t4346_probe_a_an_interpreter_that_cannot_start_returns_a_fixable_message() {
+        let missing = "tylluan-no-such-interpreter-t4346";
+        let message = probe_guild_deps(missing)
+            .await
+            .expect("un interprete que no arranca debe reportarse, no silenciarse");
+        assert!(
+            message.contains(missing),
+            "el mensaje debe nombrar el interprete elegido: {message}"
+        );
+        assert!(
+            message.contains("requirements-hashes.txt"),
+            "el mensaje debe dar el comando de arreglo: {message}"
+        );
+        assert!(
+            message.contains("mcp/fastmcp/psutil"),
+            "el mensaje debe decir que imports faltan: {message}"
+        );
+    }
+
+    /// T4346: el mensaje no puede quedarse en blanco cuando el interprete no
+    /// da version ni detalle (builds raras, permisos): dice "desconocida" y
+    /// "sin salida del interprete" en vez de dos huecos.
+    #[test]
+    fn t4346_message_survives_an_interpreter_without_version_or_detail() {
+        let message = guild_deps_error_message("/venv/bin/python", "", "");
+        assert!(message.contains("version: desconocida"), "{message}");
+        assert!(message.contains("sin salida del interprete"), "{message}");
+        assert!(message.contains("/venv/bin/python"), "{message}");
+
+        let with_data = guild_deps_error_message(
+            "C:\\tylluan\\.venv\\Scripts\\python.exe",
+            "Python 3.14.0",
+            "ModuleNotFoundError: No module named 'mcp'",
+        );
+        assert!(with_data.contains("Python 3.14.0"), "{with_data}");
+        assert!(with_data.contains("No module named 'mcp'"), "{with_data}");
+        assert!(
+            with_data.contains("C:\\tylluan\\.venv\\Scripts\\python.exe"),
+            "{with_data}"
+        );
     }
 
     #[tokio::test]
