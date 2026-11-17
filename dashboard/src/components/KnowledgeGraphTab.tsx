@@ -562,7 +562,9 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   Error al cargar recuerdos de SilvaDB
                 </h3>
                 <p className="text-[11px] text-slate-400 max-w-sm mt-1 leading-relaxed">
-                  {fetchError || 'No se pudo conectar con el endpoint del grafo de conocimiento SilvaDB.'}
+                  {fetchError && /(401|unauthorized|token)/i.test(fetchError)
+                    ? 'Autenticación requerida (HTTP 401): abre el botón «Token» en la cabecera e introduce tu .tylluan-token; después pulsa Reintentar.'
+                    : `${fetchError ? `${fetchError}. ` : ''}Comprueba que el kernel esté activo (tylluan-cli start) o revisa tu conexión local y pulsa Reintentar.`}
                 </p>
                 <button
                   type="button"

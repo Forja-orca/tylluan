@@ -68,6 +68,9 @@ export const StandbyGracefulBanner: React.FC<StandbyGracefulBannerProps> = ({
               El proceso soberano <span className="font-mono text-foreground">tylluan-nexus</span> está en ventana de reinicio, compilación o apagado temporal.
               El panel conserva tu contexto local y sondeará <span className="font-mono text-foreground">/health</span> automáticamente sin saturar el transporte.
             </p>
+            <p className="text-xs text-amber-800 dark:text-amber-200/90 leading-relaxed max-w-3xl">
+              Si el kernel está parado, ejecuta <code className="font-mono bg-amber-500/15 px-1 py-0.5 rounded">tylluan-cli start</code> en tu terminal o comprueba que el puerto del kernel responde y pulsa «Reconectar ahora».
+            </p>
             {lastKnownDetail && (
               <div className="flex items-center gap-2 pt-1 text-[11px] font-mono text-muted-foreground">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />

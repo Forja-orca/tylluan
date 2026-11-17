@@ -65,7 +65,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
       setSignal(signalStats);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(msg || 'Failed to reach Tylluan Kernel on :47004');
+      setError(msg || 'Failed to reach Tylluan Kernel');
     } finally {
       setLoading(false);
     }

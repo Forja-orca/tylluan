@@ -188,8 +188,18 @@ export function GeneralSettingsPanel({ bridge, notify }: GeneralSettingsPanelPro
     return `${s}s`;
   };
 
-  const hostVal = String((config?.nexus as Record<string, unknown>)?.host || '127.0.0.1');
-  const portVal = Number((config?.nexus as Record<string, unknown>)?.port || 47004);
+  const rawHost = (config?.nexus as Record<string, unknown>)?.host;
+  const hostVal = rawHost
+    ? String(rawHost)
+    : typeof window !== 'undefined' && window.location.hostname
+      ? window.location.hostname
+      : 'local';
+  const rawPort = (config?.nexus as Record<string, unknown>)?.port;
+  const portVal = rawPort
+    ? String(rawPort)
+    : typeof window !== 'undefined' && window.location.port
+      ? window.location.port
+      : '—';
   const devModeVal = Boolean((config?.nexus as Record<string, unknown>)?.dev_mode);
 
   return (

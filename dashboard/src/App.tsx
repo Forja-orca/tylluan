@@ -29,6 +29,7 @@ import { useAppStore } from './stores/useAppStore'
 import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthModal } from './components/ui/AuthModal'
+import { HeaderInstanceBadge } from './components/ui/HeaderInstanceBadge'
 import { MissingTokenBanner } from './components/ui/MissingTokenBanner'
 import { StandbyGracefulBanner } from './components/ui/StandbyGracefulBanner'
 
@@ -487,6 +488,8 @@ function App() {
           >
             <RefreshCw className={cn("w-4 h-4", retrying && "animate-spin text-primary")} aria-hidden="true" />
           </button>
+
+          <HeaderInstanceBadge bridge={bridge} />
 
           {online && healthDetailed ? (
             <div 

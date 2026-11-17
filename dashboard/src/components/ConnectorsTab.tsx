@@ -234,7 +234,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   // Snippets are built from the kernel's setup-hint (URL derived from the Host
   // the dashboard used to reach it — correct for legacy 3030, local 4000, or any
   // custom port). Never hardcode the port.
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:47004';
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const baseUrl = typeof bridge?.getBaseUrl === 'function' ? bridge.getBaseUrl() : originUrl;
   const sseUrl = hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url
     ?? `${baseUrl}/sse`;

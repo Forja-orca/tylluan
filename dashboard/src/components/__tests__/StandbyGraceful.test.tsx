@@ -30,6 +30,7 @@ describe('StandbyGracefulBanner & Real Probe Countdown', () => {
     expect(screen.getByText('Próxima sonda: 5s')).toBeInTheDocument();
     expect(screen.getByText(/Backoff AG-28: 5s/)).toBeInTheDocument();
     expect(screen.getByText(/Estado local preservado/)).toBeInTheDocument();
+    expect(screen.getByText(/tylluan-cli start/i)).toBeInTheDocument();
 
     const retryBtn = screen.getByRole('button', { name: /Reconectar ahora/i });
     fireEvent.click(retryBtn);

@@ -257,7 +257,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
  setMeshError('Request timed out after 10s. La consulta a /api/v1/mesh/peers excedió el tiempo límite.');
  } else {
  setMeshEndpointStatus('error');
- setMeshError(msg || 'Error al consultar /api/v1/mesh/peers en :47004');
+ setMeshError(msg || 'Error al consultar /api/v1/mesh/peers en el kernel');
  }
  setMeshPeers([]);
  setMeshStatus(null);
@@ -310,7 +310,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
  setFedNodesError('Request timed out after 10s. La consulta a /api/v1/federation/nodes excedió el tiempo límite.');
  } else {
  setFedNodesEndpointStatus('error');
- setFedNodesError(msg || 'Error al consultar /api/v1/federation/nodes en :47004');
+ setFedNodesError(msg || 'Error al consultar /api/v1/federation/nodes en el kernel');
  }
  setFedNodes([]);
  setFedNodesCount(0);

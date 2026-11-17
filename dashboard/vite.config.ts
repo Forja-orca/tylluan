@@ -1,9 +1,21 @@
 import react from "@vitejs/plugin-react"
+import { execSync } from "node:child_process"
 import { defineConfig } from "vite"
 
 const kernelTarget = process.env.VITE_KERNEL_TARGET || 'http://127.0.0.1:47004'
 
+function readBuildCommit(): string {
+  try {
+    return execSync('git rev-parse --short=8 HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    return '';
+  }
+}
+
 export default defineConfig({
+  define: {
+    __DASHBOARD_COMMIT__: JSON.stringify(readBuildCommit()),
+  },
   plugins: [
     react(),
   ],

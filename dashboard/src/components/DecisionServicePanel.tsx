@@ -147,7 +147,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
         setError('Request timed out after 10s. El endpoint tardó más de 10 segundos en responder.');
       } else {
         setEndpointStatus('error');
-        setError(msg || 'Error al consultar /api/v1/decide/shadow en :47004');
+        setError(msg || 'Error al consultar /api/v1/decide/shadow en el kernel');
       }
       setRows([]);
       setRawSummary([]);
@@ -362,7 +362,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                   ? 'Configura la credencial de operador en tu sesión para consultar el decision_shadow_log.'
                   : endpointStatus === 'pending_backend'
                   ? 'Mostrando los contratos canónicos de decisión; las filas de sombra se poblarán al responder GET /api/v1/decide/shadow.'
-                  : 'Comprueba el token Bearer de operador o el estado del kernel en :47004.'}
+                  : 'Comprueba el token Bearer de operador o el estado del kernel.'}
               </p>
             </div>
           </div>
