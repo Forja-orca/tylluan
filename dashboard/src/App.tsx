@@ -30,6 +30,7 @@ import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthModal } from './components/ui/AuthModal'
 import { HeaderInstanceBadge } from './components/ui/HeaderInstanceBadge'
+import { HeaderProdLagBadge } from './components/ui/HeaderProdLagBadge'
 import { MissingTokenBanner } from './components/ui/MissingTokenBanner'
 import { StandbyGracefulBanner } from './components/ui/StandbyGracefulBanner'
 
@@ -490,6 +491,7 @@ function App() {
           </button>
 
           <HeaderInstanceBadge bridge={bridge} />
+          <HeaderProdLagBadge bridge={bridge} />
 
           {online && healthDetailed ? (
             <div 
