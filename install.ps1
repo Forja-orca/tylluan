@@ -255,15 +255,42 @@ if ($PathEntries -notcontains $BinDir) {
 }
 
 # -- Instancias con nombre (D192) ---------------------------------------
-# `default` es la de siempre (%USERPROFILE%\.tylluan, 47004). Cualquier otro
+# `default` es la de siempre (%USERPROFILE%\.tylluan). Cualquier otro
 # nombre vive en .tylluan\instances\<nombre>, con su propio DATA_DIR y su
 # propio puerto, y queda declarado en $RegistryFile. El registro se escribe en
 # modo append-only: instalar una instancia NUNCA reescribe los bloques
 # existentes, y en particular nunca toca el de `default`.
-$DefaultInstancePort = 47004
+#
+# D194/T4437: el puerto por defecto NO se escribe aqui — se pregunta al CLI, que
+# es el dueno del valor (crates/tylluan-cli/src/instances.rs, DEFAULT_PORT). Este
+# script solo lo copia al registro y usa $Port en todo lo demas (health, PID,
+# `start`). Asi el numero vive en un solo sitio.
+# Se toma la ULTIMA linea (si el CLI escribe un aviso por stdout antes del numero)
+# y se valida el rango: un puerto de 6 cifras no es un puerto.
+$CliExe = Join-Path $BinDir "tylluan-cli.exe"
+$DefaultPortLines = @(& $CliExe --print-default-port 2>$null | ForEach-Object { "$_" })
+$DefaultInstancePort = if ($DefaultPortLines.Count -gt 0) { $DefaultPortLines[-1].Trim() } else { "" }
+
+# D195 (1): el Install Smoke instala con el CLI **publicado**, que puede ser
+# anterior a las instancias. Se le pregunta; si no sabe, se instala en modo
+# clasico (default, sin --port), que es lo que entiende.
+if ($DefaultInstancePort -match '^\d+$' -and [int]$DefaultInstancePort -ge 1 -and [int]$DefaultInstancePort -le 65535) {
+    $CliHasInstances = $true
+} else {
+    $CliHasInstances = $false
+    # FALLBACK (2): valor historico, SOLO para un CLI publicado anterior a D194
+    # (v0.17.2 y anteriores), que no conoce --print-default-port.
+    $DefaultInstancePort = 47004
+}
 
 if ($Instance -notmatch '^[A-Za-z0-9_-]+$') {
     Write-Err "Nombre de instancia invalido: '$Instance' (usa letras, numeros, '-' o '_')"
+}
+
+# D195: con un CLI que no conoce instancias, pedir una con nombre es un error
+# claro y temprano (no un `start --instance` que reventaria al final).
+if (-not $CliHasInstances -and $Instance -ne "default") {
+    Write-Err "El binario instalado ($CliExe) no soporta instancias con nombre: no conoce '--instance'. Instala sin -Instance, o usa un release posterior."
 }
 
 New-Item -ItemType Directory -Force -Path $TylluanHome | Out-Null
@@ -466,6 +493,18 @@ if ($SkipGuildDeps) {
     }
 }
 Write-Host ""
+# D195 (1): argumentos de `--port` para `install`. Vacio para `default` (su
+# puerto ya es el que escribe el config) y solo si el CLI lo anuncia.
+$InstallPortArg = @()
+if ($Instance -ne "default") {
+    $InstallHelp = (& "$BinDir\tylluan-cli" install --help 2>&1 | Out-String)
+    if ($InstallHelp -match '--port') {
+        $InstallPortArg = @('--port', "$Port")
+    } elseif ($CliHasInstances) {
+        Write-Err "Este binario no acepta 'install --port': no puedo fijar el puerto de la instancia '$Instance'."
+    }
+}
+
 # `install --profile portable` writes tylluan.toml AND boots the kernel
 # itself (chdir's to the config dir first so the kernel finds it). If a
 # config already exists it refuses without --force, so start directly --
@@ -489,8 +528,8 @@ if ($NoStart) {
         # que el $BinDir/$DataDir de este instalador (y el .venv quedaria
         # huerfano: los guilds caerian al Python del sistema).
         # --port (D192): el config generado tiene que declarar el puerto de ESTA
-        # instancia; si no, el kernel arrancaria en 47004 (el de `default`).
-        & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir" --port "$Port"
+        # instancia. D195: solo si el CLI lo anuncia; para `default` no hace falta.
+        & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir" @InstallPortArg
         if ($LASTEXITCODE -ne 0) {
             Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
         }
@@ -508,7 +547,7 @@ if ($NoStart) {
     } else {
         Write-Step "Installing portable profile (writes tylluan.toml + starts kernel)..."
         if ($Instance -eq "default") {
-            & "$BinDir\tylluan-cli" install --profile portable --dir "$DataDir" --port "$Port"
+            & "$BinDir\tylluan-cli" install --profile portable --dir "$DataDir" @InstallPortArg
             if ($LASTEXITCODE -ne 0) {
                 Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
             }
@@ -516,7 +555,7 @@ if ($NoStart) {
             # En modo instancia el config se escribe sin arrancar y el arranque va
             # por `start --instance`: es el unico camino que le pasa al kernel su
             # TYLLUAN_DATA_DIR (si no, usaria .\data-port-<puerto>).
-            & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir" --port "$Port"
+            & "$BinDir\tylluan-cli" install --profile portable --no-start --dir "$DataDir" @InstallPortArg
             if ($LASTEXITCODE -ne 0) {
                 Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
             }

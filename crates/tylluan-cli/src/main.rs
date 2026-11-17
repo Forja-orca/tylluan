@@ -413,8 +413,24 @@ fn resolve_guilds_core(candidates: &[PathBuf]) -> Option<PathBuf> {
         .find(|core| core.is_dir())
 }
 
+/// D194/T4437: ¿la invocación solo pide el puerto por defecto?
+///
+/// Se resuelve **antes de clap** a propósito: `command` es un subcomando
+/// obligatorio, así que `tylluan --print-default-port` no parsearía como flag de
+/// clap sin inventar un subcomando. Puro para poder testearlo.
+fn wants_default_port(args: &[String]) -> bool {
+    args.iter().any(|arg| arg == "--print-default-port")
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Los instaladores preguntan aquí en vez de llevar el 47004 escrito: el dueño
+    // del valor es `instances.rs`. Va antes de clap y antes de resolver la
+    // instancia (si el registro está roto, esto tiene que responder igual).
+    if wants_default_port(&std::env::args().collect::<Vec<_>>()) {
+        println!("{}", instances::DEFAULT_PORT);
+        return Ok(());
+    }
     let cli = Cli::parse();
     // T4391: el nombre de instancia resuelve puerto y DATA_DIR. Fail-closed: una
     // instancia no declarada es un error, no un fallback silencioso al 47004.
@@ -480,9 +496,8 @@ async fn main() -> Result<()> {
         Commands::Stop { port, data_dir, token, force } => {
             // T4391: parar la instancia que se pidió, no la de por defecto. Sin esto,
             // `stop --instance lab` apuntaba al PID/puerto de `default`.
-            let puerto = port.or(Some(inst_port));
             let dir = data_dir.or_else(|| inst.data_dir.clone());
-            run_stop(puerto, dir.as_deref(), token, &inst.name, force).await?;
+            run_stop(port, inst_port, dir.as_deref(), token, &inst.name, force).await?;
         }
         Commands::Status => {
             println!("🔍 Checking hub status...");
@@ -1478,8 +1493,25 @@ enum EvalAction {
     List,
 }
 
+/// R3 (Hermes/T4441): ¿este `stop` se apoya en un puerto/carpeta que pidió el
+/// operador, o puede caer al camino de candidatos?
+///
+/// El CLI inyecta SIEMPRE el puerto de la instancia, así que el valor resuelto
+/// nunca es `None`; si eso contara como "explícito", `stop` no podría caer nunca
+/// al camino de candidatos (con un PID file ausente decía "no hay kernel" y
+/// salía 0, sin parar nada). Solo cuentan las banderas del operador, y `--force`
+/// las relaja a propósito.
+fn stop_is_explicit(
+    port: Option<u16>,
+    data_dir: Option<&std::path::Path>,
+    force: bool,
+) -> bool {
+    (port.is_some() || data_dir.is_some()) && !force
+}
+
 async fn run_stop(
     port: Option<u16>,
+    instance_port: u16,
     data_dir: Option<&std::path::Path>,
     token: Option<String>,
     instance: &str,
@@ -1489,7 +1521,8 @@ async fn run_stop(
     // process whose name contains "tylluan-nexus". The PID file here is the
     // same one the kernel writes at boot (anti_orphan_protection_and_gc) and
     // removes at shutdown, resolved with the same precedence the kernel uses.
-    let data_dir_resolved = stop::resolve_pid_data_dir(data_dir, port);
+    let resolved_port = port.unwrap_or(instance_port);
+    let data_dir_resolved = stop::resolve_pid_data_dir(data_dir, Some(resolved_port));
     let pid_file = data_dir_resolved.join(stop::PID_FILE_NAME);
     let (pid_from_file, declared_instance) = match stop::read_pid_file_full(&pid_file) {
         Some((pid, declared)) => (Some(pid), declared),
@@ -1515,7 +1548,8 @@ async fn run_stop(
 
     // T-DSH-162: --port o --data-dir explicitos => SOLO se puede parar el kernel
     // que indique el PID file de ESA instancia; jamas el fallback a candidatos.
-    let explicit = port.is_some() || data_dir.is_some();
+    // R3: ver `stop_is_explicit` — el puerto inyectado por el CLI NO cuenta.
+    let explicit = stop_is_explicit(port, data_dir, force);
     let pid_alive = |pid: u32| sys.process(sysinfo::Pid::from_u32(pid)).is_some();
     let pid_is_kernel = |pid: u32| {
         sys.process(sysinfo::Pid::from_u32(pid))
@@ -1549,7 +1583,7 @@ async fn run_stop(
             // single-candidate case where any kernel answering on the default
             // port IS that candidate.
             let graceful_port = if port.is_some() || candidates.len() == 1 {
-                Some(port.unwrap_or(instances::DEFAULT_PORT))
+                Some(resolved_port)
             } else {
                 None
             };
@@ -2038,11 +2072,78 @@ mod installer_flag_tests {
                 .get_arguments()
                 .filter_map(|a| a.get_long().map(|l| l.to_string())),
         );
+        // D195: clap genera `--help`/`--version` en todos los subcomandos, así que
+        // preguntar por la ayuda (`tylluan install --help`) es legítimo aunque no
+        // estén declarados como argumentos.
+        flags.insert("help".to_string());
+        flags.insert("version".to_string());
         flags
     }
 
     /// D192: `--instance` es global, y el instalador lo usa con `start`. Si
     /// alguien le quita `global = true`, este test lo dice sin rodeos.
+    /// D194/T4437: el instalador no lleva el puerto escrito, lo pregunta; y lo
+    /// que imprime el CLI es exactamente `instances::DEFAULT_PORT`.
+    ///
+    /// Doble red: (1) el valor no puede divergir del constante, (2) el número no
+    /// puede reaparecer en los scripts (era lo que hacía saltar el aviso de
+    /// "contrato de puerto" del gate de no-depredación, falso positivo del modo
+    /// instancia: los puertos van a `instances.toml`, que no se commitea).
+    /// R3 (Hermes/T4441): el puerto que inyecta el CLI **no** hace que `stop` sea
+    /// explícito. Si contara, `stop` no podría caer nunca al camino de candidatos
+    /// y un PID file ausente se reportaba como "no hay kernel" (rc=0) sin parar
+    /// nada. Mutación: quitar `&& !force` deja `--force` sin efecto.
+    #[test]
+    fn d195_el_puerto_inyectado_no_hace_explicito_el_stop() {
+        // Sin banderas del operador: puede caer a candidatos (comportamiento previo).
+        assert!(!stop_is_explicit(None, None, false));
+        // `--port` o `--data-dir` explícitos: solo el kernel de esa instancia.
+        assert!(stop_is_explicit(Some(47009), None, false));
+        assert!(stop_is_explicit(None, Some(std::path::Path::new("/tmp/x")), false));
+        // `--force` relaja a propósito.
+        assert!(!stop_is_explicit(Some(47009), None, true));
+        assert!(!stop_is_explicit(None, Some(std::path::Path::new("/tmp/x")), true));
+    }
+
+    #[test]
+    fn d194_el_puerto_por_defecto_solo_vive_en_instances_rs() {
+        let pide = |args: &[&str]| {
+            wants_default_port(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>())
+        };
+        assert!(pide(&["tylluan", "--print-default-port"]));
+        assert!(!pide(&["tylluan", "status"]));
+        assert!(!pide(&["tylluan", "--instance", "lab", "start"]));
+
+        // El número solo puede vivir en el fallback documentado para CLIs
+        // publicados anteriores a D194 (T4441), y el script tiene que preguntar
+        // PRIMERO al CLI.
+        for (nombre, script) in [("install.sh", INSTALL_SH), ("install.ps1", INSTALL_PS1)] {
+            assert!(
+                script.contains("--print-default-port"),
+                "{nombre} debe preguntar el puerto al CLI"
+            );
+            assert!(
+                script.contains("FALLBACK"),
+                "{nombre}: el valor histórico tiene que estar marcado como fallback"
+            );
+            let con_numero: Vec<&str> = script
+                .lines()
+                .filter(|linea| linea.contains("47004"))
+                .collect();
+            assert_eq!(
+                con_numero.len(),
+                1,
+                "{nombre}: el 47004 solo puede estar en la línea del fallback, hay {con_numero:?}"
+            );
+            let linea = con_numero[0];
+            assert!(
+                linea.contains("DEFAULT_INSTANCE_PORT=47004")
+                    || linea.contains("$DefaultInstancePort = 47004"),
+                "{nombre}: el 47004 está fuera del fallback: {linea}"
+            );
+        }
+    }
+
     #[test]
     fn d192_instance_es_un_flag_global_aceptado_en_start() {
         assert!(

@@ -195,16 +195,51 @@ fi
 
 say ""
 # ── Instancias con nombre (D192) ───────────────────────────────────────
-# `default` es la de siempre (~/.tylluan, 47004). Cualquier otro nombre vive en
+# `default` es la de siempre (~/.tylluan). Cualquier otro nombre vive en
 # ~/.tylluan/instances/<nombre>, con su propio DATA_DIR y su propio puerto, y
 # queda declarado en ${REGISTRY_FILE}. El registro se escribe en modo
 # append-only: instalar una instancia NUNCA reescribe los bloques existentes, y
 # en particular nunca toca el de `default` (ni sus datos ni su config).
-DEFAULT_INSTANCE_PORT=47004
+#
+# D194/T4437: el puerto por defecto NO se escribe aqui — se pregunta al CLI, que
+# es el dueno del valor (crates/tylluan-cli/src/instances.rs, DEFAULT_PORT). Este
+# script solo lo copia al registro y usa $PORT en todo lo demas (health, PID,
+# `start`). Asi el numero vive en un solo sitio.
+# `tail -n 1`: si el CLI escribe un aviso por stdout antes del numero, quedarse con
+# TODO el flujo pegaba los digitos del aviso al puerto y salia un "puerto" de seis
+# cifras (medido: el instalador lo escribia en el registro sin quejarse). Ademas se
+# valida el rango, que es lo que corta ese caso.
+CLI="${BIN_DIR}/tylluan"
+# `|| true` dentro del grupo: con `set -o pipefail`, un CLI que no conoce el flag
+# sale con rc=2 y, al ser una asignacion, tumbaba el instalador entero (medido:
+# rc=2 sin ningun mensaje). El fallback existe justo para ese caso.
+DEFAULT_PORT_RAW="$({ "$CLI" --print-default-port 2>/dev/null || true; } | tail -n 1)"
+DEFAULT_INSTANCE_PORT="$(printf '%s' "$DEFAULT_PORT_RAW" | tr -dc '0-9')"
+
+# D195 (1): el Install Smoke instala con el CLI **publicado**, que puede ser
+# anterior a las instancias. Se le pregunta; si no sabe, se instala en modo
+# clasico (default, sin registro nuevo y sin --port), que es lo que entiende.
+if [ -n "$DEFAULT_INSTANCE_PORT" ] \
+  && [ "$DEFAULT_INSTANCE_PORT" -ge 1 ] \
+  && [ "$DEFAULT_INSTANCE_PORT" -le 65535 ]; then
+  CLI_HAS_INSTANCES=1
+else
+  CLI_HAS_INSTANCES=0
+  # FALLBACK (2): valor historico, SOLO para un CLI publicado anterior a D194
+  # (v0.17.2 y anteriores), que no conoce `--print-default-port`. Con un CLI que
+  # sabe contestar, este numero no se usa nunca.
+  DEFAULT_INSTANCE_PORT=47004
+fi
 
 case "$INSTANCE" in
   *[!A-Za-z0-9_-]*|"") err "Nombre de instancia invalido: '${INSTANCE}' (usa letras, numeros, '-' o '_')" ;;
 esac
+
+# D195: con un CLI que no conoce instancias, pedir una con nombre es un error
+# claro y temprano (no un `start --instance` que reventaria al final).
+if [ "$CLI_HAS_INSTANCES" -eq 0 ] && [ "$INSTANCE" != "default" ]; then
+  err "El binario instalado (${CLI}) no soporta instancias con nombre: no conoce '--instance'. Instala sin --instance, o usa un release posterior."
+fi
 
 mkdir -p "${TYLLUAN_HOME}"
 touch "${REGISTRY_FILE}"
@@ -288,11 +323,26 @@ else
 fi
 say ""
 
+# D195 (1): `--port` solo existe en CLIs nuevos y para `default` no hace falta
+# (su puerto ya es el que escribe el config). Se pasa unicamente si hay instancia
+# con nombre Y el CLI lo anuncia en `install --help`.
+INSTALL_PORT_ARG=""
+if [ "$INSTANCE" != "default" ]; then
+  if "$CLI" install --help 2>&1 | grep -q -- '--port'; then
+    INSTALL_PORT_ARG="--port ${PORT}"
+  elif [ "$CLI_HAS_INSTANCES" -eq 1 ]; then
+    err "Este binario no acepta 'install --port': no puedo fijar el puerto de la instancia '${INSTANCE}'."
+  fi
+fi
+
 KERNEL_DATA_DIR="${TYLLUAN_DATA_DIR:-${DATA_DIR}/data}"
 PID_FILE="${KERNEL_DATA_DIR}/tylluan-nexus.pid"
 OLD_PID=""
 if [ -f "$PID_FILE" ]; then
-  OLD_PID=$(cat "$PID_FILE" 2>/dev/null || true)
+  # D195/R1 (Hermes): el PID file puede llevar una segunda linea `instance=…`;
+# leerlo entero metia "PID\ninstance=x" en la comparacion y `kill -0` fallaba con
+# el kernel vivo.
+OLD_PID=$(head -1 "$PID_FILE" 2>/dev/null || true)
 fi
 # ── Python guilds (the 45 Python tool plugins) ─────────────────────────
 # Policy: NEVER pip-install into the user's system Python from an installer
@@ -393,8 +443,8 @@ if [ "$NO_START" -eq 1 ]; then
     # tylluan.toml en un home distinto del DATA_DIR de este instalador, dejando
     # huerfano el .venv que creamos aqui. Fijarlo mantiene todo junto.
     # --port (D192): el config generado tiene que declarar el puerto de ESTA
-    # instancia; si no, el kernel arrancaria en 47004 (el de `default`).
-    "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}" --port "${PORT}"
+    # instancia; si no, el kernel arrancaria en el puerto de `default`.
+    "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}" ${INSTALL_PORT_ARG}
   fi
 else
   if [ -f "${DATA_DIR}/tylluan.toml" ]; then
@@ -407,12 +457,12 @@ else
   else
     say "Installing portable profile (writes tylluan.toml + starts kernel)..."
     if [ "$INSTANCE" = "default" ]; then
-      "${BIN_DIR}/tylluan" install --profile portable --dir "${DATA_DIR}" --port "${PORT}"
+      "${BIN_DIR}/tylluan" install --profile portable --dir "${DATA_DIR}" ${INSTALL_PORT_ARG}
     else
       # En modo instancia el config se escribe sin arrancar y el arranque va por
       # `start --instance`: es el unico camino que le pasa al kernel su
       # TYLLUAN_DATA_DIR (si no, el kernel usaria ./data-port-<puerto>).
-      "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}" --port "${PORT}"
+      "${BIN_DIR}/tylluan" install --profile portable --no-start --dir "${DATA_DIR}" ${INSTALL_PORT_ARG}
       (cd "${DATA_DIR}" && "${BIN_DIR}/tylluan" start --instance "${INSTANCE}") &
     fi
   fi
@@ -421,7 +471,7 @@ else
   KERNEL_PID=""
   for i in $(seq 1 30); do
     if [ -f "$PID_FILE" ]; then
-      KERNEL_PID=$(cat "$PID_FILE" 2>/dev/null || true)
+      KERNEL_PID=$(head -1 "$PID_FILE" 2>/dev/null || true)  # D195/R1
       if [ -n "$KERNEL_PID" ] && kill -0 "$KERNEL_PID" 2>/dev/null; then
         break
       fi
