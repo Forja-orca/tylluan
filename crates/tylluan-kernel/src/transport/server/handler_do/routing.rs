@@ -191,6 +191,30 @@ pub(crate) async fn resolve_guild_name(
                             }
                     }
 
+        // ADR-033 R2 (D202): recuperador BM25 **opt-in** (`[nexus] bm25_retriever`,
+        // apagado por defecto). Con el flag encendido se prueba primero BM25 sobre
+        // los descriptores; si no encuentra nada, se sigue con el matcher de
+        // siempre — el fallback es parte del contrato, no un extra.
+        // `.read().await`, NO `blocking_read()`: esto corre dentro del runtime y
+        // bloquear ahí panickea («Cannot block the current thread from within a
+        // runtime»). Lo cazó la suite completa con 3 tests del servidor.
+        let bm25_enabled = match crate::config::TylluanConfig::load_cached() {
+            Ok(cfg) => cfg.read().await.nexus.bm25_retriever,
+            Err(_) => false,
+        };
+        if bm25_enabled
+            && let Some(guild) = crate::router::bm25::bm25_candidate(
+                true,
+                server.matcher.available_guilds(),
+                &intent_for_matching,
+            )
+            && server.matcher.available_guilds().iter().any(|g| g.name == guild)
+        {
+            info!("🔎 BM25 retriever (ADR-033 R2): '{}' → {}", intent_for_matching, guild);
+            trace.push(format!("bm25_retriever='{guild}'"));
+            return Ok((guild, trace));
+        }
+
         match server.matcher.match_guild(&intent_for_matching, query_embedding.as_deref(), 0.25, ctx_ref) {
             Some(m) => {
                 // RFL Guard (R20-1): check for recorded routing failures

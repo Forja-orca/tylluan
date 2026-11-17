@@ -738,6 +738,14 @@ pub struct NexusConfig {
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
 
+    /// ADR-033 R2 (D202): usar el recuperador **BM25 sobre descriptores** para
+    /// elegir guild cuando no hay `guild_hint`. Apagado por defecto: ADR-033 sigue
+    /// en estado *Propuesto*, así que encenderlo es una decisión del operador.
+    /// Si está encendido y BM25 no encuentra nada, el enrutador sigue su camino
+    /// actual (fallback), no falla.
+    #[serde(default)]
+    pub bm25_retriever: bool,
+
     /// Dev mode: disables authentication for local development
     /// Set to true while prototyping, false for production
     #[serde(default)]
@@ -822,6 +830,7 @@ impl Default for NexusConfig {
             port_retry_secs: default_port_retry_secs(),
             transport: default_transports(),
             timeouts: TimeoutsConfig::default(),
+            bm25_retriever: false,
             dev_mode: false,
             expose_guild_tools: false,
             allowed_origins: Vec::new(),

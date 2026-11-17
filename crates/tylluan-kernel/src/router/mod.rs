@@ -9,6 +9,8 @@
 
 pub mod catalog;
 pub mod matcher;
+/// ADR-033 R2: recuperador BM25 sobre descriptores (D202).
+pub mod bm25;
 pub mod complexity;
 pub mod embeddings;
 pub mod light_reranker;
