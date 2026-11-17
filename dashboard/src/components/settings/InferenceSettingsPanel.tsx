@@ -26,6 +26,7 @@ import {
   EngineAdvancedAccordion
 } from './inference/EngineAdvancedAccordion';
 import { AddProviderDrawer } from './inference/AddProviderDrawer';
+import { StrataConcurrencyPanel } from './inference/StrataConcurrencyPanel';
 
 export interface InferenceSettingsPanelProps {
   bridge: NexusBridge | null;
@@ -673,6 +674,9 @@ export function InferenceSettingsPanel({
         vectorDimensions={vectorDimensions}
         engineCapabilities={engineCapabilities}
       />
+
+      {/* SECCIÓN 2b: Concurrencia Strata (Mock GET /v1/status) */}
+      <StrataConcurrencyPanel />
 
       {/* SECCIÓN 3: Ajustes Avanzados & Motor de Inferencia (Acordeón Colapsable) */}
       <EngineAdvancedAccordion
