@@ -2105,6 +2105,34 @@ mod installer_flag_tests {
         assert!(!stop_is_explicit(None, Some(std::path::Path::new("/tmp/x")), true));
     }
 
+    /// D195/H1 (Hermes, pedido del TL en D198): candado del arreglo del Install
+    /// Smoke. El rojo del run 44050072960 fue `install … --port` con el CLI
+    /// publicado, que no lo conoce. Los scripts tienen que **preguntar**
+    /// (`install --help`) y pasar el puerto por variable, nunca escrito a mano.
+    /// Mutación: volver a `… --dir "${DATA_DIR}" --port "${PORT}"` lo tumba.
+    #[test]
+    fn d195_el_port_se_pasa_solo_tras_preguntar_al_cli() {
+        for (nombre, script, var, pregunta) in [
+            ("install.sh", INSTALL_SH, "${INSTALL_PORT_ARG}", "install --help"),
+            ("install.ps1", INSTALL_PS1, "@InstallPortArg", "install --help"),
+        ] {
+            assert!(
+                script.contains(pregunta),
+                "{nombre}: debe preguntar al CLI si soporta --port ({pregunta})"
+            );
+            assert!(
+                script.contains(var),
+                "{nombre}: la invocación debe pasar el puerto por {var}"
+            );
+            for linea in script.lines().filter(|l| l.contains("install --profile")) {
+                assert!(
+                    !linea.contains("--port"),
+                    "{nombre}: `--port` escrito en la invocación de install: {linea}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn d194_el_puerto_por_defecto_solo_vive_en_instances_rs() {
         let pide = |args: &[&str]| {

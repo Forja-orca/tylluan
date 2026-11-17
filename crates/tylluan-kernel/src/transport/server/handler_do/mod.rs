@@ -39,6 +39,7 @@ mod skill;
 mod correct;
 mod a2a;
 mod outcome;
+mod guild_args;
 mod prepare;
 mod sentinel_cmd;
 mod llama_cmd;

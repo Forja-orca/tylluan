@@ -10,6 +10,7 @@ use tracing::{info, warn};
 use super::TylluanServer;
 use super::error_prefixes;
 use super::external_mcp;
+use super::guild_args;
 use super::coloquio_utils::{_parse_coloquio_pagination, parse_coloquio_intent};
 use super::is_bash_state_intent;
 use super::outcome::penalize_lesson_fn;
@@ -24,6 +25,23 @@ pub(super) struct ResolvedToolCall {
     pub(super) tool_args: serde_json::Value,
     pub(super) routing_trace: Vec<String>,
     pub(super) call_params: CallToolRequestParam,
+}
+
+/// ADR-033 R1 (D198): qué parte del mapa de `tylluan_do` se valida contra el
+/// esquema de la tool.
+///
+/// `arguments` es el mapa **completo** del handler (`intent`, `guild`,
+/// `agent_id`, `remember`, `plan`…, ver `mod.rs:174-186`). Los argumentos de la
+/// tool son el sub-objeto `args`, la misma regla que el camino externo
+/// (`external_mcp::explicit_args_from`). Pasar el mapa entero marcaba `intent` y
+/// `guild` como «unknown field» y habría convertido en error toda llamada en
+/// lenguaje natural a un guild con esquema declarado.
+fn finalize_guild_args(
+    schema: &serde_json::Value,
+    draft: &serde_json::Value,
+    arguments: &Option<serde_json::Map<String, serde_json::Value>>,
+) -> Result<guild_args::FinalArgs, String> {
+    guild_args::finalize(schema, draft, external_mcp::explicit_args_from(arguments))
 }
 
 /// Stage 1: resolve guild, apply ACL/rate-limit, select tool, build call params.
@@ -127,20 +145,26 @@ pub(super) async fn resolve_and_prepare_tool_call(
         )));
     }
 
-    let mut tool_name = {
+    // ADR-033 R1: además del nombre de la tool se trae su **esquema** declarado,
+    // que es lo que decide qué argumentos existen (ver `guild_args::finalize`).
+    let (mut tool_name, tool_schema) = {
         let reg = server.registry.read().await;
         if let Some(guild) = reg.guilds.get(&guild_name) {
             use crate::router::matcher::{tokenize, keyword_score};
             let tokens = tokenize(effective_intent);
-            guild.tools.iter()
+            let best = guild.tools.iter()
                 .max_by(|a, b| {
                     let sa = keyword_score(&tokens, a.description.as_ref(), a.name.as_ref());
                     let sb = keyword_score(&tokens, b.description.as_ref(), b.name.as_ref());
                     sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .map(|t| t.name.to_string())
-                .unwrap_or_default()
-        } else { String::new() }
+                .unwrap_or_default();
+            let schema = guild.tools.iter()
+                .find(|t| t.name.as_ref() == best)
+                .map(|t| serde_json::Value::Object((*t.input_schema).clone()));
+            (best, schema)
+        } else { (String::new(), None) }
     };
 
     if tool_name.is_empty() {
@@ -363,6 +387,26 @@ pub(super) async fn resolve_and_prepare_tool_call(
         )));
     }
 
+    // ADR-033 R1: el borrador (blob histórico + pistas + ajustes por guild) se
+    // recorta a los campos que la tool **declara** y se valida lo requerido. Lo
+    // que no se pueda rellenar produce un error correctivo con la lista de lo que
+    // acepta la tool, en vez de mandarle campos que no pidió.
+    //
+    // Nota histórica: el 2026-10-08 se QUITÓ una compuerta de `required_args`
+    // porque comparaba por prefijos rígidos y rompía a clientes reales
+    // (Hermes/Qwen). Esto no es aquello: corre **después** de todo el rellenado y
+    // contra el `inputSchema` de la tool, no contra una lista de prefijos.
+    if let Some(schema) = tool_schema.as_ref() {
+        match finalize_guild_args(schema, &tool_args, arguments) {
+            Ok(guild_args::FinalArgs::Declared(v))
+            | Ok(guild_args::FinalArgs::Unchecked(v)) => tool_args = v,
+            Err(msg) => {
+                penalize_lesson_fn(intent, server.silva.clone());
+                return Err(error_result(&format!("{}{msg}", error_prefixes::MISSING_ARGS)));
+            }
+        }
+    }
+
     let call_params = CallToolRequestParam {
         name: tool_name.clone().into(),
         arguments: Some(tool_args.as_object().cloned().unwrap_or_default()),
@@ -487,4 +531,118 @@ pub(super) async fn execute_guild_call_with_progress(
     }
 
     (result, latency_ms)
+}
+
+#[cfg(test)]
+mod d198_explicit_args_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// El mapa COMPLETO que el handler pasa a Stage 1 en una llamada en lenguaje
+    /// natural (`mod.rs:174-186` lee estos campos y `mod.rs:576` pasa el mapa).
+    fn mapa_completo() -> Option<serde_json::Map<String, serde_json::Value>> {
+        Some(
+            json!({
+                "intent": "lista los ficheros de /tmp/x",
+                "guild": "filesystem",
+                "agent_id": "deep",
+                "remember": true,
+                "plan": false
+            })
+            .as_object()
+            .cloned()
+            .unwrap(),
+        )
+    }
+
+    /// El borrador que fabrica `prepare` (blob de alias + pistas).
+    fn borrador(intent: &str) -> serde_json::Value {
+        json!({
+            "command": intent, "intent": intent, "task": intent,
+            "query": intent, "text": intent, "content": intent,
+            "prompt": intent, "message": intent, "input": intent,
+            "server_url": "", "url": "",
+            "timeout_secs": 30, "language": "", "depth": 2, "max_results": 50,
+        })
+    }
+
+    fn esquema() -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"]
+        })
+    }
+
+    /// **D198 — el hallazgo del TL**: con el mapa completo de `tylluan_do` (que es
+    /// lo que llega de verdad), la llamada en lenguaje natural **no** puede
+    /// fallar por `intent`/`guild` como campos desconocidos.
+    /// Mutación: hacer que `finalize_guild_args` pase `arguments.as_ref()` (el
+    /// mapa entero) pone este test en FAILED.
+    #[test]
+    fn d198_el_mapa_completo_de_tylluan_do_no_rompe_la_llamada() {
+        let args = mapa_completo();
+        match finalize_guild_args(&esquema(), &borrador("lista /tmp/x"), &args) {
+            Ok(guild_args::FinalArgs::Declared(v)) => {
+                assert_eq!(v, json!({"query": "lista /tmp/x"}));
+            }
+            Ok(guild_args::FinalArgs::Unchecked(_)) => panic!("el esquema declara query"),
+            Err(e) => panic!("el mapa completo de tylluan_do no debe ser 'explicit': {e}"),
+        }
+    }
+
+    /// La prueba del bug, explícita: si se pasa el mapa completo **como si fueran**
+    /// argumentos de la tool, el error nombra `intent` y `guild`. Se deja como
+    /// test para que quede escrito por qué el helper existe.
+    #[test]
+    fn d198_pasar_el_mapa_completo_como_explicit_si_seria_un_error() {
+        let args = mapa_completo();
+        let e = match guild_args::finalize(&esquema(), &borrador("lista"), args.as_ref()) {
+            Err(e) => e,
+            Ok(_) => panic!("con el mapa completo como explicit tenía que fallar"),
+        };
+        assert!(e.contains("unknown field(s)"), "{e}");
+        assert!(e.contains("intent") && e.contains("guild"), "{e}");
+    }
+
+    /// Los argumentos de la tool siguen validándose cuando vienen en `args`.
+    #[test]
+    fn d198_args_explicitos_siguen_validando() {
+        let ok = Some(
+            json!({"intent": "lista /tmp/x", "args": {"query": "/tmp/x"}})
+                .as_object()
+                .cloned()
+                .unwrap(),
+        );
+        let declarados = match finalize_guild_args(&esquema(), &borrador("x"), &ok) {
+            Ok(guild_args::FinalArgs::Declared(v)) => v,
+            Ok(_) => panic!("esperaba argumentos declarados, no 'unchecked'"),
+            Err(e) => panic!("error inesperado: {e}"),
+        };
+        assert_eq!(declarados, json!({"query": "/tmp/x"}));
+
+        let malo = Some(
+            json!({"intent": "lista", "args": {"pattern": "*"}})
+                .as_object()
+                .cloned()
+                .unwrap(),
+        );
+        let e = match finalize_guild_args(&esquema(), &borrador("x"), &malo) {
+            Err(e) => e,
+            Ok(_) => panic!("un args con campo no declarado debe fallar"),
+        };
+        assert!(e.contains("unknown field(s): pattern"), "{e}");
+    }
+
+    /// Sin `args` y con el mapa completo: camino por intent, sin error.
+    #[test]
+    fn d198_sin_args_el_intent_manda() {
+        let args = mapa_completo();
+        match finalize_guild_args(&esquema(), &borrador("busca el informe"), &args) {
+            Ok(guild_args::FinalArgs::Declared(v)) => {
+                assert_eq!(v, json!({"query": "busca el informe"}));
+            }
+            _ => panic!("esperaba argumentos declarados"),
+        }
+    }
 }
