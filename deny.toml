@@ -71,7 +71,9 @@ ignore = [
     # (dependencia ajena; tylluan-kernel la usa como cliente MCP) y además la usan
     # directamente tylluan-kernel y tylluan-cli en ~30 módulos (`cargo tree -i chrono`).
     # El aviso recomienda `jiff` o `time`: es una migración de fechas en todo el workspace.
-    # Mientras `rmcp` la arrastre, quitarla del todo sigue dejando el aviso.
+    # Medido 2026-11-17 en el indice disperso de crates.io: de las **73** versiones
+# publicadas de `rmcp`, **las 73** dependen de chrono (la ultima, 3.10.0, `^0.4.38` y NO
+# opcional). No hay version de rmcp que permita salir del aviso por esa via.
     # Revisión: 2026-11-17 — Dueño: Deep (triaje de dependencias). Reabrir cuando `rmcp`
     # publique una versión sin chrono, o al planificar la migración a `jiff`/`time`.
     "RUSTSEC-2026-0543",
