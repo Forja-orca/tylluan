@@ -350,6 +350,13 @@ impl TylluanServer {
                 if !resolved && !approved {
                     // Reject by removing the grant without sending (receiver gets Canceled)
                     resolved = crate::security::grants::remove(request_id).await;
+                    // Jose 2026-11-16: un RECHAZO de un plan no lo borraba nadie --
+                    // `remove()` solo mira el store de grants, así que el plan seguía
+                    // pendiente y la tool respondía «Action not found». El plan
+                    // rechazado se retira aquí.
+                    if !resolved && crate::security::grants::remove_plan(request_id).await {
+                        resolved = true;
+                    }
                 }
                 if resolved {
                     Ok(CallToolResult { content: vec![Content::text("✅ Action resolved".to_string())], is_error: Some(false) })
@@ -1193,6 +1200,30 @@ mod tests {
         let plan = crate::security::grants::get_plan("hold-d184-sinmotivo").await;
         assert!(plan.map(|p| p.held.is_none()).unwrap_or(true));
         crate::security::grants::remove_plan("hold-d184-sinmotivo").await;
+    }
+
+    /// Jose 2026-11-16: rechazar un PLAN por `approve_action` tiene que borrarlo.
+    /// Antes `remove()` solo miraba grants, el plan seguía pendiente y la tool
+    /// respondía «Action not found» — el rechazo no rechazaba nada.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_rechazar_un_plan_lo_borra() {
+        let server = test_server().await;
+        seed_plan("reject-plan-d189", Some("agent-a"), "d189:reject:plan").await;
+
+        let mut args = serde_json::Map::new();
+        args.insert("requestId".to_string(), serde_json::json!("reject-plan-d189"));
+        args.insert("approved".to_string(), serde_json::json!(false));
+        args.insert("agent_id".to_string(), serde_json::json!("agent-b"));
+        let result = server
+            .handle_kernel_tool("approve_action", Some(args))
+            .await
+            .expect("rechazar no debe fallar a nivel de transporte");
+
+        assert_eq!(result.is_error, Some(false), "rechazar es una acción válida: {}", tool_text(&result));
+        assert!(
+            crate::security::grants::get_plan("reject-plan-d189").await.is_none(),
+            "el plan rechazado debe desaparecer, no quedarse pendiente"
+        );
     }
 
 }

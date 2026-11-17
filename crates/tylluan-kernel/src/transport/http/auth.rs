@@ -344,7 +344,39 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
     if m == "POST" && (path == "/api/v1/silva/edge" || path == "/api/v1/silva/consolidate") {
         return true;
     }
+    // D-13/D193: aprobar, rechazar, retener o retirar un plan pendiente ES la
+    // decisión (can_approve). Sin esto las 4 rutas POST nuevas quedaban fuera
+    // del gate y un JWT de dev_mode podía aprobar. La lectura
+    // (GET /api/v1/approvals) sigue siendo agent-class: ver el estado no
+    // autoriza nada.
+    if m != "GET" && (path == "/api/v1/approvals" || path.starts_with("/api/v1/approvals/")) {
+        return true;
+    }
     false
+}
+
+#[cfg(test)]
+mod approvals_operator_class_tests {
+    use super::*;
+
+    /// D193: las cuatro acciones sobre un plan pendiente son de operador; el
+    /// listado no. Mutación: quitar el bloque de `/api/v1/approvals` deja las
+    /// cuatro en `false` y cae este test (el inventario también caería).
+    #[test]
+    fn d193_las_acciones_sobre_un_plan_son_de_operador() {
+        for action in ["approve", "reject", "hold", "withdraw"] {
+            let path = format!("/api/v1/approvals/abc-123/{action}");
+            assert!(
+                operator_class_required("POST", &path),
+                "POST {path} debe ser clase Operador (can_approve)"
+            );
+        }
+        // El listado/lectura NO: ver estado no autoriza la decisión.
+        assert!(!operator_class_required("GET", "/api/v1/approvals"));
+        assert!(!operator_class_required("GET", "/api/v1/approvals/abc-123"));
+        // Y una ruta con prefijo parecido no se cuela por el `starts_with`.
+        assert!(!operator_class_required("POST", "/api/v1/approvalsXYZ"));
+    }
 }
 
 /// Which auth kinds satisfy the operator class. Fail-closed on absence.

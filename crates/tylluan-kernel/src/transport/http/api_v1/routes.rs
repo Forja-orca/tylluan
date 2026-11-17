@@ -180,6 +180,10 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/metrics", get(metrics_handler))
         // Jose 2026-11-15: lectura de lo que espera un criterio (grants + planes).
         .route("/api/v1/approvals", get(api_approvals::list_approvals_handler))
+        .route("/api/v1/approvals/{id}/approve", post(api_approvals::approve_handler))
+        .route("/api/v1/approvals/{id}/reject", post(api_approvals::reject_handler))
+        .route("/api/v1/approvals/{id}/hold", post(api_approvals::hold_handler))
+        .route("/api/v1/approvals/{id}/withdraw", post(api_approvals::withdraw_handler))
         .route("/api/v1/agents", get(agents_list_handler))
         .route("/api/v1/collective/suggest", get(collective_suggest_handler))
 
