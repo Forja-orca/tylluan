@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Download,
   ScanSearch,
@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   XCircle,
   RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -21,7 +22,7 @@ export type ImporterMockState =
   | 'activo'
   | 'rechazado';
 
-interface SimulatedProposal {
+export interface SimulatedProposal {
   repoName: string;
   guildName: string;
   tools: string[];
@@ -30,6 +31,11 @@ interface SimulatedProposal {
   routeSample: string;
   precisionPct: number;
   stolenQueries: number;
+}
+
+export interface RepoImporterMockupProps {
+  /** Mock asíncrono opcional para simular carga o fallo de importación sin backend. */
+  onImportRepo?: (url: string) => Promise<SimulatedProposal | void>;
 }
 
 const STATE_STEPS: Array<{ id: ImporterMockState; label: string }> = [
@@ -63,12 +69,45 @@ function buildSimulatedProposal(rawUrl: string): SimulatedProposal {
  * Fases: cuarentena -> escaneo -> propuesta -> compuertas -> autoprueba de ruta -> activo/rechazado.
  * Opera 100% con datos simulados en memoria, sin llamadas al backend.
  */
-export function RepoImporterMockup() {
+export function RepoImporterMockup({ onImportRepo }: RepoImporterMockupProps = {}) {
   const [urlInput, setUrlInput] = useState('');
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState<ImporterMockState>('idle');
   const [proposal, setProposal] = useState<SimulatedProposal | null>(null);
   const [rejectReason, setRejectReason] = useState<string | null>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
+  const stageContainerRef = useRef<HTMLDivElement>(null);
+  const prevStageRef = useRef<ImporterMockState>('idle');
+
+  useEffect(() => {
+    if (stage !== 'idle' && prevStageRef.current !== stage) {
+      stageContainerRef.current?.focus();
+    }
+    prevStageRef.current = stage;
+  }, [stage]);
+
+  const runImport = async (trimmedUrl: string) => {
+    setUrlError(null);
+    setImportError(null);
+    setRejectReason(null);
+    if (!onImportRepo) {
+      setProposal(buildSimulatedProposal(trimmedUrl));
+      setStage('cuarentena');
+      return;
+    }
+    setLoading(true);
+    try {
+      const custom = await onImportRepo(trimmedUrl);
+      setProposal(custom ?? buildSimulatedProposal(trimmedUrl));
+      setStage('cuarentena');
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Error al importar el repositorio.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleStartImport = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,17 +116,17 @@ export function RepoImporterMockup() {
       setUrlError('Introduce una URL http:// o https:// válida.');
       return;
     }
-    setUrlError(null);
-    setRejectReason(null);
-    setProposal(buildSimulatedProposal(trimmed));
-    setStage('cuarentena');
+    void runImport(trimmed);
   };
 
   const handleReset = () => {
     setStage('idle');
     setProposal(null);
     setUrlError(null);
+    setImportError(null);
+    setLoading(false);
     setRejectReason(null);
+    setTimeout(() => urlInputRef.current?.focus(), 0);
   };
 
   return (
@@ -112,7 +151,12 @@ export function RepoImporterMockup() {
       {/* Caja URL */}
       <form noValidate onSubmit={handleStartImport} className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="repo-importer-url-input" className="sr-only">
+            URL del repositorio a importar
+          </label>
           <input
+            ref={urlInputRef}
+            id="repo-importer-url-input"
             type="url"
             value={urlInput}
             onChange={(e) => {
@@ -121,21 +165,52 @@ export function RepoImporterMockup() {
             }}
             placeholder="https://github.com/org/guild-ejemplo"
             aria-label="URL del repositorio a importar"
-            disabled={stage !== 'idle'}
+            aria-invalid={Boolean(urlError || importError)}
+            aria-describedby={
+              urlError
+                ? 'repo-importer-url-error'
+                : importError
+                  ? 'repo-importer-import-error'
+                  : undefined
+            }
+            disabled={stage !== 'idle' || loading}
             className="flex-1 min-w-[220px] px-3 py-1.5 text-xs font-mono rounded-md border border-border bg-background text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none disabled:opacity-60"
           />
           <button
             type="submit"
-            disabled={stage !== 'idle'}
-            className="px-3.5 py-1.5 text-xs font-semibold rounded-md bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            disabled={stage !== 'idle' || loading}
+            aria-busy={loading}
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-md bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none inline-flex items-center gap-1.5"
           >
-            Importar repositorio
+            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+            {loading ? 'Importando...' : 'Importar repositorio'}
           </button>
         </div>
+        {loading && (
+          <p role="status" className="text-xs text-muted-foreground font-mono">
+            Clonando repositorio en cuarentena (simulado)...
+          </p>
+        )}
         {urlError && (
-          <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+          <p id="repo-importer-url-error" role="alert" className="text-xs text-rose-700 dark:text-rose-400">
             {urlError}
           </p>
+        )}
+        {importError && (
+          <div
+            id="repo-importer-import-error"
+            role="alert"
+            className="p-2.5 rounded-md border border-rose-500/30 bg-rose-500/10 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-700 dark:text-rose-300"
+          >
+            <span>Error de importación: {importError}</span>
+            <button
+              type="button"
+              onClick={() => void runImport(urlInput.trim())}
+              className="px-2.5 py-1 rounded text-[11px] font-semibold bg-rose-700 hover:bg-rose-600 text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
+            >
+              Reintentar
+            </button>
+          </div>
         )}
       </form>
 
@@ -172,7 +247,13 @@ export function RepoImporterMockup() {
 
       {/* Fase 1: Cuarentena (git clone --depth 1 sin ejecutar nada) */}
       {stage === 'cuarentena' && proposal && (
-        <div role="status" className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs">
+        <div
+          ref={stageContainerRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
           <div className="flex items-center gap-2 font-semibold text-foreground">
             <Download className="w-4 h-4 text-primary" aria-hidden="true" />
             <span>Estado: cuarentena — clonado {proposal.repoName} (git clone --depth 1, sin ejecutar código)…</span>
@@ -180,7 +261,7 @@ export function RepoImporterMockup() {
           <button
             type="button"
             onClick={() => setStage('escaneo')}
-            className="px-3 py-1 rounded text-[11px] font-semibold bg-primary text-primary-foreground cursor-pointer"
+            className="px-3 py-1 rounded text-[11px] font-semibold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             Continuar a escaneo
           </button>
@@ -189,7 +270,13 @@ export function RepoImporterMockup() {
 
       {/* Fase 2: Escaneo */}
       {stage === 'escaneo' && proposal && (
-        <div role="status" className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs">
+        <div
+          ref={stageContainerRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
           <div className="flex items-center gap-2 font-semibold text-foreground">
             <ScanSearch className="w-4 h-4 text-primary" aria-hidden="true" />
             <span>Estado: escaneo de estructura, dependencias y secretos en {proposal.repoName}…</span>
@@ -200,7 +287,7 @@ export function RepoImporterMockup() {
           <button
             type="button"
             onClick={() => setStage('propuesta')}
-            className="px-3 py-1 rounded text-[11px] font-semibold bg-primary text-primary-foreground cursor-pointer"
+            className="px-3 py-1 rounded text-[11px] font-semibold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             Generar propuesta
           </button>
@@ -209,7 +296,13 @@ export function RepoImporterMockup() {
 
       {/* Fase 3: Propuesta de guild */}
       {stage === 'propuesta' && proposal && (
-        <div role="status" className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs">
+        <div
+          ref={stageContainerRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
           <div className="flex items-center gap-2 font-semibold text-foreground">
             <FileCheck2 className="w-4 h-4 text-primary" aria-hidden="true" />
             <span>Estado: propuesta de guild «{proposal.guildName}»</span>
@@ -220,7 +313,7 @@ export function RepoImporterMockup() {
           <button
             type="button"
             onClick={() => setStage('compuertas')}
-            className="px-3 py-1 rounded text-[11px] font-semibold bg-primary text-primary-foreground cursor-pointer"
+            className="px-3 py-1 rounded text-[11px] font-semibold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             Pasar a compuertas
           </button>
@@ -229,16 +322,22 @@ export function RepoImporterMockup() {
 
       {/* Fase 4: Compuertas (hashes + CAPABILITIES + aprobación humana por plan mode) */}
       {stage === 'compuertas' && proposal && (
-        <div role="status" className="p-3 rounded-md border border-amber-500/30 bg-amber-500/10 space-y-2 text-xs">
+        <div
+          ref={stageContainerRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-md border border-amber-500/30 bg-amber-500/10 space-y-2 text-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
           <div className="flex items-center gap-2 font-semibold text-foreground">
-            <ShieldCheck className="w-4 h-4 text-amber-500" aria-hidden="true" />
+            <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
             <span>Estado: compuertas — hashes, CAPABILITIES y aprobación humana para «{proposal.guildName}»</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setStage('autoprueba_ruta')}
-              className="px-3 py-1 rounded text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+              className="px-3 py-1 rounded text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-600 text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
             >
               Aprobar compuertas
             </button>
@@ -248,7 +347,7 @@ export function RepoImporterMockup() {
                 setRejectReason('Rechazado en compuertas de seguridad.');
                 setStage('rechazado');
               }}
-              className="px-3 py-1 rounded text-[11px] font-semibold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer"
+              className="px-3 py-1 rounded text-[11px] font-semibold bg-rose-700 hover:bg-rose-600 text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
             >
               Rechazar
             </button>
@@ -258,7 +357,13 @@ export function RepoImporterMockup() {
 
       {/* Fase 5: Autoprueba de ruta (precisión + robo de consultas) */}
       {stage === 'autoprueba_ruta' && proposal && (
-        <div role="status" className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs">
+        <div
+          ref={stageContainerRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-md border border-border bg-muted/30 space-y-2 text-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
           <div className="flex items-center gap-2 font-semibold text-foreground">
             <Route className="w-4 h-4 text-primary" aria-hidden="true" />
             <span>
@@ -272,7 +377,7 @@ export function RepoImporterMockup() {
             <button
               type="button"
               onClick={() => setStage('activo')}
-              className="px-3 py-1 rounded text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+              className="px-3 py-1 rounded text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-600 text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
             >
               Confirmar activo
             </button>
@@ -282,7 +387,7 @@ export function RepoImporterMockup() {
                 setRejectReason('Autoprueba de ruta fallida o con robo de consultas.');
                 setStage('rechazado');
               }}
-              className="px-3 py-1 rounded text-[11px] font-semibold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer"
+              className="px-3 py-1 rounded text-[11px] font-semibold bg-rose-700 hover:bg-rose-600 text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
             >
               Marcar rechazado
             </button>
@@ -292,15 +397,21 @@ export function RepoImporterMockup() {
 
       {/* Fase 6a: Activo */}
       {stage === 'activo' && proposal && (
-        <div role="status" className="p-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 space-y-2 text-xs">
-          <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-300">
+        <div
+          ref={stageContainerRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 space-y-2 text-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
+          <div className="flex items-center gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
             <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
             <span>Estado: activo — guild «{proposal.guildName}» registrado en el catálogo simulado.</span>
           </div>
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex items-center gap-1 px-3 py-1 rounded text-[11px] font-semibold border border-border bg-card hover:bg-muted text-foreground cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1 rounded text-[11px] font-semibold border border-border bg-card hover:bg-muted text-foreground cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <RotateCcw className="w-3 h-3" aria-hidden="true" />
             <span>Importar otro</span>
@@ -310,15 +421,21 @@ export function RepoImporterMockup() {
 
       {/* Fase 6b: Rechazado */}
       {stage === 'rechazado' && (
-        <div role="status" className="p-3 rounded-md border border-rose-500/30 bg-rose-500/10 space-y-2 text-xs">
-          <div className="flex items-center gap-2 font-semibold text-rose-700 dark:text-rose-300">
+        <div
+          ref={stageContainerRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-md border border-rose-500/30 bg-rose-500/10 space-y-2 text-xs focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
+          <div className="flex items-center gap-2 font-semibold text-rose-800 dark:text-rose-300">
             <XCircle className="w-4 h-4" aria-hidden="true" />
             <span>Estado: rechazado — {rejectReason || 'Importación cancelada.'}</span>
           </div>
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex items-center gap-1 px-3 py-1 rounded text-[11px] font-semibold border border-border bg-card hover:bg-muted text-foreground cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1 rounded text-[11px] font-semibold border border-border bg-card hover:bg-muted text-foreground cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <RotateCcw className="w-3 h-3" aria-hidden="true" />
             <span>Reintentar</span>

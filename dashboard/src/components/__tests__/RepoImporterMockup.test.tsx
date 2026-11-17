@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { RepoImporterMockup } from '../RepoImporterMockup';
@@ -57,5 +57,53 @@ describe('RepoImporterMockup (ADR-033 R5 — maqueta simulada)', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Rechazar$/i }));
 
     expect(screen.getByText(/Estado: rechazado/i)).toBeInTheDocument();
+  });
+
+  it('muestra estado de carga con botones deshabilitados y avanza a cuarentena al resolver el mock', async () => {
+    let resolveImport!: () => void;
+    const onImportRepo = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveImport = resolve;
+        }),
+    );
+
+    render(<RepoImporterMockup onImportRepo={onImportRepo} />);
+
+    const input = screen.getByLabelText(/URL del repositorio a importar/i);
+    fireEvent.change(input, { target: { value: 'https://github.com/forja-orca/guild-async' } });
+    fireEvent.click(screen.getByRole('button', { name: /Importar repositorio/i }));
+
+    expect(screen.getByRole('button', { name: /Importando\.\.\./i })).toBeDisabled();
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(/Clonando repositorio en cuarentena/i);
+
+    resolveImport();
+    await waitFor(() => {
+      expect(screen.getByText(/Estado: cuarentena — clonado guild-async/i)).toBeInTheDocument();
+    });
+  });
+
+  it('muestra alerta recuperable ante error de importación y permite reintentar', async () => {
+    const onImportRepo = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Timeout clonando repositorio'))
+      .mockResolvedValueOnce(undefined);
+
+    render(<RepoImporterMockup onImportRepo={onImportRepo} />);
+
+    fireEvent.change(screen.getByLabelText(/URL del repositorio a importar/i), {
+      target: { value: 'https://github.com/forja-orca/guild-retry' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Importar repositorio/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/Timeout clonando repositorio/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reintentar/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Estado: cuarentena — clonado guild-retry/i)).toBeInTheDocument();
+    });
+    expect(onImportRepo).toHaveBeenCalledTimes(2);
   });
 });
