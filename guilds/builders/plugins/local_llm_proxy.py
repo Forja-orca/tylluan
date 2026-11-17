@@ -1,3 +1,10 @@
+"""
+Local LLM proxy guild: chat with a language model running on the operator machine.
+llm_chat sends a prompt (model, system, temperature, max_tokens) and returns the
+completion; llm_list_models lists the models the local server offers.
+Hablar con un modelo local: no manda nada a la nube.
+"""
+
 import json
 import logging
 import os

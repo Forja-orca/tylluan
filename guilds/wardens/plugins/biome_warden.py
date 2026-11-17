@@ -1,3 +1,9 @@
+"""
+Biome warden guild: JavaScript/TypeScript formatting and linting with Biome.
+biome_format_file reformats a JS/TS/JSON file in place; biome_lint_file reports the
+lint diagnostics of one file. Formatear o pasar el linter a un fichero JS/TS.
+"""
+
 import logging
 import os
 import sys

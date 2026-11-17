@@ -1,3 +1,11 @@
+"""
+Audio tools guild: speech-to-text over a local audio file.
+Single tool: audio_transcribe(audio_path, language, model) - uploads the file to
+ComfyUI (COMFYUI_URL, default http://localhost:8188) and runs a Whisper workflow
+node, returning the transcript text.
+Transcribir audio (mp3/wav) a texto con Whisper via ComfyUI; requiere ComfyUI en marcha. No genera audio.
+"""
+
 import asyncio
 import json
 import logging

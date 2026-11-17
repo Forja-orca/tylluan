@@ -1,3 +1,9 @@
+"""
+Screenshot guild: capture the desktop screen into an image file.
+screenshot_capture takes a screenshot and saves it as filename (PNG by default).
+Hacer una captura de pantalla y guardarla en disco.
+"""
+
 import logging
 import os
 import sys

@@ -1,3 +1,9 @@
+"""
+Clipboard guild: read and write the system clipboard text.
+clipboard_read returns what is currently copied; clipboard_write replaces it with
+text. Copiar al portapapeles o leer lo copiado, sin tocar ficheros.
+"""
+
 import logging
 import sys
 

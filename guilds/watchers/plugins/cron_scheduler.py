@@ -1,3 +1,10 @@
+"""
+Cron scheduler guild: periodic background commands managed by Tylluan itself.
+cron_schedule registers a recurring command (name, command, interval_minutes,
+max_runs); cron_list shows the scheduled jobs; cron_cancel removes one by job_id.
+Programar una tarea repetida cada N minutos, listarlas o cancelarlas.
+"""
+
 import asyncio
 import json
 import logging

@@ -1,3 +1,10 @@
+"""
+AST surgeon guild: structural edits on source code, by symbol instead of by text.
+ast_get_file_outline lists the functions and classes of a file; ast_find_references
+locates where a symbol is used in a file; ast_rename_symbol renames one symbol in a
+file. Editar codigo por simbolo: renombrar, buscar referencias, esquema de un fichero.
+"""
+
 import logging
 import re
 from pathlib import Path

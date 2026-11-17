@@ -1,8 +1,9 @@
 """
-TylluanNexus Filesystem Guild — Local file I/O operations.
-
-Provides tools for reading, writing, searching, and listing files
-on the local filesystem with safety bounds.
+Filesystem guild: operations on files and directories given a path or route.
+file_list lists a directory tree (crates/, docs/, src/, data/, E:/... any ruta);
+file_read reads a file's lines; find_files finds files by name or extension;
+file_search greps text inside files; file_write saves a file (needs approval).
+Listar el contenido de una carpeta, leer un fichero, buscar ficheros por nombre o ruta.
 """
 
 import os

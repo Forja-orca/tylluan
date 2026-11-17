@@ -1,3 +1,11 @@
+"""
+FFmpeg guild: video and audio file operations, run locally with ffmpeg.
+media_probe reports codec, format and duration of a media file; video_trim cuts a
+clip (start, end); video_concat joins files; video_resize changes resolution;
+audio_extract pulls the audio track out; video_add_text burns a caption.
+Editar o inspeccionar video y audio: recortar, unir, redimensionar, extraer audio.
+"""
+
 import json
 import logging
 import os
