@@ -25,12 +25,23 @@ cargo build -p tylluan-kernel --features cuda
 ```
 
 **Runtime** — tres piezas de NVIDIA/Microsoft que ningún crate puede empaquetar (licencias):
-1. **onnxruntime con CUDA**: descargar `onnxruntime-win-x64-gpu-<ver>.zip` de
-   https://github.com/microsoft/onnxruntime/releases (versión 1.20+), extraer y apuntar:
+1. **onnxruntime con CUDA**: la página de releases de Microsoft devuelve **404** desde el
+   2026-11-18 (repositorio, releases y API caen a la vez). La vía que funciona es PyPI:
    ```bat
-   set ORT_DYLIB_PATH=C:\ruta\a\onnxruntime-win-x64-gpu\lib\onnxruntime.dll
+   pip download onnxruntime-gpu==1.22.0 --no-deps -d ort
+   copy ort\onnxruntime_gpu-1.22.0-*.whl ort\ort.zip
+   powershell -Command "Expand-Archive -Force ort\ort.zip -DestinationPath ort\wheel"
    ```
-   (el kernel usa `load-dynamic`: carga esa DLL en runtime; sin la variable usa la del sistema, que es CPU-only)
+   La DLL queda en `onnxruntime\capi\onnxruntime.dll` dentro de la rueda (comprobado en la
+   rueda de Windows `onnxruntime-1.22.0-cp312-cp312-win_amd64.whl`: las dos DLL que trae son
+   `onnxruntime/capi/onnxruntime.dll` y `onnxruntime/capi/onnxruntime_providers_shared.dll`).
+   Apunta el kernel a ella:
+   ```bat
+   set ORT_DYLIB_PATH=C:\ruta\a\ort\wheel\onnxruntime\capi\onnxruntime.dll
+   ```
+   Sin `ORT_DYLIB_PATH`, el kernel carga la DLL del sistema, que es **CPU-only**. La versión
+   tiene que ser **1.22.0**, la misma que fijan CI y la imagen: el feature `load-dynamic` carga
+   el ORT API de esa DLL concreta y mezclar versiones puede fallar al cargar.
 2. **CUDA Runtime 12.x** — instalador de NVIDIA o las DLLs (`cudart64_12.dll` etc.) en PATH.
 3. **cuDNN 9** — DLLs en PATH.
 
