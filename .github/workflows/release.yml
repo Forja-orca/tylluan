@@ -3,6 +3,10 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # D210: ejecución en seco del pipeline SIN publicar nada. `publish` tiene
+  # `if: github.event_name == 'push'`, así que un dispatch nunca promociona el
+  # draft; sirve para ejercitar el gate de artefacto a mano.
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -442,10 +446,47 @@ jobs:
 
   # Promote the draft release to public and latest ONLY when all smoke tests and gates pass.
   # Published by numeric release ID because GitHub CLI (`gh release edit <tag>`) cannot locate drafts by tag.
+  # ── D210: gate de artefacto (auditoría externa, 3 puntos aceptados por José) ──
+  # Corre DESPUÉS de empaquetar y ANTES de publicar: extrae el tarball en un HOME
+  # temporal, exige `guilds/requirements-hashes.txt` en la raíz canónica, arranca un
+  # guild REAL con el intérprete de esa instalación (handshake MCP, falla ante
+  # ModuleNotFoundError) y comprueba que el `.tylluan-token` queda en 0600 (D206).
+  # Si algo falla, el draft se queda como está: no se publica.
+  artifact-gate:
+    name: Release Artifact Gate (D210)
+    needs: [package-draft, version-gate]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # TL (clase A): el proyecto exige Python >=3.12 (pyproject.toml) y los hashes se
+      # compilaron con `--python-version 3.12`; el python3 de ubuntu-22.04 es el 3.10 y
+      # el gate bloquearia TODA release. Mismo paso fijado que usa ci.yml.
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Download release archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-archives
+
+      - name: Gate de los tres puntos de la auditoría externa
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL=tylluan-x86_64-unknown-linux-gnu.tar.gz
+          [ -f "$TARBALL" ] || { echo "::error::no está $TARBALL"; ls -la; exit 1; }
+          bash scripts/release_gate.sh --tarball "$TARBALL"
+
   # If any test fails, this job does not run, leaving the draft intact for log inspection.
   publish:
     name: Publish Release (Promote Draft to Latest)
-    needs: [package-draft, version-gate, smoke-test]
+    needs: [package-draft, version-gate, smoke-test, artifact-gate]
+    # D210: un workflow_dispatch NO publica; solo un push de tag llega aquí.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
