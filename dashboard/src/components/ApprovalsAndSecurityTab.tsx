@@ -66,9 +66,7 @@ export function ApprovalsAndSecurityTab({
     }
     void (async () => {
       try {
-        const res = await bridge.fetchRaw('/api/v1/setup-hint');
-        if (!res || !res.ok) return;
-        const data = (await res.json()) as { auth_required?: boolean };
+        const data = (await bridge.fetchRaw('/api/v1/setup-hint')) as { auth_required?: boolean } | null;
         if (!cancelled && typeof data?.auth_required === 'boolean') {
           setDevModeActive(data.auth_required === false);
         }

@@ -55,15 +55,7 @@ export function HeaderProdLagBadge({
 
     void (async () => {
       try {
-        const res = await bridge.fetchRaw('/health');
-        if (!res || !res.ok) {
-          if (!cancelled) {
-            setError(true);
-            setKernelCommit('');
-          }
-          return;
-        }
-        const data = (await res.json()) as HealthPayload;
+        const data = (await bridge.fetchRaw('/health')) as HealthPayload | null;
         if (!cancelled) {
           const commit = typeof data?.commit === 'string' ? data.commit.trim() : '';
           if (!commit) {

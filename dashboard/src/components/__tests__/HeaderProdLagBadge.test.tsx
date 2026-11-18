@@ -27,9 +27,8 @@ describe('HeaderProdLagBadge (T4511)', () => {
   it('muestra Producción al día cuando el commit de /health coincide con main y pasa axe', async () => {
     const bridge = {
       fetchRaw: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'ok', commit: 'cd420050' }),
+        status: 'ok',
+        commit: 'cd420050',
       }),
     } as unknown as NexusBridge;
 
@@ -51,9 +50,8 @@ describe('HeaderProdLagBadge (T4511)', () => {
   it('muestra Producción atrasada · N commits sin desplegar (solo lectura, sin botones) y pasa axe', async () => {
     const bridge = {
       fetchRaw: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'ok', commit: '8a893aff' }),
+        status: 'ok',
+        commit: '8a893aff',
       }),
     } as unknown as NexusBridge;
 
@@ -78,9 +76,8 @@ describe('HeaderProdLagBadge (T4511)', () => {
   it('sin cifra conocida NO inventa el número de commits (ni /health ni la prop lo dan)', async () => {
     const bridge = {
       fetchRaw: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'ok', commit: '8a893aff' }),
+        status: 'ok',
+        commit: '8a893aff',
       }),
     } as unknown as NexusBridge;
 

@@ -253,16 +253,12 @@ describe('ApprovalsAndSecurityTab', () => {
   it('muestra aviso visible en Seguridad cuando /api/v1/setup-hint devuelve auth_required=false', async () => {
     const fetchRaw = vi.fn().mockImplementation((url: string) => {
       if (url === '/api/v1/setup-hint') {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ auth_required: false }),
-        });
+        return Promise.resolve({ auth_required: false });
       }
       return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({ approvals: [], count: 0, judgement: { held: 0, withdrawn: 0 } }),
+        approvals: [],
+        count: 0,
+        judgement: { held: 0, withdrawn: 0 },
       });
     });
     const bridge = { fetchRaw } as unknown as NexusBridge;
@@ -277,16 +273,12 @@ describe('ApprovalsAndSecurityTab', () => {
   it('no muestra aviso de dev_mode cuando /api/v1/setup-hint devuelve auth_required=true', async () => {
     const fetchRaw = vi.fn().mockImplementation((url: string) => {
       if (url === '/api/v1/setup-hint') {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ auth_required: true }),
-        });
+        return Promise.resolve({ auth_required: true });
       }
       return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({ approvals: [], count: 0, judgement: { held: 0, withdrawn: 0 } }),
+        approvals: [],
+        count: 0,
+        judgement: { held: 0, withdrawn: 0 },
       });
     });
     const bridge = { fetchRaw } as unknown as NexusBridge;

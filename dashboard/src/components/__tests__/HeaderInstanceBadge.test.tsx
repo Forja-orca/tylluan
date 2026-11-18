@@ -9,9 +9,9 @@ describe('HeaderInstanceBadge (T4368)', () => {
     const bridge = {
       getBaseUrl: () => 'http://127.0.0.1:47005',
       fetchRaw: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'ok', version: '0.17.2', commit: '90785663' }),
+        status: 'ok',
+        version: '0.17.2',
+        commit: '90785663',
       }),
     } as unknown as NexusBridge;
 
@@ -28,9 +28,9 @@ describe('HeaderInstanceBadge (T4368)', () => {
     const bridge = {
       getBaseUrl: () => 'http://127.0.0.1:47004',
       fetchRaw: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'ok', version: '0.17.2', commit: '8a893aff' }),
+        status: 'ok',
+        version: '0.17.2',
+        commit: '8a893aff',
       }),
     } as unknown as NexusBridge;
 
@@ -46,20 +46,12 @@ describe('HeaderInstanceBadge (T4368)', () => {
   it('muestra agent_id y rol reales desde /api/v1/whoami en la insignia y tooltip', async () => {
     const fetchRaw = vi.fn().mockImplementation(async (url: string) => {
       if (url === '/health') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ status: 'ok', version: '0.17.2', commit: '621c9b44' }),
-        };
+        return { status: 'ok', version: '0.17.2', commit: '621c9b44' };
       }
       if (url === '/api/v1/whoami') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ agent_id: 'operator', activity: { role: 'admin' } }),
-        };
+        return { agent_id: 'operator', activity: { role: 'admin' } };
       }
-      return { ok: false, status: 404, json: async () => ({}) };
+      throw new Error('HTTP Error: 404');
     });
 
     const bridge = {
@@ -79,16 +71,12 @@ describe('HeaderInstanceBadge (T4368)', () => {
   it('degrada sin romper si /api/v1/whoami devuelve 401', async () => {
     const fetchRaw = vi.fn().mockImplementation(async (url: string) => {
       if (url === '/health') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ status: 'ok', version: '0.17.2', commit: '621c9b44' }),
-        };
+        return { status: 'ok', version: '0.17.2', commit: '621c9b44' };
       }
       if (url === '/api/v1/whoami') {
-        return { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) };
+        throw new Error('Unauthorized');
       }
-      return { ok: false, status: 404, json: async () => ({}) };
+      throw new Error('HTTP Error: 404');
     });
 
     const bridge = {

@@ -72,28 +72,16 @@ export function HeaderInstanceBadge({
         bridge.fetchRaw('/api/v1/whoami'),
       ]);
 
-      if (!cancelled && healthRes.status === 'fulfilled' && healthRes.value?.ok) {
-        try {
-          const data = (await healthRes.value.json()) as HealthCommitPayload;
-          if (!cancelled) {
-            setKernelCommit(typeof data?.commit === 'string' ? data.commit.trim() : '');
-            setKernelVersion(typeof data?.version === 'string' ? data.version.trim() : '');
-          }
-        } catch {
-          // Ignorar fallo de parseo auxiliar
-        }
+      if (!cancelled && healthRes.status === 'fulfilled' && healthRes.value) {
+        const data = healthRes.value as HealthCommitPayload;
+        setKernelCommit(typeof data?.commit === 'string' ? data.commit.trim() : '');
+        setKernelVersion(typeof data?.version === 'string' ? data.version.trim() : '');
       }
 
-      if (!cancelled && whoamiRes.status === 'fulfilled' && whoamiRes.value?.ok) {
-        try {
-          const wdata = (await whoamiRes.value.json()) as WhoamiPayload;
-          if (!cancelled) {
-            setWhoamiAgent(typeof wdata?.agent_id === 'string' ? wdata.agent_id.trim() : '');
-            setWhoamiRole(typeof wdata?.activity?.role === 'string' ? wdata.activity.role.trim() : '');
-          }
-        } catch {
-          // Ignorar fallo de lectura auxiliar
-        }
+      if (!cancelled && whoamiRes.status === 'fulfilled' && whoamiRes.value) {
+        const wdata = whoamiRes.value as WhoamiPayload;
+        setWhoamiAgent(typeof wdata?.agent_id === 'string' ? wdata.agent_id.trim() : '');
+        setWhoamiRole(typeof wdata?.activity?.role === 'string' ? wdata.activity.role.trim() : '');
       } else if (!cancelled) {
         setWhoamiAgent('');
         setWhoamiRole('');
