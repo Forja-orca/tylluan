@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
-import { NexusProvider } from './hooks/useNexus'
+import { NexusProvider } from '@tylluan/ui-core'
 
 // StrictMode removed: its dev-only double-mount/double-effect cycle doesn't
 // play well with imperative canvas wrapper libraries like react-force-graph

@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import React from 'react';
-import { AgentCompetencyPanel, parseCompetencies } from '../AgentCompetencyPanel';
+import { AgentCompetencyPanel } from '../AgentCompetencyPanel';
+import { parseCompetencies } from '../../lib/competencies';
 
 describe('AgentCompetencyPanel', () => {
   const mockAgentsData = {

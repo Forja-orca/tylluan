@@ -37,14 +37,10 @@ export interface PlanResponse {
   routing_trace: string[];
 }
 
-export function riskToDisplay(risk: 'Low' | 'Medium' | 'High'): { destructive: boolean; profile: string } {
+function riskToDisplay(risk: 'Low' | 'Medium' | 'High'): { destructive: boolean; profile: string } {
   if (risk === 'High') return { destructive: true, profile: 'Strict' };
   if (risk === 'Medium') return { destructive: false, profile: 'Balanced' };
   return { destructive: false, profile: 'Permissive' };
-}
-
-export function detectDestructiveKeywords(intentText: string): boolean {
-  return /rm\s|delete\s|kill\s|drop\s|overwrite\s|remove\s|format\s|git\s+reset|git\s+clean/i.test(intentText);
 }
 
 interface PlanModePanelProps {

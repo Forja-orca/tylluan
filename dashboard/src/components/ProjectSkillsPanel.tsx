@@ -27,7 +27,6 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
 
   // Editor states
   const [editingSkill, setEditingSkill] = useState<ProjectSkill | null>(null);
-  const [loadingSkill, setLoadingSkill] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -112,7 +111,6 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     }
     if (!bridge) return;
     setIsCreating(false);
-    setLoadingSkill(true);
     try {
       const full = await bridge.getProjectSkill(skillName);
       setEditingSkill(full);
@@ -121,8 +119,6 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       notify(`Failed to load skill '${skillName}': ${msg}`, 'error');
-    } finally {
-      setLoadingSkill(false);
     }
   };
 

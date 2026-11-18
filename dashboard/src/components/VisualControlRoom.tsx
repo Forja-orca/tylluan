@@ -34,9 +34,7 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
     }
     return 'rings';
   });
-  const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Raw data from endpoints
   interface RuntimeTaskEntry {
@@ -77,7 +75,6 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
   // Poll data with interval >= 5s
   const fetchData = useCallback(async () => {
     if (!bridge || !online) {
-      setLoading(false);
       return;
     }
 
@@ -113,12 +110,8 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
       setSysStatusData(sysRes || null);
 
       setLastUpdated(new Date());
-      setErrorMsg(null);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMsg(msg || 'Error consultando endpoints de telemetría');
-    } finally {
-      setLoading(false);
+    } catch {
+      // Errors are surfaced via individual endpoint fallbacks above
     }
   }, [bridge, online]);
 

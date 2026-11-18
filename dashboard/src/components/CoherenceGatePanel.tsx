@@ -9,12 +9,12 @@ export interface CoherenceGatePanelProps {
   bridge: NexusBridge | null;
 }
 
-export function calculateProgressPct(resolved: number, threshold: number): number {
+function calculateProgressPct(resolved: number, threshold: number): number {
   if (!threshold || threshold <= 0) return 0;
   return Math.min(100, Math.max(0, (resolved / threshold) * 100));
 }
 
-export function formatStatValue(val: number | undefined): string {
+function formatStatValue(val: number | undefined): string {
   if (val === undefined || val === null) return '—';
   return val.toLocaleString();
 }
