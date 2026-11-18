@@ -34,31 +34,22 @@ RUN cargo build --release --locked -p tylluan-kernel -p tylluan-cli --features e
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl libssl3 libsqlite3-0 libgomp1 \
+    ca-certificates curl unzip libssl3 libsqlite3-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 tylluan
 
 COPY --from=builder /build/target/release/tylluan-nexus /usr/local/bin/
 COPY --from=builder /build/target/release/tylluan-cli /usr/local/bin/
 
-# Install ONNX Runtime shared library based on target architecture
-# ONNX Runtime 1.22.0 official Linux assets. SHA-256 calculated from the
-# downloaded release assets:
-#   curl -fsSL -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
-#   sha256sum ort.tgz
-# Recalculate both hashes if the version changes; do not reuse them.
-RUN dpkgArch="$(dpkg --print-architecture)" \
-    && case "${dpkgArch}" in \
-        amd64) ortArch="x64"; ortSha="8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3" ;; \
-        arm64) ortArch="aarch64"; ortSha="bb76395092d150b52c7092dc6b8f2fe4d80f0f3bf0416d2f269193e347e24702" ;; \
-        *) echo "Unsupported architecture: ${dpkgArch}"; exit 1 ;; \
-    esac \
-    && curl -fsSL -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-${ortArch}-1.22.0.tgz" \
-    && echo "${ortSha}  /tmp/onnxruntime.tgz" | sha256sum -c - \
-    && tar -zxvf /tmp/onnxruntime.tgz -C /tmp \
-    && mv /tmp/onnxruntime-linux-${ortArch}-1.22.0/lib/libonnxruntime.so* /usr/lib/ \
-    && rm -rf /tmp/onnxruntime* \
-    && ldconfig
+# Install ONNX Runtime shared library based on target architecture.
+#
+# D204 (H-20261118-ORT-404): el .tgz de github.com/microsoft/onnxruntime dejó de
+# existir (404 entero el 2026-11-18) y con él se caía esta imagen. La librería sale
+# ahora de la RUEDA de onnxruntime en PyPI (`onnxruntime==1.22.0`), cuyo sha256 está
+# fijado en el script y se verifica ANTES de extraer nada. Mismo script que usan
+# ci.yml y scheduled-heavy-tests.yml: una sola fuente de verdad para el binario.
+COPY scripts/install_onnxruntime.sh /usr/local/bin/install_onnxruntime.sh
+RUN bash /usr/local/bin/install_onnxruntime.sh --dest /usr/lib
 
 COPY tylluan.docker.toml /etc/tylluan/tylluan.toml
 RUN mkdir -p /data && chown tylluan:tylluan /data

@@ -30,13 +30,9 @@ jobs:
           toolchain: 1.99.1
 
       - name: Install ONNX Runtime shared library
-        run: |
-          curl -fL --retry 6 --retry-delay 10 --retry-all-errors -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz"
-          gzip -t /tmp/onnxruntime.tgz
-          tar -zxf /tmp/onnxruntime.tgz -C /tmp
-          sudo mv /tmp/onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so* /usr/lib/
-          rm -rf /tmp/onnxruntime*
-          sudo ldconfig
+        # D204: el .tgz de github.com/microsoft ya no existe (404 el 2026-11-18);
+        # la librería sale de PyPI con el sha256 verificado (scripts/install_onnxruntime.sh).
+        run: sudo bash scripts/install_onnxruntime.sh --dest /usr/lib
 
       - name: Cache Embedding Models
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4
