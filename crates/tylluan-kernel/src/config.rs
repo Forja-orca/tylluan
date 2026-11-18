@@ -3205,6 +3205,18 @@ impl TylluanConfig {
         // 2. Check .tylluan-token file
         let token_path = Path::new(".tylluan-token");
         if token_path.exists() {
+            // D206 (P1 del TL): un token existente con permisos de más se AVISA, no se rota
+            // (rotarlo dejaría fuera a los clientes ya configurados). En Windows no hay
+            // permisos POSIX: la ACL heredada del directorio es la que manda y esto es no-op.
+            if let Some(modo) = permissions_too_open(token_path) {
+                warn!(
+                    "⚠️ {} tiene permisos {:o}: el token maestro es legible por otros usuarios. \
+                     Arréglalo con `chmod 600 {}` (no se rota nada)",
+                    token_path.display(),
+                    modo,
+                    token_path.display()
+                );
+            }
             let content = std::fs::read_to_string(token_path)?;
             let trimmed = content.trim();
             if !trimmed.is_empty() {
@@ -3224,7 +3236,7 @@ impl TylluanConfig {
             .map(char::from)
             .collect();
 
-        if let Err(e) = std::fs::write(token_path, &new_token) {
+        if let Err(e) = write_secret_file(token_path, &new_token) {
             error!("❌ Failed to write .tylluan-token: {}. Security compromised.", e);
             anyhow::bail!("Security violation: cannot persist auth token");
         }
@@ -3232,6 +3244,134 @@ impl TylluanConfig {
         info!("✅ New Master Token saved to {}.", token_path.display());
 
         Ok(Some(new_token))
+    }
+}
+
+/// D206 (P1 del TL): escribe un secreto con permisos de **solo dueño** (0600) en Unix.
+///
+/// Por qué: `std::fs::write` crea el fichero con el modo por defecto (0644 con umask 022),
+/// así que el token maestro quedaba legible por cualquier usuario de la máquina. En Windows
+/// los permisos POSIX no existen; ahí se delega en la ACL heredada del directorio (no-op).
+pub fn write_secret_file(path: &Path, contents: &str) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        // `mode` solo aplica al CREAR; si ya existía, truncate no cambia sus permisos y el
+        // aviso de `permissions_too_open` es el que lo delata.
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        f.write_all(contents.as_bytes())?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, contents)
+    }
+}
+
+/// D206: `Some(modo)` si el fichero existe y da permiso a alguien que no sea el dueño.
+///
+/// Puro y pequeño a propósito: es lo que se testea (y lo que rompe una mutación).
+pub fn permissions_too_open(path: &Path) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let md = std::fs::metadata(path).ok()?;
+        let modo = md.permissions().mode() & 0o777;
+        if mode_is_too_open(modo) { Some(modo) } else { None }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// D206: la decisión, sin sistema de ficheros — testeable en cualquier plataforma.
+///
+/// `0o077` = bits de grupo y otros. Si alguno está puesto, el token lo puede leer alguien
+/// que no es el dueño. `0o600` es el único modo que queremos.
+pub fn mode_is_too_open(modo: u32) -> bool {
+    modo & 0o077 != 0
+}
+
+#[cfg(test)]
+mod d206_token_permissions {
+    use super::*;
+
+    /// Se compila y cuenta en **todas** las plataformas a propósito: el recuento que valida
+    /// `check_test_count.sh` tiene que ser idéntico en Windows y en Linux. En no-Unix no hay
+    /// modos POSIX que comprobar; la protección ahí es la ACL del directorio.
+    #[test]
+    fn d206_write_secret_file_creates_0600() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join(".tylluan-token");
+        write_secret_file(&p, "secreto").unwrap();
+
+        // Común a todas las plataformas.
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "secreto");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let modo = std::fs::metadata(&p).unwrap().permissions().mode() & 0o777;
+            assert_eq!(modo, 0o600, "el token debe crearse 0600, no {modo:o}");
+        }
+    }
+
+    #[test]
+    fn d206_permissions_too_open_detecta_0644_y_acepta_0600() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("t");
+        std::fs::write(&p, "x").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600)).unwrap();
+            assert_eq!(permissions_too_open(&p), None, "0600 no debe avisar");
+
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert_eq!(
+                permissions_too_open(&p),
+                Some(0o644),
+                "0644 debe avisar, y con el modo visto"
+            );
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Sin modos POSIX la función es no-op por contrato: eso es lo que se asevera aquí.
+            assert_eq!(permissions_too_open(&p), None);
+        }
+    }
+
+    #[test]
+    fn d206_permissions_too_open_fichero_inexistente_es_none() {
+        assert_eq!(
+            permissions_too_open(Path::new("/no/existe/tylluan-token-d206")),
+            None
+        );
+    }
+
+    /// La decisión pura, en cualquier plataforma (Windows incluido): es lo que rompe la
+    /// mutación `modo & 0o077` -> `modo & 0o000`.
+    #[test]
+    fn d206_mode_is_too_open_solo_acepta_0600() {
+        assert!(!mode_is_too_open(0o600), "0600 no debe avisar");
+        // 0700 también es de solo-dueño: no da lectura a grupo ni a otros.
+        assert!(!mode_is_too_open(0o700), "0700 no debe avisar (no da acceso a otros)");
+        for modo in [0o640, 0o604, 0o644, 0o660, 0o666, 0o777] {
+            assert!(
+                mode_is_too_open(modo),
+                "modo {modo:o} da permiso a otros y debe avisar"
+            );
+        }
     }
 }
 
