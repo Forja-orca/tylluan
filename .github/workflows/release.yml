@@ -21,16 +21,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # D221 / decision de Jose (2026-11-07): Tylluan solo prueba y soporta
+        # **Windows x86_64 y Linux x86_64** (WSL incluido). macOS/Apple Silicon y
+        # Linux ARM64 (Raspberry Pi) dejan de prometerse: los binarios publicados
+        # hasta 0.17.x siguen descargables, pero no se construyen ni se prueban.
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-22.04
-            suffix: ""
-          - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-22.04
-            suffix: ""
-            cross: true
-          - target: aarch64-apple-darwin
-            runner: macos-latest
             suffix: ""
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
@@ -45,14 +42,6 @@ jobs:
         with:
           toolchain: 1.99.1
           target: ${{ matrix.target }}
-
-      - name: Install cross-compilation tools
-        if: matrix.cross
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml
-          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
 
       - name: Build tylluan-nexus (release)
         run: cargo build --release -p tylluan-kernel --target ${{ matrix.target }}
@@ -351,14 +340,11 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-22.04
-          - target: aarch64-apple-darwin
-            runner: macos-latest
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
-        # aarch64-unknown-linux-gnu (Raspberry Pi target) intentionally
-        # excluded: no ARM64 GitHub-hosted runner exists to boot-test it
-        # natively. `build`'s cross-compile check is all CI can verify for
-        # that target; a real boot test needs actual ARM hardware.
+        # D221 / decision de Jose (2026-11-07): fuera macOS/Apple Silicon y Linux
+        # ARM64. Los dos targets que se construyen (Windows y Linux x86_64) se
+        # boot-testean aqui; no queda ningun target construido sin smoke.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
