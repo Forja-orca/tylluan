@@ -190,10 +190,14 @@ def _parse_offset(text: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-def _parse_author(text: str) -> str:
-    """Extract 'author X' or 'as X' from intent string."""
-    m = re.search(r'(?:author|as|autor)\s+([\w][\w\-]*)', text, re.IGNORECASE)
-    return m.group(1) if m else "agent"
+def _parse_author(text: str, default: str = "agent") -> str:
+    """Extract 'author X' / 'autor X' / 'as X' from the HEADER of an intent string.
+
+    Word boundary on the keyword: 'as' must be a whole word, never the tail of 'tareas'
+    or 'mias' (that bug signed real messages as @D213, @sin, @bajo, @cifras).
+    """
+    m = re.search(r'\b(?:author|as|autor)\s+([\w][\w\-]*)', text, re.IGNORECASE)
+    return m.group(1) if m else default
 
 
 # Global output budget for read_channel / search_channel (approved design):
@@ -553,7 +557,7 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
 @mcp.tool()
 def post_to_channel(channel_id: str = "", content: str = "", author_id: str = "",
                     role: str = "agent", message: str = "", query: str = "",
-                    intent: str = "", command: str = "") -> str:
+                    intent: str = "", command: str = "", agent_id: str = "") -> str:
     """Post a message to a Coloquio channel.
     Use for: post to channel, write to channel, respond in colloquio, add to thread.
     Format: 'post to channel <channel>: <message>' or supply channel_id + content directly.
@@ -569,24 +573,30 @@ def post_to_channel(channel_id: str = "", content: str = "", author_id: str = ""
     """
     raw = query or intent or command or ""
 
+    # TL 2026-11-19 (identidad del Coloquio): el canal y el autor se leen SOLO de la
+    # cabecera, es decir, de lo que hay antes del primer ':'. Antes se buscaban en
+    # TODO el mensaje, y el regex `(author|as|autor)\s+X` sin limite de palabra
+    # casaba con el final de cualquier palabra («tareas D213» firmaba como @D213,
+    # «mias sin hacer» como @sin), y un «canal X» dentro del cuerpo cambiaba el canal.
     if not channel_id and raw:
-        channel_id, rest = _extract_channel_and_rest(raw)
-        # Extract content from 'content:' or ':' separator
-        m_content = re.search(r'(?:content\s*[:\-]\s*|:\s*)(.+)$', rest, re.IGNORECASE | re.DOTALL)
-        if m_content and not content:
-            content = m_content.group(1).strip()
-        elif not content:
-            # Try '<action> <canal>: <content>'
-            m2 = re.search(r':\s*(.+)$', raw, re.DOTALL)
-            if m2:
-                content = m2.group(1).strip()
-        # Extract author_id from 'author X'
-        if not author_id:
-            author_id = _parse_author(rest) or _parse_author(raw)
+        header, sep, body = raw.partition(":")
+        if sep:
+            channel_id, _rest = _extract_channel_and_rest(header)
+            if not content:
+                content = body.strip()
+            if not author_id:
+                author_id = _parse_author(header, default="")
+        else:
+            channel_id, rest = _extract_channel_and_rest(raw)
+            m_content = re.search(r'(?:content\s*[:\-]\s*|:\s*)(.+)$', rest, re.IGNORECASE | re.DOTALL)
+            if m_content and not content:
+                content = m_content.group(1).strip()
+            if not author_id:
+                author_id = _parse_author(rest, default="")
 
     content = content or message or ""
     if not author_id:
-        author_id = "agent"
+        author_id = agent_id or "agent"
 
     if not channel_id or not content:
         return "❌ Specify channel and content: 'post to coloquio <channel>: <message>'"
