@@ -1,4 +1,4 @@
-use crate::registry::guild_process::{GuildRegistry, GuildStatus, GuildCallStats, GuardedKill};
+use crate::registry::guild_process::{GuildRegistry, GuildProcess, GuildStatus, GuildCallStats, GuardedKill};
 use anyhow::Result;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -442,15 +442,7 @@ impl RegistryActor {
                                 true
                             }
                         })
-                        .map(|g| {
-                            serde_json::json!({
-                                "name": g.name,
-                                "description": g.description(),
-                                "always_on": g.always_on,
-                                "tool_count": g.tools.len(),
-                                "running": g.is_running(),
-                            })
-                        })
+                        .map(guild_summary_json)
                         .collect();
                     let _ = resp.send(guilds);
                 }
@@ -643,9 +635,27 @@ impl RegistryHandle {
     }
 }
 
+/// D212: JSON de un guild tal y como lo sirve `/api/v1/guilds`.
+///
+/// Extraído a función para poder fijarlo: el cableado `crash_backoff <-
+/// in_crash_backoff()` no lo cubría ningún test (Hermes, T4652: borrar la clave o
+/// devolver siempre `false` dejaba los 3 tests de readiness en verde).
+pub fn guild_summary_json(g: &GuildProcess) -> serde_json::Value {
+    serde_json::json!({
+        "name": g.name,
+        "description": g.description(),
+        "always_on": g.always_on,
+        "tool_count": g.tools.len(),
+        "running": g.is_running(),
+        // D212: un guild en backoff T13 no está "caído sin más";
+        // /health lo cuenta para decidir `degraded`.
+        "crash_backoff": g.in_crash_backoff(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{classify_err, classify_ok, is_transport_failure, AttemptOutcome};
+    use super::{classify_err, classify_ok, guild_summary_json, is_transport_failure, AttemptOutcome};
     use rmcp::model::{CallToolResult, Content};
 
     #[test]
@@ -662,6 +672,29 @@ mod tests {
         ));
         // Timeouts are handled by a different branch.
         assert!(!is_transport_failure("GUILD_TIMEOUT|coloquio|30s"));
+    }
+
+    /// **D de Hermes (T4652)**: el cableado `crash_backoff` no lo cubría ningún test.
+    /// Mutación: quitar la clave del JSON (o hacer `in_crash_backoff()` siempre `false`)
+    /// dejaba los tests de readiness en verde.
+    #[test]
+    fn d212_guilds_json_expone_crash_backoff() {
+        use crate::registry::guild_process::{GuildLauncher, GuildProcess};
+
+        let launcher = GuildLauncher::Python { module_path: "test.module".to_string() };
+        let mut guild = GuildProcess::new("test", launcher, false, None, 3);
+
+        let json = guild_summary_json(&guild);
+        assert_eq!(json["crash_backoff"], serde_json::json!(false), "sin crashes no hay backoff");
+
+        guild.crash_count = 1;
+        guild.last_crash_at = Some(std::time::Instant::now());
+        let json = guild_summary_json(&guild);
+        assert_eq!(
+            json["crash_backoff"],
+            serde_json::json!(true),
+            "/api/v1/guilds tiene que exponer el backoff: /health lo lee para decidir `degraded`"
+        );
     }
 
     #[test]

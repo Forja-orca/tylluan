@@ -586,12 +586,25 @@ if ($NoStart) {
     $ErrorCount = 0
     for ($i = 0; $i -lt 30; $i++) {
         try {
+            # D212 (DEC-20261118-18): se lee `readiness` del JSON, no solo el codigo HTTP.
+            # `degraded` sirve (200) y se avisa; `failed` llega como 503 y se sigue esperando.
             $Response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -ErrorAction Stop
-            if ($Response.StatusCode -eq 200) {
+            $Health = $null
+            try { $Health = $Response.Content | ConvertFrom-Json } catch { $Health = $null }
+            $Readiness = if ($Health -and $Health.readiness) { $Health.readiness } else { $null }
+            # Compatibilidad: las releases anteriores a D212 no emiten `readiness`.
+            # Si no viene, vale el 200 (que es lo que siempre significo "kernel arriba").
+            $SinReadiness = [string]::IsNullOrEmpty($Readiness)
+            if ($Readiness -eq "ok" -or $Readiness -eq "degraded" -or
+                ($SinReadiness -and $Response.StatusCode -eq 200)) {
                 if (-not (Get-Process -Id $KernelPid -ErrorAction SilentlyContinue)) {
                     Write-Err "Port $Port answers but PID $KernelPid is not alive: another kernel is occupying it."
                 }
-                Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:$Port (PID $KernelPid)"
+                if ($Readiness -eq "degraded") {
+                    $Down = if ($null -ne $Health.guilds_down) { $Health.guilds_down } else { "?" }
+                    Write-Host "WARN kernel up but degraded ($Down guild(s) down); memory and recall work." -ForegroundColor Yellow
+                }
+                Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:$Port (PID $KernelPid, readiness=$Readiness)"
                 $Ready = $true
                 break
             }

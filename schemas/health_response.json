@@ -56,12 +56,31 @@
         "in_flight": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
+    },
+    "readiness": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "degraded",
+        "failed"
+      ],
+      "description": "D212 (DEC-20261118-18): lo que leen doctor e instaladores. ok/degraded responden 200; solo failed responde 503"
+    },
+    "guilds_down": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "D212 v2: nombres de los guilds always_on que no estan arriba (incluye los que esperan backoff T13). Los lazy no aparecen"
     }
   },
   "required": [
     "status",
     "version",
-    "commit"
+    "commit",
+    "readiness",
+    "guilds_down"
   ],
   "additionalProperties": false
 }

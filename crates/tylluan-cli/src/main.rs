@@ -339,8 +339,20 @@ async fn wait_for_health(client: &reqwest::Client, url: &str, cap_secs: u64) -> 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         match client.get(url).send().await {
-            Ok(resp) if resp.status().is_success() => return true,
-            _ => {
+            Ok(resp) => {
+                // D212: un kernel con `readiness: failed` responde **503** y sigue vivo
+                // (acepta peticiones; solo sus guilds `always_on` no están arriba). `start`
+                // no debe esperar 180 s ni anunciar un fallo de arranque por eso: dice lo
+                // que ve y sigue. "No contesta" sigue contando como no listo.
+                if !resp.status().is_success() {
+                    println!(
+                        "   ⚠ /health responde HTTP {} — el kernel está vivo; su readiness no es ok",
+                        resp.status().as_u16()
+                    );
+                }
+                return true;
+            }
+            Err(_) => {
                 let now = std::time::Instant::now();
                 if now >= next_report && now < deadline {
                     let remaining =
@@ -2625,6 +2637,41 @@ mod startup_wait_tests {
         assert!(elapsed.as_secs() >= 1, "first poll happens after the 1s sleep");
         assert!(elapsed.as_secs() <= 3, "ready must be reported on the first 200, got {elapsed:?}");
     }
+    #[tokio::test]
+    async fn d212_un_503_cuenta_como_kernel_arrancado() {
+        // D212: `readiness: failed` => `/health` responde 503 con el kernel VIVO.
+        // `start` tiene que darlo por arrancado, no esperar 180 s y anunciar un fallo.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            if let Ok((mut sock, _)) = listener.accept() {
+                // Drenar la petición antes de responder: si no, Windows manda RST.
+                let mut req_buf = [0u8; 1024];
+                let _ = sock.read(&mut req_buf);
+                let mut resp = Vec::new();
+                for part in [b"HTTP/1.1 503 Service Unavailable".as_slice(),
+                    b"content-length: 0", b"connection: close", b""]
+                {
+                    resp.extend_from_slice(part);
+                    resp.extend_from_slice(&[13u8, 10u8]);
+                }
+                let _ = sock.write_all(&resp);
+                let _ = sock.flush();
+                std::thread::sleep(std::time::Duration::from_millis(400));
+            }
+        });
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let ready = wait_for_health(&client, &format!("http://{addr}/health"), 30).await;
+        assert!(
+            ready,
+            "un 503 (kernel vivo con readiness `failed`) cuenta como arrancado, no como fallo"
+        );
+    }
+
 }
 
 #[cfg(test)]

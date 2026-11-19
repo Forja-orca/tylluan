@@ -475,10 +475,18 @@ async fn health_running(port: u16) -> Result<Option<String>> {
         .build()
         .context("building HTTP client")?;
     let url = format!("http://127.0.0.1:{port}/health");
-    if let Ok(resp) = client.get(&url).send().await
-        && resp.status().is_success()
-    {
-        return Ok(Some(format!("health endpoint {url} is responding")));
+    // D213/D212: CUALQUIER respuesta HTTP cuenta como "hay kernel en ese puerto".
+    //
+    // Antes era `resp.status().is_success()`, que valía mientras `/health` siempre
+    // devolvía 200. Con `readiness`, un kernel en `failed` responde **503**: y esta sonda
+    // no pregunta "¿está sano?" sino "¿hay alguien vivo que vaya a escribir en estas
+    // bases?", que es lo que protege el restore in-situ (T-DSH-159). Un 503 NO significa
+    // que el kernel esté muerto, así que no debe desactivar la guarda.
+    if let Ok(resp) = client.get(&url).send().await {
+        return Ok(Some(format!(
+            "health endpoint {url} is responding (HTTP {})",
+            resp.status().as_u16()
+        )));
     }
     Ok(None)
 }
@@ -658,6 +666,43 @@ pub(crate) async fn run_restore(
 mod tests {
     use super::*;
     use rusqlite::Connection;
+
+    /// **NET 1 de Hermes (T4652)**: `/health` puede responder **503** cuando el kernel está en
+    /// `failed`, y eso NO significa que esté muerto. Esta sonda protege el restore in-situ
+    /// (T-DSH-159), así que un 503 tiene que contar como «hay kernel».
+    ///
+    /// Mutación: volver a `resp.status().is_success()` hace caer este test.
+    #[tokio::test]
+    async fn d212_un_503_cuenta_como_kernel_vivo() {
+        use tokio::io::AsyncWriteExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let puerto = listener.local_addr().unwrap().port();
+
+        // Servidor de un solo uso: lee la petición y responde 503.
+        // Leer ANTES de escribir importa: si respondemos con el cliente aún enviando, puede
+        // recibir un RST y `send()` devuelve error (que es lo que hacía fallar este test).
+        tokio::spawn(async move {
+            if let Ok((mut sock, _)) = listener.accept().await {
+                use tokio::io::AsyncReadExt;
+                let mut buf = [0u8; 1024];
+                let _ = sock.read(&mut buf).await;
+                let _ = sock.write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                ).await;
+                let _ = sock.flush().await;
+                // No cerramos en seco: dejamos que el cliente lea y cierre.
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        });
+
+        let visto = health_running(puerto).await.unwrap();
+        assert!(
+            visto.is_some(),
+            "un 503 (kernel en `failed`) tiene que contar como kernel vivo, no como ausente"
+        );
+    }
 
     fn make_db(path: &Path, marker: &str) {
         let conn = Connection::open(path).unwrap();

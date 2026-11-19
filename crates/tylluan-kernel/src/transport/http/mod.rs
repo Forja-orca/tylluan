@@ -1582,6 +1582,101 @@ pub struct HealthQuery {
     pub verbose: Option<bool>,
 }
 
+/// D212 (DEC-20261118-18): qué tan listo está el kernel para trabajo real.
+///
+/// - `ok`: arrancó y todos sus guilds `always_on` están arriba, ninguno en backoff.
+/// - `degraded`: sirve, pero algo falta (guilds caídos o en backoff). **Sigue siendo 200**:
+///   un kernel degradado atiende memoria y recall, y los instaladores no deben abortar.
+/// - `failed`: no arrancó, o no queda ni un guild vivo cuando hay guilds. **503**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Readiness {
+    Ok,
+    Degraded,
+    Failed,
+}
+
+impl Readiness {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Readiness::Ok => "ok",
+            Readiness::Degraded => "degraded",
+            Readiness::Failed => "failed",
+        }
+    }
+
+    /// 200 salvo `failed` (503). Que un guild esté caído no debe tumbar el health.
+    ///
+    /// Devuelve el `StatusCode` de **axum** explícitamente: en este módulo el nombre
+    /// `StatusCode` a secas es el de `reqwest` y no encaja con `into_response()`.
+    pub fn http_status(self) -> axum::http::StatusCode {
+        match self {
+            Readiness::Failed => axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            _ => axum::http::StatusCode::OK,
+        }
+    }
+}
+
+/// D212 v2: resumen de los guilds **`always_on`** a partir del JSON de `list_guilds`.
+///
+/// Devuelve `(total, arriba, en_backoff, nombres_caidos)`.
+///
+/// Por qué existe esta función y no se cuenta en el handler: el error de la v1 fue contar
+/// **todos** los guilds. La mayoría son lazy y no corren hasta que se usan, así que un
+/// kernel sano con 47 lazy parados salía `failed` (503). El mapeo se testea aparte,
+/// con datos con la misma forma que los reales.
+pub fn always_on_summary(guilds: &[serde_json::Value]) -> (usize, usize, usize, Vec<String>) {
+    let mut total = 0usize;
+    let mut arriba = 0usize;
+    let mut en_backoff = 0usize;
+    let mut caidos: Vec<String> = Vec::new();
+
+    for g in guilds {
+        // Solo los que el operador declaró `always_on`: un lazy parado no es un problema.
+        if !g.get("always_on").and_then(|v| v.as_bool()).unwrap_or(false) {
+            continue;
+        }
+        total += 1;
+        let corriendo = g.get("running").and_then(|v| v.as_bool()).unwrap_or(false);
+        if corriendo {
+            arriba += 1;
+        } else if let Some(nombre) = g.get("name").and_then(|v| v.as_str()) {
+            caidos.push(nombre.to_string());
+        }
+        if g.get("crash_backoff").and_then(|v| v.as_bool()).unwrap_or(false) {
+            en_backoff += 1;
+        }
+    }
+
+    (total, arriba, en_backoff, caidos)
+}
+
+/// D212: la decisión, pura y testeable sin servidor.
+///
+/// `guilds_in_backoff` es independiente de `guilds_up` a propósito: un guild puede estar
+/// **arriba** y tener crashes previos, y otro puede estar caído dentro de la ventana de
+/// backoff. La mutación del TL (guild en backoff => degraded) cae con la rama explícita.
+pub fn readiness_of(
+    boot_ready: bool,
+    guilds_total: usize,
+    guilds_up: usize,
+    guilds_in_backoff: usize,
+) -> Readiness {
+    if !boot_ready {
+        return Readiness::Failed;
+    }
+    if guilds_total == 0 {
+        // Sin guilds registrados no hay nada que degradar (perfil mínimo).
+        return Readiness::Ok;
+    }
+    if guilds_up == 0 {
+        return Readiness::Failed;
+    }
+    if guilds_up < guilds_total || guilds_in_backoff > 0 {
+        return Readiness::Degraded;
+    }
+    Readiness::Ok
+}
+
 /// Standard health response payload returned by GET /health.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HealthResponse {
@@ -1596,6 +1691,12 @@ pub struct HealthResponse {
     /// tokens ni rutas. `None` se omite para no romper el contrato JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sentinel: Option<serde_json::Value>,
+    /// D212: `ok` | `degraded` | `failed`. Es lo que deben leer doctor e instaladores
+    /// (más fiable que el código HTTP, que solo distingue failed).
+    pub readiness: String,
+    /// D212 v2: **nombres** de los guilds `always_on` que no están arriba (incluye los que
+    /// esperan backoff). Lista vacía = todos los always_on arriba. Los lazy no aparecen.
+    pub guilds_down: Vec<String>,
 }
 
 async fn health_handler(
@@ -1708,14 +1809,21 @@ async fn health_handler(
     } else {
         "ok"
     };
+    // D212 v2: solo cuentan los `always_on`. Ningún lazy parado puede degradar el health.
+    let guilds = state.registry.list_guilds(None).await.unwrap_or_default();
+    let (total, up, en_backoff, caidos) = always_on_summary(&guilds);
+    let readiness = readiness_of(ready, total, up, en_backoff);
+
     let resp = HealthResponse {
         status: status.to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         commit: env!("TYLLUAN_GIT_COMMIT").to_string(),
         repo_map: repo_map_status.to_string(),
         sentinel: Some(crate::security::sentinel::health_json()),
+        readiness: readiness.as_str().to_string(),
+        guilds_down: caidos,
     };
-    (StatusCode::OK, Json(resp)).into_response()
+    (readiness.http_status(), Json(resp)).into_response()
 }
 
 /// Returns the 6 sovereign MCP tools for agent discovery.
@@ -1784,6 +1892,103 @@ impl<T: Serialize> IntoResponse for Utf8Json<T> {
 
 #[cfg(test)]
 mod tests {
+    /// D212 (DEC-20261118-18): la tabla de decisión, sin servidor.
+    #[test]
+    fn d212_readiness_tabla() {
+        // Arrancó y todo arriba.
+        assert_eq!(readiness_of(true, 10, 10, 0), Readiness::Ok);
+        // Sin guilds registrados (perfil mínimo) no hay nada que degradar.
+        assert_eq!(readiness_of(true, 0, 0, 0), Readiness::Ok);
+        // No arrancó -> failed, aunque haya guilds.
+        assert_eq!(readiness_of(false, 10, 10, 0), Readiness::Failed);
+        // Hay guilds pero ninguno vivo -> failed.
+        assert_eq!(readiness_of(true, 10, 0, 0), Readiness::Failed);
+        // Falta uno por arrancar -> degraded.
+        assert_eq!(readiness_of(true, 10, 9, 0), Readiness::Degraded);
+    }
+
+    /// **Mutación del TL**: un guild en backoff tiene que dar `degraded`.
+    ///
+    /// El caso es el que se escapa de mirar solo `up < total`: el guild puede estar
+    /// **contando como arriba** (o ser el único caído sin que el total lo delate) y aun
+    /// así estar esperando el backoff T13. Si alguien quita `guilds_in_backoff > 0` de la
+    /// condición, este test cae.
+    #[test]
+    fn d212_guild_en_backoff_degrada() {
+        assert_eq!(
+            readiness_of(true, 10, 10, 1),
+            Readiness::Degraded,
+            "un guild en backoff (aunque todos los demás estén arriba) degrada el health"
+        );
+        assert_eq!(readiness_of(true, 3, 3, 2), Readiness::Degraded);
+    }
+
+    /// Construye el JSON de un guild como lo devuelve `list_guilds`.
+    fn g(nombre: &str, always_on: bool, running: bool, backoff: bool) -> serde_json::Value {
+        serde_json::json!({
+            "name": nombre,
+            "always_on": always_on,
+            "running": running,
+            "crash_backoff": backoff,
+            "tool_count": 0,
+        })
+    }
+
+    /// **D212 v2 (defecto que devolvió el TL)**: 50 guilds, 3 always_on arriba y 47 lazy
+    /// parados => `ok`. Es el caso de producción; la v1 contaba los 50 y daba `failed`.
+    ///
+    /// **Mutación**: quitar el `if !always_on { continue }` de `always_on_summary` hace que
+    /// salga total=50, arriba=3 => `degraded`, y este test cae.
+    #[test]
+    fn d212_v2_50_guilds_3_always_on_da_ok() {
+        let mut guilds = vec![
+            g("filesystem", true, true, false),
+            g("coloquio", true, true, false),
+            g("memory", true, true, false),
+        ];
+        for i in 0..47 {
+            guilds.push(g(&format!("lazy_{i}"), false, false, false));
+        }
+        let (total, arriba, backoff, caidos) = always_on_summary(&guilds);
+        assert_eq!((total, arriba, backoff), (3, 3, 0), "solo cuentan los always_on");
+        assert!(caidos.is_empty());
+        assert_eq!(readiness_of(true, total, arriba, backoff), Readiness::Ok);
+    }
+
+    /// Un always_on en backoff degrada (la mutación del TL de la v1 sigue viva).
+    #[test]
+    fn d212_v2_backoff_en_always_on_degrada() {
+        let guilds = vec![
+            g("filesystem", true, true, false),
+            g("coloquio", true, false, true),
+            g("lazy_1", false, false, false),
+        ];
+        let (total, arriba, backoff, caidos) = always_on_summary(&guilds);
+        assert_eq!((total, arriba, backoff), (2, 1, 1));
+        assert_eq!(caidos, vec!["coloquio".to_string()]);
+        assert_eq!(readiness_of(true, total, arriba, backoff), Readiness::Degraded);
+    }
+
+    /// Sin ningún always_on no hay nada que degradar (perfil mínimo / solo lazy).
+    #[test]
+    fn d212_v2_sin_always_on_da_ok() {
+        let guilds: Vec<_> = (0..50).map(|i| g(&format!("lazy_{i}"), false, false, false)).collect();
+        let (total, arriba, backoff, caidos) = always_on_summary(&guilds);
+        assert_eq!((total, arriba, backoff), (0, 0, 0));
+        assert!(caidos.is_empty());
+        assert_eq!(readiness_of(true, total, arriba, backoff), Readiness::Ok);
+    }
+
+    /// El código HTTP: 200 salvo `failed`.
+    #[test]
+    fn d212_http_status_solo_503_en_failed() {
+        assert_eq!(Readiness::Ok.http_status(), StatusCode::OK);
+        assert_eq!(Readiness::Degraded.http_status(), StatusCode::OK);
+        assert_eq!(Readiness::Failed.http_status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(Readiness::Ok.as_str(), "ok");
+        assert_eq!(Readiness::Degraded.as_str(), "degraded");
+        assert_eq!(Readiness::Failed.as_str(), "failed");
+    }
     use super::*;
 
     #[test]

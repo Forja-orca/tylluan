@@ -170,6 +170,9 @@ fn test_real_health_response_struct_matches_schema() {
         commit: "be69f11".to_string(),
         repo_map: "ok".to_string(),
         sentinel: None,
+        // D212 (DEC-20261118-18): campos aditivos del contrato.
+        readiness: "ok".to_string(),
+        guilds_down: vec![],
     };
 
     // 2. Serialize real struct instance

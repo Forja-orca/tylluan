@@ -485,11 +485,24 @@ else
     err "PID file still points to the previous kernel (PID ${OLD_PID}); refusing to report success."
   fi
   for i in $(seq 1 30); do
-    if curl -s "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+    # D212 (DEC-20261118-18): se lee `readiness` del cuerpo, no solo el código HTTP.
+    # `degraded` sirve (200) y se avisa; `failed` llega como 503 y aquí se sigue esperando.
+    HEALTH_CODE=$(curl -s -o /tmp/.tylluan_health.$$ -w '%{http_code}' \
+      "http://127.0.0.1:${PORT}/health" 2>/dev/null || true)
+    HEALTH_BODY=$(cat /tmp/.tylluan_health.$$ 2>/dev/null || true)
+    rm -f /tmp/.tylluan_health.$$
+    READINESS=$(printf '%s' "$HEALTH_BODY" | grep -o '"readiness":"[a-z]*"' | head -1 | cut -d'"' -f4)
+    # Compatibilidad: las releases anteriores a D212 no emiten `readiness`. Si no viene,
+    # vale el 200 (que es lo que siempre significó "kernel arriba").
+    if [ "$READINESS" = "ok" ] || [ "$READINESS" = "degraded" ] \
+       || { [ -z "$READINESS" ] && [ "$HEALTH_CODE" = "200" ]; }; then
       if ! kill -0 "$KERNEL_PID" 2>/dev/null; then
         err "Port ${PORT} answers but PID ${KERNEL_PID} is not alive: another kernel is occupying it."
       fi
-      say "Tylluan is running at http://127.0.0.1:${PORT} (PID ${KERNEL_PID})"
+      if [ "$READINESS" = "degraded" ]; then
+        warn "Kernel is up but degraded ($(printf '%s' "$HEALTH_BODY" | grep -o '"guilds_down":[0-9]*' | head -1 | cut -d: -f2) guild(s) down). Memory and recall work."
+      fi
+      say "Tylluan is running at http://127.0.0.1:${PORT} (PID ${KERNEL_PID}, readiness=${READINESS})"
       break
     fi
     if [ "$i" -eq 30 ]; then

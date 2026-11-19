@@ -652,6 +652,32 @@ impl GuildProcess {
     }
 
     /// Check if the guild process is currently running and connected.
+    /// D212: ¿está este guild esperando el backoff exponencial T13?
+    ///
+    /// Misma fórmula que `ensure_guild_running` (2^crash_count, tope 300 s): si está
+    /// dentro de la ventana tras un crash, no está "caído sin más", está **en backoff**,
+    /// y eso es lo que `/health` debe reportar como `degraded` en vez de silencio.
+    /// T13: segundos de backoff para `crash_count` fallos consecutivos (2^n, tope 300 s).
+    ///
+    /// `saturating_pow`, no `pow`: `crash_count` es `u32` y a partir de 64 el `pow`
+    /// desborda (pánico con overflow-checks, **0 en release**), y un backoff de 0 suelta el
+    /// bucle de rearranque justo cuando el guild ya lleva 64 fallos seguidos. El
+    /// `min(.., 300)` de fuera no protege porque el producto se evalúa antes.
+    pub(crate) fn backoff_secs(crash_count: u32) -> u64 {
+        std::cmp::min(2u64.saturating_pow(crash_count), 300)
+    }
+
+    pub fn in_crash_backoff(&self) -> bool {
+        if self.is_running() || self.crash_count == 0 {
+            return false;
+        }
+        let backoff_secs = Self::backoff_secs(self.crash_count);
+        match self.last_crash_at {
+            Some(last) => last.elapsed().as_secs() < backoff_secs,
+            None => false,
+        }
+    }
+
     pub fn is_running(&self) -> bool {
         self.proxy.is_some()
     }
@@ -2106,7 +2132,7 @@ impl GuildRegistry {
             
             // T13: Crash backoff — prevent crash-loop storms
             if guild.crash_count > 0 {
-                let backoff_secs = std::cmp::min(2u64.pow(guild.crash_count), 300);
+                let backoff_secs = GuildProcess::backoff_secs(guild.crash_count);
                 if let Some(last_crash) = guild.last_crash_at {
                     let elapsed = last_crash.elapsed().as_secs();
                     if elapsed < backoff_secs {
@@ -2135,7 +2161,7 @@ impl GuildRegistry {
                     // Increment crash counter
                     guild.crash_count += 1;
                     guild.last_crash_at = Some(Instant::now());
-                    let backoff = std::cmp::min(2u64.pow(guild.crash_count), 300);
+                    let backoff = GuildProcess::backoff_secs(guild.crash_count);
                     warn!(
                         "⚠️ Guild '{}' crash #{} — backoff {}s before next retry",
                         guild_name, guild.crash_count, backoff
@@ -2971,6 +2997,51 @@ mod tests {
         assert!(guild.idle_seconds() < 2);
         guild.touch();
         assert!(guild.idle_seconds() < 2);
+    }
+
+    /// **E de Hermes (T4652)**: `2u64.pow(crash_count)` desborda a partir de 64 fallos
+    /// consecutivos (~4,7 h de un guild roto reintentando cada 300 s). En release el valor
+    /// envuelve a 0, `min(0, 300)` = 0 y **el backoff desaparece** justo cuando el guild ya
+    /// lleva 64 rearranques seguidos; con overflow-checks (debug/CI) es un pánico.
+    #[test]
+    fn t13_backoff_secs_no_desborda() {
+        assert_eq!(GuildProcess::backoff_secs(0), 1);
+        assert_eq!(GuildProcess::backoff_secs(1), 2);
+        assert_eq!(GuildProcess::backoff_secs(8), 256);
+        assert_eq!(GuildProcess::backoff_secs(9), 300, "2^9 = 512 -> tope de 300");
+        assert_eq!(
+            GuildProcess::backoff_secs(64),
+            300,
+            "2^64 desborda: en release daría 0 y el backoff desaparecería"
+        );
+        assert_eq!(GuildProcess::backoff_secs(u32::MAX), 300);
+    }
+
+    /// **D212**: la ventana de backoff (`2^n` s desde el último crash) es lo que `/health`
+    /// lee para contar el guild como `degraded` en vez de silencio.
+    ///
+    /// Mutación: devolver siempre `false` deja `/health` en `ok` con el guild en backoff.
+    #[test]
+    fn d212_in_crash_backoff_respeta_la_ventana() {
+        let launcher = GuildLauncher::Python { module_path: "test.module".to_string() };
+        let mut guild = GuildProcess::new("test", launcher, false, None, 3);
+
+        // Sin crashes: no hay backoff que respetar.
+        assert!(!guild.in_crash_backoff());
+
+        // Un crash reciente: dentro de la ventana (2^1 = 2 s).
+        guild.crash_count = 1;
+        guild.last_crash_at = Some(Instant::now());
+        assert!(guild.in_crash_backoff());
+
+        // Ventana vencida: ya puede reintentar, no está "en backoff".
+        guild.last_crash_at = Some(Instant::now() - std::time::Duration::from_secs(5));
+        assert!(!guild.in_crash_backoff());
+
+        // Con 64 fallos el tope de 300 s sigue vigente, y no desborda.
+        guild.crash_count = 64;
+        guild.last_crash_at = Some(Instant::now());
+        assert!(guild.in_crash_backoff());
     }
 
 #[tokio::test]
