@@ -4,7 +4,7 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [0.17.3] — 2026-11-18
+## [0.17.3] — 2026-11-19
 
 Release de consolidación del enrutador, las instancias y los instaladores, con los gates de seguridad de la release y de las dependencias. **Plataformas probadas en esta release: solo Windows x86_64 y Linux x86_64 (WSL incluido)**; macOS/Apple Silicon y Linux ARM64 dejan de prometerse desde el 2026-11-07 (los binarios ya publicados siguen descargables).
 
@@ -45,6 +45,8 @@ Release de consolidación del enrutador, las instancias y los instaladores, con 
 - `dnspython` 2.9.1 → 2.9.2 (alerta de Dependabot #73, alta) (`426387b7`)
 - `libonnxruntime` se toma de PyPI con `sha256` fijado: la URL de `microsoft/onnxruntime` devolvía 404 (`D204`) (`a8fecd1d`)
 
+- `tylluan-cli --version` responde la version del crate (antes fallaba con `error: unexpected argument '--version'` y rc=2), y `audit` y `resume` mandan el bearer: con `dev_mode = false` esos dos GET daban 401 en vez de verificar la cadena (`4a0db1aa`)
+- El instalador ya no muere en silencio cuando el kernel no emite `readiness`: avisa y sigue (`ab8bf943`)
 **Security**
 - El fichero del token maestro se crea con modo `0600` y se avisa si uno existente es más permisivo, sin rotar nada (`D206`) (`e6eefb92`)
 - Gate de artefacto en `release.yml`: se extrae el tarball en un HOME temporal y se comprueba `requirements-hashes.txt` antes de publicar (`D210`) (`d6855a0b`)
@@ -53,6 +55,7 @@ Release de consolidación del enrutador, las instancias y los instaladores, con 
 - `deny.toml` ignora `RUSTSEC-2026-0543` (chrono) y `RUSTSEC-2026-0555` (chrono-tz), marcados unmaintained, con fecha de revisión y dueño (`D196`) (`045230ce`)
 - El cerrojo de build rechaza la liberación por un no-dueño (`D187`) (`b8e09b68`)
 
+- El instalador lee `/health` en un fichero creado con `mktemp` en vez de un nombre predecible en `/tmp` (patron de symlink/carrera); si no hay `mktemp`, se pierde el `readiness` antes que volver al nombre predecible (`8f6b3576`)
 **Behaviour changes**
 - `/health` publica `readiness` (`ok`/`degraded`/`failed`) y `guilds_down` en el cuerpo, de forma **aditiva**: los clientes que solo miran el status HTTP siguen funcionando (`247b1892`)
 - **Añadido, apagado por defecto.** El recuperador BM25 sobre descriptores de guild (ADR-033 R2) es opt-in; sin la opción, el enrutado se comporta como en v0.17.2 (`fae67c1c`)
@@ -60,6 +63,7 @@ Release de consolidación del enrutador, las instancias y los instaladores, con 
 - El fichero de PID incluye la instancia y `stop` aborta si hay más de un kernel salvo `--force` (`29ac7dd2`)
 - El enrutador puede declarar argumentos por tool y devuelve un error correctivo en vez de adivinar (`141c6ea0`)
 
+- `/health` responde **200 siempre** y la verdad viaja en el cuerpo (`readiness`): los jobs de CI y los instaladores que arrancan el kernel sin guilds dejan de romperse por un 503 que no significaba "caido" (`f9eb10ca`)
 ---
 
 ## [0.17.2] — 2026-10-27
