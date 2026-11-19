@@ -490,10 +490,21 @@ else
     # `ok` se acepta al instante; `degraded`/`failed` se esperan (los guilds pueden estar
     # arrancando) y, si siguen así al final, se AVISA y se termina: el kernel SÍ está
     # arriba (CI lo vio con 503 y el instalador colgaba con un kernel vivo).
-    HEALTH_CODE=$(curl -s -o /tmp/.tylluan_health.$$ -w '%{http_code}' \
-      "http://127.0.0.1:${PORT}/health" 2>/dev/null || true)
-    HEALTH_BODY=$(cat /tmp/.tylluan_health.$$ 2>/dev/null || true)
-    rm -f /tmp/.tylluan_health.$$
+    # D212e (Hermes T4673): nombre UNICO con `mktemp`. Antes el temporal llevaba el PID como
+    # nombre predecible en un directorio compartido: el patron clasico de symlink/race.
+    HEALTH_TMP=$(mktemp "${TMPDIR:-/tmp}/tylluan_health.XXXXXX" 2>/dev/null || true)
+    if [ -n "$HEALTH_TMP" ]; then
+      HEALTH_CODE=$(curl -s -o "$HEALTH_TMP" -w '%{http_code}' \
+        "http://127.0.0.1:${PORT}/health" 2>/dev/null || true)
+      HEALTH_BODY=$(cat "$HEALTH_TMP" 2>/dev/null || true)
+      rm -f "$HEALTH_TMP"
+    else
+      # Sin `mktemp` no hay cuerpo: vale el codigo HTTP (igual que con las releases anteriores a
+      # D212). Preferimos perder el `readiness` a escribir en un fichero de nombre predecible.
+      HEALTH_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+        "http://127.0.0.1:${PORT}/health" 2>/dev/null || true)
+      HEALTH_BODY=""
+    fi
     # `|| true`: este script corre con `set -euo pipefail`; un kernel publicado antes de D212
     # no emite `readiness`, `grep -o` no casa, el pipeline devuelve 1 y el instalador moria
     # EN SILENCIO con codigo 1 (Install Smoke, push 375 y 376).

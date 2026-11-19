@@ -2285,6 +2285,20 @@ mod installer_flag_tests {
         }
     }
 
+    /// D212e (Hermes T4673): `install.sh` no puede volver a un temporal de nombre **predecible**
+    /// (`/tmp/.algo.$$`): en un directorio compartido eso es symlink/race. `mktemp` da nombre único.
+    #[test]
+    fn d212e_install_sh_usa_mktemp_y_no_un_temporal_predecible() {
+        assert!(
+            !INSTALL_SH.contains("$$"),
+            "install.sh: nombre de temporal predecible (`$$`); usa `mktemp`"
+        );
+        assert!(
+            INSTALL_SH.contains("mktemp"),
+            "install.sh: los temporales se crean con `mktemp`"
+        );
+    }
+
     #[test]
     fn test_generated_config_never_enables_stdio_transport() {
         // A kernel spawned by the installer has no usable stdin: stdio in the
