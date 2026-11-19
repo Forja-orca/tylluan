@@ -64,7 +64,7 @@
         "degraded",
         "failed"
       ],
-      "description": "D212 (DEC-20261118-18): lo que leen doctor e instaladores. ok/degraded responden 200; solo failed responde 503"
+      "description": "D212 (DEC-20261118-18): lo que leen doctor e instaladores. siempre responde 200 mientras el proceso vive: la salud va en este campo, no en el codigo HTTP"
     },
     "guilds_down": {
       "type": "array",

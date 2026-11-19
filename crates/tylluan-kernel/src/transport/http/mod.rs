@@ -1587,7 +1587,10 @@ pub struct HealthQuery {
 /// - `ok`: arrancó y todos sus guilds `always_on` están arriba, ninguno en backoff.
 /// - `degraded`: sirve, pero algo falta (guilds caídos o en backoff). **Sigue siendo 200**:
 ///   un kernel degradado atiende memoria y recall, y los instaladores no deben abortar.
-/// - `failed`: no arrancó, o no queda ni un guild vivo cuando hay guilds. **503**.
+/// - `failed`: no arrancó, o no queda ni un guild vivo cuando hay guilds. **También 200**:
+///   el CI lo midió (push 375): con un 503 el Boot smoke y el Install Smoke, que arrancan el
+///   kernel SIN guilds a propósito, esperan un 200 y se cuelgan con el kernel vivo. La
+///   verdad va en el cuerpo (`readiness`), el código HTTP solo dice que el proceso responde.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Readiness {
     Ok,
@@ -1604,15 +1607,12 @@ impl Readiness {
         }
     }
 
-    /// 200 salvo `failed` (503). Que un guild esté caído no debe tumbar el health.
+    /// Siempre 200 mientras el proceso responde: la salud va en el cuerpo, no en el código.
     ///
     /// Devuelve el `StatusCode` de **axum** explícitamente: en este módulo el nombre
     /// `StatusCode` a secas es el de `reqwest` y no encaja con `into_response()`.
     pub fn http_status(self) -> axum::http::StatusCode {
-        match self {
-            Readiness::Failed => axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            _ => axum::http::StatusCode::OK,
-        }
+        axum::http::StatusCode::OK
     }
 }
 
@@ -1655,6 +1655,24 @@ pub fn always_on_summary(guilds: &[serde_json::Value]) -> (usize, usize, usize, 
 /// `guilds_in_backoff` es independiente de `guilds_up` a propósito: un guild puede estar
 /// **arriba** y tener crashes previos, y otro puede estar caído dentro de la ventana de
 /// backoff. La mutación del TL (guild en backoff => degraded) cae con la rama explícita.
+/// D212/NET3: la misma decisión, pero sabiendo además si el registro **contestó**.
+///
+/// `guilds_total == 0` es legítimo (perfil mínimo, sin `always_on`) y da `Ok`; que el actor
+/// del registro esté muerto también da cero guilds, y eso **no** es lo mismo: no saber el
+/// estado de las guilds es `failed`, porque es justo cuando `/health` más se consulta.
+pub fn readiness_tras_consulta(
+    boot_ready: bool,
+    registro_disponible: bool,
+    guilds_total: usize,
+    guilds_up: usize,
+    guilds_in_backoff: usize,
+) -> Readiness {
+    if !registro_disponible {
+        return Readiness::Failed;
+    }
+    readiness_of(boot_ready, guilds_total, guilds_up, guilds_in_backoff)
+}
+
 pub fn readiness_of(
     boot_ready: bool,
     guilds_total: usize,
@@ -1810,9 +1828,20 @@ async fn health_handler(
         "ok"
     };
     // D212 v2: solo cuentan los `always_on`. Ningún lazy parado puede degradar el health.
-    let guilds = state.registry.list_guilds(None).await.unwrap_or_default();
-    let (total, up, en_backoff, caidos) = always_on_summary(&guilds);
-    let readiness = readiness_of(ready, total, up, en_backoff);
+    // NET3 (Hermes T4669): si el actor del registro no contesta, `list_guilds` devuelve Err.
+    // El `unwrap_or_default()` de la v4 lo convertía en **cero guilds**, y `readiness_of(..,
+    // 0, 0, 0)` responde `Ok` a propósito (perfil mínimo) -> `/health` decía que todo iba bien
+    // justo cuando no había forma de saberlo.
+    let consulta = state.registry.list_guilds(None).await;
+    let registro_ok = match &consulta {
+        Ok(_) => true,
+        Err(e) => {
+            tracing::warn!("D212: el registro de guilds no responde ({e}); readiness = failed");
+            false
+        }
+    };
+    let (total, up, en_backoff, caidos) = always_on_summary(&consulta.unwrap_or_default());
+    let readiness = readiness_tras_consulta(ready, registro_ok, total, up, en_backoff);
 
     let resp = HealthResponse {
         status: status.to_string(),
@@ -1923,6 +1952,21 @@ mod tests {
         assert_eq!(readiness_of(true, 3, 3, 2), Readiness::Degraded);
     }
 
+    /// **NET3 de Hermes (T4669)**: con el registro caído `list_guilds` falla, y la v4 lo
+    /// convertía en cero guilds -> `/health` respondía `ok` con el registro muerto.
+    ///
+    /// Mutación: devolver `readiness_of(boot_ready, 0, 0, 0)` en vez de `Failed` cuando el
+    /// registro no contesta deja este test en rojo.
+    #[test]
+    fn d212_net3_registro_caido_no_es_ok() {
+        assert_eq!(readiness_tras_consulta(true, false, 0, 0, 0), Readiness::Failed);
+        assert_eq!(readiness_tras_consulta(true, false, 10, 10, 0), Readiness::Failed);
+        // El caso legítimo de «no hay guilds» (perfil mínimo) sigue siendo `ok`.
+        assert_eq!(readiness_tras_consulta(true, true, 0, 0, 0), Readiness::Ok);
+        assert_eq!(readiness_tras_consulta(true, true, 3, 3, 0), Readiness::Ok);
+        assert_eq!(readiness_tras_consulta(true, true, 3, 2, 0), Readiness::Degraded);
+    }
+
     /// Construye el JSON de un guild como lo devuelve `list_guilds`.
     fn g(nombre: &str, always_on: bool, running: bool, backoff: bool) -> serde_json::Value {
         serde_json::json!({
@@ -1979,12 +2023,14 @@ mod tests {
         assert_eq!(readiness_of(true, total, arriba, backoff), Readiness::Ok);
     }
 
-    /// El código HTTP: 200 salvo `failed`.
+    /// El código HTTP es SIEMPRE 200 (también con `failed`): el Boot smoke y el Install Smoke
+    /// del CI arrancan el kernel sin guilds y esperan un 200 (regresión del push 375).
+    /// Mutación: devolver 503 para `Failed` deja este test en rojo.
     #[test]
-    fn d212_http_status_solo_503_en_failed() {
+    fn d212_http_status_siempre_200() {
         assert_eq!(Readiness::Ok.http_status(), StatusCode::OK);
         assert_eq!(Readiness::Degraded.http_status(), StatusCode::OK);
-        assert_eq!(Readiness::Failed.http_status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(Readiness::Failed.http_status(), StatusCode::OK);
         assert_eq!(Readiness::Ok.as_str(), "ok");
         assert_eq!(Readiness::Degraded.as_str(), "degraded");
         assert_eq!(Readiness::Failed.as_str(), "failed");

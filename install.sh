@@ -486,7 +486,10 @@ else
   fi
   for i in $(seq 1 30); do
     # D212 (DEC-20261118-18): se lee `readiness` del cuerpo, no solo el código HTTP.
-    # `degraded` sirve (200) y se avisa; `failed` llega como 503 y aquí se sigue esperando.
+    # `/health` responde 200 siempre que el kernel está vivo; la salud real va en el cuerpo.
+    # `ok` se acepta al instante; `degraded`/`failed` se esperan (los guilds pueden estar
+    # arrancando) y, si siguen así al final, se AVISA y se termina: el kernel SÍ está
+    # arriba (CI lo vio con 503 y el instalador colgaba con un kernel vivo).
     HEALTH_CODE=$(curl -s -o /tmp/.tylluan_health.$$ -w '%{http_code}' \
       "http://127.0.0.1:${PORT}/health" 2>/dev/null || true)
     HEALTH_BODY=$(cat /tmp/.tylluan_health.$$ 2>/dev/null || true)
@@ -494,13 +497,15 @@ else
     READINESS=$(printf '%s' "$HEALTH_BODY" | grep -o '"readiness":"[a-z]*"' | head -1 | cut -d'"' -f4)
     # Compatibilidad: las releases anteriores a D212 no emiten `readiness`. Si no viene,
     # vale el 200 (que es lo que siempre significó "kernel arriba").
-    if [ "$READINESS" = "ok" ] || [ "$READINESS" = "degraded" ] \
-       || { [ -z "$READINESS" ] && [ "$HEALTH_CODE" = "200" ]; }; then
+    [ -z "$READINESS" ] && [ "$HEALTH_CODE" = "200" ] && READINESS="ok"
+    KERNEL_ANSWERS=0
+    [ -n "$READINESS" ] && KERNEL_ANSWERS=1
+    if [ "$READINESS" = "ok" ] || { [ "$i" -eq 30 ] && [ "$KERNEL_ANSWERS" -eq 1 ]; }; then
       if ! kill -0 "$KERNEL_PID" 2>/dev/null; then
         err "Port ${PORT} answers but PID ${KERNEL_PID} is not alive: another kernel is occupying it."
       fi
-      if [ "$READINESS" = "degraded" ]; then
-        warn "Kernel is up but degraded ($(printf '%s' "$HEALTH_BODY" | grep -o '"guilds_down":[0-9]*' | head -1 | cut -d: -f2) guild(s) down). Memory and recall work."
+      if [ "$READINESS" != "ok" ]; then
+        warn "Kernel is up but readiness=${READINESS} (always-on guilds down: $(printf '%s' "$HEALTH_BODY" | grep -o '"guilds_down":\[[^]]*\]' | head -1 | cut -d: -f2)). Memory and recall work; guild tools may not."
       fi
       say "Tylluan is running at http://127.0.0.1:${PORT} (PID ${KERNEL_PID}, readiness=${READINESS})"
       break

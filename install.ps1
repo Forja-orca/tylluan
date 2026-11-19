@@ -587,7 +587,7 @@ if ($NoStart) {
     for ($i = 0; $i -lt 30; $i++) {
         try {
             # D212 (DEC-20261118-18): se lee `readiness` del JSON, no solo el codigo HTTP.
-            # `degraded` sirve (200) y se avisa; `failed` llega como 503 y se sigue esperando.
+            # `degraded` sirve (200) y se avisa; `failed` tambien llega como 200; si no mejora se avisa al final.
             $Response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -ErrorAction Stop
             $Health = $null
             try { $Health = $Response.Content | ConvertFrom-Json } catch { $Health = $null }
@@ -595,14 +595,18 @@ if ($NoStart) {
             # Compatibilidad: las releases anteriores a D212 no emiten `readiness`.
             # Si no viene, vale el 200 (que es lo que siempre significo "kernel arriba").
             $SinReadiness = [string]::IsNullOrEmpty($Readiness)
-            if ($Readiness -eq "ok" -or $Readiness -eq "degraded" -or
-                ($SinReadiness -and $Response.StatusCode -eq 200)) {
+            # `/health` responde 200 siempre que el kernel esta vivo; la salud real va en el JSON.
+            # `ok` se acepta al instante; `degraded`/`failed` se esperan y, si siguen asi en el
+            # ultimo intento, se AVISA y se termina: el kernel SI esta arriba.
+            $Responde = (-not $SinReadiness) -or ($Response.StatusCode -eq 200)
+            if ($Readiness -eq "ok" -or ($SinReadiness -and $Response.StatusCode -eq 200) -or
+                (($i -eq 29) -and $Responde)) {
                 if (-not (Get-Process -Id $KernelPid -ErrorAction SilentlyContinue)) {
                     Write-Err "Port $Port answers but PID $KernelPid is not alive: another kernel is occupying it."
                 }
-                if ($Readiness -eq "degraded") {
-                    $Down = if ($null -ne $Health.guilds_down) { $Health.guilds_down } else { "?" }
-                    Write-Host "WARN kernel up but degraded ($Down guild(s) down); memory and recall work." -ForegroundColor Yellow
+                if ($Readiness -ne "ok" -and -not $SinReadiness) {
+                    $Down = if ($null -ne $Health.guilds_down) { @($Health.guilds_down) -join ", " } else { "?" }
+                    Write-Host "WARN kernel up but readiness=$Readiness (always-on guilds down: $Down); memory and recall work, guild tools may not." -ForegroundColor Yellow
                 }
                 Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:$Port (PID $KernelPid, readiness=$Readiness)"
                 $Ready = $true
