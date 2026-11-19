@@ -276,7 +276,7 @@ export function GeneralSettingsPanel({ bridge, notify }: GeneralSettingsPanelPro
               <div>
                 <span className="text-[11px] text-muted-foreground block">Versión</span>
                 <span className="font-mono font-semibold text-foreground">
-                  v{health?.version || '0.17.2'}
+                  v{health?.version || '0.17.3'}
                 </span>
               </div>
               <div>

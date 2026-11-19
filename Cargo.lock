@@ -4439,7 +4439,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-cli"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4462,7 +4462,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-common"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "anyhow",
  "serde",
@@ -4473,7 +4473,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-evals"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "anyhow",
  "rusqlite",
@@ -4486,7 +4486,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-fsrs"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -4498,7 +4498,7 @@ version = "3.0.0-rc.1"
 
 [[package]]
 name = "tylluan-kernel"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "anyhow",
  "argon2",
@@ -4567,7 +4567,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-link"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-11-07 · v0.17.2 (Cargo.toml) · the HEAD of record is the `**HEAD:**` line below (kept in sync by `scripts/check_head_sync.sh`)
+> Last updated: 2026-11-18 · v0.17.3 (Cargo.toml) · the HEAD of record is the `**HEAD:**` line below (kept in sync by `scripts/check_head_sync.sh`)
 
 ## Estado verificado — 2026-10-14
 
@@ -154,7 +154,8 @@ cd <raiz-repo> && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 
 ## Version
 
-**v0.17.2** (Cargo.toml, current; preparada 2026-10-27) — corrige el cierre a los ~66 s del v0.17.1 publicado, más los guards Origin/Host, la limpieza de guilds huérfanos y los arreglos de instalador; ver `CHANGELOG.md`. v0.17.1 se publicó el 2026-10-13.
+**v0.17.3** (Cargo.toml, current; preparada 2026-11-18) — release de consolidacion del enrutador y de los instaladores: recuperador BM25 sobre descriptores, opt-in y apagado por defecto (D202); argumentos declarados por tool con error correctivo (D197/D198); pista de ruta ampliada a image_path/audio_path/db_path/seed_path/root_path (D199); instancias con PID propio y `stop` que aborta sin `--force` (D192); acciones de aprobacion por HTTP como clase Operador (D193); instaladores compatibles con el CLI publicado (D195); token maestro creado con modo 0600 (D206); gate de artefacto de release (D210); libonnxruntime desde PyPI con sha256 fijado (D204). Plataformas probadas: solo Windows x86_64 y Linux x86_64
+**v0.17.2** (taggeada 2026-10-27) — corrige el cierre a los ~66 s del v0.17.1 publicado, más los guards Origin/Host, la limpieza de guilds huérfanos y los arreglos de instalador; ver `CHANGELOG.md`. v0.17.1 se publicó el 2026-10-13.
 **v0.17.0** (taggeada 2026-08-23) — federation auto-sync robustness (concurrent per-peer JoinSet + overlap guard + timeout), SQL interpolation whitelisting, drift_guard/silva_db canary fixes, unwrap() production audit (2026-09). **v0.16.0** — MCP 2026-07-28 adoption (M39) + continuity/trust/action layer (M40), CoherenceGate→dataset circuit phase 1+2; **v0.15.0** — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
 **v0.12.0** (tag) — Single binary target release and automated installer profiles.
 **v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.

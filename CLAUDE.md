@@ -1,4 +1,4 @@
-# Tylluan v0.17.2 — Claude Code Instructions
+# Tylluan v0.17.3 — Claude Code Instructions
 
 <!-- RUTAS-DE-LECTURA:BEGIN (bloque identico en todos los ficheros agenticos; lo vigila scripts/check_read_routes.sh) -->
 ## Rutas de lectura (orden obligatorio, rutas desde la raiz del repo)
@@ -119,10 +119,10 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 
 ---
 
-## Estado actual — v0.17.2 (v0.17.0 tagged 2026-08-23; v0.17.2 corta el cierre a los ~66 s del v0.17.1, los guards Origin/Host y los arreglos de instalador y guilds del 2026-10-26/27)
+## Estado actual — v0.17.3 (v0.17.0 tagged 2026-08-23; v0.17.2 corta el cierre a los ~66 s del v0.17.1, los guards Origin/Host y los arreglos de instalador y guilds del 2026-10-26/27)
 
 **Tests:** 1726 kernel lib + 75 link lib + 12 fsrs = 1813 en verde (el gate `scripts/check_test_count.sh` vigila README.md y AGENTS.md, **no este fichero**: esta cifra es manual) — verifica con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
-**Cargo.toml:** `version = "0.17.2"`, Rust edition 2024, toolchain 1.99.1 (`rust-toolchain.toml`, fijado también en los workflows y en `verify.sh`).
+**Cargo.toml:** `version = "0.17.3"`, Rust edition 2024, toolchain 1.99.1 (`rust-toolchain.toml`, fijado también en los workflows y en `verify.sh`).
 
 ### Cerrado en v0.17.0 (2026-08-24; trabajo del 2026-08-11 al 2026-08-14):
 - **A2A F1-F4 completo** — cliente outbound real, exposición REST + intent con ACL, streaming SSE, hardening (Deep)

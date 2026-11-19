@@ -4,13 +4,61 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [Unreleased]
+## [0.17.3] — 2026-11-18
 
-**Platform support narrowed to the two we can actually test (2026-11-07, José).** Tylluan
-now tests and supports **Windows x86_64 and Linux x86_64 (WSL included)** only.
-Releases published up to 0.17.x also shipped macOS (Apple Silicon) and Linux ARM64
-binaries; those remain downloadable from the releases page, but they are no longer tested
-or supported. Nothing published is being deleted.
+Release de consolidación del enrutador, las instancias y los instaladores, con los gates de seguridad de la release y de las dependencias. **Plataformas probadas en esta release: solo Windows x86_64 y Linux x86_64 (WSL incluido)**; macOS/Apple Silicon y Linux ARM64 dejan de prometerse desde el 2026-11-07 (los binarios ya publicados siguen descargables).
+
+**Fixes**
+- BM25 sobre descriptores de guild (`D202`): recuperador opt-in y **apagado por defecto**, con el umbral calibrado sobre el catálogo de guilds como estaba al medirlo (`fae67c1c`)
+- Argumentos declarados por tool y error correctivo en la capa de enrutado (`D197`/`D198`) (`141c6ea0`)
+- La pista de ruta cubre `image_path`, `audio_path`, `db_path`, `seed_path` y `root_path` (`D199`) (`01ddf0d6`)
+- Instancias con PID propio en el fichero, `stop` aborta sin `--force` y los instaladores aceptan modo instancia (`D192`) (`29ac7dd2`)
+- Acciones de aprobación (`approve`/`reject`/`hold`/`withdraw`) por HTTP como clase Operador (`D193`) (`7234a0eb`)
+- `hold`/`withdraw` de planes y `GET /api/v1/approvals` unificado (`D183`-`D185`) (`89a5114e`)
+- `kind`/`space`/`topic` de primer nivel en `tylluan_remember` (`MEM-7`, `D181`) (`e4d95f84`)
+- Sonda de dependencias del intérprete de los guilds: un venv sin `mcp`/`psutil` se reporta con ruta, versión y comando de arreglo en vez de dejar que cada guild muera solo (`T4346`) (`6168b3fd`)
+- Indicador «Producción atrasada» en la cabecera, solo lectura (`T4511`) (`58ccc2c5`)
+- Insignia de instancia contra `/api/v1/whoami` (`T4439`) (`d0143fae`)
+- Importador de repos con estados de carga/error y accesibilidad (`T4473`/`T4479`) (`6d43fa35`)
+- Caja R5 en la pestaña de guilds (`T4457`) (`5f58ec16`)
+- Panel de concurrencia (Strata) en la zona de inferencia, con datos de ejemplo declarados (`T4500`) (`cd420050`)
+- Aviso en Seguridad cuando el kernel acepta peticiones sin token (`T4341`) (`90785663`)
+- Pila de UI del dashboard: errores, maqueta R5, insignia de instancia, flujo de aprobaciones y auditoría del puerto 47004 (`271193be`)
+- Estado de reranker y embeddings en Inferencia, sin suponer datos (`T3806 v2`) (`d4569c79`)
+- Inferencia muestra `models_dir` y una pista cuando el inventario está vacío (`T3828`) (`878ff589`)
+- `/api/v1/models` publica la carpeta absoluta y una pista veraz (`D-162`) (`e52e5daf`)
+- El p95 de la prueba de carga de cuatro agentes se auto-calibra en vez de usar un umbral fijo que fallaba por contención de la máquina (`T4234`); y Aprobaciones pasa a `/api/v1/approvals` (`T4322`) (`ae836071`)
+- `file_search` toma el directorio del intent y no cae en el CWD del kernel (`T4190`) (`67ed8735`)
+- Los instaladores vuelven a ser compatibles con el CLI publicado v0.17.2 (`D195`) (`127bafe7`)
+- El gate de orden de los instaladores busca la línea que crea el venv, no un comentario (`D177 T4b`) (`4b196af1`)
+- El indicador de despliegue lee el cuerpo ya parseado que devuelve el cliente, no una `Response` (`T4540`) (`266334fb`)
+- Navegación por teclado en canales del Coloquio y Cuarentena (`T4349`) (`94ba2fd4`)
+- Aprobaciones con estado vacío accionable y errores 401/403/409 claros (`T4331`/`T4335`) (`7f4a9e5b`)
+- Modal de token con focus trap y sin desbordes a 375 px (`T4290`/`T4293`/`T4296`/`T4307`) (`8073d65f`)
+- Estado de configuración inicial explícito y peticiones de dream/canary cancelables (`T4264`) (`588e2e12`)
+- Botón de token visible en cabecera y aviso cuando no hay token guardado (`T4252`) (`4e9824a7`)
+- Cabecera sin desbordes a 390 px: un solo conmutador de tema, chip de health siempre visible (`f3653f83`)
+- `fastembed_model_cached` exige un `.onnx` real, no sólo el directorio `models--*` (`T3853`) (`2da555f9`)
+- El arranque de embeddings respeta `allow_hf_download` y el directorio de modelos acoplado (`D-166b`) (`3a23c114`)
+- El motor de embeddings no descarga modelos de HuggingFace con `allow_hf_download=false` (`D-166`) (`5bd6a25e`)
+- El restore aísla `-wal`/`-shm` antes de `quick_check` (`640d82a2`)
+- `dnspython` 2.9.1 → 2.9.2 (alerta de Dependabot #73, alta) (`426387b7`)
+- `libonnxruntime` se toma de PyPI con `sha256` fijado: la URL de `microsoft/onnxruntime` devolvía 404 (`D204`) (`a8fecd1d`)
+
+**Security**
+- El fichero del token maestro se crea con modo `0600` y se avisa si uno existente es más permisivo, sin rotar nada (`D206`) (`e6eefb92`)
+- Gate de artefacto en `release.yml`: se extrae el tarball en un HOME temporal y se comprueba `requirements-hashes.txt` antes de publicar (`D210`) (`d6855a0b`)
+- El Docker Smoke comprueba que la librería ONNX está y que la resuelve el loader (`d7014432`)
+- La identidad del autor del Coloquio se prueba contra el handler real y queda cableada en CI (`D182`) (`5ba1e1ba`)
+- `deny.toml` ignora `RUSTSEC-2026-0543` (chrono) y `RUSTSEC-2026-0555` (chrono-tz), marcados unmaintained, con fecha de revisión y dueño (`D196`) (`045230ce`)
+- El cerrojo de build rechaza la liberación por un no-dueño (`D187`) (`b8e09b68`)
+
+**Behaviour changes**
+- `/health` publica `readiness` (`ok`/`degraded`/`failed`) y `guilds_down` en el cuerpo, de forma **aditiva**: los clientes que solo miran el status HTTP siguen funcionando (`247b1892`)
+- **Añadido, apagado por defecto.** El recuperador BM25 sobre descriptores de guild (ADR-033 R2) es opt-in; sin la opción, el enrutado se comporta como en v0.17.2 (`fae67c1c`)
+- Las acciones de aprobación pasan a ejecutarse por HTTP como clase Operador; `GET /api/v1/approvals` queda unificado (`7234a0eb`)
+- El fichero de PID incluye la instancia y `stop` aborta si hay más de un kernel salvo `--force` (`29ac7dd2`)
+- El enrutador puede declarar argumentos por tool y devuelve un error correctivo en vez de adivinar (`141c6ea0`)
 
 ---
 

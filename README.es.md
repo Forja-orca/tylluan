@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml"><img src="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="Licencia MIT"></a>
-  <img src="https://img.shields.io/badge/version-0.17.2-blue.svg" alt="v0.17.2">
+  <img src="https://img.shields.io/badge/version-0.17.3-blue.svg" alt="v0.17.3">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP nativo">
 </p>
 
@@ -145,7 +145,7 @@ Para cambiar de perfil, para primero el kernel y ejecuta `tylluan-cli install --
 
 **Por qué no**
 
-- Mem0, Letta, Zep, Cognee y otros llevan años en producción y tienen comunidades más grandes. Tylluan es joven; v0.17.2 es su última release.
+- Mem0, Letta, Zep, Cognee y otros llevan años en producción y tienen comunidades más grandes. Tylluan es joven; v0.17.3 es su última release.
 - No es un servicio alojado. No hay panel de equipo, ni copias de seguridad gestionadas, ni soporte. Existe un dashboard en React en `dashboard/`, pero los binarios publicados no lo incluyen: compila desde el código con `--features bundled-dashboard` para servirlo desde el kernel.
 - No está endurecido para redes hostiles. Mantenlo en `127.0.0.1`.
 - Varios gremios necesitan Python 3.12 o posterior, y algunos (la búsqueda web, por ejemplo) salen a internet cuando se lo pides.
@@ -175,7 +175,7 @@ Dos o más instancias de Tylluan pueden sincronizar memorias con pares que aprue
 
 ## Estado
 
-- **Última release:** v0.17.2 (2026-10-27). El trabajo posterior vive en `main`; consulta [CHANGELOG.md](CHANGELOG.md).
+- **Última release:** v0.17.3 (fecha de publicación). El trabajo posterior vive en `main`; consulta [CHANGELOG.md](CHANGELOG.md).
 - **Tests:** 1897 tests entre el kernel de Rust (lib), `tylluan-link` y `tylluan-fsrs`, que CI ejecuta en cada push junto con clippy, `cargo-deny`, el lint de Python y la suite de auditoría de seguridad.
 - **Qué está planificado y qué no:** [ROADMAP.md](ROADMAP.md). Estado actual de cada afirmación: [STATUS.md](STATUS.md).
 - **Plataformas:** Windows x86_64 y Linux x86_64 (WSL incluido) — las dos únicas que probamos y soportamos. CI ejecuta los tests en Linux x86_64 y el workflow de release sigue construyendo también los destinos antiguos de macOS y Linux ARM64, hasta que se limpien los workflows. La medición de arranque de arriba se tomó en Windows x86_64.
