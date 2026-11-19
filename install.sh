@@ -494,7 +494,10 @@ else
       "http://127.0.0.1:${PORT}/health" 2>/dev/null || true)
     HEALTH_BODY=$(cat /tmp/.tylluan_health.$$ 2>/dev/null || true)
     rm -f /tmp/.tylluan_health.$$
-    READINESS=$(printf '%s' "$HEALTH_BODY" | grep -o '"readiness":"[a-z]*"' | head -1 | cut -d'"' -f4)
+    # `|| true`: este script corre con `set -euo pipefail`; un kernel publicado antes de D212
+    # no emite `readiness`, `grep -o` no casa, el pipeline devuelve 1 y el instalador moria
+    # EN SILENCIO con codigo 1 (Install Smoke, push 375 y 376).
+    READINESS=$(printf '%s' "$HEALTH_BODY" | grep -o '"readiness":"[a-z]*"' | head -1 | cut -d'"' -f4 || true)
     # Compatibilidad: las releases anteriores a D212 no emiten `readiness`. Si no viene,
     # vale el 200 (que es lo que siempre significó "kernel arriba").
     [ -z "$READINESS" ] && [ "$HEALTH_CODE" = "200" ] && READINESS="ok"
