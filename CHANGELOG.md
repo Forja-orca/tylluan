@@ -9,6 +9,7 @@ All notable changes to Tylluan are documented here.
 Release de consolidación del enrutador, las instancias y los instaladores, con los gates de seguridad de la release y de las dependencias. **Plataformas probadas en esta release: solo Windows x86_64 y Linux x86_64 (WSL incluido)**; macOS/Apple Silicon y Linux ARM64 dejan de prometerse desde el 2026-11-07 (los binarios ya publicados siguen descargables).
 
 **Fixes**
+- **El kernel ya no se cae al arrancar con `TYLLUAN_DATA_DIR` fuera del directorio de trabajo.** En v0.17.2 `journal.db` se buscaba en `./data` relativo al directorio de trabajo (el resto de bases sí respetaban `TYLLUAN_DATA_DIR`) y, si allí no había `data/`, el proceso moría con `journal.db init failed: unable to open database file`. Ahora `journal.db`, `contracts.db`, `peers.db`, el contexto de tareas y la cola de despacho se resuelven desde `TYLLUAN_DATA_DIR` (`01be12b4`)
 - BM25 sobre descriptores de guild (`D202`): recuperador opt-in y **apagado por defecto**, con el umbral calibrado sobre el catálogo de guilds como estaba al medirlo (`fae67c1c`)
 - Argumentos declarados por tool y error correctivo en la capa de enrutado (`D197`/`D198`) (`141c6ea0`)
 - La pista de ruta cubre `image_path`, `audio_path`, `db_path`, `seed_path` y `root_path` (`D199`) (`01ddf0d6`)
