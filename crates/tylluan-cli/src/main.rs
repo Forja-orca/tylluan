@@ -37,6 +37,9 @@ impl std::fmt::Display for InstallProfile {
 
 #[derive(Parser)]
 #[command(name = "tylluan")]
+// CLI-SIN-VERSION: sin esto `tylluan --version` responde `error: unexpected argument '--version'`
+// (rc=2). clap toma el numero de CARGO_PKG_VERSION, que es el del Cargo.toml del crate.
+#[command(version)]
 #[command(about = "Sovereign Agentic Hub CLI — Manage your TylluanNexus o3 hub", long_about = None)]
 struct Cli {
     /// Instancia con nombre (registro en `~/.tylluan/instances.toml`). Por defecto `default`.
@@ -761,7 +764,10 @@ async fn main() -> Result<()> {
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
             let verify_url = format!("http://127.0.0.1:{inst_port}/api/v1/audit/verify");
-            match client.get(&verify_url).send().await {
+            // CLI-AUDIT-RESUME-SIN-TOKEN: con `dev_mode = false` este GET sin bearer devolvia 401 y
+            // la CLI decia "Hub returned error status: 401" en vez de verificar la cadena.
+            let token = resolve_cli_token(None);
+            match with_optional_bearer(client.get(&verify_url), &token).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
                     let status = json["status"].as_str().unwrap_or("unknown");
@@ -1275,7 +1281,12 @@ def test_{snake}_tool_registered():
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
             let url = format!("http://127.0.0.1:{inst_port}/api/v1/sessions/resume");
-            match client.get(&url).query(&[("agent_id", &agent_id)]).send().await {
+            // CLI-AUDIT-RESUME-SIN-TOKEN: mismo caso que `audit`; el helper ya existia.
+            let token = resolve_cli_token(None);
+            match with_optional_bearer(client.get(&url).query(&[("agent_id", &agent_id)]), &token)
+                .send()
+                .await
+            {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
                     println!("📋 Resume session for agent: {}", json["agent_id"]);
@@ -2259,6 +2270,61 @@ mod installer_flag_tests {
             }
         }
         found
+    }
+
+    /// CLI-AUDIT-RESUME-SIN-TOKEN (hallazgo abierto, reproducido el 2026-11-19): con
+    /// `dev_mode = false` los dos verbos respondían 401 porque su GET no llevaba bearer.
+    ///
+    /// Es un pin de fuente, no un test de comportamiento: lo que fija es que las dos ramas pasan por
+    /// `resolve_cli_token` + `with_optional_bearer`. Un 401/200 real necesitaría un kernel con
+    /// `dev_mode = false`, que es el ensayo de D213d, no un unit test.
+    #[test]
+    fn cli_audit_y_resume_adjuntan_el_bearer() {
+        const SRC: &str = include_str!("main.rs");
+        for rama in ["Commands::Audit { .. } => {", "Commands::Resume { agent_id } => {"] {
+            let i = SRC.find(rama).expect("la rama sigue existiendo");
+            let fin = (i + 1400).min(SRC.len());
+            let region = &SRC[i..fin];
+            assert!(
+                region.contains("resolve_cli_token"),
+                "{rama} no resuelve el token: con dev_mode=false responderá 401"
+            );
+            assert!(
+                region.contains("with_optional_bearer"),
+                "{rama} no adjunta el bearer a la petición"
+            );
+        }
+    }
+
+    /// CLI-SIN-VERSION (hallazgo abierto, reproducido el 2026-11-19): `tylluan --version` respondía
+    /// `error: unexpected argument '--version' found` con rc=2. La version tiene que ser la del
+    /// Cargo.toml del crate, no una copia a mano.
+    #[test]
+    fn cli_sin_version_el_flag_existe_y_dice_la_version_del_crate() {
+        use clap::CommandFactory;
+
+        let cmd = Cli::command();
+        assert_eq!(
+            cmd.get_version(),
+            Some(env!("CARGO_PKG_VERSION")),
+            "la version del CLI tiene que venir de CARGO_PKG_VERSION"
+        );
+
+        // `--version` y `-V` salen por DisplayVersion (rc=0 en el binario real), no por error.
+        for flag in ["--version", "-V"] {
+            // `Command::try_get_matches_from` en vez de `Cli::try_parse_from`: así no hace falta
+            // que `Cli` sea `Debug` sólo por el `unwrap_err`.
+            let err = cmd.clone().try_get_matches_from(["tylluan", flag]).unwrap_err();
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::DisplayVersion,
+                "{flag} tiene que imprimir la version, no fallar: {err}"
+            );
+            assert!(
+                err.to_string().contains(env!("CARGO_PKG_VERSION")),
+                "{flag} no menciona la version del crate: {err}"
+            );
+        }
     }
 
     #[test]
