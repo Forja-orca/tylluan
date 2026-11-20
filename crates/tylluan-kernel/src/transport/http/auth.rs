@@ -287,6 +287,8 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
         || path == "/api/v1/decide/shadow"
         || path == "/api/v1/silva/conflicted"
         || path == "/api/v1/runtime/tasks"
+        // D228: absolute local paths + which inference points go to the cloud
+        || path == "/api/v1/setup/status"
     {
         return true;
     }
@@ -1321,6 +1323,12 @@ mod fase1_operator_tests {
         assert!(
             operator_class_required("GET", "/api/v1/silva/conflicted"),
             "conflicted-nodes read is operator-class"
+        );
+        // D228: setup/status shows absolute local paths and which inference
+        // points go to the cloud, so an agent JWT or guild credential must not read it.
+        assert!(
+            operator_class_required("GET", "/api/v1/setup/status"),
+            "setup/status leaks local paths and cloud points: operator-class"
         );
         // NOT operator (agent-class surfaces):
         assert!(!operator_class_required("GET", "/api/v1/federation/peers"));
