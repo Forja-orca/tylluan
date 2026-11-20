@@ -24,7 +24,13 @@ def guild():
         posted.append((path, body))
         return {"turn": 7, "msg_id": "abcdef0123456789"}
 
+    def fake_get(path):
+        # D229: the guild checks the channel exists before posting; a unit test must not
+        # depend on a live kernel (CI has none), so the kernel answers with its channel list.
+        return [{"channel_id": "general"}, {"channel_id": "mision-activa"}]
+
     mod._post = fake_post
+    mod._get = fake_get
     mod._posted = posted
     return mod
 
