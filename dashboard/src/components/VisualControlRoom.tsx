@@ -4,6 +4,10 @@ import type { NexusBridge } from '@tylluan/ui-core';
 interface VisualControlRoomProps {
   bridge: NexusBridge | null;
   online: boolean;
+  /** D232: health/detailed viene del hook (`useNexus`) — este componente NO lo pide. */
+  healthDetailed?: HealthDetailedResponse | null;
+  /** D232: system/status también viene del hook. */
+  sysStatus?: SystemStatusSummary | null;
 }
 
 export type SubruntimeId = 'Memoria' | 'Inferencia' | 'Procesos' | 'Decision' | 'Coordinacion' | 'Red';
@@ -25,7 +29,39 @@ export interface HeatmapCell {
   count: number;
 }
 
-export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
+export interface RuntimeTaskEntry {
+  subruntime?: string;
+  name?: string;
+  runs?: number;
+  errors?: number;
+}
+
+export interface HealthDetailedResponse {
+  status?: string;
+  components?: {
+    silva?: { ok?: boolean; nodes?: number; edges?: number };
+    embeddings?: { ok?: boolean; model?: string; status?: string };
+    reranker?: { ok?: boolean; status?: string };
+    inference?: { ok?: boolean; status?: string };
+    guilds?: { total?: number; active?: number };
+    tunnel?: { ok?: boolean };
+  };
+}
+
+export interface GuildProcessEntry {
+  running?: boolean;
+}
+
+export interface ColoquioHeatmapMessage {
+  author_id?: string;
+  created_at?: number;
+}
+
+export interface SystemStatusSummary {
+  score?: number;
+  mailbox_healthy?: boolean;
+}
+export function VisualControlRoom({ bridge, online, healthDetailed, sysStatus }: VisualControlRoomProps) {
   const [activeView, setActiveView] = useState<'rings' | 'heatmap'>(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
@@ -37,65 +73,36 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Raw data from endpoints
-  interface RuntimeTaskEntry {
-    subruntime?: string;
-    name?: string;
-    runs?: number;
-    errors?: number;
-  }
-  interface HealthDetailedResponse {
-    status?: string;
-    components?: {
-      silva?: { ok?: boolean; nodes?: number; edges?: number };
-      embeddings?: { ok?: boolean; model?: string; status?: string };
-      reranker?: { ok?: boolean; status?: string };
-      inference?: { ok?: boolean; status?: string };
-      guilds?: { total?: number; active?: number };
-      tunnel?: { ok?: boolean };
-    };
-  }
-  interface GuildProcessEntry {
-    running?: boolean;
-  }
-  interface ColoquioHeatmapMessage {
-    author_id?: string;
-    created_at?: number;
-  }
-  interface SystemStatusSummary {
-    score?: number;
-    mailbox_healthy?: boolean;
-  }
 
   const [tasksData, setTasksData] = useState<RuntimeTaskEntry[] | null>(null);
-  const [healthDetailed, setHealthDetailed] = useState<HealthDetailedResponse | null>(null);
   const [guildsData, setGuildsData] = useState<GuildProcessEntry[] | null>(null);
   const [messagesData, setMessagesData] = useState<ColoquioHeatmapMessage[] | null>(null);
-  const [sysStatusData, setSysStatusData] = useState<SystemStatusSummary | null>(null);
+  // D232: health/detailed y system/status NO se piden aquí. Los trae el hook `useNexus` y
+  // llegan como props; pedirlos otra vez duplicaba el sondeo contra el kernel.
+  const sysStatusData = sysStatus ?? null;
 
-  // Poll data with interval >= 5s
+  // D232: sondeo con la pestaña visible y cada >= 15 s. Con la pestaña oculta no se pide
+  // NADA (ni una llamada): antes eran 5 endpoints cada 6 s aunque el usuario no mirase.
   const fetchData = useCallback(async () => {
     if (!bridge || !online) {
+      return;
+    }
+    if (typeof document !== 'undefined' && document.hidden) {
       return;
     }
 
     try {
       // 1. /api/v1/runtime/tasks (T-DSH-140)
       const tasksPromise = bridge.fetch('/api/v1/runtime/tasks').catch(() => null);
-      // 2. /api/v1/health/detailed
-      const healthPromise = bridge.fetch('/api/v1/health/detailed').catch(() => null);
-      // 3. /api/v1/guilds
+      // 2. /api/v1/guilds
       const guildsPromise = bridge.fetch('/api/v1/guilds').catch(() => null);
-      // 4. /api/v1/coloquio/channels/general/messages?limit=100
+      // 3. /api/v1/coloquio/channels/general/messages?limit=100
       const msgsPromise = bridge.fetch('/api/v1/coloquio/channels/general/messages?limit=100').catch(() => null);
-      // 5. /api/v1/system/status
-      const sysPromise = bridge.fetch('/api/v1/system/status').catch(() => null);
 
-      const [tasksRes, healthRes, guildsRes, msgsRes, sysRes] = await Promise.all([
+      const [tasksRes, guildsRes, msgsRes] = await Promise.all([
         tasksPromise,
-        healthPromise,
         guildsPromise,
         msgsPromise,
-        sysPromise,
       ]);
 
       if (tasksRes?.tasks) {
@@ -104,10 +111,8 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
         setTasksData(null);
       }
 
-      setHealthDetailed(healthRes || null);
       setGuildsData(Array.isArray(guildsRes) ? guildsRes : (guildsRes?.value || null));
       setMessagesData(msgsRes?.messages || null);
-      setSysStatusData(sysRes || null);
 
       setLastUpdated(new Date());
     } catch {
@@ -116,9 +121,24 @@ export function VisualControlRoom({ bridge, online }: VisualControlRoomProps) {
   }, [bridge, online]);
 
   useEffect(() => {
+    const POLL_MS = 15000; // D232: >= 15 s; con la pestaña oculta no se sondea
     fetchData();
-    const interval = setInterval(fetchData, 6000); // 6s refresh (>= 5s required)
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchData, POLL_MS);
+    // Al volver a la pestaña se refresca UNA vez, para no enseñar datos de hace minutos.
+    const onVisibility = () => {
+      if (!document.hidden) {
+        fetchData();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+    };
   }, [fetchData]);
 
   // Compute Subruntime Rings data with strictly documented, non-arbitrary formulas

@@ -630,6 +630,8 @@ function App() {
                   <VisualControlRoom
                     bridge={bridge}
                     online={online}
+                    healthDetailed={healthDetailed}
+                    sysStatus={sysStatus}
                   />
                 </ErrorBoundary>
               )}
