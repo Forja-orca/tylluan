@@ -456,7 +456,7 @@ export function OverviewTab({
       </fieldset>
 
       {/* Homeostasis Hero Widget */}
-      <HomeostasisWidget bridge={bridge} />
+      <HomeostasisWidget bridge={bridge} health={healthDetailed as React.ComponentProps<typeof HomeostasisWidget>['health']} />
 
       {/* Health Banner */}
       {healthDetailed && typeof healthDetailed.score === 'number' && healthDetailed.score < 70 && (

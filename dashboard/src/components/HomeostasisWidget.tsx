@@ -5,6 +5,9 @@ import { usePolling } from '../hooks/usePolling';
 
 interface HomeostasisWidgetProps {
   bridge: NexusBridge | null;
+  /** Health already fetched by the shared hook. When given (even null), the widget
+   *  does NOT call /api/v1/health/detailed itself: one request per interval, not three. */
+  health?: HomeostasisHealth | null;
 }
 
 interface HomeostasisHealth {
@@ -16,12 +19,15 @@ interface HomeostasisHealth {
   };
 }
 
-export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
-  const [health, setHealth] = useState<HomeostasisHealth | null>(null);
-  const [loading, setLoading] = useState(true);
+export function HomeostasisWidget({ bridge, health: sharedHealth }: HomeostasisWidgetProps) {
+  const ownsFetch = sharedHealth === undefined;
+  const [ownHealth, setHealth] = useState<HomeostasisHealth | null>(null);
+  const [ownLoading, setLoading] = useState(true);
+  const health = ownsFetch ? ownHealth : sharedHealth;
+  const loading = ownsFetch ? ownLoading : sharedHealth === null;
 
   useEffect(() => {
-    if (!bridge) return;
+    if (!bridge || !ownsFetch) return;
     const fetchHealth = async () => {
       try {
         const h = (await bridge.health_detailed()) as HomeostasisHealth;
@@ -33,13 +39,13 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
       }
     };
     fetchHealth();
-  }, [bridge]);
+  }, [bridge, ownsFetch]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('homeostasis-health', async () => {
     if (!bridge) return;
     try { setHealth(await bridge.health_detailed()); } catch {}
-  }, { interval: 'medium', enabled: !!bridge });
+  }, { interval: 'medium', enabled: !!bridge && ownsFetch });
 
   // Prefer authoritative score from /api/v1/health/detailed; fallback only if endpoint omits score
   const guildsOk = health?.components?.guilds?.ok ? 1 : 0;
