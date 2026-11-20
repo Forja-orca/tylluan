@@ -410,7 +410,7 @@ $GuildReq = Join-Path $BinDir "guilds"
 if (-not (Test-Path (Join-Path $GuildReq "requirements.txt"))) { $GuildReq = "guilds" }
 $ReqHashes = Join-Path $GuildReq "requirements-hashes.txt"
 $ReqPlain = Join-Path $GuildReq "requirements.txt"
-$GuildImport = 'import mcp, fastmcp, psutil'
+$GuildImport = 'from mcp.server.fastmcp import FastMCP; import psutil'
 
 function Write-GuildDepsManualHint {
     if (Test-Path $ReqHashes) {

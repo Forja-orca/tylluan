@@ -794,10 +794,10 @@ GuildLauncher::Python { module_path } => {
                     error!("❌ find_python() failed: {}. Check .venv exists!", e);
                     e
                 })?;
-                // Caso 3+10 del estudio INSTALL-PYTHON-DISCOVERY (T4346): el
-                // interprete se elige igual que antes, pero si no puede importar
-                // mcp/fastmcp/psutil hay que decirlo con ruta, version y arreglo
-                // en vez de dejar que cada guild se muera solo al arrancar.
+                // Caso 3+10 del estudio INSTALL-PYTHON-DISCOVERY (T4346; import real
+                // corregido en D207): el interprete se elige igual que antes, pero si no
+                // puede hacer el import que los guilds usan de verdad hay que decirlo con
+                // ruta, version y arreglo en vez de dejar que cada guild muera solo.
                 warn_guild_deps_once(&python).await;
 
                 // S1: Docker sandbox — profile-based (guild-level only, no session)
@@ -2475,10 +2475,18 @@ pub async fn find_python() -> Result<String> {
     )
 }
 
-/// Sonda de dependencias de los guilds: los mismos tres imports que ejecutan
-/// los instaladores (`install.sh:214` y `install.ps1:263`). Un interprete que
-/// puede con esto puede arrancar cualquier guild Python.
-const GUILD_DEPS_PROBE: &str = "import mcp, fastmcp, psutil";
+/// Sonda de dependencias de los guilds: el **import real** que hacen los guilds.
+///
+/// D207 (2026-11-18): antes esta sonda era `import mcp, fastmcp, psutil`, copiada de
+/// los instaladores. Daba una ALARMA FALSA en produccion: el venv tiene `mcp` y
+/// `psutil`, y los guilds hacen `from mcp.server.fastmcp import FastMCP` (el FastMCP
+/// viene DENTRO de `mcp`), pero el paquete suelto `fastmcp` no esta y nadie lo usa.
+/// Medido: 17 ficheros de guild con `from mcp.server.fastmcp import FastMCP`, 0 con
+/// `import fastmcp`; y en el venv de produccion `import mcp` OK, el import largo OK,
+/// `import fastmcp` FALLA.
+///
+/// Se comprueba el import largo y `psutil`, que si se usa de verdad.
+const GUILD_DEPS_PROBE: &str = "from mcp.server.fastmcp import FastMCP; import psutil";
 
 /// Comando de arreglo que se cita en el error (ruta relativa al release, igual
 /// que la documenta `install.sh:203`).
@@ -2508,7 +2516,8 @@ fn guild_deps_error_message(python: &str, version: &str, detail: &str) -> String
         detail.to_string()
     };
     format!(
-        "El interprete de los guilds '{python}' no puede importar mcp/fastmcp/psutil \
+        "El interprete de los guilds '{python}' no puede importar lo que los guilds \
+         necesitan ('from mcp.server.fastmcp import FastMCP' y 'psutil') \
          (version: {version_text}). Los guilds Python no arrancaran y tylluan_do respondera \
          'Unknown guild'. Arreglo: '{python}' {GUILD_DEPS_FIX_COMMAND} (o reinstala con \
          el instalador, que crea <DataDir>/.venv con las dependencias). Detalle: {detail_text}"
@@ -3294,8 +3303,8 @@ mod tests {
             "el mensaje debe dar el comando de arreglo: {message}"
         );
         assert!(
-            message.contains("mcp/fastmcp/psutil"),
-            "el mensaje debe decir que imports faltan: {message}"
+            message.contains("from mcp.server.fastmcp import FastMCP"),
+            "el mensaje debe decir que import hace falta (D207): {message}"
         );
     }
 
@@ -3320,6 +3329,35 @@ mod tests {
             with_data.contains("C:\\tylluan\\.venv\\Scripts\\python.exe"),
             "{with_data}"
         );
+    }
+
+    /// D207 (2026-11-18): la sonda tiene que pedir el import REAL de los guilds.
+    ///
+    /// Esta es la mutacion que faltaba en T4346: alli el test usaba un interprete
+    /// inexistente, asi que cubria "no arranca" pero NO "arranca y el import pedido es
+    /// el equivocado". En produccion la sonda daba alarma falsa porque pedia el paquete
+    /// suelto `fastmcp`, que no existe en el venv y que ningun guild importa.
+    ///
+    /// Mutacion que debe hacerla fallar: volver a `import mcp, fastmcp, psutil` (pide el
+    /// paquete suelto) o quitar el import largo que si usan los guilds.
+    #[test]
+    fn d207_the_probe_asks_for_the_import_the_guilds_really_use() {
+        assert!(
+            GUILD_DEPS_PROBE.contains("from mcp.server.fastmcp import FastMCP"),
+            "la sonda debe pedir el import real de los guilds: {GUILD_DEPS_PROBE}"
+        );
+        assert!(
+            GUILD_DEPS_PROBE.contains("psutil"),
+            "psutil si se usa de verdad: {GUILD_DEPS_PROBE}"
+        );
+        for token in GUILD_DEPS_PROBE.split(';') {
+            let t = token.trim();
+            assert!(
+                !(t == "import fastmcp" || t == "fastmcp"),
+                "la sonda NO debe exigir el paquete suelto fastmcp (falsa alarma en \
+                 produccion: los guilds usan from mcp.server.fastmcp import FastMCP): {t}"
+            );
+        }
     }
 
     #[tokio::test]

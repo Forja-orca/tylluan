@@ -381,7 +381,7 @@ guild_deps_hint() {
 if [ "$SKIP_GUILD_DEPS" -eq 1 ]; then
   info "  Skipped (--skip-guild-deps)."
   guild_deps_hint
-elif [ -x "${VENV_PY}" ] && "${VENV_PY}" -c 'import mcp, fastmcp, psutil' >/dev/null 2>&1; then
+elif [ -x "${VENV_PY}" ] && "${VENV_PY}" -c 'from mcp.server.fastmcp import FastMCP; import psutil' >/dev/null 2>&1; then
   say "  guild deps OK in ${VENV_DIR}"
 else
   GUILD_PY=""
@@ -420,7 +420,7 @@ else
         warn "  NO instalo dependencias Python sin hashes (falla cerrado)."
         warn "  Si aceptas el riesgo, repite con --allow-unhashed-deps."
       fi
-      if "${VENV_PY}" -c 'import mcp, fastmcp, psutil' >/dev/null 2>&1; then
+      if "${VENV_PY}" -c 'from mcp.server.fastmcp import FastMCP; import psutil' >/dev/null 2>&1; then
         say "  guild deps OK in ${VENV_DIR}"
       else
         info "  Guild dependencies are NOT installed (pip did not finish)."
