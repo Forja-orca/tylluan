@@ -480,6 +480,10 @@ pub async fn start_http_server(
     let bound_port = bound_addr.port();
     info!("\u{1F680} TylluanNexus HTTP Gateway listening on {}", bound_addr);
     
+    // D230 v3 (T4802): se captura AQUI, con el puerto ya bound (puede no ser el
+    // configurado si hubo retry). Es la fuente que no falla por contencion del lock
+    // de config y la que impide que un guild caiga a 47004 (H-HER-D-05).
+    crate::config::set_kernel_base_runtime(crate::config::kernel_base_url(host, bound_port));
     // D-94: the instance DATA_DIR is the single place where the port is recorded.
     match instance::write_active_port(&active_port_file, bound_port) {
         Ok(()) => info!(

@@ -2162,19 +2162,46 @@ pub fn kernel_base_url(host: &str, port: u16) -> String {
     }
 }
 
-/// D230: base que hay que inyectar. Si el operador ya fijo `KERNEL_BASE`, manda la
-/// suya (mismo criterio que `TYLLUAN_VISION_MODEL_DIR`: no se pisa lo que puso el
-/// operador); si no, se calcula del config cargado.
-pub fn kernel_base_para_guilds() -> Option<String> {
-    if let Ok(v) = std::env::var(KERNEL_BASE_ENV) {
-        let v = v.trim().to_string();
-        if !v.is_empty() {
-            return Some(v);
-        }
+/// D230 v3 (T4802): base del kernel capturada **cuando se bindea el puerto real**
+/// (no el configurado: con `port_retry_secs` puede ser otro). Es la fuente que no
+/// puede fallar por contencion del lock, y la que cierra el fail-open H-HER-D-05.
+static KERNEL_BASE_RUNTIME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// D230 v3: la llama el transporte HTTP en cuanto conoce el puerto bound.
+pub fn set_kernel_base_runtime(base: impl Into<String>) {
+    let base = base.into();
+    if !base.trim().is_empty() {
+        let _ = KERNEL_BASE_RUNTIME.set(base);
     }
-    let cfg = TylluanConfig::load_cached().ok()?;
-    let guard = cfg.try_read().ok()?;
-    Some(kernel_base_url(&guard.nexus.host, guard.nexus.port))
+}
+
+/// D230 v3: prioridad explicita y testeable. Operador > config > runtime.
+/// `None` solo si las tres fuentes faltan; el llamador **debe abortar** el spawn
+/// (nunca omitir la variable: el guild caeria a `active_port.json` o a 47004).
+pub fn kernel_base_de_fuentes(
+    operador: Option<String>,
+    config: Option<String>,
+    runtime: Option<String>,
+) -> Option<String> {
+    [operador, config, runtime]
+        .into_iter()
+        .flatten()
+        .map(|v| v.trim().to_string())
+        .find(|v| !v.is_empty())
+}
+
+/// D230: base que hay que inyectar. Si el operador ya fijo `KERNEL_BASE`, manda la
+/// suya; si no, la del config; si el config esta bloqueado (un `POST /config/edit`
+/// sujetando el escritor justo al arrancar un guild), la capturada al bindear.
+pub fn kernel_base_para_guilds() -> Option<String> {
+    let operador = std::env::var(KERNEL_BASE_ENV).ok();
+    let config = TylluanConfig::load_cached().ok().and_then(|cfg| {
+        cfg.try_read()
+            .ok()
+            .map(|guard| kernel_base_url(&guard.nexus.host, guard.nexus.port))
+    });
+    let runtime = KERNEL_BASE_RUNTIME.get().cloned();
+    kernel_base_de_fuentes(operador, config, runtime)
 }
 pub fn guild_launcher_env_with_operator_override(
     vision_model_path: &str,
@@ -4722,27 +4749,83 @@ mod t138_reindex_config_tests {
         assert_eq!(kernel_base_url("::1", 47925), "http://[::1]:47925");
     }
 
-    /// D230: `guild_launcher_env` tiene que llevar la variable, y si el operador
-    /// ya la fijo, se respeta la suya (no se pisa).
-    #[test]
-    fn d230_launcher_env_lleva_kernel_base_y_respeta_al_operador() {
-        // SAFETY: test de un solo hilo para esta variable; se borra al terminar.
-        unsafe { std::env::set_var(KERNEL_BASE_ENV, "http://127.0.0.1:49000") };
-        let env = guild_launcher_env("");
-        let base = env
-            .iter()
-            .find(|(k, _)| k == KERNEL_BASE_ENV)
-            .map(|(_, v)| v.clone());
-        unsafe { std::env::remove_var(KERNEL_BASE_ENV) };
-        assert_eq!(base.as_deref(), Some("http://127.0.0.1:49000"));
+}
+    /// H-HER-D-06 (T4801): el entorno es del PROCESO y los tests corren en paralelo, asi
+    /// que dos tests que tocan `KERNEL_BASE` se pisan (medido: uno veia el valor del otro).
+    /// Restaurar no basta; hay que serializar.
+    #[cfg(test)]
+    static ENV_KERNEL_BASE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-        let sin_operador = guild_launcher_env("")
+    /// H-HER-D-06 (T4801): guarda y **restaura** el valor previo de la variable.
+    #[cfg(test)]
+    struct EnvGuard(&'static str, Option<String>);
+    #[cfg(test)]
+    #[cfg(test)]
+    impl EnvGuard {
+        fn quitar(k: &'static str) -> Self {
+            let previo = std::env::var(k).ok();
+            unsafe { std::env::remove_var(k) };
+            Self(k, previo)
+        }
+        fn poner(k: &'static str, v: &str) -> Self {
+            let previo = std::env::var(k).ok();
+            unsafe { std::env::set_var(k, v) };
+            Self(k, previo)
+        }
+    }
+    #[cfg(test)]
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.1 {
+                Some(v) => unsafe { std::env::set_var(self.0, v) },
+                None => unsafe { std::env::remove_var(self.0) },
+            }
+        }
+    }
+
+    /// D230 v3: la prioridad es explicita: operador > config > runtime.
+    /// MUTACION (H-HER-D-05): si el resolver devuelve None con una fuente
+    /// presente, este test se pone ROJO.
+    #[test]
+    fn d230v3_el_resolver_nunca_pierde_una_fuente_presente() {
+        let op = Some("http://127.0.0.1:49001".to_string());
+        let cfg = Some("http://127.0.0.1:49002".to_string());
+        let rt = Some("http://127.0.0.1:49003".to_string());
+
+        assert_eq!(kernel_base_de_fuentes(op.clone(), cfg.clone(), rt.clone()).as_deref(), op.as_deref());
+        assert_eq!(kernel_base_de_fuentes(None, cfg.clone(), rt.clone()).as_deref(), cfg.as_deref());
+        assert_eq!(kernel_base_de_fuentes(None, None, rt.clone()).as_deref(), rt.as_deref());
+        // vacios o en blanco no cuentan, pero no tapan a la siguiente fuente
+        assert_eq!(kernel_base_de_fuentes(Some("  ".into()), cfg.clone(), None).as_deref(), cfg.as_deref());
+        // y solo sin ninguna fuente devuelve None (el llamador debe abortar)
+        assert!(kernel_base_de_fuentes(None, None, None).is_none());
+    }
+
+    /// D230 v3: en un kernel vivo SIEMPRE hay base — el fail-open de H-HER-D-05
+    /// (config bloqueado -> variable omitida -> guild a 47004) no puede repetirse.
+    #[test]
+    fn d230v3_el_launcher_env_siempre_lleva_kernel_base() {
+        let _lk = ENV_KERNEL_BASE.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = EnvGuard::quitar(KERNEL_BASE_ENV);
+        set_kernel_base_runtime("http://127.0.0.1:47777");
+        let base = guild_launcher_env("")
             .into_iter()
             .find(|(k, _)| k == KERNEL_BASE_ENV)
             .map(|(_, v)| v);
-        if let Some(v) = sin_operador {
-            assert!(v.starts_with("http://"), "base sin esquema: {v}");
-            assert!(v.rsplit(':').next().unwrap().parse::<u16>().is_ok(), "base sin puerto: {v}");
-        }
+        assert!(base.is_some(), "H-HER-D-05: sin KERNEL_BASE el guild cae a 47004");
+        let base = base.unwrap();
+        assert!(base.starts_with("http://"), "base sin esquema: {base}");
+        assert!(base.rsplit(':').next().unwrap().parse::<u16>().is_ok(), "base sin puerto: {base}");
     }
-}
+
+    /// Y si el operador la fija, gana la suya.
+    #[test]
+    fn d230v3_el_operador_manda_sobre_el_config() {
+        let _lk = ENV_KERNEL_BASE.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = EnvGuard::poner(KERNEL_BASE_ENV, "http://127.0.0.1:49000");
+        let base = guild_launcher_env("")
+            .into_iter()
+            .find(|(k, _)| k == KERNEL_BASE_ENV)
+            .map(|(_, v)| v);
+        assert_eq!(base.as_deref(), Some("http://127.0.0.1:49000"));
+    }

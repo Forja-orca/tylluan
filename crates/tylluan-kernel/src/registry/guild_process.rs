@@ -910,6 +910,12 @@ GuildLauncher::Python { module_path } => {
         launcher_env.extend(crate::config::guild_launcher_env(
             &crate::config::configured_vision_model_path(),
         ));
+        // D230 v3 (T4802): nunca spawnear sin KERNEL_BASE. Si faltara, el guild caeria a
+        // `data/active_port.json` o a 47004 (produccion) y escribiria ahi: el fallo que
+        // D230 vino a cerrar. Abortar con error claro es mejor que un guild sobre produccion.
+        if !launcher_env.iter().any(|(k, _)| k == crate::config::KERNEL_BASE_ENV) {
+            anyhow::bail!("D230: no puedo determinar {} para el guild '{}'; aborto el spawn para que no caiga al puerto 47004 (produccion)", crate::config::KERNEL_BASE_ENV, self.name);
+        }
         for (key, value) in launcher_env {
             command.env(key, value);
         }
