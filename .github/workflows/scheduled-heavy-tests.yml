@@ -133,5 +133,5 @@ jobs:
             --test sparse_cascade_bench \
             --test sparse_signature_spike \
             --test trust_banners_adversarial \
-            -- --ignored
+            -- --ignored --nocapture
 
