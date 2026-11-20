@@ -554,6 +554,39 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
         return f"❌ Error reading channel: {e}"
 
 
+def _list_channel_ids_or_none():
+    """D229 v3 (T4799): None = no se pudo comprobar (kernel caido, 401, timeout);
+    [] = el kernel contesto y no hay canales. La diferencia importa: `_list_channel_ids`
+    se traga los fallos y devuelve [], asi que un guard basado en "lista vacia" no
+    protegia nada (hallazgo de Hermes, T4798)."""
+    try:
+        data = _get("/api/v1/coloquio/channels")
+        channels = data if isinstance(data, list) else data.get("channels", [])
+        return [c["channel_id"] for c in channels]
+    except Exception:
+        return None
+
+
+def _guard_canal_existe(channel_id: str):
+    """D229 v3: mensaje de rechazo, o None si se puede postear.
+
+    Rechaza en los TRES casos: no se pudo comprobar, no hay canales, y el canal no
+    existe. Postear a un canal inexistente lo crea en el kernel (memory/coloquio.rs:671)
+    y el mensaje se queda en un canal basura: paso con 'channel' y 'fix'."""
+    existentes = _list_channel_ids_or_none()
+    if existentes is None:
+        return ("❌ No pude comprobar los canales (kernel no disponible o sin permiso); "
+                "no posteo para no crear uno por accidente. Reintenta en unos segundos.")
+    if not existentes:
+        return ("❌ No hay ningún canal en el Coloquio; no posteo para no crear uno "
+                "por accidente. Créalo primero con create_channel.")
+    if not any(c.strip().lower() == channel_id.strip().lower() for c in existentes):
+        return (f"❌ El canal '{channel_id}' no existe; no lo creo por accidente. "
+                f"Canales: {', '.join(sorted(existentes)[:12])}"
+                f"{' …' if len(existentes) > 12 else ''}. "
+                f"Si de verdad quieres uno nuevo, create_channel('{channel_id}').")
+    return None
+
 @mcp.tool()
 def post_to_channel(channel_id: str = "", content: str = "", author_id: str = "",
                     role: str = "agent", message: str = "", query: str = "",
@@ -600,6 +633,13 @@ def post_to_channel(channel_id: str = "", content: str = "", author_id: str = ""
 
     if not channel_id or not content:
         return "❌ Specify channel and content: 'post to coloquio <channel>: <message>'"
+    # H-20261119-COLOQUIO-POST-CREA-CANAL (D229 v3): el kernel CREA el canal al postear
+    # a uno inexistente y el mensaje se queda en un canal basura. El guard rechaza si
+    # no se puede comprobar, si no hay canales y si el canal no existe.
+    rechazo = _guard_canal_existe(channel_id)
+    if rechazo:
+        return rechazo
+
     try:
         quoted_id = urllib.parse.quote(channel_id, safe="")
         # Never trust the caller-supplied `role` -- this tool is only ever
@@ -799,6 +839,11 @@ def post_to_coloquio(channel_id: str, message: str, agent_id: str) -> str:
     """
     if not channel_id or not message or not agent_id:
         return "❌ All parameters are required: channel_id, message, agent_id"
+    # D229 v3 (T4799): esta tool hace el MISMO POST que post_to_channel y tambien
+    # dejaba que el kernel creara el canal. Mismo guard.
+    rechazo = _guard_canal_existe(channel_id)
+    if rechazo:
+        return rechazo
     try:
         quoted_id = urllib.parse.quote(channel_id, safe="")
         result = _post(
