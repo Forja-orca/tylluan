@@ -39,6 +39,16 @@ pub struct SchemaField {
     pub min: Option<f64>,
     pub max: Option<f64>,
     pub options: &'static [&'static str],
+    /// D227 (T4771): nivel de la clasificacion del operador.
+    /// `essential` = asistente de primera instalacion y Ajustes principal;
+    /// `advanced` = afinado plegado; `internal` = solo diagnostico de lectura.
+    pub level: &'static str,
+    /// D227: valor por defecto como literal JSON. No se escribe a mano y se deja
+    /// ahi: el test `defaults_del_esquema_coinciden_con_el_config_real` lo compara
+    /// con `TylluanConfig::default()`, asi que un default inventado pone el test
+    /// ROJO. Los dos campos de `DEFAULT_DINAMICO` se validan aparte porque su
+    /// default depende de la plataforma o de las features de compilacion.
+    pub default: &'static str,
     pub reason: &'static str,
 }
 
@@ -60,36 +70,132 @@ pub const BOOT_ONLY_KEYS: &[&str] = &[
 ];
 
 pub const SCHEMA: &[SchemaField] = &[
-    // General
-    SchemaField { key: "low_memory_mode", section: "general", kind: "boolean", editable: true, requires_restart: false, sensitive: false, min: None, max: None, options: &[], reason: "" },
-    SchemaField { key: "dev_mode", section: "general", kind: "boolean", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], reason: "solo el operador (tylluan.toml)" },
-    SchemaField { key: "host", section: "general", kind: "string", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], reason: "solo el operador (tylluan.toml)" },
-    SchemaField { key: "port", section: "general", kind: "integer", editable: false, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(65535.0), options: &[], reason: "solo el operador (tylluan.toml)" },
-    // Inferencia (absorbe Model Hub)
-    SchemaField { key: "memory.embedding_model", section: "inference", kind: "string", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], reason: "" },
-    SchemaField { key: "memory.vector_dimensions", section: "inference", kind: "integer", editable: false, requires_restart: true, sensitive: false, min: Some(1024.0), max: Some(1024.0), options: &[], reason: "invariante 1024: migrar vectores antes de cambiarla" },
-    SchemaField { key: "inference.device", section: "inference", kind: "enum", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &["cpu", "directml", "cuda", "coreml"], reason: "" },
-    SchemaField { key: "inference.max_threads", section: "inference", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(256.0), options: &[], reason: "" },
-    SchemaField { key: "silva.reranker_enabled", section: "inference", kind: "boolean", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], reason: "" },
-    // Mantenimiento
-    // D-160: TTL de inactividad del motor de embeddings (0 = nunca liberar).
-    SchemaField { key: "memory.embedding_idle_ttl_secs", section: "inference", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(86400.0), options: &[], reason: "libera RAM de ONNX tras inactividad; 0 = apagado" },
-    SchemaField { key: "memory.background_concurrency", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(32.0), options: &[], reason: "el supervisor se crea al arrancar (H1)" },
-    SchemaField { key: "memory.background_max_wait_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(0.0), max: Some(3600.0), options: &[], reason: "el supervisor se crea al arrancar (H1)" },
-    SchemaField { key: "memory.reindex_node_delay_ms", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(10000.0), options: &[], reason: "en caliente: se lee en cada pasada" },
-    SchemaField { key: "memory.reindex_nodes_per_tick", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(10000.0), options: &[], reason: "el bucle lo captura al arrancar (H1)" },
-    SchemaField { key: "memory.reindex_tick_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(86400.0), options: &[], reason: "el intervalo se fija al arrancar (H1)" },
-    SchemaField { key: "logging.max_file_size_mb", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(10240.0), options: &[], reason: "el appender rotativo se abre al arrancar (H1)" },
-    SchemaField { key: "logging.max_files", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(100.0), options: &[], reason: "el appender rotativo se abre al arrancar (H1)" },
-    // Seguridad (solo lectura en A0; A3 añade acciones con código de operador)
-    SchemaField { key: "security.intent_filter", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], reason: "sensible: solo lectura en A0 (A3: código de operador)" },
-    SchemaField { key: "security.coherence_gate_hybrid_enabled", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], reason: "sensible: solo lectura en A0" },
-    SchemaField { key: "security.encrypt_at_rest", section: "security", kind: "boolean", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], reason: "sensible: solo lectura en A0" },
-    SchemaField { key: "security.external_acl.enabled", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], reason: "B1/D-96: solo el operador en tylluan.toml" },
-    // Conectores (B1: solo el operador)
-    SchemaField { key: "external_mcp", section: "connectors", kind: "array", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], reason: "B1: [[external_mcp]] solo en tylluan.toml" },
-    SchemaField { key: "services", section: "connectors", kind: "table", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], reason: "B1: [services] solo en tylluan.toml" },
-    SchemaField { key: "wake.command", section: "connectors", kind: "string", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], reason: "B1: solo el operador" },
+    // general
+    SchemaField { key: "low_memory_mode", section: "general", kind: "boolean", editable: true, requires_restart: false, sensitive: false, min: None, max: None, options: &[], level: "advanced", default: r#"false"#, reason: "" },
+    SchemaField { key: "dev_mode", section: "general", kind: "boolean", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "solo el operador (tylluan.toml)" },
+    SchemaField { key: "nexus.host", section: "general", kind: "string", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#""127.0.0.1""#, reason: "solo el operador (tylluan.toml)" },
+    SchemaField { key: "nexus.port", section: "general", kind: "integer", editable: false, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(65535.0), options: &[], level: "essential", default: r#"47004"#, reason: "solo el operador (tylluan.toml)" },
+    // memory
+    SchemaField { key: "memory.db_path", section: "memory", kind: "string", editable: false, requires_restart: true, sensitive: false, min: None, max: None, options: &[], level: "essential", default: r#""./data/tylluan.db""#, reason: "mover la base exige migracion: lo hace el asistente, no un campo de texto" },
+    SchemaField { key: "memory.embedding_model", section: "memory", kind: "string", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], level: "essential", default: r#""mxbai-embed-large""#, reason: "" },
+    SchemaField { key: "memory.vector_dimensions", section: "memory", kind: "integer", editable: false, requires_restart: true, sensitive: false, min: Some(1024.0), max: Some(1024.0), options: &[], level: "essential", default: r#"1024"#, reason: "invariante 1024: migrar vectores antes de cambiarla" },
+    SchemaField { key: "memory.embedding_idle_ttl_secs", section: "memory", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(86400.0), options: &[], level: "advanced", default: r#"0"#, reason: "libera RAM de ONNX tras inactividad; 0 = apagado" },
+    SchemaField { key: "silva.db_path", section: "memory", kind: "string", editable: false, requires_restart: true, sensitive: false, min: None, max: None, options: &[], level: "essential", default: r#""./data/silva.db""#, reason: "mover la base exige migracion" },
+    SchemaField { key: "silva.decay_enabled", section: "memory", kind: "boolean", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"true"#, reason: "solo el operador: apaga la decadencia de toda la memoria" },
+    SchemaField { key: "silva.reranker_enabled", section: "memory", kind: "boolean", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &[], level: "advanced", default: r#"true"#, reason: "" },
+    // inference
+    SchemaField { key: "inference.device", section: "inference", kind: "enum", editable: true, requires_restart: true, sensitive: false, min: None, max: None, options: &["cpu", "directml", "cuda", "coreml"], level: "essential", default: r#"auto"#, reason: "por defecto lo elige la plataforma (auto_select_device)" },
+    SchemaField { key: "inference.max_threads", section: "inference", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(256.0), options: &[], level: "advanced", default: r#"null"#, reason: "" },
+    SchemaField { key: "inference.primary_model", section: "inference", kind: "string", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#""""#, reason: "el chat lo elige el usuario; Tylluan no impone modelo (directiva de Jose)" },
+    SchemaField { key: "inference.llama.models_dir", section: "inference", kind: "string", editable: false, requires_restart: true, sensitive: false, min: None, max: None, options: &[], level: "essential", default: r#"null"#, reason: "carpeta del usuario; se toca desde el asistente" },
+    SchemaField { key: "inference.llama.ctx_size", section: "inference", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(512.0), max: Some(1048576.0), options: &[], level: "essential", default: r#"4096"#, reason: "" },
+    SchemaField { key: "inference.llama.n_gpu_layers", section: "inference", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(-1.0), max: Some(999.0), options: &[], level: "essential", default: r#"99"#, reason: "" },
+    SchemaField { key: "inference.llama.threads", section: "inference", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(256.0), options: &[], level: "essential", default: r#"4"#, reason: "" },
+    SchemaField { key: "inference.llama.temperature", section: "inference", kind: "float", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(2.0), options: &[], level: "advanced", default: r#"0.7"#, reason: "" },
+    // cloud
+    SchemaField { key: "inference.points.chat.cloud_enabled", section: "cloud", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "privacidad: solo el operador (D213); la nube no se enciende por API" },
+    SchemaField { key: "inference.points.chat.model", section: "cloud", kind: "string", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"null"#, reason: "solo el operador: el modelo de chat lo elige el usuario" },
+    SchemaField { key: "inference.points.chat.api_key_env", section: "cloud", kind: "string", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"null"#, reason: "solo el operador: apunta a una credencial de nube" },
+    SchemaField { key: "inference.points.decision.cloud_enabled", section: "cloud", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "privacidad: solo el operador (D213); la nube no se enciende por API" },
+    SchemaField { key: "inference.points.grammar_judge.cloud_enabled", section: "cloud", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "privacidad: solo el operador (D213); la nube no se enciende por API" },
+    SchemaField { key: "inference.points.sentinel.cloud_enabled", section: "cloud", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "privacidad: solo el operador (D213); la nube no se enciende por API" },
+    SchemaField { key: "nexus.allow_hf_download", section: "cloud", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "descarga de modelos: solo el operador (sale a internet)" },
+    SchemaField { key: "nexus.allowed_model_hosts", section: "cloud", kind: "array", editable: false, requires_restart: false, sensitive: false, min: None, max: None, options: &[], level: "advanced", default: r#"["huggingface.co","cdn-lfs.huggingface.co"]"#, reason: "lista: se edita en tylluan.toml" },
+    // maintenance
+    SchemaField { key: "memory.background_concurrency", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(32.0), options: &[], level: "advanced", default: r#"2"#, reason: "el supervisor se crea al arrancar (H1)" },
+    SchemaField { key: "memory.background_max_wait_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(0.0), max: Some(3600.0), options: &[], level: "advanced", default: r#"60"#, reason: "el supervisor se crea al arrancar (H1)" },
+    SchemaField { key: "memory.reindex_node_delay_ms", section: "maintenance", kind: "integer", editable: true, requires_restart: false, sensitive: false, min: Some(0.0), max: Some(10000.0), options: &[], level: "advanced", default: r#"200"#, reason: "en caliente: se lee en cada pasada" },
+    SchemaField { key: "memory.reindex_nodes_per_tick", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(10000.0), options: &[], level: "advanced", default: r#"100"#, reason: "el bucle lo captura al arrancar (H1)" },
+    SchemaField { key: "memory.reindex_tick_secs", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(86400.0), options: &[], level: "advanced", default: r#"600"#, reason: "el intervalo se fija al arrancar (H1)" },
+    SchemaField { key: "logging.max_file_size_mb", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(10240.0), options: &[], level: "advanced", default: r#"50"#, reason: "el appender rotativo se abre al arrancar (H1)" },
+    SchemaField { key: "logging.max_files", section: "maintenance", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(100.0), options: &[], level: "advanced", default: r#"5"#, reason: "el appender rotativo se abre al arrancar (H1)" },
+    // security
+    SchemaField { key: "security.intent_filter", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#"true"#, reason: "sensible: solo lectura (A3: codigo de operador)" },
+    SchemaField { key: "security.coherence_gate_hybrid_enabled", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#"false"#, reason: "sensible: solo lectura" },
+    SchemaField { key: "security.encrypt_at_rest", section: "security", kind: "boolean", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#"false"#, reason: "sensible: solo lectura; depende de la feature encryption" },
+    SchemaField { key: "security.external_acl.enabled", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "B1/D-96: solo el operador en tylluan.toml" },
+    SchemaField { key: "security.capabilities_enforce", section: "security", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#"false"#, reason: "sensible: solo lectura" },
+    SchemaField { key: "nexus.expose_guild_tools", section: "security", kind: "boolean", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#"false"#, reason: "excepcion opt-in de AUD-07: amplia las tools del contrato" },
+    // connectors
+    SchemaField { key: "guilds.core.always_on", section: "connectors", kind: "array", editable: false, requires_restart: false, sensitive: false, min: None, max: None, options: &[], level: "essential", default: r#"["bash","memory","filesystem"]"#, reason: "se activan por guild desde /api/v1/guilds, no reescribiendo la lista" },
+    SchemaField { key: "guilds.core.warm_pool", section: "connectors", kind: "array", editable: false, requires_restart: false, sensitive: false, min: None, max: None, options: &[], level: "essential", default: r#"[]"#, reason: "se activan por guild desde /api/v1/guilds" },
+    SchemaField { key: "guilds.guild_max_concurrent_calls", section: "connectors", kind: "integer", editable: true, requires_restart: true, sensitive: false, min: Some(1.0), max: Some(32.0), options: &[], level: "advanced", default: r#"3"#, reason: "" },
+    SchemaField { key: "external_mcp", section: "connectors", kind: "array", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#"[]"#, reason: "B1: [[external_mcp]] solo en tylluan.toml" },
+    SchemaField { key: "services", section: "connectors", kind: "table", editable: false, requires_restart: true, sensitive: true, min: None, max: None, options: &[], level: "advanced", default: r#"{}"#, reason: "B1: [services] solo en tylluan.toml" },
+    // network
+    SchemaField { key: "federation.auto_sync_mode", section: "network", kind: "string", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#""push""#, reason: "define que se comparte con otros equipos: solo el operador" },
+    SchemaField { key: "p2p.enabled", section: "network", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "abre red hacia fuera: solo el operador" },
+    SchemaField { key: "mesh.bootstrap_enabled", section: "network", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"true"#, reason: "sensible: mezcla malla LAN/DHT; se decide en tylluan.toml" },
+    SchemaField { key: "mdns.advertise", section: "network", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "privacidad: anunciar el nodo en la LAN" },
+    SchemaField { key: "mdns.discover", section: "network", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "privacidad: descubrir otros nodos en la LAN" },
+    SchemaField { key: "tunnel.enabled", section: "network", kind: "boolean", editable: false, requires_restart: false, sensitive: true, min: None, max: None, options: &[], level: "essential", default: r#"false"#, reason: "abre red hacia fuera: solo el operador" },
+];
+
+/// D227 (T4771): campos cuyo default NO es una constante del esquema.
+/// `inference.device` lo elige la plataforma (`auto_select_device`) y
+/// `security.encrypt_at_rest` depende de la feature `encryption`; el test los
+/// valida contra el default REAL del binario en vez de contra un literal fijo.
+pub const DEFAULT_DINAMICO: &[&str] = &["inference.device", "security.encrypt_at_rest"];
+
+/// D227 (T4771): claves del esquema que NO resuelven contra `TylluanConfig`.
+///
+/// `dev_mode` se queda como clave plana por **exclusion explicita del TL** (T4771:
+/// "no tocar auth ni dev_mode"), aunque la clave real del TOML sea `nexus.dev_mode`.
+/// Se declara aqui para que el test de cruce no la tape en silencio: si algun dia se
+/// renombra, hay que sacarla de esta lista y el test lo pedira.
+pub const CLAVES_HEREDADAS: &[&str] = &["dev_mode"];
+
+/// D227 v2: los grupos que el asistente pinta, con las claves que los respaldan. Un grupo sin
+/// ningun campo `essential` dejaria la pantalla coja aunque el recuento total cuadre.
+pub const GRUPOS_ASISTENTE: &[(&str, &[&str])] = &[
+    ("datos", &["memory.db_path", "silva.db_path"]),
+    ("clave", &["dev_mode", "nexus.host", "nexus.port"]),
+    ("memoria", &["memory.embedding_model", "memory.vector_dimensions", "silva.decay_enabled"]),
+    ("herramientas", &["security.external_acl.enabled", "guilds.core.always_on"]),
+    ("privacidad", &["inference.points.chat.cloud_enabled", "nexus.allow_hf_download"]),
+    ("red", &["p2p.enabled", "tunnel.enabled", "mesh.bootstrap_enabled", "mdns.advertise"]),
+];
+
+/// D227 v2 (T4775): campos editables que **ya lo eran en main** (schema v1). Todo lo que
+/// sea editable y no esté aquí es afinado nuevo, y solo se admite el de rendimiento.
+pub const EDITABLES_HEREDADOS: &[&str] = &[
+    "low_memory_mode",
+    "memory.embedding_model",
+    "inference.device",
+    "inference.max_threads",
+    "silva.reranker_enabled",
+    "memory.embedding_idle_ttl_secs",
+    "memory.background_concurrency",
+    "memory.background_max_wait_secs",
+    "memory.reindex_node_delay_ms",
+    "memory.reindex_nodes_per_tick",
+    "memory.reindex_tick_secs",
+    "logging.max_file_size_mb",
+    "logging.max_files",
+];
+
+/// D227 v2: los **únicos** editables nuevos permitidos — afinado de rendimiento del chat del
+/// usuario. Si alguien añade otro (privacidad, red, seguridad), el test lo dice.
+pub const EDITABLES_NUEVOS_PERMITIDOS: &[&str] = &[
+    "inference.llama.ctx_size",
+    "inference.llama.n_gpu_layers",
+    "inference.llama.threads",
+    "inference.llama.temperature",
+    "guilds.guild_max_concurrent_calls",
+];
+
+/// D227 v2: privacidad y red que la API **no** puede tocar (orden del TL en T4775).
+pub const FUERA_DE_LA_API: &[&str] = &[
+    "inference.points.chat.cloud_enabled",
+    "inference.points.decision.cloud_enabled",
+    "inference.points.grammar_judge.cloud_enabled",
+    "inference.points.sentinel.cloud_enabled",
+    "inference.points.chat.api_key_env",
+    "nexus.allow_hf_download",
+    "tunnel.enabled",
+    "p2p.enabled",
+    "federation.auto_sync_mode",
+    "inference.primary_model",
 ];
 
 pub fn schema_field(key: &str) -> Option<&'static SchemaField> {
@@ -100,13 +206,19 @@ pub fn schema_json() -> serde_json::Value {
     let fields: Vec<serde_json::Value> = SCHEMA
         .iter()
         .map(|f| {
+            // D227: `default` viaja como JSON ya tipado (no como string), para que
+            // el dashboard lo pueda pintar sin adivinar el tipo del campo.
+            let default = serde_json::from_str::<serde_json::Value>(f.default)
+                .unwrap_or_else(|_| json!(f.default));
             let mut obj = json!({
                 "key": f.key,
                 "section": f.section,
                 "type": f.kind,
+                "level": f.level,
                 "editable_via_api": f.editable,
                 "requires_restart": f.requires_restart,
                 "sensitive": f.sensitive,
+                "default": default,
                 "reason": f.reason,
             });
             if !f.options.is_empty() {
@@ -122,13 +234,16 @@ pub fn schema_json() -> serde_json::Value {
         })
         .collect();
     json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "tylluan.toml",
         "fields": fields,
         "notes": [
             "editable_via_api=false exige edición manual del TOML (B1/operador).",
             "sensitive=true: A0 solo lectura; A3 añadirá acciones con código de operador.",
-            "requires_restart=true: el cambio no surte efecto hasta reiniciar el kernel."
+            "requires_restart=true: el cambio no surte efecto hasta reiniciar el kernel.",
+            "level=essential|advanced|internal: clasificacion del operador (D227/T4771).",
+            "default: valor de fabrica, contrastado por test contra TylluanConfig::default().",
+            "sensitive=true: NUNCA editable por la API; solo lectura y accion de operador."
         ]
     })
 }
@@ -287,6 +402,16 @@ fn json_to_toml(value: &serde_json::Value) -> Result<toml::Value, String> {
 fn validate_edit(edit: &ConfigEdit) -> Result<toml::Value, String> {
     let field = schema_field(&edit.key)
         .ok_or_else(|| format!("clave desconocida: {}", edit.key))?;
+    // D227 (T4771): un campo sensible no se escribe por API, aunque alguien lo
+    // marque `editable: true` por error en SCHEMA. Es el veto que pide el
+    // contrato, y va ANTES del chequeo de `editable` para que una mutacion de
+    // `editable` no abra la puerta.
+    if field.sensitive {
+        return Err(format!(
+            "campo sensible: {} no se edita por la API ({})",
+            edit.key, field.reason
+        ));
+    }
     if !field.editable {
         return Err(format!(
             "clave no editable por la API: {} ({})",
@@ -309,6 +434,23 @@ fn validate_edit(edit: &ConfigEdit) -> Result<toml::Value, String> {
             let n = match toml_value {
                 toml::Value::Integer(i) => i as f64,
                 _ => return Err(format!("{} debe ser integer", edit.key)),
+            };
+            if let Some(min) = field.min
+                && n < min
+            {
+                return Err(format!("{} por debajo del minimo {min}", edit.key));
+            }
+            if let Some(max) = field.max
+                && n > max
+            {
+                return Err(format!("{} por encima del maximo {max}", edit.key));
+            }
+        }
+        "float" => {
+            let n = match toml_value {
+                toml::Value::Float(f) => f,
+                toml::Value::Integer(i) => i as f64,
+                _ => return Err(format!("{} debe ser numero", edit.key)),
             };
             if let Some(min) = field.min
                 && n < min
@@ -1156,5 +1298,264 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
         assert!(!text.contains("secreto"), "{text}");
         assert!(text.contains("services.foo.env.API_KEY"), "{text}");
         assert!(text.contains(REDACTED), "{text}");
+    }
+    /// D227 (T4771) — OBJETIVO DE MUTACION: marcar un campo sensible como
+    /// editable en SCHEMA tiene que poner este test ROJO. Y no vale que el
+    /// esquema salga vacio de sensibles: se exige un minimo real.
+    #[test]
+    fn d227_ningun_campo_sensible_es_editable_por_api() {
+        let sensibles: Vec<&str> = SCHEMA.iter().filter(|f| f.sensitive).map(|f| f.key).collect();
+        assert!(
+            sensibles.len() >= 8,
+            "se esperaban al menos 8 campos sensibles, hay {}: {:?}",
+            sensibles.len(),
+            sensibles
+        );
+        let editables: Vec<&str> = SCHEMA
+            .iter()
+            .filter(|f| f.sensitive && f.editable)
+            .map(|f| f.key)
+            .collect();
+        assert!(
+            editables.is_empty(),
+            "sensibles editables por API (viola T4771): {:?}",
+            editables
+        );
+    }
+
+    /// El veto no depende solo de la bandera: `validate_edit` rechaza el
+    /// campo por `sensitive` aunque `editable` fuese true.
+    #[test]
+    fn d227_validate_edit_rechaza_campo_sensible() {
+        let edit = ConfigEdit {
+            key: "security.intent_filter".to_string(),
+            value: json!(false),
+        };
+        let err = validate_edit(&edit).expect_err("un sensible no se escribe por API");
+        assert!(err.contains("sensible"), "error poco claro: {err}");
+        assert!(err.contains("security.intent_filter"), "error sin la clave: {err}");
+    }
+
+    /// Cruce real con config.rs: cada `default` del esquema tiene que ser
+    /// EXACTAMENTE el de `TylluanConfig::default()`. Un default inventado
+    /// rompe este test (es el fallo que quiero que no vuelva a pasar).
+    #[test]
+    fn d227_defaults_del_esquema_coinciden_con_el_config_real() {
+        let real = serde_json::to_value(crate::config::TylluanConfig::default())
+            .expect("TylluanConfig serializa");
+        let mut comprobados = 0usize;
+        for f in SCHEMA {
+            if CLAVES_HEREDADAS.contains(&f.key) {
+                comprobados += 1;
+                continue;
+            }
+            let valor_real = valor_en_config(&real, f.key)
+                .unwrap_or_else(|| panic!("{}: la clave no existe en TylluanConfig", f.key));
+            if DEFAULT_DINAMICO.contains(&f.key) {
+                match f.key {
+                    "inference.device" => {
+                        let s = valor_real.as_str().unwrap_or_default();
+                        assert!(
+                            f.options.contains(&s),
+                            "inference.device={s} no esta entre las opciones {:?}",
+                            f.options
+                        );
+                    }
+                    "security.encrypt_at_rest" => {
+                        assert_eq!(
+                            valor_real.as_bool(),
+                            Some(cfg!(feature = "encryption")),
+                            "security.encrypt_at_rest debe seguir a la feature encryption"
+                        );
+                    }
+                    otro => panic!("DEFAULT_DINAMICO declara {otro} sin rama de validacion"),
+                }
+                comprobados += 1;
+                continue;
+            }
+            let declarado: serde_json::Value = serde_json::from_str(f.default)
+                .unwrap_or_else(|e| panic!("{}: default no es JSON ({}): {}", f.key, f.default, e));
+            // Los `f32` de config.rs no viajan exactos a JSON (0.7f32 ->
+            // 0.699999988079071): en floats se exige igualdad con tolerancia,
+            // no el artefacto de precision escrito a mano en el esquema.
+            if f.kind == "float" {
+                let esperado = declarado.as_f64().expect("default float");
+                let real_f = valor_real.as_f64().expect("campo float en config.rs");
+                assert!(
+                    (esperado - real_f).abs() < 1e-5,
+                    "{}: default del esquema {esperado} != config.rs {real_f}",
+                    f.key
+                );
+                comprobados += 1;
+                continue;
+            }
+            assert_eq!(
+                declarado, valor_real,
+                "{}: el default del esquema no es el de config.rs",
+                f.key
+            );
+            comprobados += 1;
+        }
+        assert_eq!(comprobados, SCHEMA.len(), "el test tiene que cubrir todos los campos");
+        assert!(comprobados >= 40, "se esperaban ~40-50 campos, hay {comprobados}");
+    }
+
+    /// Ninguna clave del esquema puede ser un fantasma (el caso `wake.command`,
+    /// que el esquema declaraba y config.rs no tiene).
+    #[test]
+    fn d227_toda_clave_del_esquema_existe_en_el_config_real() {
+        let real = serde_json::to_value(crate::config::TylluanConfig::default())
+            .expect("TylluanConfig serializa");
+        let fantasmas: Vec<&str> = SCHEMA
+            .iter()
+            .filter(|f| !CLAVES_HEREDADAS.contains(&f.key))
+            .filter(|f| valor_en_config(&real, f.key).is_none())
+            .map(|f| f.key)
+            .collect();
+        assert!(fantasmas.is_empty(), "claves que config.rs no tiene: {:?}", fantasmas);
+    }
+
+    /// Clasificacion del operador: niveles conocidos y suficientes esenciales.
+    #[test]
+    fn d227_niveles_conocidos_y_esenciales_suficientes() {
+        let validos = ["essential", "advanced", "internal"];
+        let malos: Vec<&str> = SCHEMA
+            .iter()
+            .filter(|f| !validos.contains(&f.level))
+            .map(|f| f.key)
+            .collect();
+        assert!(malos.is_empty(), "nivel desconocido en: {:?}", malos);
+        // D227 v2: al sacar `inference.primary_model` de esenciales (directiva de Jose) el
+        // suelo baja a 28. El recuento solo no basta: se exige que **cada grupo del asistente**
+        // tenga al menos un campo esencial, que es lo que de verdad necesita la pantalla.
+        let esenciales = SCHEMA.iter().filter(|f| f.level == "essential").count();
+        assert!(
+            esenciales >= 28,
+            "se esperaban >=28 esenciales para el asistente, hay {esenciales}"
+        );
+        for (grupo, claves) in GRUPOS_ASISTENTE {
+            let cubierto = claves.iter().any(|k| {
+                SCHEMA
+                    .iter()
+                    .any(|f| f.key == *k && f.level == "essential")
+            });
+            assert!(cubierto, "el grupo '{grupo}' no tiene ningun campo esencial");
+        }
+    }
+
+    /// Tamano y unicidad: 40-52 campos (T4771 pide ~40-50) y sin repetidas.
+    #[test]
+    fn d227_esquema_en_rango_y_sin_claves_repetidas() {
+        assert!(
+            (40..=52).contains(&SCHEMA.len()),
+            "SCHEMA tiene {} campos; el contrato pide ~40-50",
+            SCHEMA.len()
+        );
+        let mut vistas = std::collections::HashSet::new();
+        for f in SCHEMA {
+            assert!(vistas.insert(f.key), "clave repetida en SCHEMA: {}", f.key);
+        }
+    }
+
+    /// El JSON que consume el dashboard lleva level y default ya tipados.
+    #[test]
+    fn d227_schema_json_expone_level_y_default_tipados() {
+        let doc = schema_json();
+        assert_eq!(doc["schema_version"], 2);
+        let campos = doc["fields"].as_array().expect("fields es array");
+        assert_eq!(campos.len(), SCHEMA.len());
+        let puerto = campos
+            .iter()
+            .find(|f| f["key"] == "nexus.port")
+            .expect("nexus.port en el esquema");
+        assert_eq!(puerto["level"], "essential");
+        assert_eq!(puerto["default"], 47004);
+        let decay = campos
+            .iter()
+            .find(|f| f["key"] == "silva.decay_enabled")
+            .expect("silva.decay_enabled en el esquema");
+        assert_eq!(decay["default"], true);
+        // y ningun sensible sale editable en el documento
+        let malos: Vec<&str> = campos
+            .iter()
+            .filter(|f| f["sensitive"] == true && f["editable_via_api"] == true)
+            .filter_map(|f| f["key"].as_str())
+            .collect();
+        assert!(malos.is_empty(), "sensibles editables en el JSON: {:?}", malos);
+    }
+
+    /// Un campo float se valida por rango y se escribe como float.
+    #[test]
+    fn d227_validate_edit_acepta_float_y_respeta_rango() {
+        let ok = validate_edit(&ConfigEdit {
+            key: "inference.llama.temperature".to_string(),
+            value: json!(0.3),
+        });
+        assert!(ok.is_ok(), "0.3 deberia aceptarse: {:?}", ok.err());
+        let alto = validate_edit(&ConfigEdit {
+            key: "inference.llama.temperature".to_string(),
+            value: json!(9.0),
+        });
+        assert!(alto.is_err(), "9.0 deberia rechazarse por maximo");
+        let texto = validate_edit(&ConfigEdit {
+            key: "inference.llama.temperature".to_string(),
+            value: json!("caliente"),
+        });
+        assert!(texto.is_err(), "un string no es un float");
+    }
+
+    /// Resuelve `a.b.c` sobre el JSON del config.
+    fn valor_en_config(config: &serde_json::Value, key: &str) -> Option<serde_json::Value> {
+        let mut actual = config;
+        for parte in key.split('.') {
+            actual = actual.get(parte)?;
+        }
+        Some(actual.clone())
+    }
+    /// La lista de heredadas no puede crecer sin justificarlo: hoy solo es
+    /// `dev_mode`, por exclusion del TL. Si aparece otra, este test lo dice.
+    #[test]
+    fn d227_claves_heredadas_son_solo_las_declaradas() {
+        assert_eq!(CLAVES_HEREDADAS, &["dev_mode"]);
+        // y ninguna heredada puede estar ademas en DEFAULT_DINAMICO (doble excusa)
+        for k in CLAVES_HEREDADAS {
+            assert!(!DEFAULT_DINAMICO.contains(k), "{k} tiene dos excepciones a la vez");
+            assert!(SCHEMA.iter().any(|f| f.key == *k), "{k} ya no esta en SCHEMA");
+        }
+    }
+    /// D227 v2 (T4775) — OBJETIVO DE MUTACION: privacidad y red no se tocan por API.
+    /// Marcar cualquiera de estos como editable pone el test ROJO.
+    #[test]
+    fn d227v2_privacidad_y_red_fuera_de_la_api() {
+        for clave in FUERA_DE_LA_API {
+            let f = schema_field(clave).unwrap_or_else(|| panic!("{clave} no esta en el esquema"));
+            assert!(!f.editable, "{clave} NO puede ser editable por API (T4775)");
+            assert!(f.sensitive, "{clave} tiene que declararse sensible (T4775)");
+        }
+        // y ninguna puede escribirse de verdad: el veto responde 400
+        for clave in ["inference.points.chat.cloud_enabled", "p2p.enabled", "tunnel.enabled"] {
+            let edit = ConfigEdit { key: (*clave).to_string(), value: json!(true) };
+            let err = validate_edit(&edit).expect_err("un campo de FUERA_DE_LA_API no se escribe");
+            assert!(err.contains("sensible"), "{clave}: error sin el veto de sensible -> {err}");
+        }
+    }
+
+    /// D227 v2: el unico aflojamiento nuevo frente a main es afinado de rendimiento.
+    #[test]
+    fn d227v2_los_editables_nuevos_son_solo_afinado_de_rendimiento() {
+        let mut nuevos: Vec<&str> = SCHEMA
+            .iter()
+            .filter(|f| f.editable && !EDITABLES_HEREDADOS.contains(&f.key))
+            .map(|f| f.key)
+            .collect();
+        nuevos.sort_unstable();
+        let mut permitidos = EDITABLES_NUEVOS_PERMITIDOS.to_vec();
+        permitidos.sort_unstable();
+        assert_eq!(nuevos, permitidos, "hay editables nuevos que no son afinado de rendimiento");
+        // y no se ha perdido ningun heredado: los 13 siguen editables
+        for clave in EDITABLES_HEREDADOS {
+            let f = schema_field(clave).unwrap_or_else(|| panic!("{clave} desaparecio"));
+            assert!(f.editable, "{clave} era editable en main y dejo de serlo");
+        }
     }
 }
