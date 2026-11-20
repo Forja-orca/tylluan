@@ -2140,6 +2140,42 @@ fn operator_vision_model_dir() -> Option<String> {
 ///
 /// Separado de `std::env` a propósito: permite testear la prioridad T4124
 /// (el valor del operador gana) sin tocar variables del proceso de test.
+/// D230 (T4793): nombre de la variable con la que el kernel se identifica ante sus
+/// guilds. `guilds/core/coloquio.py` ya la respeta (`KERNEL_BASE`); hasta ahora NADIE
+/// se la inyectaba y el guild caia a `data/active_port.json` o a **47004**, el puerto
+/// canonico de produccion: un kernel de prueba con `DATA_DIR` propio escribia en
+/// produccion (incidente del 2026-11-20, 6 mensajes).
+pub const KERNEL_BASE_ENV: &str = "KERNEL_BASE";
+
+/// D230: URL base del kernel para los guilds. `0.0.0.0`/`::` se traducen a loopback
+/// (un guild vive en la misma maquina: escuchar en todas las interfaces no significa
+/// que haya que conectar por ellas) y las IPv6 se entrecomillan en la URL.
+pub fn kernel_base_url(host: &str, port: u16) -> String {
+    let h = match host.trim() {
+        "" | "0.0.0.0" | "::" | "[::]" => "127.0.0.1",
+        otra => otra,
+    };
+    if h.contains(':') && !h.starts_with('[') {
+        format!("http://[{h}]:{port}")
+    } else {
+        format!("http://{h}:{port}")
+    }
+}
+
+/// D230: base que hay que inyectar. Si el operador ya fijo `KERNEL_BASE`, manda la
+/// suya (mismo criterio que `TYLLUAN_VISION_MODEL_DIR`: no se pisa lo que puso el
+/// operador); si no, se calcula del config cargado.
+pub fn kernel_base_para_guilds() -> Option<String> {
+    if let Ok(v) = std::env::var(KERNEL_BASE_ENV) {
+        let v = v.trim().to_string();
+        if !v.is_empty() {
+            return Some(v);
+        }
+    }
+    let cfg = TylluanConfig::load_cached().ok()?;
+    let guard = cfg.try_read().ok()?;
+    Some(kernel_base_url(&guard.nexus.host, guard.nexus.port))
+}
 pub fn guild_launcher_env_with_operator_override(
     vision_model_path: &str,
     operator_vision_dir: Option<&str>,
@@ -2164,10 +2200,16 @@ pub fn guild_launcher_env_with_operator_override(
 /// proceso hijo; `TYLLUAN_VISION_MODEL_DIR` es la que consume el guild de visión.
 /// Si el operador ya la fijó en el entorno del kernel, se respeta (no se pisa).
 pub fn guild_launcher_env(vision_model_path: &str) -> Vec<(String, String)> {
-    guild_launcher_env_with_operator_override(
+    let mut env = guild_launcher_env_with_operator_override(
         vision_model_path,
         operator_vision_model_dir().as_deref(),
-    )
+    );
+    // D230 (T4793): el guild tiene que saber A QUE kernel pertenece. Sin esto cae a
+    // `data/active_port.json` o a 47004 y un kernel de prueba escribe en produccion.
+    if let Some(base) = kernel_base_para_guilds() {
+        env.push((KERNEL_BASE_ENV.to_string(), base));
+    }
+    env
 }
 
 pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
@@ -4667,5 +4709,40 @@ mod t138_reindex_config_tests {
             .agents
             .insert("*".to_string(), vec!["slack".to_string()]);
         assert!(any_agent.allows(Some("buffy"), "slack"), "wildcard agent key");
+    }
+    /// D230 (T4793): la base que se inyecta a los guilds nunca puede apuntar a
+    /// "todas las interfaces" ni dejar de ser una URL con puerto.
+    #[test]
+    fn d230_kernel_base_url_mapea_wildcard_y_respeta_hosts() {
+        assert_eq!(kernel_base_url("0.0.0.0", 47925), "http://127.0.0.1:47925");
+        assert_eq!(kernel_base_url("::", 47925), "http://127.0.0.1:47925");
+        assert_eq!(kernel_base_url("", 47004), "http://127.0.0.1:47004");
+        assert_eq!(kernel_base_url("127.0.0.1", 47925), "http://127.0.0.1:47925");
+        assert_eq!(kernel_base_url("192.168.1.7", 47004), "http://192.168.1.7:47004");
+        assert_eq!(kernel_base_url("::1", 47925), "http://[::1]:47925");
+    }
+
+    /// D230: `guild_launcher_env` tiene que llevar la variable, y si el operador
+    /// ya la fijo, se respeta la suya (no se pisa).
+    #[test]
+    fn d230_launcher_env_lleva_kernel_base_y_respeta_al_operador() {
+        // SAFETY: test de un solo hilo para esta variable; se borra al terminar.
+        unsafe { std::env::set_var(KERNEL_BASE_ENV, "http://127.0.0.1:49000") };
+        let env = guild_launcher_env("");
+        let base = env
+            .iter()
+            .find(|(k, _)| k == KERNEL_BASE_ENV)
+            .map(|(_, v)| v.clone());
+        unsafe { std::env::remove_var(KERNEL_BASE_ENV) };
+        assert_eq!(base.as_deref(), Some("http://127.0.0.1:49000"));
+
+        let sin_operador = guild_launcher_env("")
+            .into_iter()
+            .find(|(k, _)| k == KERNEL_BASE_ENV)
+            .map(|(_, v)| v);
+        if let Some(v) = sin_operador {
+            assert!(v.starts_with("http://"), "base sin esquema: {v}");
+            assert!(v.rsplit(':').next().unwrap().parse::<u16>().is_ok(), "base sin puerto: {v}");
+        }
     }
 }
