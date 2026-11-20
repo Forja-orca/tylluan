@@ -17,6 +17,7 @@ import sqlite3
 import threading
 import time
 import json
+import logging
 import urllib.request
 import urllib.error
 import uuid
@@ -26,10 +27,12 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+log = logging.getLogger("tylluan.scheduler")
+
 mcp = FastMCP("scheduler")
 
 try:
-    from guilds.core import kernel_auth
+    from guilds.core import kernel_auth, colo_guard
 except ImportError:  # direct-script run fallback
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
     from guilds.core import kernel_auth
@@ -83,6 +86,12 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def _post_to_coloquio(channel: str, message: str, author_id: str = "scheduler") -> bool:
+    # H-HER-E-01 (D233b): este escritor no comprobaba el canal y el kernel lo CREABA al
+    # postear. Misma decisión que el guild de coloquio (helper compartida, 1 GET).
+    estado, detalle = colo_guard.consulta_sync(KERNEL_BASE, channel, kernel_auth.kernel_headers())
+    if estado != colo_guard.EXISTE:
+        log.warning("[scheduler] no posteo a '%s': %s %s", channel, estado, detalle)
+        return False
     url = f"{KERNEL_BASE}/api/v1/coloquio/channels/{channel}/post"
     body = json.dumps({
         "author_id": author_id,

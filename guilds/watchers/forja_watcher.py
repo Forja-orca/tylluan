@@ -14,8 +14,20 @@ from abc import ABC, abstractmethod
 
 import httpx
 
+from guilds.core import colo_guard
+
 FORJA_BASE = os.getenv("FORJA_URL", "http://127.0.0.1:3033")
 log = logging.getLogger(__name__)
+
+def _headers_forja() -> dict:
+    """Cabeceras del kernel para este watcher (token de guild o maestro)."""
+    try:
+        from guilds.core import kernel_auth
+
+        return kernel_auth.kernel_headers()
+    except Exception:
+        return {}
+
 
 
 class ForjaWatcher(ABC):
@@ -188,6 +200,11 @@ class ForjaWatcher(ABC):
             return "closed"
 
     async def _post(self, message: str) -> None:
+        # H-HER-E-01 (D233b): antes posteaba sin comprobar el canal y el kernel lo creaba.
+        estado, detalle = await colo_guard.consulta_async(FORJA_BASE, self.channel_id, _headers_forja())
+        if estado != colo_guard.EXISTE:
+            log.warning("[%s] no posteo a '%s': %s %s", self.agent_id, self.channel_id, estado, detalle)
+            return
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(

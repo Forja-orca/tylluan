@@ -9,7 +9,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 try:
-    from guilds.core import kernel_auth
+    from guilds.core import kernel_auth, colo_guard
 except ImportError:  # direct-script run: python guilds/core/coloquio.py
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -568,24 +568,14 @@ def _list_channel_ids_or_none():
 
 
 def _guard_canal_existe(channel_id: str):
-    """D229 v3: mensaje de rechazo, o None si se puede postear.
+    """D233b v3: delega en la helper COMPARTIDA (guilds/core/colo_guard.py).
 
-    Rechaza en los TRES casos: no se pudo comprobar, no hay canales, y el canal no
-    existe. Postear a un canal inexistente lo crea en el kernel (memory/coloquio.rs:671)
-    y el mensaje se queda en un canal basura: paso con 'channel' y 'fix'."""
-    existentes = _list_channel_ids_or_none()
-    if existentes is None:
-        return ("❌ No pude comprobar los canales (kernel no disponible o sin permiso); "
-                "no posteo para no crear uno por accidente. Reintenta en unos segundos.")
-    if not existentes:
-        return ("❌ No hay ningún canal en el Coloquio; no posteo para no crear uno "
-                "por accidente. Créalo primero con create_channel.")
-    if not any(c.strip().lower() == channel_id.strip().lower() for c in existentes):
-        return (f"❌ El canal '{channel_id}' no existe; no lo creo por accidente. "
-                f"Canales: {', '.join(sorted(existentes)[:12])}"
-                f"{' …' if len(existentes) > 12 else ''}. "
-                f"Si de verdad quieres uno nuevo, create_channel('{channel_id}').")
-    return None
+    Misma decision para los cuatro escritores del Coloquio: un GET a la lista, `None` si no se
+    pudo leer (fail-closed) y rechazo si el canal no esta. Se usa `_get` para no romper los
+    dobles de los tests.
+    """
+    estado, detalle = colo_guard.consulta_con(_get, channel_id)
+    return colo_guard.motivo_de_rechazo(channel_id, estado, detalle)
 
 @mcp.tool()
 def post_to_channel(channel_id: str = "", content: str = "", author_id: str = "",

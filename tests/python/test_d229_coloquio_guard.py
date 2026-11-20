@@ -61,7 +61,8 @@ def test_sin_canales_rechaza_y_no_posta(monkeypatch):
     reg = Registro(get_resultado={"channels": []})
     _con(monkeypatch, reg)
     salida = coloquio.post_to_channel(channel_id="general", content="hola", author_id="a")
-    assert "No hay ning" in salida, salida
+    # D233b v3: el mensaje es uno solo para "no hay canales" y "no existe".
+    assert "no existe" in salida or "No hay ning" in salida, salida
     assert reg.posts == []
 
 
