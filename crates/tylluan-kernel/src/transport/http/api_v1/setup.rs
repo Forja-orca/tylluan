@@ -43,6 +43,13 @@ pub struct Medidas {
     /// (`memory.reindex_tick_secs`, 600 s por defecto), así que un recuerdo recién
     /// guardado puede tardar en tener vector sin que nada esté roto.
     pub nodos_con_embedding: u64,
+    /// D228b: clientes vistos por **sesiones activas** (lo que de verdad demuestra que
+    /// alguien está conectado). Los ids de sesión y los tokens NO salen nunca.
+    pub sesiones_activas: usize,
+    /// Nombres de cliente distintos vistos en las sesiones (p. ej. "hermes", "claude-code").
+    pub clientes_conocidos: Vec<String>,
+    /// Credenciales de agente declaradas en la ACL (evidencia; hoy suele estar vacío porque
+    /// los agentes usan el token maestro).
     pub agentes_con_credencial: usize,
     /// Nombres de los puntos de inferencia con nube encendida. Nombres, nunca claves.
     pub puntos_cloud_encendidos: Vec<&'static str>,
@@ -80,6 +87,28 @@ impl Medidas {
             ..Self::default()
         }
     }
+}
+
+/// D228b (T4834): recuento y nombres de cliente a partir de las sesiones activas.
+///
+/// Sale **solo** el número y los nombres distintos: ni un id de sesión ni un token (los ids
+/// identifican a un cliente concreto y no hacen falta para decidir el paso). Puro, para que
+/// la mutación «devolver 0» tenga dónde caer.
+/// Largo maximo de un nombre de cliente en la respuesta (lo declara el propio cliente).
+const MAX_CLIENT_NAME_CHARS: usize = 64;
+
+pub fn clientes_de_sesiones(
+    sesiones: &std::collections::HashMap<String, crate::transport::http::McpSession>,
+) -> (usize, Vec<String>) {
+    let mut nombres: Vec<String> = sesiones
+        .values()
+        // Largo acotado: el nombre lo declara el cliente (no es de fiar) y sale en la respuesta.
+        .map(|s| s.client_name.trim().chars().take(MAX_CLIENT_NAME_CHARS).collect::<String>())
+        .filter(|n| !n.is_empty())
+        .collect();
+    nombres.sort();
+    nombres.dedup();
+    (sesiones.len(), nombres)
 }
 
 /// Evalúa los pasos. Puro: sin I/O, sin reloj salvo el que le pasan.
@@ -143,14 +172,24 @@ pub fn evalua(m: &Medidas, data_dir: &Path, ahora_unix: u64) -> serde_json::Valu
             "clients",
             "Conectar tus herramientas",
             true,
-            if m.agentes_con_credencial > 0 { "done" } else { "pending" },
-            if m.agentes_con_credencial > 0 {
-                "hay al menos un cliente con credencial"
+            if m.sesiones_activas > 0 || m.agentes_con_credencial > 0 {
+                "done"
             } else {
-                "ningún cliente tiene credencial todavía"
+                "pending"
             },
-            // Solo el recuento: las claves de `acl.tokens` son el secreto.
-            json!({ "agentes_con_credencial": m.agentes_con_credencial }),
+            if m.sesiones_activas > 0 {
+                "hay clientes conectados ahora mismo (sesiones activas)"
+            } else if m.agentes_con_credencial > 0 {
+                "hay credenciales de agente declaradas"
+            } else {
+                "ningún cliente conectado ni credencial de agente declarada"
+            },
+            // D228b: recuentos y nombres de cliente. Ni un id de sesión ni un token.
+            json!({
+                "sesiones_activas": m.sesiones_activas,
+                "clientes": m.clientes_conocidos,
+                "agentes_con_credencial": m.agentes_con_credencial,
+            }),
         ),
         paso(
             "privacy",
@@ -252,6 +291,15 @@ pub async fn setup_status_handler(State(state): State<Arc<HttpState>>) -> impl I
     let declarada = Path::new(&config.memory.db_path).to_path_buf();
     medidas.memory_db_existe = efectiva.exists() || declarada.exists();
     medidas.clave_operador_presente = data_dir.join("operator.json").exists();
+
+    // D228b (T4834): los clientes se cuentan por SESIONES, no por `acl.tokens` (que suele
+    // estar vacío porque los agentes usan el token maestro). Solo recuento y nombres.
+    {
+        let sesiones = state.sessions.read().await;
+        let (n, nombres) = clientes_de_sesiones(&sesiones);
+        medidas.sesiones_activas = n;
+        medidas.clientes_conocidos = nombres;
+    }
     medidas.copia_configurada = false;
 
     // Memoria del operador = nodos totales menos la siembra del kernel. Se mide con las
@@ -299,7 +347,9 @@ mod tests {
             memory_db_existe: true,
             nodos_de_usuario: 3,
             nodos_con_embedding: 4,
-            agentes_con_credencial: 2,
+            agentes_con_credencial: 0,
+            sesiones_activas: 2,
+            clientes_conocidos: vec!["hermes".to_string(), "deep".to_string()],
             puntos_cloud_encendidos: vec![],
             clave_operador_presente: true,
             copia_configurada: true,
@@ -372,6 +422,115 @@ mod tests {
         assert_eq!(doc["steps"][3]["evidence"]["agentes_con_credencial"], 2);
     }
 
+    /// D228b: la cuenta sale de las sesiones y de nadie mas. MUTACION: si esta funcion
+    /// devuelve 0, este test se pone ROJO.
+    #[test]
+    fn d228b_el_nombre_de_cliente_sale_acotado() {
+        use crate::transport::http::McpSession;
+        use std::collections::HashMap;
+        use std::time::Instant;
+
+        let mut sesiones = HashMap::new();
+        sesiones.insert(
+            "s1".to_string(),
+            McpSession {
+                id: "s1".to_string(),
+                client_name: "x".repeat(5000),
+                agent_id: None,
+                created_at: Instant::now(),
+                last_active: Instant::now(),
+                tool_count: 0,
+                last_intent: None,
+                last_guild: None,
+                mcp_apps: false,
+                created_unix: 0,
+                last_active_unix: 0,
+            },
+        );
+        let (n, nombres) = clientes_de_sesiones(&sesiones);
+        assert_eq!(n, 1);
+        assert!(
+            nombres[0].chars().count() <= MAX_CLIENT_NAME_CHARS,
+            "nombre sin acotar: {} caracteres",
+            nombres[0].chars().count()
+        );
+    }
+
+    #[test]
+    fn d228b_clientes_de_sesiones_cuenta_y_deduplica_nombres() {
+        use crate::transport::http::McpSession;
+        use std::collections::HashMap;
+        use std::time::Instant;
+
+        let vacio: HashMap<String, McpSession> = HashMap::new();
+        assert_eq!(clientes_de_sesiones(&vacio), (0, vec![]));
+
+        let mut sesiones = HashMap::new();
+        for (k, cliente) in [("s1", "hermes"), ("s2", "deep"), ("s3", "hermes")] {
+            sesiones.insert(
+                k.to_string(),
+                McpSession {
+                    id: k.to_string(),
+                    client_name: cliente.to_string(),
+                    agent_id: None,
+                    created_at: Instant::now(),
+                    last_active: Instant::now(),
+                    tool_count: 0,
+                    last_intent: None,
+                    last_guild: None,
+                    mcp_apps: false,
+                    created_unix: 0,
+                    last_active_unix: 0,
+                },
+            );
+        }
+        let (n, nombres) = clientes_de_sesiones(&sesiones);
+        assert_eq!(n, 3, "tres sesiones");
+        assert_eq!(nombres, vec!["deep".to_string(), "hermes".to_string()], "deduplicado");
+    }
+    /// D228b (T4834) — OBJETIVO DE MUTACION: con 0 sesiones y 0 credenciales, `clients`
+    /// queda PENDING. Antes se miraba solo `acl.tokens`, vacío en producción aunque haya
+    /// agentes trabajando: el asistente decía «ningún cliente» con el Coloquio lleno.
+    #[test]
+    fn d228b_clients_cuenta_sesiones_y_no_solo_credenciales() {
+        // sin nada: pending
+        let m = Medidas::default();
+        assert_eq!(estado(&evalua(&m, Path::new("D:/datos"), 1), "clients"), "pending");
+
+        // con una sesión activa y CERO credenciales de ACL: done (el caso de producción)
+        let m1 = Medidas {
+            sesiones_activas: 1,
+            clientes_conocidos: vec!["hermes".to_string()],
+            ..Default::default()
+        };
+        let doc = evalua(&m1, Path::new("D:/datos"), 1);
+        assert_eq!(estado(&doc, "clients"), "done", "una sesión activa basta");
+        let ev = &doc["steps"][3]["evidence"];
+        assert_eq!(ev["sesiones_activas"], 1);
+        assert_eq!(ev["clientes"][0], "hermes");
+
+        // con solo credenciales de ACL también vale (compatibilidad)
+        let m2 = Medidas {
+            agentes_con_credencial: 1,
+            ..Default::default()
+        };
+        assert_eq!(estado(&evalua(&m2, Path::new("D:/datos"), 1), "clients"), "done");
+    }
+
+    /// D228b: la evidencia no lleva ids de sesión ni tokens, solo recuentos y nombres.
+    #[test]
+    fn d228b_la_evidencia_no_lleva_ids_ni_tokens() {
+        let m = Medidas {
+            sesiones_activas: 3,
+            clientes_conocidos: vec!["hermes".to_string(), "deep".to_string()],
+            agentes_con_credencial: 2,
+            ..Default::default()
+        };
+        let texto = evalua(&m, Path::new("D:/datos"), 1).to_string();
+        assert!(!texto.contains("session_id"));
+        assert!(!texto.contains("sha256:"));
+        assert!(texto.contains("hermes"));
+    }
     /// Ningún paso puede declarar `done` sin evidencia, ni usar un estado inventado.
     #[test]
     fn d228_estados_validos_y_done_siempre_con_evidencia() {
