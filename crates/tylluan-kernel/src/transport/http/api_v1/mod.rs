@@ -19,6 +19,7 @@ pub mod api_guilds;
 pub mod api_outputs;
 pub mod api_admin;
 pub mod config_safe;
+pub mod setup;
 pub mod api_approvals;
 pub mod api_coloquio;
 pub mod api_federation;

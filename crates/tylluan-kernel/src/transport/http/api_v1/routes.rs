@@ -90,6 +90,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
         // A0 «Ajustes completos»: contrato seguro de configuración.
         .route("/api/v1/config/schema", get(super::config_safe::config_schema_handler))
+        // D228 (T4774): estado de la primera instalacion, medido y sin secretos.
+        .route("/api/v1/setup/status", get(super::setup::setup_status_handler))
         .route("/api/v1/config/validate", post(super::config_safe::validate_config_handler))
         .route("/api/v1/config/edit", post(super::config_safe::edit_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
