@@ -653,6 +653,14 @@ async fn main() -> anyhow::Result<()> {
     let (download_tx, _) = tokio::sync::broadcast::channel::<tylluan_kernel::maintenance::DownloadProgress>(100);
     
 
+    // D230 v4 (T4804): base temprana. El bind HTTP va en un tokio::spawn, asi que un
+    // guild puede spawnearse antes de que exista el puerto real: si solo se capturase
+    // alli y el config estuviera bloqueado, el spawn abortaria por nada. El puerto
+    // declarado es suficiente hasta que el bind lo refine.
+    tylluan_kernel::config::set_kernel_base_runtime(tylluan_kernel::config::kernel_base_url(
+        &config.nexus.host,
+        config.nexus.port,
+    ));
     // ─── Initialize Core Subsystems ────────────────────────────────
     // Allow TYLLUAN_DATA_DIR env var to override db paths (useful for Docker/WSL)
     if let Ok(data_override) = std::env::var("TYLLUAN_DATA_DIR") {

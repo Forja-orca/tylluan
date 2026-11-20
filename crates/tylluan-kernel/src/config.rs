@@ -2165,14 +2165,30 @@ pub fn kernel_base_url(host: &str, port: u16) -> String {
 /// D230 v3 (T4802): base del kernel capturada **cuando se bindea el puerto real**
 /// (no el configurado: con `port_retry_secs` puede ser otro). Es la fuente que no
 /// puede fallar por contencion del lock, y la que cierra el fail-open H-HER-D-05.
-static KERNEL_BASE_RUNTIME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+/// D230 v4 (T4804): `RwLock` y no `OnceLock`, porque la base se fija **dos** veces: una
+/// temprano con el puerto del config (para que ningun guild pueda caer al aborto antes de
+/// que el HTTP bindee) y otra al bindear, con el puerto REAL (que puede diferir si hubo
+/// retry). Con `OnceLock` la primera ganaba y la segunda se perdia.
+static KERNEL_BASE_RUNTIME: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
 
-/// D230 v3: la llama el transporte HTTP en cuanto conoce el puerto bound.
+/// D230 v3/v4: la llama main al cargar el config (puerto declarado) y el transporte HTTP en
+/// cuanto conoce el puerto bound (que manda). Nunca deja la fuente vacia.
 pub fn set_kernel_base_runtime(base: impl Into<String>) {
     let base = base.into();
-    if !base.trim().is_empty() {
-        let _ = KERNEL_BASE_RUNTIME.set(base);
+    if base.trim().is_empty() {
+        return;
     }
+    if let Ok(mut slot) = KERNEL_BASE_RUNTIME.write() {
+        *slot = Some(base);
+    }
+}
+
+/// D230 v4: la base capturada, si ya hay alguna.
+pub fn kernel_base_runtime() -> Option<String> {
+    KERNEL_BASE_RUNTIME
+        .read()
+        .ok()
+        .and_then(|slot| slot.clone())
 }
 
 /// D230 v3: prioridad explicita y testeable. Operador > config > runtime.
@@ -2200,7 +2216,7 @@ pub fn kernel_base_para_guilds() -> Option<String> {
             .ok()
             .map(|guard| kernel_base_url(&guard.nexus.host, guard.nexus.port))
     });
-    let runtime = KERNEL_BASE_RUNTIME.get().cloned();
+    let runtime = kernel_base_runtime();
     kernel_base_de_fuentes(operador, config, runtime)
 }
 pub fn guild_launcher_env_with_operator_override(
@@ -4801,6 +4817,19 @@ mod t138_reindex_config_tests {
         assert!(kernel_base_de_fuentes(None, None, None).is_none());
     }
 
+    /// D230 v4 (T4804): el puerto BOUND manda sobre el declarado. Antes, con
+    /// `OnceLock`, la captura temprana (config) ganaba y la del bind se perdia.
+    #[test]
+    fn d230v4_el_runtime_se_puede_refinar_y_gana_el_ultimo() {
+        let _lk = ENV_KERNEL_BASE.lock().unwrap_or_else(|e| e.into_inner());
+        set_kernel_base_runtime("http://127.0.0.1:49100");
+        assert_eq!(kernel_base_runtime().as_deref(), Some("http://127.0.0.1:49100"));
+        set_kernel_base_runtime("http://127.0.0.1:49101");
+        assert_eq!(kernel_base_runtime().as_deref(), Some("http://127.0.0.1:49101"));
+        // y una cadena vacia no borra lo que ya habia
+        set_kernel_base_runtime("   ");
+        assert_eq!(kernel_base_runtime().as_deref(), Some("http://127.0.0.1:49101"));
+    }
     /// D230 v3: en un kernel vivo SIEMPRE hay base — el fail-open de H-HER-D-05
     /// (config bloqueado -> variable omitida -> guild a 47004) no puede repetirse.
     #[test]
