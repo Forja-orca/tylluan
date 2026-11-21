@@ -3,10 +3,10 @@
 > Source of truth for the verified technical state. Updated on each release.
 > Last updated: 2026-11-18 · v0.17.3 (Cargo.toml) · the HEAD of record is the `**HEAD:**` line below (kept in sync by `scripts/check_head_sync.sh`)
 
-## Estado verificado — 2026-10-14
+## Estado verificado — 2026-11-21
 
-- **Release:** v0.17.1 publicada como Latest el 2026-10-13 (tag sobre `ccdd509`, que toca `.github/workflows/release.yml` e `install.ps1`). Comprobado: el Install Smoke contra esa release instala v0.17.1 en Linux y Windows y el kernel responde `ok`; el binario Linux exige como máximo `GLIBC_2.34`.
-- **Kernel en ejecución de José:** `/health` devuelve v0.17.1, commit `31b965c` (verificado por Hermes en vivo; reincorporado el 2026-10-25 tras el despliegue de los guards Origin/Host — Coloquio T1770). Un POST a `/messages` con `Origin: http://evil.example` responde 403 `forbidden_origin` — comprobado por Hermes contra el kernel vivo. El anterior, `93d7cb1` del 2026-10-24, llevaba código idéntico a `7b24da2`, con D-39 a D-46. `main` puede ir por delante solo con scripts y docs.
+- **Release:** **v0.17.3** publicada como **Latest** el 2026-11-19 (`gh release list` → `v0.17.3 Latest v0.17.3 2026-11-19T20:38:31Z`; v0.17.2 el 2026-10-27 y v0.17.1 el 2026-10-13 quedan históricas). Solo se publican y soportan **Windows x86_64 y Linux x86_64** (decisión de José, 2026-11-07): macOS/Apple Silicon y Linux ARM64 dejaron de prometerse y su matriz salió de `.github/workflows/release.yml`.
+- **Kernel en ejecución de José:** `/health` devuelve **v0.17.3**, commit **`d117e9f5`**, `readiness: ok` y `guilds_down: []` — medido el 2026-11-21 contra el kernel de producción. **Ojo: ese commit está 14 commits por delante del tag `v0.17.3`** (`git rev-list --count v0.17.3..d117e9f5` → 14, con el tag en `6bc5cafa`): el `/health` dice 0.17.3 pero **no es el binario del tag**. `origin/main` va **11 commits** por delante de lo desplegado y **sí trae código del kernel**: `git diff --stat d117e9f5 origin/main -- crates` → **6 ficheros, +390/−24** (`api_security.rs`, `setup.rs`, `a2a_live.rs`, `embeddings.rs`, `write_gate.rs`, `guild_process.rs`).
 - **Cierres del 2026-10-24/25 (detalle y anclas en ROADMAP.md, sección "Closures of 2026-10-24 and 2026-10-25"):** guard de Origin/Host en rutas MCP/SSE con `application/json` obligatorio (T-DSH-86, D-59, M-BUFFY-10 — 403/415 verificados en vivo por el TL y el 403 también por Hermes), luego extendido a toda la API REST mutante `/api/v1/*` (T-DSH-87, e6e19c5); deadlock D-58 de `federation_approve_peer` (RwLock no reentrante) y contratos con log real (D-57) en d1a375c, con su test de regresión D-56 ya sin `#[ignore]`; WAL bajo BUSY (T-DSH-81); `audit_or_warn` sin descartes silenciosos (T-DSH-74); borrado fail-closed (T-DSH-79); token Bearer por cliente (T-DSH-83) y guía para apagar dev_mode (T-DSH-84); guardián R4 de anclas `fichero:linea` sobre estos dos docs (H-31, `scripts/check_readme_claims.sh` exit 0).
 - **Tests:** 1932 (1845 kernel + 75 link + 12 fsrs), vigilado por `scripts/check_test_count.sh`.
 - **Filtro de coherencia (T-DSH-96/98):** `[security] coherence_semantic_scope` por defecto `all`. El perfil `conflicting_top` es EXPERIMENTAL y no recomendado: en A/B (40 preguntas) bajó Recall@5 de 27,5 % a 17,5 % aunque penaliza la mitad.
@@ -45,7 +45,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 | Rust — ARM64 portability (aarch64-unknown-linux-gnu) | ✅ pass |
-| Install smoke (Linux + Windows) | ✅ pass contra v0.17.1 (se dispara al tocar `install.*`, `tylluan-cli`, `release.yml` o a mano; instala la última release publicada) |
+| Install smoke (Linux + Windows) | ✅ pass contra la ultima release publicada (hoy **v0.17.3**; se dispara al tocar `install.*`, `tylluan-cli`, `release.yml` o a mano) |
 | Docker smoke | ✅ pass (job `Docker Smoke` del CI) |
 | Security — claims gate | ✅ pass |
 
