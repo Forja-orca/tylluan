@@ -2020,10 +2020,45 @@ mod tests {
     // (verificado 2026-10-08, 2/2 ok en 50.69s con el cache del kernel ya
     // provisionado). Ejecutar manualmente: cargo test -p tylluan-kernel --lib
     // test_real_inference -- --ignored --test-threads=1
+    /// T4868 (estrechado por el TL): solo la AUSENCIA de modelo justifica saltar un test de
+    /// inferencia real. Cualquier otro error de carga (pesos presentes pero cargador roto,
+    /// ONNX corrupto...) tiene que FALLAR, no saltar: si no, un modelo roto se leeria como "SKIP".
+    fn modelo_ausente(e: &dyn std::fmt::Display) -> bool {
+        e.to_string().contains("allow_hf_download=false")
+    }
+
+    #[test]
+    fn t4868_el_skip_solo_cubre_la_ausencia_de_modelo() {
+        let ausente = "allow_hf_download=false y BAAI/bge-m3 no esta completo en /cache";
+        assert!(modelo_ausente(&ausente), "la puerta HF cerrada es ausencia de modelo");
+        let roto = "ONNX corrupto: unexpected EOF reading model.onnx";
+        assert!(!modelo_ausente(&roto), "un modelo roto NO es ausencia: tiene que fallar");
+    }
+
     #[test]
     #[ignore = "real ONNX inference: fastembed auto-downloads 1.2GB (bge-m3) on first run and takes ~50s CPU — run with `-- --ignored` (see comment above)"]
     fn test_real_inference_bge_m3() {
-        let engine = EmbeddingEngine::load("bge-m3").expect("Failed to load engine");
+        // T4868: en CI el job semanal corre `--lib -- --ignored` con
+        // `allow_hf_download=false` y sin pesos provisionados, asi que `load` falla al
+        // instante y ESTE test tumbaba el job entero. Igual que T4740 en A2A: requisito
+        // explicito y salto explicito en vez de fallar por el entorno. El test sigue
+        // midiendo lo mismo cuando el modelo esta en disco.
+        let engine = match EmbeddingEngine::load("bge-m3") {
+            Ok(e) => e,
+            Err(e) => {
+                if !modelo_ausente(&e) {
+                    panic!("Failed to load engine (no es ausencia de modelo, no se salta): {e}");
+                }
+                eprintln!(
+                    "SKIP test_real_inference_bge_m3: bge-m3 no esta provisionado ({e}). \
+                     Este test necesita el modelo en el cache de fastembed; con \
+                     allow_hf_download=false no se descarga. Para ejecutarlo: deja los pesos \
+                     en models/ (o pon allow_hf_download=true) y corre \
+                     `cargo test -p tylluan-kernel --lib test_real_inference -- --ignored --test-threads=1`"
+                );
+                return;
+            }
+        };
         let vector = engine.embed("Hello, TylluanNexus sovereignty").expect("Inference failed");
         assert_eq!(vector.len(), 1024, "BGE-M3 should produce 1024-dim vectors");
     }
@@ -2033,7 +2068,23 @@ mod tests {
     #[test]
     #[ignore = "real ONNX inference: model auto-download + ~50s CPU — run with `-- --ignored` (see test_real_inference_bge_m3 comment)"]
     fn test_real_inference_minilm() {
-        let engine = EmbeddingEngine::load("minilm").expect("Failed to load engine");
+        // Mismo gate que test_real_inference_bge_m3 (T4868): sin pesos provisionados y con
+        // allow_hf_download=false, `load` falla al instante; se salta con aviso explicito en
+        // vez de tumbar el job semanal por el entorno.
+        let engine = match EmbeddingEngine::load("minilm") {
+            Ok(e) => e,
+            Err(e) => {
+                if !modelo_ausente(&e) {
+                    panic!("Failed to load engine (no es ausencia de modelo, no se salta): {e}");
+                }
+                eprintln!(
+                    "SKIP test_real_inference_minilm: minilm no esta provisionado ({e}). \
+                     Para ejecutarlo: deja los pesos en models/ (o allow_hf_download=true) y \
+                     corre `cargo test -p tylluan-kernel --lib test_real_inference -- --ignored --test-threads=1`"
+                );
+                return;
+            }
+        };
         let vector = engine.embed("Hello from portable mode").expect("Inference failed");
         assert_eq!(vector.len(), 384, "MiniLM should produce 384-dim vectors");
         assert_eq!(engine.dimension(), 384);

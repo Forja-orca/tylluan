@@ -105,7 +105,7 @@ jobs:
           toolchain: 1.99.1
       - name: Run ignored integration tests weekly
         run: |
-          cargo test -p tylluan-kernel \
+          cargo test -p tylluan-kernel --no-fail-fast \
             --test a2a_live \
             --test adr024_containment_pending \
             --test approve_action_intent_adversarial \
