@@ -24,3 +24,12 @@ psutil>=5.9.0,<8
 
 # Seguridad 2026-10: bundle de CAs sin las 8 intermedias eMudhra comprometidas
 certifi>=2026.10.19,<2027
+
+# ── PDF guild (entrega 1, 2026-11-21): lectura + render ──────────────────────
+# pypdf para texto; pypdfium2 para rasterizar; Pillow porque
+# `pypdfium2.bitmap.to_pil()` la EXIGE (validado instalando el lock en una venv
+# limpia: sin Pillow el render revienta con ModuleNotFoundError: No module named 'PIL').
+# pdfplumber queda fuera a proposito (no se usa; traeria pdfminer-six extra).
+pypdf>=4.0.0,<7
+pypdfium2>=4.30,<6
+pillow>=11,<14
