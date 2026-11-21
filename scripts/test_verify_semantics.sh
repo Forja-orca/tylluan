@@ -126,7 +126,8 @@ fi
 # directly but serve as standalone developer/build utilities with documented rationale.
 # verify_restart.sh: operator tool run by hand after a kernel restart (T-DSH-60); not a gate.
 # check_dashboard_dist_fresh.sh: post-build/deploy dist freshness gate (T4028; dashboard/dist is gitignored); tested in CI via tests/python/test_check_dashboard_dist_fresh.py.
-EXEMPT_GATE_HELPERS="verify_portable_guild.py verify_restart.sh check_dashboard_dist_fresh.sh"
+# verify_release.py: operator tool run by hand AFTER a release is published (T4960): downloads the tarball, checks its sum, boots the packaged kernel on its own port. It needs network and a published tag, so it cannot be a pre-commit/CI gate; its cleanup and tar-extraction rules are tested in CI via tests/python/test_verify_release_cleanup.py.
+EXEMPT_GATE_HELPERS="verify_portable_guild.py verify_restart.sh check_dashboard_dist_fresh.sh verify_release.py"
 
 # ONE awk pass over every wiring source (verify.sh + CI workflows + scripts/*.sh)
 # replacing the old grep-per-candidate-per-source loop (~75 spawns). Semantics
