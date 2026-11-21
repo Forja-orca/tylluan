@@ -247,6 +247,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # check_docs_reality.sh section 8 needs history: spec revision must exist and be an ancestor of HEAD
       # Existed since the 2026-09-11 cycle but was never cabled in here or in
       # verify.sh (fifth external audit round, 2026-09-27, found it). Needed
       # two real fixes first to run clean in a runner with no live
