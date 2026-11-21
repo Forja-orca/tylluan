@@ -3506,13 +3506,15 @@ mod d206_token_permissions {
     #[test]
     fn d226_aviso_cuando_el_token_queda_fuera_de_sitio() {
         use std::path::Path as P;
-        let a = aviso_token_en_cwd(P::new("D:/Temp"), P::new("D:/instancia/data"), Some(P::new("E:/tylluan")))
+        // Ruta absoluta en cada plataforma: en Linux "D:/x" NO es absoluta (CI fallo 21-nov); en Windows "/x" tampoco.
+        let r = |s: &str| format!("{}{}", if cfg!(windows) { "D:/" } else { "/" }, s);
+        let a = aviso_token_en_cwd(P::new(&r("Temp")), P::new(&r("instancia/data")), Some(P::new(&r("tylluan"))))
             .expect("tiene que avisar");
-        assert!(a.contains("D:/Temp") && a.contains(".tylluan-token"), "aviso sin rutas: {a}");
-        assert!(aviso_token_en_cwd(P::new("E:/tylluan"), P::new("E:/tylluan/data"), Some(P::new("E:/tylluan"))).is_none());
-        assert!(aviso_token_en_cwd(P::new("D:/instancia"), P::new("data"), None).is_none());
-        assert!(aviso_token_en_cwd(P::new("D:/instancia"), P::new("D:/instancia/perfil"), None).is_none());
-        assert!(aviso_token_en_cwd(P::new("D:/Temp"), P::new("D:/datos"), None).is_some());
+        assert!(a.contains(&r("Temp")) && a.contains(".tylluan-token"), "aviso sin rutas: {a}");
+        assert!(aviso_token_en_cwd(P::new(&r("tylluan")), P::new(&r("tylluan/data")), Some(P::new(&r("tylluan")))).is_none());
+        assert!(aviso_token_en_cwd(P::new(&r("instancia")), P::new("data"), None).is_none());
+        assert!(aviso_token_en_cwd(P::new(&r("instancia")), P::new(&r("instancia/perfil")), None).is_none());
+        assert!(aviso_token_en_cwd(P::new(&r("Temp")), P::new(&r("datos")), None).is_some());
     }
 }
 
