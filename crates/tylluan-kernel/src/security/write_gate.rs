@@ -37,12 +37,29 @@ pub fn judge_unavailable_count() -> u64 {
 }
 
 /// Cuántas veces el juez respondió (con veredicto, sea SAFE o SUSPICIOUS).
-/// `spawns == answered + unavailable + en_vuelo`; el test usa esto para esperar
-/// a que los `tokio::spawn` terminen antes de juzgar los contadores.
+/// Invariante completo (D215): `spawns == answered + unavailable + skipped_sentinel + en_vuelo`.
+/// El término `skipped_sentinel` faltaba desde T-DSH-113 y hacía que la cuenta no cuadrara.
 static JUDGE_ANSWERED: AtomicU64 = AtomicU64::new(0);
 
 pub fn judge_answered_count() -> u64 {
     JUDGE_ANSWERED.load(Ordering::Relaxed)
+}
+
+/// D215: cuántas veces **no se llamó** al juez de gramática porque el centinela local (T-DSH-113)
+/// ya había dado veredicto. Sin este contador, `spawned - answered - unavailable` era un agujero
+/// que en producción se leía como «el juez está colgado» (93/0/0) cuando no se le llamó.
+static JUDGE_SKIPPED_SENTINEL: AtomicU64 = AtomicU64::new(0);
+
+pub fn judge_skipped_sentinel_count() -> u64 {
+    JUDGE_SKIPPED_SENTINEL.load(Ordering::Relaxed)
+}
+
+/// Anota que la capa 2 no se invocó porque el centinela ya respondió.
+///
+/// Punto único del incremento: Hermes midió (H1) que borrar los `fetch_add` dejaba el test
+/// anterior en verde porque sólo miraba el JSON.
+pub(crate) fn note_skipped_sentinel() {
+    JUDGE_SKIPPED_SENTINEL.fetch_add(1, Ordering::Relaxed);
 }
 
 pub(crate) const WRITE_GATE_GRAMMAR: &str = "root ::= verdict\nverdict ::= \"SAFE\" | \"SUSPICIOUS\"";
@@ -196,6 +213,7 @@ pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: Str
             match mode {
                 crate::security::sentinel::SentinelMode::Enforce => {
                     if apply_sentinel_verdict(&silva, &node_id, verdict).await {
+                        note_skipped_sentinel();
                         return;
                     }
                     sentinel.note_fallback();
@@ -208,6 +226,7 @@ pub fn spawn_write_gate_judge(silva: Arc<SilvaDB>, node_id: String, content: Str
                             "[T-DSH-113] centinela observe: veredicto {:?} para nodo {node_id} (no se aplica)",
                             verdict
                         );
+                        note_skipped_sentinel();
                         return;
                     }
                 }
@@ -293,5 +312,14 @@ mod tests {
         let long_content: String = "a".repeat(5000);
         let truncated: String = long_content.chars().take(2000).collect();
         assert_eq!(truncated.len(), 2000);
+    }
+
+    /// H1 de Hermes (D215): ejercita el incremento en su punto único.
+    #[test]
+    fn d215_el_contador_de_esquivados_incrementa() {
+        let antes = judge_skipped_sentinel_count();
+        note_skipped_sentinel();
+        note_skipped_sentinel();
+        assert!(judge_skipped_sentinel_count() >= antes + 2);
     }
 }

@@ -111,6 +111,35 @@ pub async fn friction_stats_handler() -> impl axum::response::IntoResponse {
 mod tests {
     use super::feedback_counts;
 
+    /// D215: el invariante de la capa 2 tiene que ser expresable en el JSON, con el término del
+    /// centinela incluido. En producción se veía 93/0/0 y se leía como juez colgado.
+    #[test]
+    fn d215_el_json_de_la_capa2_declara_el_termino_del_centinela() {
+        let v = super::write_gate_stats_json();
+        assert!(
+            v.get("layer2_skipped_sentinel").is_some(),
+            "falta layer2_skipped_sentinel: sin él, spawned != answered + unavailable"
+        );
+        let invariante = v.get("invariant").and_then(|i| i.as_str()).unwrap_or("");
+        assert!(
+            invariante.contains("layer2_skipped_sentinel"),
+            "el invariante publicado tiene que nombrar el término del centinela: {invariante}"
+        );
+        // H2: TODOS los términos del invariante tienen que ser claves del payload.
+        for c in ["layer2_spawned", "layer2_answered", "layer2_unavailable",
+                  "layer2_skipped_sentinel", "layer2_in_flight"] {
+            assert!(v.get(c).is_some(), "el invariante cita {c} y no está en el payload");
+        }
+        // La igualdad `spawned == suma` NO se afirma aquí: los contadores son
+        // estáticos de proceso y otros tests llaman a `note_skipped_sentinel()`.
+
+        let nota = v.get("note").and_then(|n| n.as_str()).unwrap_or("");
+        assert!(
+            nota.contains("layer2_skipped_sentinel"),
+            "la nota sigue dejando creer que spawned-answered-unavailable es un juez colgado"
+        );
+    }
+
     /// T-DSH-79: los fallos de los contadores avisan y el contrato (0) no cambia.
     #[test]
     fn feedback_counts_warns_and_keeps_zero_contract() {
@@ -164,14 +193,24 @@ pub async fn sentinel_status_handler() -> impl axum::response::IntoResponse {
 /// Funcion aparte para poder probarla sin montar el handler.
 pub fn write_gate_stats_json() -> serde_json::Value {
     use crate::security::write_gate::{
-        judge_answered_count, judge_spawn_count, judge_unavailable_count,
+        judge_answered_count, judge_skipped_sentinel_count, judge_spawn_count,
+        judge_unavailable_count,
     };
     serde_json::json!({
         "layer2_spawned": judge_spawn_count(),
         "layer2_answered": judge_answered_count(),
         "layer2_unavailable": judge_unavailable_count(),
+        // D215: cuando el centinela local responde, la capa 2 no llega a invocarse.
+        "layer2_skipped_sentinel": judge_skipped_sentinel_count(),
+        "layer2_in_flight": judge_spawn_count().saturating_sub(
+            judge_answered_count() + judge_unavailable_count() + judge_skipped_sentinel_count()
+        ),
+        "invariant": "layer2_spawned == layer2_answered + layer2_unavailable + layer2_skipped_sentinel + en_vuelo",
+        // V-06 (T4849): constante de diseno, no medida. Quien quiera saber si la capa 2
+        // guarda mire `layer2_unavailable` y `layer2_policy`.
         "layer2_fails_open": true,
-        "note": "layer 2 is fail-open: when the ephemeral grammar judge is unavailable the node is written anyway and only layer 1 (deterministic) applied. layer2_unavailable > 0 means layer 2 has NOT been guarding.",
+        "layer2_policy": "fail_open",
+        "note": "layer 2 is fail-open BY DESIGN: when the ephemeral grammar judge is unavailable the node is written anyway and only layer 1 (deterministic) applied. In mode=observe layer 2 does not guard by design and /health shows it; layer2_unavailable > 0 means it was ASKED and could not answer; layer2_skipped_sentinel counts the times the local sentinel answered first, so spawned - answered - unavailable is NOT a hung judge.",
     })
 }
 
@@ -226,8 +265,22 @@ mod tests_write_gate_stats {
             assert!(v.get(clave).is_some(), "falta {clave} en {v}");
         }
         assert_eq!(v.get("layer2_fails_open"), Some(&serde_json::json!(true)));
+        assert_eq!(v.get("layer2_policy"), Some(&serde_json::json!("fail_open")));
+        let nota = v.get("note").and_then(|n| n.as_str()).unwrap_or("");
+        assert!(nota.contains("BY DESIGN"), "la nota debe decir que el fail-open es de diseno: {nota}");
+        assert!(nota.contains("observe"), "y nombrar el modo observe: {nota}");
         let nota = v.get("note").and_then(|n| n.as_str()).unwrap_or_default();
         assert!(nota.contains("fail-open"), "{nota}");
         assert!(nota.contains("layer 1"), "{nota}");
+    }
+
+    /// H1 de Hermes (D215): borrar las DOS llamadas de producción dejaba el test del JSON
+    /// en verde. Pin sobre la región de producción (antes de `mod tests`).
+    #[test]
+    fn d215_los_dos_retornos_que_esquivan_la_capa2_anotan_el_esquivado() {
+        const SRC: &str = include_str!("../../../security/write_gate.rs");
+        let corte = SRC.find("mod tests").unwrap_or(SRC.len());
+        let veces = SRC[..corte].matches("note_skipped_sentinel();").count();
+        assert_eq!(veces, 2, "los dos retornos que esquivan la capa 2 tienen que anotarlo");
     }
 }
