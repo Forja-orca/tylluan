@@ -64,7 +64,18 @@ pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req)
                 node_id.clone(),
                 content.to_string(),
             );
-            (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "node_id": node_id }))).into_response()
+            // REST-WRITE-CONTENT-HASH-VACIO (TL T4701): la respuesta decía sólo `status` y `node_id`;
+            // quien escribe no tenía forma de comprobar qué se guardó sin volver a leerlo. Se devuelve
+            // el mismo `sha256` que encadena la tabla de episodios (64 hex, determinista).
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "ok",
+                    "node_id": node_id,
+                    "content_hash": crate::memory::episodes::sha256_hex(content),
+                })),
+            )
+                .into_response()
         }
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "write failed" }))).into_response(),
     }

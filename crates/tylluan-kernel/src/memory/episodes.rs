@@ -59,7 +59,10 @@ BEGIN
 END;
 ";
 
-fn sha256_hex(text: &str) -> String {
+/// SHA-256 en hex de un contenido. `pub(crate)` desde 2026-11-19 (REST-WRITE-CONTENT-HASH-VACIO): lo
+/// reutiliza `POST /api/v1/memory/write` para devolver el mismo `content_hash` que usa la cadena de
+/// episodios, en vez de inventar un segundo hash con otro formato.
+pub(crate) fn sha256_hex(text: &str) -> String {
     let digest = Sha256::digest(text.as_bytes());
     let mut out = String::with_capacity(64);
     for b in &digest {
@@ -238,6 +241,18 @@ mod tests {
 
     fn log() -> EpisodeLog {
         EpisodeLog::open_in_memory().unwrap()
+    }
+
+    /// REST-WRITE-CONTENT-HASH-VACIO: el hash que devuelve la ruta de escritura es el mismo que usa la
+    /// cadena de episodios: 64 hex, determinista y distinto por contenido.
+    #[test]
+    fn content_hash_es_64_hex_determinista_y_discrimina() {
+        let a = sha256_hex("hola mundo");
+        assert_eq!(a.len(), 64, "sha256 en hex son 64 caracteres");
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()), "sólo hex: {a}");
+        assert_eq!(a, sha256_hex("hola mundo"), "determinista");
+        assert_ne!(a, sha256_hex("hola mundo "), "un byte de más cambia el hash");
+        assert_ne!(a, sha256_hex(""), "la cadena vacía también tiene hash");
     }
 
     #[test]
