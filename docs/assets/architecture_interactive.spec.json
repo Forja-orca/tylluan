@@ -3,14 +3,14 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Tylluan Kernel Architecture",
-    "subtitle": "v0.17.1 — sovereign memory + tool execution, single Rust binary",
+    "subtitle": "v0.17.3 — sovereign memory + tool execution, single Rust binary",
     "quality_profile": "showcase",
     "legend": {
       "mode": "auto"
     },
     "repository": {
       "url": "https://github.com/Forja-orca/tylluan",
-      "revision": "0ac9dfb0791ebfac94db0b4798d7a7c434e517d2"
+      "revision": "dd37bb0ccabed3256cc0745f96abd25e665d1942"
     }
   },
   "layout": {
@@ -46,7 +46,7 @@
       "kind": "region",
       "label": "Execution",
       "wraps": [
-        "guilds46",
+        "guilds50",
         "coloquio"
       ],
       "pad": 16
@@ -84,6 +84,20 @@
       "id": "mcp_clients",
       "type": "external",
       "label": "MCP IDEs + A2A",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/transport/http/api_v1/mcp.rs",
+          "line": 315,
+          "symbol": "mcp_handler",
+          "label": "mcp_handler (MCP streamable)"
+        },
+        {
+          "path": "crates/tylluan-kernel/src/transport/http/a2a.rs",
+          "line": 353,
+          "symbol": "a2a_jsonrpc_handler",
+          "label": "a2a_jsonrpc_handler (A2A)"
+        }
+      ],
       "row": 0,
       "col": 0
     },
@@ -91,6 +105,14 @@
       "id": "dashboard_ui",
       "type": "frontend",
       "label": "Dashboard",
+      "sources": [
+        {
+          "path": "dashboard/src/App.tsx",
+          "line": 50,
+          "symbol": "function App",
+          "label": "App (React)"
+        }
+      ],
       "row": 0,
       "col": 1
     },
@@ -101,6 +123,8 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/transport/http/auth.rs",
+          "line": 258,
+          "symbol": "operator_class_required",
           "label": "operator vs agent class"
         }
       ],
@@ -114,6 +138,8 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/transport/server/tools.rs",
+          "line": 16,
+          "symbol": "all_tools",
           "label": "all_tools()"
         }
       ],
@@ -128,6 +154,7 @@
         {
           "path": "crates/tylluan-kernel/src/router/matcher.rs",
           "line": 160,
+          "symbol": "GuildMatcher",
           "label": "GuildMatcher"
         }
       ],
@@ -146,7 +173,8 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/router/decision/service.rs",
-          "line": 85,
+          "line": 371,
+          "symbol": "fn decide",
           "label": "DecisionService::decide"
         }
       ],
@@ -154,12 +182,14 @@
       "col": 1
     },
     {
-      "id": "guilds46",
+      "id": "guilds50",
       "type": "backend",
-      "label": "45 Python guilds",
+      "label": "45 python + 5 ext (50)",
       "sources": [
         {
           "path": "guilds/core/coloquio.py",
+          "line": 18,
+          "symbol": "FastMCP",
           "label": "guilds/core/"
         }
       ],
@@ -170,6 +200,14 @@
       "id": "coloquio",
       "type": "backend",
       "label": "Coloquio/Contracts",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/transport/http/api_v1/api_coloquio.rs",
+          "line": 266,
+          "symbol": "coloquio_list_channels",
+          "label": "coloquio_list_channels"
+        }
+      ],
       "row": 3,
       "col": 1
     },
@@ -180,7 +218,8 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/router/embeddings.rs",
-          "line": 186,
+          "line": 190,
+          "symbol": "EmbeddingEngine",
           "label": "EmbeddingEngine"
         }
       ],
@@ -194,6 +233,8 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/memory/inference_budget.rs",
+          "line": 67,
+          "symbol": "InferenceBudgetConfig",
           "label": "bounded queue + 503"
         }
       ],
@@ -207,6 +248,8 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/memory/silva/graph.rs",
+          "line": 207,
+          "symbol": "personalized_pagerank_local",
           "label": "PageRank+FSRS"
         }
       ],
@@ -221,6 +264,7 @@
         {
           "path": "crates/tylluan-kernel/src/registry/capability_registry.rs",
           "line": 71,
+          "symbol": "build_registry",
           "label": "build_registry()"
         }
       ],
@@ -234,6 +278,8 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/federation/permissions.rs",
+          "line": 30,
+          "symbol": "PeerPermissions",
           "label": "per-peer, per-space ACL (deny-by-default)"
         }
       ],
@@ -244,6 +290,14 @@
       "id": "peers",
       "type": "external",
       "label": "Remote peers",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/federation/mod.rs",
+          "line": 57,
+          "symbol": "PeerDb",
+          "label": "PeerDb"
+        }
+      ],
       "row": 6,
       "col": 1
     }
@@ -280,7 +334,7 @@
     },
     {
       "from": "matcher",
-      "to": "guilds46",
+      "to": "guilds50",
       "label": "dispatch",
       "labelAt": [
         100,
@@ -288,11 +342,11 @@
       ]
     },
     {
-      "from": "guilds46",
+      "from": "guilds50",
       "to": "coloquio"
     },
     {
-      "from": "guilds46",
+      "from": "guilds50",
       "to": "embed_engine"
     },
     {
