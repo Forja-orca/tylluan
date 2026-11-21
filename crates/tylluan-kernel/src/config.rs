@@ -2046,6 +2046,42 @@ impl Default for SecurityConfig {
 /// [0-9a-f] so string interpolation cannot produce SQL injection.
 /// The key is applied BEFORE any other PRAGMA to avoid reading an encrypted
 /// DB with WAL mode before it is unlocked.
+/// D226: ¿el `.tylluan-token` del cwd queda fuera de sitio? Devuelve el aviso, o `None`.
+pub fn aviso_token_en_cwd(
+    cwd: &std::path::Path,
+    data_dir: &std::path::Path,
+    config_dir: Option<&std::path::Path>,
+) -> Option<String> {
+    if let Some(cd) = config_dir
+        && mismo_sitio(cwd, cd)
+    {
+        return None;
+    }
+    let abs_data = if data_dir.is_absolute() {
+        data_dir.to_path_buf()
+    } else {
+        cwd.join(data_dir)
+    };
+    if abs_data.starts_with(cwd) {
+        return None;
+    }
+    Some(format!(
+        "El token maestro se escribe en {}/.tylluan-token (cwd del proceso), que no es el directorio del config ni el DATA_DIR ({}). Arranca el kernel desde el directorio de la instalacion para que el token quede donde lo buscan el CLI y los backups.",
+        cwd.display(),
+        abs_data.display()
+    ))
+}
+
+fn mismo_sitio(a: &std::path::Path, b: &std::path::Path) -> bool {
+    let norm = |p: &std::path::Path| {
+        p.components()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect::<Vec<_>>()
+    };
+    norm(a) == norm(b)
+}
 /// T-DSH-168: directorio de datos efectivo del kernel.
 /// `TYLLUAN_DATA_DIR` manda; sin el, el historico `./data`.
 pub fn data_dir() -> std::path::PathBuf {
@@ -3272,6 +3308,14 @@ impl TylluanConfig {
     /// 2. Local file .tylluan-token
     /// 3. Randomly generated (and saved to .tylluan-token) if dev_mode is false
     pub fn ensure_auth_token(&self) -> anyhow::Result<Option<String>> {
+        // D226 (hallazgo H_token_maestro_en_cwd): el fichero se resuelve contra el cwd,
+        // asi que arrancar desde otro directorio deja el token maestro donde nadie lo espera.
+        if let Ok(cwd) = std::env::current_dir() {
+            let cfg_dir = Self::find_config_file().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+            if let Some(aviso) = aviso_token_en_cwd(&cwd, &data_dir(), cfg_dir.as_deref()) {
+                warn!("{aviso}");
+            }
+        }
         // 0. Dev mode bypass
         if self.nexus.dev_mode {
             info!("🔓 Dev mode enabled: authentication disabled");
@@ -3457,6 +3501,18 @@ mod d206_token_permissions {
                 "modo {modo:o} da permiso a otros y debe avisar"
             );
         }
+    }
+    /// D226: el aviso sale solo cuando el token queda fuera de sitio.
+    #[test]
+    fn d226_aviso_cuando_el_token_queda_fuera_de_sitio() {
+        use std::path::Path as P;
+        let a = aviso_token_en_cwd(P::new("D:/Temp"), P::new("D:/instancia/data"), Some(P::new("E:/tylluan")))
+            .expect("tiene que avisar");
+        assert!(a.contains("D:/Temp") && a.contains(".tylluan-token"), "aviso sin rutas: {a}");
+        assert!(aviso_token_en_cwd(P::new("E:/tylluan"), P::new("E:/tylluan/data"), Some(P::new("E:/tylluan"))).is_none());
+        assert!(aviso_token_en_cwd(P::new("D:/instancia"), P::new("data"), None).is_none());
+        assert!(aviso_token_en_cwd(P::new("D:/instancia"), P::new("D:/instancia/perfil"), None).is_none());
+        assert!(aviso_token_en_cwd(P::new("D:/Temp"), P::new("D:/datos"), None).is_some());
     }
 }
 
