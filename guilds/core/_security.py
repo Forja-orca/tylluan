@@ -16,7 +16,10 @@ SKIP_DIRS = {
 # Sensitive files to never read or search
 SKIP_FILES = {
     "tylluan.db", "silva.db", "mailbox.db", ".env", ".tylluan-token", 
-    "tylluan-nexus.pid", "Cargo.lock", "package-lock.json", "id_rsa", "id_ed25519"
+    "tylluan-nexus.pid", "Cargo.lock", "package-lock.json", "id_rsa", "id_ed25519",
+    # 2026-11-21 (Deep): el token del segundo plano (.forja-token) estaba fuera de esta lista
+    # y `file_read` lo devolvia en produccion, igual que el maestro.
+    ".forja-token",
 }
 
 # Binary or large extensions to ignore by default

@@ -113,6 +113,14 @@ async def file_read(
     file_path = Path(path).resolve()
     if not validate_path(_FS_ROOT, str(file_path)):
         return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{_FS_ROOT}'."
+    # SEGURIDAD (Deep, 2026-11-21): `file_search` ya filtraba con los SKIP compartidos de
+    # `guilds/core/_security.py`, pero `file_read` NO: su unica barrera era `validate_path`,
+    # cuya raiz cae a `os.getcwd()` -- en produccion, la raiz del repo. Con eso, `.tylluan-token`
+    # (33 B, clase OPERADOR), `.env`, `id_rsa` y `data/*.db` se devolvian: un `tylluan_do`
+    # ("lee el fichero .tylluan-token") bastaba para exfiltrar el token maestro.
+    # Se reutiliza la MISMA lista que usa `file_search`, no una copia.
+    if file_path.name in _FS_SKIP_NAMES or file_path.suffix.lower() in _FS_SKIP_EXTS:
+        return f"🚫 BLOCKED: '{file_path.name}' es un fichero sensible (token, clave o base de datos); no se lee."
 
     if not file_path.exists():
         return f"❌ File not found: {file_path}"
