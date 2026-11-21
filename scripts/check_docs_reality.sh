@@ -478,9 +478,174 @@ if [ -f crates/tylluan-kernel/src/transport/server/tools.rs ]; then
     done
 fi
 
+# ── 8. docs/assets: versiones rotuladas y coherencia spec ↔ HTML (H-Y-02) ──
+# Hermes (H-Y-02, 2026-11-21): `architecture_interactive.{html,spec.json}` rotulaban
+# v0.17.1 con la version real en 0.17.3, citaban lineas de codigo que ya no existian y
+# el bloque JSON embebido del HTML se habia separado del spec (un nodo sin fuente,
+# `peers`, detras de un `verified: true`). Nada lo vigilaba: `git grep
+# architecture_interactive` no daba ni un hit en el repo y este script solo miraba
+# `architecture.svg`. La raiz es que el HTML **duplica** los datos del spec, asi que
+# corregir uno deja al otro mintiendo en silencio.
+# Tres comprobaciones, solo en `docs/assets`:
+#   (a) ninguna version rotulada puede ser ANTERIOR a la de Cargo.toml;
+#   (b) los componentes y sus fuentes (path+line) del spec y del bloque
+#       `archify-source-evidence-data` del HTML deben coincidir, y `referenceCount`
+#       debe igualar el numero real de referencias;
+#   (c) la `revision` declarada en el spec debe existir en este repo.
+PYBIN=$(command -v python3 || command -v python || true)
+if [ -f docs/assets/architecture_interactive.spec.json ]; then
+    if [ -z "$PYBIN" ]; then
+        # H-HER-K-03 (Hermes, T4940): fail-CLOSED. Antes, sin python, la seccion no corria y el
+        # gate daba por buena una comprobacion que no habia hecho.
+        echo "❌ docs/assets: no hay python3 ni python; no puedo verificar versiones ni el spec (fail-closed)"
+        problems=1
+    # PYTHONIOENCODING: sin esto, en Windows el print del ❌ revienta con
+    # UnicodeEncodeError/cp1252 y el gate muere JUSTO cuando encuentra algo (visto
+    # en la prueba roja del 21-nov: no imprimia hallazgos, lanzaba un traceback).
+    elif ! PYTHONIOENCODING=utf-8 "$PYBIN" - <<'PY'
+import json, re, subprocess, sys
+from pathlib import Path
+
+bad = 0
+
+
+def fail(msg):
+    global bad
+    print("\u274c " + msg)
+    bad += 1
+
+
+cargo = Path("Cargo.toml").read_text(encoding="utf-8", errors="replace")
+m = re.search(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', cargo, re.M)
+if not m:
+    sys.exit(0)
+real_s = m.group(1)
+real = tuple(int(x) for x in real_s.split("."))
+
+# (a) versiones rotuladas en docs/assets
+for p in sorted(Path("docs/assets").glob("*")):
+    if p.suffix.lower() not in (".svg", ".html", ".json"):
+        continue
+    txt = p.read_text(encoding="utf-8", errors="replace")
+    # `(?<![\d.])` y `(?![\d.])`: sin eso, `127.0.0.1` casa como "0.0.1" y el gate
+    # marca una IP como version antigua (visto en la prueba del 21-nov con
+    # puntos_neuronales_tylluan.*: 5 hallazgos falsos).
+    for mm in re.finditer(r'(?<![\d.])v?(0\.\d+\.\d+)(?![\d.])', txt):
+        v = tuple(int(x) for x in mm.group(1).split("."))
+        if v < real:
+            line = txt.count("\n", 0, mm.start()) + 1
+            fail("%s:%d: rotula v%s, anterior a Cargo.toml (%s)" % (p, line, mm.group(1), real_s))
+
+spec_p = Path("docs/assets/architecture_interactive.spec.json")
+html_p = Path("docs/assets/architecture_interactive.html")
+if html_p.exists():
+    spec = json.loads(spec_p.read_text(encoding="utf-8"))
+
+    # (b) spec vs bloque JSON embebido del HTML
+    html = html_p.read_text(encoding="utf-8", errors="replace")
+    mm = re.search(r'<script id="archify-source-evidence-data" type="application/json">(.*?)</script>',
+                   html, re.S)
+    if not mm:
+        fail("no encuentro el bloque archify-source-evidence-data en el HTML")
+    else:
+        blk = json.loads(mm.group(1))
+        refs = blk.get("nodes") or {}
+        comp = {c["id"]: (c.get("sources") or []) for c in spec.get("components", [])}
+        for cid in comp:
+            if cid not in refs:
+                fail("componente '%s' del spec sin entrada en el bloque del HTML" % cid)
+        for cid in refs:
+            if cid not in comp:
+                fail("entrada '%s' del bloque del HTML sin componente en el spec" % cid)
+        for cid, srcs in comp.items():
+            a = [(s.get("path"), s.get("line")) for s in srcs]
+            b = [(s.get("path"), s.get("line")) for s in refs.get(cid, [])]
+            if a != b:
+                fail("'%s': el spec cita %s y el HTML %s" % (cid, a, b))
+        total = sum(len(v) for v in refs.values())
+        if blk.get("referenceCount") != total:
+            fail("referenceCount=%s pero hay %d referencias" % (blk.get("referenceCount"), total))
+        # (b2) H-HER-Z-01 (Hermes, T4937): comparar (path, line) no basta si la fuente NO tiene
+        # ancla: el bloque decia `verified: true` con 6 de 15 fuentes sin linea. Si se promete
+        # verificado, cada fuente tiene que anclarse a una linea concreta.
+        for cid, refs_n in refs.items():
+            for s in refs_n:
+                if s.get("line") is None:
+                    fail("'%s': fuente sin ancla (`line`) y el bloque dice verified:true -- %s"
+                         % (cid, s.get("path")))
+        for cid, srcs in comp.items():
+            for s in srcs:
+                if s.get("line") is None:
+                    fail("'%s': fuente sin ancla (`line`) en el spec -- %s" % (cid, s.get("path")))
+
+    # (c) la revision del spec existe de verdad
+    rev = (spec.get("meta", {}).get("repository", {}) or {}).get("revision", "")
+    if rev and re.fullmatch(r"[0-9a-f]{40}", rev):
+        r = subprocess.run(["git", "cat-file", "-e", rev + "^{commit}"], capture_output=True)
+        if r.returncode != 0:
+            fail("la revision %s del spec no existe en este repo" % rev[:12])
+        else:
+            # H-HER-K-01 (Hermes, T4940): existir no basta; tiene que ser ANCESTRO de HEAD, o
+            # el diagrama describe codigo que no es el de esta rama.
+            anc = subprocess.run(["git", "merge-base", "--is-ancestor", rev, "HEAD"], capture_output=True)
+            if anc.returncode != 0:
+                fail("la revision %s del spec existe pero NO es ancestro de HEAD" % rev[:12])
+
+    # (d) H-HER-K-02 (Hermes, T4940): comparar spec<->HTML deja pasar un defecto repetido en
+    # los dos. Aqui se contrasta cada fuente con el CODIGO: la linea citada tiene que contener
+    # el `symbol` declarado. Sin `symbol` en una fuente, no se puede comprobar y se avisa.
+    for c in spec.get("components", []):
+        for s in (c.get("sources") or []):
+            path_s, line_s, sym = s.get("path"), s.get("line"), s.get("symbol")
+            if not path_s or line_s is None:
+                continue
+            if not sym:
+                fail("'%s': fuente sin `symbol`; no se puede contrastar con el codigo (%s)"
+                     % (c.get("id"), path_s))
+                continue
+            fp = Path(path_s)
+            if not fp.exists():
+                fail("'%s': el fichero citado no existe -- %s" % (c.get("id"), path_s))
+                continue
+            lineas_f = fp.read_text(encoding="utf-8", errors="replace").splitlines()
+            if not (0 < int(line_s) <= len(lineas_f)):
+                fail("'%s': la linea %s se sale de %s (%d lineas)"
+                     % (c.get("id"), line_s, path_s, len(lineas_f)))
+                continue
+            real = lineas_f[int(line_s) - 1]
+            if sym not in real:
+                fail("'%s': %s:%s no contiene '%s' (la linea dice: %r)"
+                     % (c.get("id"), path_s, line_s, sym, real.strip()[:70]))
+
+sys.exit(1 if bad else 0)
+PY
+    then
+        problems=1
+    fi
+fi
+
+# ── 9. STATUS.md: lo que dice que devuelve /health (H-HER-K-04) ─────────────
+# Hermes (T4940): la seccion 8 solo miraba `docs/assets/*` y `STATUS.md:9` citaba
+# `/health` => v0.17.1 mientras Cargo.toml iba por 0.17.3. La cara publica se lee
+# primero; si anuncia una version que no es la del codigo, miente con sello de
+# verificado. Aqui solo se puede comprobar la VERSION (el commit vivo exigiria
+# llamar al kernel, que no existe en CI); eso ya lo vigila `check_head_sync.sh`
+# para la linea **HEAD:**.
+if [ -f STATUS.md ] && [ -f Cargo.toml ]; then
+    real_ver=$(sed -n 's/^version *= *"\([0-9][0-9.]*\)".*/\1/p' Cargo.toml | head -1)
+    while IFS=: read -r hline hclaim; do
+        [ -n "$hclaim" ] || continue
+        hver=$(echo "$hclaim" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        [ -n "$hver" ] || continue
+        if [ "v$real_ver" != "$hver" ]; then
+            echo "❌ STATUS.md:$hline: dice que /health devuelve $hver, pero Cargo.toml esta en $real_ver"
+            problems=1
+        fi
+    done < <(grep -nE '/health[^\n]{0,40}(devuelve|returns)' STATUS.md || true)
+fi
+
 echo ""
-if [ "$problems" -eq 0 ]; then
-    echo "✅ No doc-path, doc-port or version drift found ($low_conf low-confidence findings suppressed)."
+if [ "$problems" -eq 0 ]; then    echo "✅ No doc-path, doc-port or version drift found ($low_conf low-confidence findings suppressed)."
     exit 0
 fi
 
