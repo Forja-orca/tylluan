@@ -25,15 +25,15 @@
 ///
 /// Each entry is `(guild_name, python_module_path, is_cpu_bound)`.
 pub const LAZY_GUILDS: &[(&str, &str, bool)] = &[
-    ("database", "guilds.core.database", false),
+    ("database", "guilds.builders.plugins.database", false),
     ("browser", "guilds.core.browser", false),
-    ("pdf", "guilds.core.pdf", false),
-    ("code_analysis", "guilds.core.code_analysis", false),
-    ("data_tools", "guilds.core.data_tools", false),
-    ("formatter", "guilds.core.formatter", false),
+    ("pdf", "guilds.scholars.plugins.pdf", false),
+    ("code_analysis", "guilds.builders.plugins.code_analysis", false),
+    ("data_tools", "guilds.scholars.plugins.data_tools", false),
+    ("formatter", "guilds.builders.plugins.formatter", false),
     ("vision", "guilds.core.vision", false),
-    ("ingest", "guilds.core.ingest", false),
-    ("deep_analysis", "guilds.core.deep_analysis", false),
+    ("ingest", "guilds.scholars.plugins.ingest", false),
+    ("deep_analysis", "guilds.scholars.plugins.deep_analysis", false),
     ("mcp_bridge", "guilds.core.mcp_bridge", false),
     ("code_reviewer", "guilds.core.code_reviewer", false),
     ("deep_web_research", "guilds.core.deep_web_research", false),
@@ -59,5 +59,28 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), before, "LAZY_GUILDS contains a duplicate guild name");
+    }
+
+    /// H-HER-??? (2026-11-21): el registro lazy nombraba el **modulo** de cada guild, y nada
+    /// comprobaba que ese modulo exista. Habia **7 de 21** apuntando a `guilds.core.*` cuando
+    /// los ficheros viven en `guilds/{builders,scholars}/plugins/` -- entre ellos `pdf`, que por
+    /// eso era inalcanzable por `tylluan_do` aunque el fichero existia desde v0.1.0.
+    /// `test_lazy_or_always_on_guilds_are_registered` compara NOMBRES, no rutas: por eso pasaba.
+    #[test]
+    fn test_lazy_guild_modules_exist() {
+        let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let mut faltan = Vec::new();
+        for (nombre, modulo, _) in LAZY_GUILDS {
+            let ruta = raiz.join(modulo.replace('.', "/") + ".py");
+            if !ruta.is_file() {
+                faltan.push(format!("{nombre} -> {modulo}"));
+            }
+        }
+        assert!(
+            faltan.is_empty(),
+            "LAZY_GUILDS nombra modulos que no existen: {faltan:?}"
+        );
     }
 }
