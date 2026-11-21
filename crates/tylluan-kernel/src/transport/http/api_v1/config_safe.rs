@@ -618,6 +618,76 @@ pub fn backup_path_for(path: &Path) -> Result<PathBuf, String> {
     Ok(path.with_file_name(format!("{file_name}.bak-{ts}")))
 }
 
+/// Cuantas copias `<config>.bak-<millis>` se conservan en el directorio de la config (caso 5 de
+/// la politica de backups, 21-nov): las 3 mas recientes; la siguiente edicion poda el resto.
+pub const KEEP_CONFIG_BACKUPS: usize = 3;
+
+/// Marca numerica de una copia de `file_name` si el nombre encaja EXACTAMENTE con
+/// `<file_name>.bak-<digitos>`. Cualquier otro nombre devuelve `None` y no se toca:
+/// `tylluan.toml.bak` (sin marca), `tylluan.toml.bak-abc`, `tylluan.toml.bak-123.tmp`,
+/// `tylluan.toml`, `providers.json.bak`, `otro.toml.bak-1`.
+fn backup_mark(name: &str, file_name: &str) -> Option<u128> {
+    let rest = name.strip_prefix(file_name)?.strip_prefix(".bak-")?;
+    if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    rest.parse::<u128>().ok()
+}
+
+/// Conserva las `keep` copias mas recientes de `config` en SU MISMO directorio y borra el resto.
+/// Solo mira entradas de ese directorio (sin recursion), solo ficheros regulares y solo nombres
+/// con el patron exacto: no borra la config viva, ni `.json.bak`, ni nada con otro nombre, ni
+/// sigue enlaces. La antiguedad sale de la marca del nombre (millis de [`backup_path_for`]), no
+/// del mtime, para que el orden sea estable aunque dos copias caigan en el mismo segundo.
+/// Devuelve cuantas borro. Best-effort: un fallo no interrumpe la edicion.
+pub fn prune_backups(config: &Path, keep: usize) -> usize {
+    let (Some(dir), Some(file_name)) = (config.parent(), config.file_name().and_then(|n| n.to_str()))
+    else {
+        return 0;
+    };
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
+    let mut copies: Vec<(u128, PathBuf)> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        let Some(mark) = backup_mark(name, file_name) else {
+            continue;
+        };
+        // Solo ficheros regulares: un directorio con ese nombre exacto no se toca.
+        match entry.file_type() {
+            Ok(t) if t.is_file() => copies.push((mark, entry.path())),
+            _ => continue,
+        }
+    }
+    if copies.len() <= keep {
+        return 0;
+    }
+    copies.sort_by_key(|a| std::cmp::Reverse(a.0));
+    let mut removed = 0;
+    for (mark, path) in copies.into_iter().skip(keep) {
+        match std::fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(e) => {
+                tracing::warn!(backup = %path.display(), mark, "no se pudo podar la copia de config: {e}")
+            }
+        }
+    }
+    removed
+}
+
+/// Copia previa de `path` + poda de las copias viejas: es el unico punto por el que deben pasar
+/// las tres vias que editan la config (`/config/edit`, persistencia interna y POST de
+/// compatibilidad), para que la poda no se pueda olvidar en una de ellas.
+pub fn backup_and_prune(path: &Path) -> Result<PathBuf, String> {
+    let backup = backup_path_for(path)?;
+    std::fs::copy(path, &backup).map_err(|e| format!("no se pudo hacer copia previa: {e}"))?;
+    prune_backups(path, KEEP_CONFIG_BACKUPS);
+    Ok(backup)
+}
+
 pub fn audit_change(diff: &[serde_json::Value], backup: &Path, source: &str, actor: &str) {
     let keys: Vec<&str> = diff
         .iter()
@@ -702,13 +772,10 @@ pub async fn edit_config_handler(
     if diff.is_empty() {
         return (StatusCode::OK, Json(json!({"ok": true, "status": "no_changes", "applied": [], "diff": []}))).into_response();
     }
-    let backup = match backup_path_for(&path) {
+    let backup = match backup_and_prune(&path) {
         Ok(p) => p,
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"ok": false, "errors": [e]}))).into_response(),
     };
-    if let Err(e) = std::fs::copy(&path, &backup) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"ok": false, "errors": [format!("no se pudo hacer copia previa: {e}")]}))).into_response();
-    }
     let tmp = path.with_extension("toml.tmp");
     let serialized = match toml::to_string(&new_value) {
         Ok(text) => text,
@@ -893,14 +960,8 @@ pub fn persist_config_raw(
     source: &str,
     actor: &str,
 ) -> Result<PathBuf, ApiError> {
-    let backup = backup_path_for(path).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, "backup_failed", e))?;
-    std::fs::copy(path, &backup).map_err(|e| {
-        api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "backup_failed",
-            format!("no se pudo hacer copia previa: {e}"),
-        )
-    })?;
+    let backup = backup_and_prune(path)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, "backup_failed", e))?;
     let tmp = path.with_extension("toml.tmp");
     if let Err(e) = std::fs::write(&tmp, raw) {
         return Err(api_error(
@@ -1556,6 +1617,117 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
         for clave in EDITABLES_HEREDADOS {
             let f = schema_field(clave).unwrap_or_else(|| panic!("{clave} desaparecio"));
             assert!(f.editable, "{clave} era editable en main y dejo de serlo");
+        }
+    }
+
+    // ── Caso 5 de la politica de backups: solo quedan las 3 copias mas recientes ─────────
+    // Estos tests entran por `backup_and_prune`, no por el helper suelto: si alguien quita la
+    // llamada a la poda, el primero se pone rojo (mutacion comprobada a mano, ver informe).
+
+    fn marca_de(nombre: &str) -> Option<u128> {
+        nombre
+            .rsplit_once(".bak-")
+            .and_then(|(_, m)| m.parse::<u128>().ok())
+    }
+
+    fn copias_en(dir: &std::path::Path) -> Vec<String> {
+        let mut v: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .filter_map(|e| e.file_name().to_str().map(str::to_string))
+            .filter(|n| n.starts_with("tylluan.toml.bak-"))
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn backup_and_prune_deja_solo_las_tres_mas_recientes() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+        std::fs::write(&cfg, "[memory]\nvector_dimensions = 1024\n").unwrap();
+        for mark in [1000u128, 2000, 3000, 4000, 5000] {
+            std::fs::write(dir.path().join(format!("tylluan.toml.bak-{mark}")), b"vieja").unwrap();
+        }
+
+        let backup = backup_and_prune(&cfg).expect("copia previa");
+
+        assert!(backup.exists(), "la copia nueva debe existir");
+        let copias = copias_en(dir.path());
+        assert_eq!(
+            copias.len(),
+            KEEP_CONFIG_BACKUPS,
+            "de 5 copias + la nueva deben quedar 3, quedan {copias:?}"
+        );
+        let mut marcas: Vec<u128> = copias.iter().filter_map(|n| marca_de(n)).collect();
+        marcas.sort_unstable();
+        assert!(
+            marcas.iter().all(|m| *m >= 3000),
+            "se conservan las 3 mas recientes, no {marcas:?}"
+        );
+        assert!(cfg.exists(), "la config viva no se toca");
+    }
+
+    #[test]
+    fn backup_and_prune_no_toca_otros_nombres() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+        std::fs::write(&cfg, "a = 1\n").unwrap();
+        for mark in [1u128, 2, 3, 4, 5] {
+            std::fs::write(dir.path().join(format!("tylluan.toml.bak-{mark}")), b"x").unwrap();
+        }
+        let otros = [
+            "tylluan.toml.bak",             // sin marca
+            "tylluan.toml.bak-abc",         // marca no numerica
+            "tylluan.toml.bak-6.tmp",       // otro sufijo
+            "tylluan.toml.old",             // otro nombre
+            "providers.json.bak",           // patron de mod.rs, no este
+            "otro.toml.bak-1",              // otra config
+        ];
+        for nombre in otros {
+            std::fs::write(dir.path().join(nombre), b"no tocar").unwrap();
+        }
+
+        backup_and_prune(&cfg).expect("copia previa");
+
+        for nombre in otros {
+            assert!(
+                dir.path().join(nombre).exists(),
+                "{nombre} no debia borrarse: solo se poda el patron exacto"
+            );
+        }
+        assert!(!dir.path().join("tylluan.toml.bak-1").exists(), "la mas vieja se poda");
+    }
+
+    #[test]
+    fn backup_and_prune_no_borra_un_directorio_con_ese_nombre() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+        std::fs::write(&cfg, "a = 1\n").unwrap();
+        let carpeta = dir.path().join("tylluan.toml.bak-9999999999999");
+        std::fs::create_dir(&carpeta).unwrap();
+        for mark in [1u128, 2, 3, 4] {
+            std::fs::write(dir.path().join(format!("tylluan.toml.bak-{mark}")), b"x").unwrap();
+        }
+
+        backup_and_prune(&cfg).expect("copia previa");
+
+        assert!(carpeta.is_dir(), "solo se borran ficheros regulares");
+    }
+
+    #[test]
+    fn backup_mark_exige_el_patron_exacto() {
+        assert_eq!(backup_mark("tylluan.toml.bak-12", "tylluan.toml"), Some(12));
+        for malo in [
+            "tylluan.toml.bak",
+            "tylluan.toml.bak-",
+            "tylluan.toml.bak-12.tmp",
+            "tylluan.toml.bak-x",
+            "tylluan.toml",
+            "otro.toml.bak-12",
+            "providers.json.bak",
+        ] {
+            assert_eq!(backup_mark(malo, "tylluan.toml"), None, "{malo} no es copia podable");
         }
     }
 }

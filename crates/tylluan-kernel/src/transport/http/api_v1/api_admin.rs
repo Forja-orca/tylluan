@@ -851,17 +851,12 @@ pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req):
         .unwrap_or_else(|| std::path::PathBuf::from("tylluan.toml"));
     // A0: copia previa antes de cualquier escritura (la vía nueva es
     // /config/edit; este POST se conserva por compatibilidad).
-    let backup = match super::config_safe::backup_path_for(&config_path) {
+    let backup = match super::config_safe::backup_and_prune(&config_path) {
         Ok(path) => path,
         Err(e) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e }))).into_response();
         }
     };
-    if let Err(e) = fs::copy(&config_path, &backup) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-            "error": format!("no se pudo hacer copia previa: {e}")
-        }))).into_response();
-    }
     let diff = super::config_safe::config_diff(&old_value, &new_value);
     let tmp_path = config_path.with_extension("toml.tmp");
     if let Err(e) = fs::write(&tmp_path, &req.content) {
