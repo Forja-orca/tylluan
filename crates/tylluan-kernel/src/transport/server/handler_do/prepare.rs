@@ -44,7 +44,21 @@ fn finalize_guild_args(
     guild_args::finalize(schema, draft, external_mcp::explicit_args_from(arguments))
 }
 
-/// Stage 1: resolve guild, apply ACL/rate-limit, select tool, build call params.
+/// Esquema de entrada de la tool `name` dentro de las tools que declara el gremio.
+///
+/// D4975: el esquema y el nombre de la tool tienen que ir juntos. El router elige
+/// la tool por parecido ANTES de que el bloque de `coloquio` la reescriba según el
+/// intent, así que validar con el esquema viejo mandaba a los clientes un
+/// `MISSING_ARGS` por un campo (`agent_id`) que la tool que se iba a llamar ni
+/// siquiera exige.
+fn pick_tool_schema(tools: &[rmcp::model::Tool], name: &str) -> Option<serde_json::Value> {
+    tools
+        .iter()
+        .find(|t| t.name.as_ref() == name)
+        .map(|t| serde_json::Value::Object((*t.input_schema).clone()))
+}
+
+
 /// Returns early-`Err(CallToolResult)` for soft failures (ACL, rate-limit,
 /// missing guild/tool). On `Ok` all downstream code can assume the call is
 /// safe and prepared.
@@ -147,24 +161,23 @@ pub(super) async fn resolve_and_prepare_tool_call(
 
     // ADR-033 R1: además del nombre de la tool se trae su **esquema** declarado,
     // que es lo que decide qué argumentos existen (ver `guild_args::finalize`).
-    let (mut tool_name, tool_schema) = {
+    // El router elige la tool por parecido; para `coloquio` el nombre se reescribe más
+    // abajo según el intent. El esquema se busca DESPUÉS de esa decisión (D4975): buscarlo
+    // aquí dejaba una asignación muerta y, peor, validaba contra la tool equivocada.
+    let mut tool_name = {
         let reg = server.registry.read().await;
         if let Some(guild) = reg.guilds.get(&guild_name) {
             use crate::router::matcher::{tokenize, keyword_score};
             let tokens = tokenize(effective_intent);
-            let best = guild.tools.iter()
+            guild.tools.iter()
                 .max_by(|a, b| {
                     let sa = keyword_score(&tokens, a.description.as_ref(), a.name.as_ref());
                     let sb = keyword_score(&tokens, b.description.as_ref(), b.name.as_ref());
                     sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .map(|t| t.name.to_string())
-                .unwrap_or_default();
-            let schema = guild.tools.iter()
-                .find(|t| t.name.as_ref() == best)
-                .map(|t| serde_json::Value::Object((*t.input_schema).clone()));
-            (best, schema)
-        } else { (String::new(), None) }
+                .unwrap_or_default()
+        } else { String::new() }
     };
 
     if tool_name.is_empty() {
@@ -341,6 +354,19 @@ pub(super) async fn resolve_and_prepare_tool_call(
             }
         }
     }
+
+    // D4975 (H-20261121-COLOQUIO-POST, 2026-11-22): el esquema con el que se valida
+    // tiene que ser el de la tool que se va a llamar **de verdad**. Para `coloquio` el
+    // nombre se decide con el intent (`post`/`read`/`list`…, bloque de arriba) DESPUÉS
+    // de que el router eligiera por parecido, así que «post to coloquio …» se validaba
+    // contra el esquema de `post_to_coloquio` —que exige `agent_id`, `channel_id` y
+    // `message`— y moría con `MISSING_ARGS: cannot fill the required field(s) agent_id`
+    // ANTES de llegar al gremio. Medido en instancia propia: el mismo intent falla con
+    // 41 y con 344 caracteres, o sea que el tamaño no tenía nada que ver.
+    let tool_schema = {
+        let reg = server.registry.read().await;
+        reg.guilds.get(&guild_name).and_then(|g| pick_tool_schema(&g.tools, &tool_name))
+    };
 
     // Pre-execution required_args hard-fail gate REMOVED for text-backfilled args
     // (2026-10-08, architectural fix for simple-harness MCP clients -- Hermes/Qwen
@@ -722,5 +748,64 @@ mod d199_path_hints_tests {
                 .collect();
         assert_eq!(directorio.get("directory").map(String::as_str), Some("/tmp/proyecto"));
         assert_eq!(directorio.get("cwd").map(String::as_str), Some("/tmp/proyecto"));
+    }
+}
+
+#[cfg(test)]
+mod d4975_esquema_de_la_tool_que_se_llama {
+    use super::pick_tool_schema;
+    use rmcp::model::Tool;
+    use serde_json::json;
+
+    /// Las dos tools REALES del gremio `coloquio` (nombres y `required` copiados
+    /// de `guilds/core/coloquio.py`): `post_to_coloquio` exige agent_id,
+    /// channel_id y message; `post_to_channel` no exige nada.
+    fn tools_del_coloquio() -> Vec<Tool> {
+        vec![
+            Tool::new(
+                "post_to_coloquio",
+                "Post a message (strict)",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "channel_id": {"type": "string"},
+                        "message": {"type": "string"},
+                        "agent_id": {"type": "string"}
+                    },
+                    "required": ["channel_id", "message", "agent_id"]
+                }).as_object().cloned().unwrap(),
+            ),
+            Tool::new(
+                "post_to_channel",
+                "Post a message to a Coloquio channel",
+                json!({"type": "object", "properties": {}}).as_object().cloned().unwrap(),
+            ),
+        ]
+    }
+
+    /// MUTACION: si el esquema se toma de la tool que eligió el router
+    /// (`post_to_coloquio`, la primera) en vez de la que se va a llamar, el
+    /// `required` vuelve a exigir `agent_id` y este test se pone rojo.
+    #[test]
+    fn el_esquema_es_el_de_la_tool_que_se_va_a_llamar() {
+        let tools = tools_del_coloquio();
+        let s = pick_tool_schema(&tools, "post_to_channel").expect("tiene que encontrar la tool");
+        assert_eq!(
+            s.get("required"), None,
+            "post_to_channel no exige campos, y el agente no puede inventarse agent_id: {s}"
+        );
+
+        let estricta = pick_tool_schema(&tools, "post_to_coloquio").expect("tiene que encontrarla");
+        assert_eq!(
+            estricta["required"],
+            json!(["channel_id", "message", "agent_id"]),
+            "control: la tool estricta sí exige los tres"
+        );
+    }
+
+    #[test]
+    fn una_tool_que_no_existe_no_da_esquema() {
+        assert!(pick_tool_schema(&tools_del_coloquio(), "no_existe").is_none());
+        assert!(pick_tool_schema(&[], "post_to_channel").is_none());
     }
 }
