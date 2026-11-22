@@ -5,10 +5,13 @@ use crate::eval;
 use crate::eval::EvalResult;
 use crate::transport::http::HttpState;
 
-const RESULTS_FILE: &str = "./data/eval_results.json";
+/// Nombre del fichero; la CARPETA la decide el DATA_DIR efectivo (D4980: antes era
+/// `./data` relativo al cwd, así que una instancia con `TYLLUAN_DATA_DIR` escribía
+/// sus resultados en el directorio desde el que se arrancase).
+const RESULTS_FILE: &str = "eval_results.json";
 
 fn results_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(RESULTS_FILE)
+    crate::config::data_file(RESULTS_FILE)
 }
 
 fn save_result(r: &EvalResult) {

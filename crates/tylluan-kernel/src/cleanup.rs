@@ -77,15 +77,51 @@ pub fn cleanup_orphan_guilds(stale_kernel_pid: u32) {
     }
 }
 
+/// Directorios residuales a barrer, dentro del **DATA_DIR efectivo** (D4981).
+///
+/// Antes eran `data/...` relativos al cwd: una instancia con `TYLLUAN_DATA_DIR`
+/// barría (o dejaba de barrer) carpetas del directorio equivocado. Misma clase que
+/// D4978/D4979/D4980.
+pub fn residual_dirs() -> Vec<std::path::PathBuf> {
+    ["test_stress", "uploads", "bench"]
+        .iter()
+        .map(|n| crate::config::data_file(n))
+        .collect()
+}
+
 /// Clean up residual data directories from previous sessions or stress tests.
 /// This prevents accumulation of "trash" nodes or temp files in sovereign hardware.
 pub fn cleanup_residual_data() {
-    let targets = ["data/test_stress", "data/uploads", "data/bench"];
-    for target in targets {
-        let path = std::path::Path::new(target);
+    for path in residual_dirs() {
         if path.exists() {
-            tracing::info!("🧹 Garbage Collection: Removing residual directory: {}", target);
-            let _ = std::fs::remove_dir_all(path);
+            tracing::info!("🧹 Garbage Collection: Removing residual directory: {}", path.display());
+            let _ = std::fs::remove_dir_all(&path);
+        }
+    }
+}
+
+#[cfg(test)]
+mod residual_dirs_tests {
+
+    /// D4981: el barrido mira el DATA_DIR efectivo, no el cwd.
+    /// MUTACION: volver a `["data/…"]` deja este test en rojo.
+    #[test]
+    fn residual_dirs_siguen_al_data_dir() {
+        let _g = crate::test_env::serial();
+        let previo = std::env::var("TYLLUAN_DATA_DIR").ok();
+        unsafe { std::env::set_var("TYLLUAN_DATA_DIR", "D:/tmp/instancia-clean") };
+        let dirs = super::residual_dirs();
+        match previo {
+            Some(p) => unsafe { std::env::set_var("TYLLUAN_DATA_DIR", p) },
+            None => unsafe { std::env::remove_var("TYLLUAN_DATA_DIR") },
+        }
+        assert_eq!(dirs.len(), 3);
+        for d in &dirs {
+            assert!(
+                d.starts_with("D:/tmp/instancia-clean"),
+                "tiene que colgar del DATA_DIR: {}",
+                d.display()
+            );
         }
     }
 }

@@ -5,10 +5,6 @@ use super::*;
 use crate::workspace::{TaskSpec, WorkspaceStore};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
-
-static ENV_LOCK: Mutex<()> = Mutex::new(());
-
 fn run_git(repo: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .args(args)
@@ -187,7 +183,8 @@ fn recovery_patch_applies_on_a_clean_clone_and_does_not_touch_the_tree() {
         .set_dirty_paths("t1", "claimed/a.txt,claimed/new.txt")
         .unwrap();
 
-    let lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    // D4984: la misma cerradura que el resto de tests que mutan entorno.
+    let lock = crate::test_env::serial();
     let data = tempfile::tempdir().unwrap();
     unsafe { std::env::set_var("TYLLUAN_DATA_DIR", data.path()) };
     let tree_before = std::fs::read_to_string(repo.join("claimed/a.txt")).unwrap();
@@ -231,7 +228,8 @@ fn snapshot_before_claim_saves_patch_and_untracked_list_without_touching_the_tre
     std::fs::write(repo.join("a.txt"), "a1").unwrap();
     std::fs::write(repo.join("nuevo.txt"), "n").unwrap();
 
-    let lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    // D4984: la misma cerradura que el resto de tests que mutan entorno.
+    let lock = crate::test_env::serial();
     let data = tempfile::tempdir().unwrap();
     unsafe { std::env::set_var("TYLLUAN_DATA_DIR", data.path()) };
     let snapshot = snapshot_before_claim(&repo, "deadbeef").expect("snapshot");

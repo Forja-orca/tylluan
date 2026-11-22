@@ -94,6 +94,13 @@ fn validate_url_for_ssrf(url_str: &str) -> Result<Option<(String, IpAddr)>, Stri
     Ok(Some((bare.to_string(), ips[0])))
 }
 
+/// Carpeta de ingesta dentro del DATA_DIR efectivo (D4980). Antes era
+/// `data/ingest` relativo al cwd: una instancia con `TYLLUAN_DATA_DIR` dejaba
+/// los ficheros subidos en el directorio desde el que se arrancase.
+pub fn ingest_dir() -> std::path::PathBuf {
+    crate::config::data_file("ingest")
+}
+
 #[derive(serde::Deserialize)]
 pub struct IngestQuery {
     pub tags: Option<String>,
@@ -129,8 +136,8 @@ pub async fn ingest_upload_handler(
     if file_bytes.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "empty body"}))).into_response();
     }
-    let ingest_dir = std::path::Path::new("data/ingest");
-    if let Err(e) = fs::create_dir_all(ingest_dir) {
+    let ingest_dir = ingest_dir();
+    if let Err(e) = fs::create_dir_all(&ingest_dir) {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("create_dir_all: {}", e)}))).into_response();
     }
     let base_name = original_name.rsplit_once('.').map(|(n, _)| n).unwrap_or(&original_name);
@@ -301,7 +308,7 @@ fn file_serving_headers(
 pub async fn serve_ingested_file_handler(
     Path(filename): Path<String>,
 ) -> impl IntoResponse {
-    let filepath = match resolve_ingest_file_path_in(std::path::Path::new("data/ingest"), &filename) {
+    let filepath = match resolve_ingest_file_path_in(&ingest_dir(), &filename) {
         Ok(path) => path,
         Err(status) => return (status, "Invalid filename").into_response(),
     };
@@ -428,8 +435,8 @@ pub async fn ingest_handler(
 
             if ext == "pdf" || mime_type.as_deref() == Some("application/pdf") {
                 content_type = "pdf";
-                let ingest_dir = std::path::Path::new("data/ingest");
-                let _ = fs::create_dir_all(ingest_dir);
+                let ingest_dir = ingest_dir();
+                let _ = fs::create_dir_all(&ingest_dir);
                 let filename = format!("ingest_{}_{}.pdf", chrono::Utc::now().timestamp_millis(), uuid::Uuid::new_v4().simple());
                 let filepath = ingest_dir.join(&filename);
                 if fs::write(&filepath, &bytes).is_ok() {
@@ -441,8 +448,8 @@ pub async fn ingest_handler(
                 || ["jpg", "jpeg", "png", "gif", "webp", "bmp"].contains(&ext.as_str())
             {
                 content_type = "image";
-                let ingest_dir = std::path::Path::new("data/ingest");
-                let _ = fs::create_dir_all(ingest_dir);
+                let ingest_dir = ingest_dir();
+                let _ = fs::create_dir_all(&ingest_dir);
                 let ext2 = std::path::Path::new(&file_name)
                     .extension().and_then(|e| e.to_str()).unwrap_or("png");
                 let filename = format!("ingest_{}_{}.{}", chrono::Utc::now().timestamp_millis(), uuid::Uuid::new_v4().simple(), ext2);
@@ -811,4 +818,19 @@ mod tests {
             );
         }
     }
-}
+
+    /// D4980: la carpeta de ingesta sigue al DATA_DIR efectivo, no al cwd.
+    /// MUTACION: volver a `Path::new("data/ingest")` deja este test en rojo.
+    #[test]
+    fn ingest_dir_sigue_al_data_dir() {
+        // D4984: cerradura COMPARTIDA (antes esta era local y no excluia a las demas).
+        let _guard = crate::test_env::serial();
+        let previo = std::env::var("TYLLUAN_DATA_DIR").ok();
+        unsafe { std::env::set_var("TYLLUAN_DATA_DIR", "D:/tmp/instancia-ingest") };
+        let salida = super::ingest_dir();
+        match previo {
+            Some(p) => unsafe { std::env::set_var("TYLLUAN_DATA_DIR", p) },
+            None => unsafe { std::env::remove_var("TYLLUAN_DATA_DIR") },
+        }
+        assert_eq!(salida, std::path::PathBuf::from("D:/tmp/instancia-ingest/ingest"));
+    }}

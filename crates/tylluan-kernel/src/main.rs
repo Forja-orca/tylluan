@@ -3,7 +3,6 @@
 //! Sovereign Agentic MCP Hub — the Rust microkernel that powers TylluanMCP v3.
 
 mod setup;
-mod cleanup;
 
 use tylluan_kernel::config::{TylluanConfig, load_guild_config, models_dir_absolute};
 use tylluan_kernel::transport::server::TylluanServer;
@@ -390,7 +389,7 @@ fn anti_orphan_protection_and_gc(args: &[String], effective_port: Option<u16>) {
     match (decision, stale_pid) {
         (PeerDecision::Stale, Some(old)) | (PeerDecision::SamePort, Some(old)) => {
             info!("🧹 PID file for our own port is stale/crashed (PID {}). Cleaning up orphan processes...", old);
-            cleanup::cleanup_orphan_guilds(old);
+            tylluan_kernel::cleanup::cleanup_orphan_guilds(old);
         }
         (PeerDecision::OtherPort, _) => {
             warn!("🛡️ PID file {} belongs to a LIVE kernel listening on a DIFFERENT port — not touching it, not overwriting (fail-closed anti-orphan; use the launcher / TYLLUAN_DATA_DIR for test instances)", pid_file.display());
@@ -418,7 +417,7 @@ fn anti_orphan_protection_and_gc(args: &[String], effective_port: Option<u16>) {
         );
     }
 
-    cleanup::cleanup_residual_data();
+    tylluan_kernel::cleanup::cleanup_residual_data();
 }
 
 /// Detects low-memory environments (< 2 GB total RAM) via sysinfo when not

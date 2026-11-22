@@ -771,7 +771,11 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             use_mdns,
             use_mainline,
             seed_nodes,
-            dht_peers_path: std::path::PathBuf::from("data/dht_peers.json"),
+            // H-20261119-JOURNAL-DB-CWD (misma clase): `data/` fijo relativo al CWD
+            // creaba un `./data/dht_peers.json` en cualquier directorio desde el que se
+            // arrancase el kernel, ignorando TYLLUAN_DATA_DIR. Medido con DATA_DIR propio:
+            // aparecia `<cwd>/data/dht_peers.json`. data_file() usa el DATA_DIR efectivo.
+            dht_peers_path: crate::config::data_file("dht_peers.json"),
             listen_port,
         };
 

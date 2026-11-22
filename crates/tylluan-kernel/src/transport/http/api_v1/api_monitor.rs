@@ -794,7 +794,8 @@ pub async fn autoresearch_summary_handler(State(_state): State<Arc<HttpState>>) 
     let dedup_cos = DEDUP_COSINE.load(Ordering::Relaxed);
 
     // Parse TSV history to build lineage and current metrics
-    let tsv = std::fs::read_to_string("data/idle_lab_results.tsv").unwrap_or_default();
+    // D4980: sigue al DATA_DIR efectivo, no al cwd.
+    let tsv = std::fs::read_to_string(crate::config::data_file("idle_lab_results.tsv")).unwrap_or_default();
     let mut lineage: Vec<serde_json::Value> = Vec::new();
     let mut best_r1 = 0.65f64;
     let mut best_r5 = 0.90f64;

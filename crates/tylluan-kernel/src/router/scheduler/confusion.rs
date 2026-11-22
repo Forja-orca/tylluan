@@ -62,8 +62,11 @@ use serde_json::json;
 /// `TYLLUAN_AUDIT_DB` in the seam-unification pass).
 pub fn confusion_db_path() -> std::path::PathBuf {
     std::env::var("TYLLUAN_CONFUSION_DB")
-        .unwrap_or_else(|_| "./data/scheduler_confusion.db".to_string())
-        .into()
+        .map(std::path::PathBuf::from)
+        // D4979: el default sigue el DATA_DIR efectivo (TYLLUAN_DATA_DIR) en vez de ser
+        // relativo al cwd. Sin la variable, el resultado es el histórico
+        // `./data/scheduler_confusion.db`.
+        .unwrap_or_else(|_| crate::config::data_file("scheduler_confusion.db"))
 }
 
 /// Scheduler verdict short name for storage. `StandardGuild` carries empty

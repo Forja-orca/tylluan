@@ -31,3 +31,6 @@ pub mod redaction;
 
 #[cfg(test)]
 mod integration_tests;
+
+#[cfg(test)]
+mod data_dir_follows_env_tests;

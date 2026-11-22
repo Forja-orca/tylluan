@@ -176,10 +176,12 @@ pub(crate) fn friction_db_path() -> std::path::PathBuf {
     test_scratch_db_path()
 }
 
-/// Resolve the friction DB path (production): `./data/audit.db`.
+/// Resolve the friction DB path (production): `audit.db` bajo el DATA_DIR efectivo
+/// (`TYLLUAN_DATA_DIR`), no relativo al cwd — D4979. Sin la variable, el histórico
+/// `./data/audit.db`.
 #[cfg(not(test))]
 pub(crate) fn friction_db_path() -> std::path::PathBuf {
-    std::path::PathBuf::from("./data/audit.db")
+    crate::config::data_file("audit.db")
 }
 
 /// Open the friction database using the default path resolution

@@ -55,12 +55,13 @@ pub const MAX_INDEXED_BYTES_PER_RUN: u64 = 512 * 1024 * 1024;
 const MTIME_MARGIN_SECS: u64 = 1;
 
 /// Single owner of the outputs root path. Env seam for tests
-/// (`TYLLUAN_OUTPUTS_DIR`), default `data/outputs` relative to cwd —
-/// mirroring where comfy and every existing guild already write.
+/// (`TYLLUAN_OUTPUTS_DIR`), default `outputs` bajo el **DATA_DIR efectivo**
+/// (`TYLLUAN_DATA_DIR`), no relativo al cwd — D4979. Sin la variable, el histórico
+/// `./data/outputs`.
 pub fn outputs_root() -> PathBuf {
     match std::env::var("TYLLUAN_OUTPUTS_DIR") {
         Ok(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
-        _ => PathBuf::from("data/outputs"),
+        _ => crate::config::data_file("outputs"),
     }
 }
 

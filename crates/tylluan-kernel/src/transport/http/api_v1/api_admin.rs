@@ -1799,11 +1799,17 @@ pub async fn sessions_resume_handler(
 
 pub async fn maintenance_status_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let mut total_bytes = 0u64;
-    for path in &["./data/silva.db", "./data/silva.db-wal", "./data/silva.db-shm", "./data/tylluan.db"] {
+    // D4981: siguen al DATA_DIR efectivo, no al cwd.
+    for path in &[
+        crate::config::data_file("silva.db"),
+        crate::config::data_file("silva.db-wal"),
+        crate::config::data_file("silva.db-shm"),
+        crate::config::data_file("tylluan.db"),
+    ] {
         if let Ok(meta) = fs::metadata(path) { total_bytes += meta.len(); }
     }
 
-    let last_export = fs::read_dir("./data/exports").ok()
+    let last_export = fs::read_dir(crate::config::data_file("exports")).ok()
         .and_then(|dir| {
             dir.filter_map(|e| e.ok())
                .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
@@ -1972,7 +1978,9 @@ pub async fn sessions_resume_action_handler(
 pub async fn maintenance_onnx_clean_handler() -> impl IntoResponse {
     let mut count = 0;
     let mut bytes = 0u64;
-    let cache_dir = std::path::Path::new("./data/cache/onnx");
+    // D4981: la cache de ONNX vive en el DATA_DIR efectivo.
+    let cache_dir = crate::config::data_file("cache/onnx");
+    let cache_dir = cache_dir.as_path();
     if cache_dir.exists()
         && let Ok(entries) = std::fs::read_dir(cache_dir)
     {
