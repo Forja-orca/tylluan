@@ -331,6 +331,11 @@ async def find_files(
                 continue
             if any(part in SKIP_DIRS for part in f.relative_to(root).parts):
                 continue
+            # H-HER-M-06 (Hermes, 2026-11-22): `find_files` solo filtraba DIRECTORIOS, asi que
+            # devolvia los NOMBRES de `.tylluan-token` y `.env` (18 llamadas ok, 26-jul a 22-oct en
+            # guild_audit.db). `file_search` y `file_list` ya filtraban nombres; esto las iguala.
+            if f.name in SKIP_FILES or f.suffix.lower() in SKIP_EXTENSIONS:
+                continue
             try:
                 files.append(str(f.relative_to(root)))
             except ValueError:

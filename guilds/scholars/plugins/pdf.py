@@ -45,15 +45,67 @@ class PdfError(Exception):
     """Error explicito con el motivo. Nunca se devuelve una respuesta vacia."""
 
 
+def _sin_prefijo_extendido(ruta: str) -> str:
+    r"""Quita el prefijo de ruta extendida de Windows (``\\?\``).
+
+    H-HER-A-01 (Hermes, 2026-11-22; confirmado en vivo por el TL tras el reinicio): el kernel
+    resuelve la raiz del gremio con `std::fs::canonicalize`, que en Windows devuelve
+    ``\\?\E:\...``. Ese valor acaba en `TYLLUAN_ROOT` y en `PYTHONPATH` (y por tanto en
+    `__file__`). `validate_path` compara con `is_relative_to` DESPUES de `resolve()`, y
+    ``\\?\E:\x`` no es relativo a ``E:\x``: medido, raiz con prefijo + objetivo absoluto normal
+    -> False, o sea **se denegaba toda ruta absoluta**.
+
+    Se recorta solo lo que devuelve `canonicalize`: el prefijo verbatim de una ruta local
+    (``\\?\X:``) y el de una UNC (``\\?\UNC\host\share`` -> ``\\host\share``).
+    """
+    if not ruta.startswith("\\\\?\\"):
+        return ruta
+    resto = ruta[4:]
+    if resto.upper().startswith("UNC\\"):
+        return "\\\\" + resto[4:]
+    return resto
+
+
+def _raiz_desde_modulo(ruta_modulo: str) -> Path | None:
+    r"""`<repo>/data` a partir de la ruta del propio modulo, sin depender del entorno.
+
+    Separada de `_raices_permitidas()` para poder probarla con una ruta de modulo **prefijada**
+    tal cual la entrega Python cuando `PYTHONPATH` lleva ``\\?\``.
+    """
+    try:
+        repo = Path(_sin_prefijo_extendido(ruta_modulo)).resolve().parents[3]
+        return (repo / "data").resolve()
+    except (IndexError, OSError):
+        return None
+
+
 def _raices_permitidas() -> list[Path]:
-    """Raices explicitas. Sin `~`, sin cwd por defecto (ver database.py:46-47)."""
+    """Raices explicitas. Sin `~`, sin cwd por defecto (ver database.py:46-47).
+
+    H-HER-M-05 (Hermes, 2026-11-21): en produccion esta funcion devolvia `[]` y el gremio no podia
+    abrir NINGUN PDF. Causa: el spawn de guilds (`guild_process.rs:113-132`) solo hereda una lista
+    blanca de variables y **ni `TYLLUAN_PDF_ROOTS` ni `TYLLUAN_DATA_DIR` estan en ella**, asi que
+    las dos ramas de arriba nunca se cumplian. Las dos ramas siguientes no dependen de variables
+    que el spawn no pase: `TYLLUAN_ROOT` SI viaja (esta en la lista EXACT) y, si tampoco estuviera,
+    la posicion del PROPIO MODULO (`<repo>/guilds/scholars/plugins/pdf.py` -> `<repo>/data`) sigue
+    dando una raiz valida. Todas las rutas se normalizan con `_sin_prefijo_extendido` (H-HER-A-01).
+    """
     crudo = os.environ.get("TYLLUAN_PDF_ROOTS", "").strip()
     if crudo:
-        return [Path(p).resolve() for p in crudo.split(";") if p.strip()]
+        return [Path(_sin_prefijo_extendido(p)).resolve() for p in crudo.split(";") if p.strip()]
     data_dir = os.environ.get("TYLLUAN_DATA_DIR", "").strip()
     if data_dir:
-        return [Path(data_dir).resolve()]
-    return []
+        return [Path(_sin_prefijo_extendido(data_dir)).resolve()]
+    # TYLLUAN_ROOT lo inyecta el kernel siempre (con `\\?\` hasta que se arregle H-HER-A-01).
+    root = os.environ.get("TYLLUAN_ROOT", "").strip()
+    if root:
+        return [(Path(_sin_prefijo_extendido(root)) / "data").resolve()]
+    # `<repo>/guilds/scholars/plugins/pdf.py` -> parents[0]=plugins [1]=scholars [2]=guilds [3]=repo
+    # Se devuelve aunque `data/` no exista todavia: `validate_path` resuelve lexicamente y el
+    # fallo correcto entonces es «no existe el fichero», no «no hay raices» (que es lo que hacia
+    # el gremio inutilizable). En un checkout limpio `data/` esta gitignored y no existe.
+    por_modulo = _raiz_desde_modulo(__file__)
+    return [por_modulo] if por_modulo else []
 
 
 def _permitido(ruta: str) -> Path:
