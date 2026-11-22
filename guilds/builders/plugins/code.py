@@ -23,6 +23,7 @@ from collections import defaultdict
 from mcp.server.fastmcp import FastMCP
 
 from guilds.builders.plugins import utils
+from guilds.core._root import raiz_permitida
 
 mcp = FastMCP("tylluan-code")
 
@@ -97,7 +98,7 @@ async def code_parse(
     # B-24 (2026-11-01): this tool read ANY path handed to it - filesystem.py
     # has the containment guard, code.py never did. Resolve the root per call
     # (not at import) so an operator can relocate it without restarting.
-    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    _root = raiz_permitida()
     if not utils.validate_path(_root, os.path.abspath(file_path)):
         return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{_root}'."
 
@@ -261,7 +262,7 @@ async def code_stats(
     # B-30 (B24-H3): enumerating a directory without this guard let the tool count
     # and read any tree on the machine (`path="E:/"`), which is the same hole B-24
     # closed for code_parse. Same root and same message, so the refusal is uniform.
-    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    _root = raiz_permitida()
     if not utils.validate_path(_root, os.path.abspath(path)):
         return f"🚫 BLOCKED: Path '{path}' is outside the allowed root '{_root}'."
 
@@ -364,7 +365,7 @@ async def code_todos(
     # B-30 (B24-H3): enumerating a directory without this guard let the tool count
     # and read any tree on the machine (`path="E:/"`), which is the same hole B-24
     # closed for code_parse. Same root and same message, so the refusal is uniform.
-    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    _root = raiz_permitida()
     if not utils.validate_path(_root, os.path.abspath(path)):
         return f"🚫 BLOCKED: Path '{path}' is outside the allowed root '{_root}'."
 
@@ -436,7 +437,7 @@ async def code_security_scan(
     # B-30 (B24-H3): enumerating a directory without this guard let the tool count
     # and read any tree on the machine (`path="E:/"`), which is the same hole B-24
     # closed for code_parse. Same root and same message, so the refusal is uniform.
-    _root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    _root = raiz_permitida()
     if not utils.validate_path(_root, os.path.abspath(path)):
         return f"🚫 BLOCKED: Path '{path}' is outside the allowed root '{_root}'."
 

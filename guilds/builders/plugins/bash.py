@@ -21,6 +21,7 @@ import sys
 from mcp.server.fastmcp import FastMCP
 
 from guilds.builders.plugins import utils
+from guilds.core._root import raiz_permitida
 
 CAPABILITIES = {"process_execution": True}
 
@@ -237,7 +238,7 @@ async def bash_execute(
         return block_reason
 
     # Security step 2: validate cwd against project root
-    kernel_root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    kernel_root = raiz_permitida()
     work_dir = cwd or kernel_root
     if not utils.validate_path(kernel_root, work_dir):
         return f"🚫 BLOCKED: Working directory '{work_dir}' is outside the allowed project root '{kernel_root}'."

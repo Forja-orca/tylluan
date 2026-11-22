@@ -14,6 +14,7 @@ from mcp.server.fastmcp import FastMCP
 from guilds.core import utils
 from guilds.core._security import SKIP_DIRS, SKIP_FILES, SKIP_EXTENSIONS
 from guilds.builders.plugins.utils import validate_path
+from guilds.core._root import raiz_o_deniega
 
 mcp = FastMCP("tylluan-filesystem")
 
@@ -21,7 +22,20 @@ MAX_READ_SIZE = 500_000  # 500KB max read
 MAX_SEARCH_RESULTS = 50
 
 # Default root — kernel CWD, overridable via env var
-_FS_ROOT = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+def _raiz() -> str | None:
+    """Raiz permitida resuelta EN CADA LLAMADA (no al importar).
+
+    Si el fallo cerrado esta activo y no hay raiz declarada, devuelve None y las tools
+    responden BLOCKED: asi el guild sigue vivo en vez de quedarse caido (guild_down).
+    """
+    raiz, _error = raiz_o_deniega()
+    return raiz
+
+
+def _denegado() -> str:
+    """Mensaje de BLOCKED cuando no hay raiz utilizable."""
+    _raiz_ok, error = raiz_o_deniega()
+    return f"🚫 {error}" if error else "🚫 BLOCKED: no hay raiz permitida configurada."
 
 # ─── FS-FIND-FILES-IGNORA-RUTA-DEL-INTENT (encargo TL T4147) ────────────────
 # A natural-language intent can name the very directory that has to be listed
@@ -111,8 +125,11 @@ async def file_read(
                     end_line = int(m.group(1))
 
     file_path = Path(path).resolve()
-    if not validate_path(_FS_ROOT, str(file_path)):
-        return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{_FS_ROOT}'."
+    raiz = _raiz()
+    if raiz is None:
+        return _denegado()
+    if not validate_path(raiz, str(file_path)):
+        return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{raiz}'."
     # SEGURIDAD (Deep, 2026-11-21): `file_search` ya filtraba con los SKIP compartidos de
     # `guilds/core/_security.py`, pero `file_read` NO: su unica barrera era `validate_path`,
     # cuya raiz cae a `os.getcwd()` -- en produccion, la raiz del repo. Con eso, `.tylluan-token`
@@ -195,8 +212,11 @@ async def file_write(
         return "❌ Missing path or content. Example: 'write file hello.txt with text: hello world'"
     
     file_path = Path(path).resolve()
-    if not validate_path(_FS_ROOT, str(file_path)):
-        return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{_FS_ROOT}'."
+    raiz = _raiz()
+    if raiz is None:
+        return _denegado()
+    if not validate_path(raiz, str(file_path)):
+        return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{raiz}'."
 
     # Safety guard: prevent accidental overwrites of existing non-empty files
     if file_path.exists() and file_path.stat().st_size > 0:
@@ -290,16 +310,19 @@ async def find_files(
     try:
         root = Path(directory).resolve()
         named = " (named in your request)" if named_dir else ""
-        if not validate_path(_FS_ROOT, str(root)):
+        raiz = _raiz()
+        if raiz is None:
+            return _denegado()
+        if not validate_path(raiz, str(root)):
             return (
                 f"🚫 BLOCKED: Directory '{directory}'{named} is outside the allowed root "
-                f"'{_FS_ROOT}'. The search did NOT fall back to the kernel's working "
+                f"'{raiz}'. The search did NOT fall back to the kernel's working "
                 f"directory — name a path inside the allowed root."
             )
         if not root.is_dir():
             return (
                 f"❌ Directory not found: {directory}{named}. It was not replaced by the "
-                f"kernel's working directory ('{_FS_ROOT}')."
+                f"kernel's working directory ('{raiz}')."
             )
 
         files: list[str] = []
@@ -400,16 +423,19 @@ async def file_search(
     directory = os.path.abspath(directory) if directory else os.path.abspath(".")
     dir_path = Path(directory).resolve()
     named = " (named in your request)" if named_dir else ""
-    if not validate_path(_FS_ROOT, str(dir_path)):
+    raiz = _raiz()
+    if raiz is None:
+        return _denegado()
+    if not validate_path(raiz, str(dir_path)):
         return (
             f"🚫 BLOCKED: Directory '{directory}'{named} is outside the allowed root "
-            f"'{_FS_ROOT}'. The search did NOT fall back to the kernel's working "
+            f"'{raiz}'. The search did NOT fall back to the kernel's working "
             f"directory — name a path inside the allowed root."
         )
     if not dir_path.is_dir():
         return (
             f"❌ Not a directory: {directory}{named}. It was not replaced by the "
-            f"kernel's working directory ('{_FS_ROOT}')."
+            f"kernel's working directory ('{raiz}')."
         )
 
     try:
@@ -499,16 +525,19 @@ async def file_list(
 
     dir_path = Path(directory).resolve()
     named = " (named in your request)" if named_dir else ""
-    if not validate_path(_FS_ROOT, str(dir_path)):
+    raiz = _raiz()
+    if raiz is None:
+        return _denegado()
+    if not validate_path(raiz, str(dir_path)):
         return (
             f"🚫 BLOCKED: Directory '{directory}'{named} is outside the allowed root "
-            f"'{_FS_ROOT}'. The listing did NOT fall back to the kernel's working "
+            f"'{raiz}'. The listing did NOT fall back to the kernel's working "
             f"directory — name a path inside the allowed root."
         )
     if not dir_path.is_dir():
         return (
             f"❌ Not a directory: {directory}{named}. It was not replaced by the "
-            f"kernel's working directory ('{_FS_ROOT}')."
+            f"kernel's working directory ('{raiz}')."
         )
 
     lines: list[str] = [f"📁 {dir_path}/"]
