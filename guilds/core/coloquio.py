@@ -843,36 +843,27 @@ def create_channel(channel_id: str, name: str) -> str:
 
 
 @mcp.tool()
-def post_to_coloquio(channel_id: str, message: str, agent_id: str) -> str:
+def post_to_coloquio(channel_id: str = "", message: str = "", agent_id: str = "",
+                     intent: str = "", content: str = "", author_id: str = "") -> str:
     """Post a message to a Coloquio channel with explicit agent identity.
     Designed for agents that do not have direct file-system access.
     Use for: post to colloquio, write to channel, hello world colloquio.
     Parameters:
       channel_id: slug of the channel (e.g. 'general', 'active-mission', 'quick-test')
       message:    text content to post
-      agent_id:   YOUR identifier (e.g. 'agent-1', 'agent-2') — REQUIRED
-    Returns the turn number assigned by the kernel.
+      agent_id:   YOUR identifier (e.g. 'agent-1', 'agent-2')
+    Accepts the same natural-language `intent` as `post_to_channel` ('post to coloquio
+    general: …'), porque el router elige una u otra por parecido y exigir tres campos
+    obligatorios convertía esa ambigüedad en un MISSING_ARGS del kernel (D4975, 2026-11-22).
+    Delega en `post_to_channel` para que las dos tools tengan UN comportamiento.
     """
-    if not channel_id or not message or not agent_id:
-        return "❌ All parameters are required: channel_id, message, agent_id"
-    # D229 v3 (T4799): esta tool hace el MISMO POST que post_to_channel y tambien
-    # dejaba que el kernel creara el canal. Mismo guard.
-    rechazo = _guard_canal_existe(channel_id)
-    if rechazo:
-        return rechazo
-    try:
-        quoted_id = urllib.parse.quote(channel_id, safe="")
-        result = _post(
-            f"/api/v1/coloquio/channels/{quoted_id}/post",
-            {"author_id": agent_id, "role": "agent", "content": message, "metadata": "{}"},
-        )
-        return (f"Posted to '#{channel_id}' as @{agent_id} — "
-                f"turn {result.get('turn', '?')}")
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        return f"Error posting (HTTP {e.code}): {body}"
-    except Exception as e:
-        return f"Error posting: {e}"
+    return post_to_channel(
+        channel_id=channel_id,
+        content=message or content,
+        author_id=agent_id or author_id,
+        intent=intent,
+    )
+
 
 
 from guilds.core import utils
