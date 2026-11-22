@@ -58,6 +58,7 @@ def test_sin_prefijo_extendido_recorta_local_y_unc():
     assert g._sin_prefijo_extendido("\\\\srv\\share") == "\\\\srv\\share"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="arma una ruta con separadores de Windows y el prefijo extendido, que solo existen alli")
 def test_raiz_desde_modulo_con_prefijo_no_devuelve_prefijo(tmp_path):
     """`__file__` llega prefijado cuando PYTHONPATH lleva \\\\?\\; la raiz no puede heredarlo."""
     import guilds.scholars.plugins.pdf as g
