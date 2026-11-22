@@ -139,11 +139,25 @@ async fn reject_borra_y_segundo_reject_es_404() {
     let app = support::build_test_app(state);
     seed("apr-reject", "deep").await;
 
+    // D4977 (H-20261116): rechazar lo AJENO ya no es posible. Antes este test lo daba por
+    // bueno (otro agente rechazaba el plan de `deep` con 200): eso era el defecto.
     let (status, body) = post(
         &app,
         "/api/v1/approvals/apr-reject/reject",
         serde_json::json!({"reason": "no aplica"}),
         "buffy",
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "not_author");
+    assert!(grants::get_plan("apr-reject").await.is_some(), "el plan ajeno no se toca");
+
+    // El autor si puede descartar su propio plan.
+    let (status, body) = post(
+        &app,
+        "/api/v1/approvals/apr-reject/reject",
+        serde_json::json!({"reason": "no aplica"}),
+        "deep",
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -154,7 +168,7 @@ async fn reject_borra_y_segundo_reject_es_404() {
         &app,
         "/api/v1/approvals/apr-reject/reject",
         serde_json::json!({}),
-        "buffy",
+        "deep",
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
