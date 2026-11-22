@@ -245,7 +245,47 @@ impl TylluanServer {
                     };
                     resolved = crate::security::grants::resolve(request_id, level).await;
                 } else {
-                    resolved = crate::security::grants::remove(request_id).await;
+                    // H-20261116 APPROVE-ACTION-REJECT-SIN-COMPUERTA (P1): rechazar
+                    // llamaba a `remove` a secas, así que cualquier autenticado
+                    // cancelaba el grant o el plan de otro y no quedaba rastro.
+                    // `reject_checked` compara con el autor (o exige clase operador) y
+                    // devuelve los datos para la fila de auditoría.
+                    let operator = crate::transport::http::auth::operator_gate_allows(
+                        crate::transport::http::auth::current_auth_kind(),
+                    );
+                    match crate::security::grants::reject_checked(request_id, &agent_id, operator).await {
+                        crate::security::grants::JudgementOutcome::Removed { guild, tool, owner } => {
+                            resolved = true;
+                            // Fila de auditoría del rechazo: quién decidió, qué se
+                            // descartó y quién lo había pedido.
+                            handler_do::audit::audit_or_warn(
+                                &format!("approve_action:reject {}", request_id),
+                                &guild,
+                                &tool,
+                                if agent_id.is_empty() { "anonymous" } else { &agent_id },
+                                true,
+                                &format!("rechazado por {agent_id:?}; autor del plan/grant: {owner:?}"),
+                                0,
+                                operator,
+                            );
+                        }
+                        crate::security::grants::JudgementOutcome::NotFound => resolved = false,
+                        crate::security::grants::JudgementOutcome::NotOwner { owner } => {
+                            return Ok(CallToolResult {
+                                content: vec![Content::text(
+                                    serde_json::json!({
+                                        "error": "not_author",
+                                        "request_id": request_id,
+                                        "author": owner,
+                                        "decider": agent_id,
+                                        "hint": "solo su autor (o el token del operador) puede rechazarlo; el plan sigue pendiente",
+                                    })
+                                    .to_string(),
+                                )],
+                                is_error: Some(true),
+                            });
+                        }
+                    }
                 }
                 // M31-P2: Try plan store — execute the stored plan directly
                 if !resolved && approved
@@ -354,8 +394,47 @@ impl TylluanServer {
                     // `remove()` solo mira el store de grants, así que el plan seguía
                     // pendiente y la tool respondía «Action not found». El plan
                     // rechazado se retira aquí.
-                    if !resolved && crate::security::grants::remove_plan(request_id).await {
-                        resolved = true;
+                    //
+                    // P1 (H-20261116): también aquí se comprueba la autoría; antes
+                    // cualquier autenticado retiraba el plan de otro. Solo se llega a
+                    // este bloque con `approved=false` o con un grant ya resuelto, así
+                    // que `reject_checked` es el camino correcto (el plan sigue
+                    // pendiente si no es suyo).
+                    if !resolved {
+                        let operator = crate::transport::http::auth::operator_gate_allows(
+                            crate::transport::http::auth::current_auth_kind(),
+                        );
+                        match crate::security::grants::reject_checked(request_id, &agent_id, operator).await {
+                            crate::security::grants::JudgementOutcome::Removed { guild, tool, owner } => {
+                                resolved = true;
+                                handler_do::audit::audit_or_warn(
+                                    &format!("approve_action:reject {} (plan)", request_id),
+                                    &guild,
+                                    &tool,
+                                    if agent_id.is_empty() { "anonymous" } else { &agent_id },
+                                    true,
+                                    &format!("plan rechazado por {agent_id:?}; autor: {owner:?}"),
+                                    0,
+                                    operator,
+                                );
+                            }
+                            crate::security::grants::JudgementOutcome::NotFound => {}
+                            crate::security::grants::JudgementOutcome::NotOwner { owner } => {
+                                return Ok(CallToolResult {
+                                    content: vec![Content::text(
+                                        serde_json::json!({
+                                            "error": "not_author",
+                                            "request_id": request_id,
+                                            "author": owner,
+                                            "decider": agent_id,
+                                            "hint": "solo su autor (o el token del operador) puede rechazarlo; el plan sigue pendiente",
+                                        })
+                                        .to_string(),
+                                    )],
+                                    is_error: Some(true),
+                                });
+                            }
+                        }
                     }
                 }
                 if resolved {
@@ -1205,10 +1284,14 @@ mod tests {
     /// Jose 2026-11-16: rechazar un PLAN por `approve_action` tiene que borrarlo.
     /// Antes `remove()` solo miraba grants, el plan seguía pendiente y la tool
     /// respondía «Action not found» — el rechazo no rechazaba nada.
+    ///
+    /// P1 H-20261116: quien rechaza tiene que ser **su autor** o el operador, así que
+    /// aquí el autor y el que decide son el mismo (antes este test rechazaba un plan
+    /// de otro y daba la holgura por buena).
     #[tokio::test(flavor = "multi_thread")]
     async fn approve_action_rechazar_un_plan_lo_borra() {
         let server = test_server().await;
-        seed_plan("reject-plan-d189", Some("agent-a"), "d189:reject:plan").await;
+        seed_plan("reject-plan-d189", Some("agent-b"), "d189:reject:plan").await;
 
         let mut args = serde_json::Map::new();
         args.insert("requestId".to_string(), serde_json::json!("reject-plan-d189"));
@@ -1224,6 +1307,36 @@ mod tests {
             crate::security::grants::get_plan("reject-plan-d189").await.is_none(),
             "el plan rechazado debe desaparecer, no quedarse pendiente"
         );
+    }
+
+    /// P1 H-20261116 APPROVE-ACTION-REJECT-SIN-COMPUERTA: un tercero NO puede
+    /// descartar el plan de otro, y el plan sigue pendiente para su autor.
+    /// MUTACION: sin la compuerta, el plan desaparece y la tool responde «ok».
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_no_deja_que_un_tercero_rechace_el_plan_de_otro() {
+        let server = test_server().await;
+        seed_plan("reject-plan-ajeno", Some("agent-a"), "p1:reject:ajeno").await;
+
+        let mut args = serde_json::Map::new();
+        args.insert("requestId".to_string(), serde_json::json!("reject-plan-ajeno"));
+        args.insert("approved".to_string(), serde_json::json!(false));
+        args.insert("agent_id".to_string(), serde_json::json!("agent-b"));
+        let result = server
+            .handle_kernel_tool("approve_action", Some(args))
+            .await
+            .expect("no debe fallar a nivel de transporte");
+
+        assert_eq!(result.is_error, Some(true), "rechazar lo ajeno es un error: {}", tool_text(&result));
+        assert!(
+            tool_text(&result).contains("not_author"),
+            "tiene que decir por qué: {}",
+            tool_text(&result)
+        );
+        assert!(
+            crate::security::grants::get_plan("reject-plan-ajeno").await.is_some(),
+            "el plan del otro tiene que seguir pendiente"
+        );
+        crate::security::grants::remove_plan("reject-plan-ajeno").await;
     }
 
 }

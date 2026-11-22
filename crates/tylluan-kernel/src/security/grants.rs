@@ -432,6 +432,77 @@ pub async fn remove(id: &str) -> bool {
     locked.pending.remove(id).is_some()
 }
 
+/// Resultado de un juicio (rechazo) con compuerta de autoría.
+///
+/// H-20261116 APPROVE-ACTION-REJECT-SIN-COMPUERTA (P1): la vía de rechazo llamaba a
+/// `remove` / `remove_plan` sin comparar al que decide con el autor, así que
+/// **cualquier autenticado cancelaba el grant o el plan de otro** y no quedaba fila de
+/// auditoría de lo ocurrido. `resolve` (aprobar) ya tenía su compuerta de
+/// autoaprobación (D-13); rechazar no tenía ninguna, y rechazar *sí* destruye trabajo
+/// ajeno aunque no ejecute nada.
+#[derive(Debug, PartialEq, Eq)]
+pub enum JudgementOutcome {
+    /// Se quitó: estos datos son los de la fila de auditoría.
+    Removed {
+        guild: String,
+        tool: String,
+        owner: String,
+    },
+    NotFound,
+    /// Existe, pero no es suyo: no se toca nada.
+    NotOwner {
+        owner: String,
+    },
+}
+
+/// Descarta un plan o un grant **solo si quien lo pide es su autor o el operador**.
+///
+/// Precedencia idéntica a la histórica (plan primero, luego grant) para no cambiar qué
+/// se cancela; lo único nuevo es la compuerta. Un id vacío o `anonymous` solo puede
+/// decidir sobre lo que también nació anónimo, que es el caso normal con `dev_mode`.
+pub async fn reject_checked(id: &str, requester: &str, is_operator: bool) -> JudgementOutcome {
+    let anon = |s: &str| s.is_empty() || s == "anonymous";
+    let is_mine = |owner: &str| owner == requester || (anon(owner) && anon(requester));
+
+    if let Some(plan) = get_plan(id).await {
+        if !(is_operator || is_mine(&plan.agent_id)) {
+            return JudgementOutcome::NotOwner { owner: plan.agent_id };
+        }
+        return if remove_plan(id).await {
+            JudgementOutcome::Removed {
+                guild: plan.guild,
+                tool: plan.tool,
+                owner: plan.agent_id,
+            }
+        } else {
+            JudgementOutcome::NotFound
+        };
+    }
+
+    let pendiente = {
+        let locked = GRANT_REGISTRY
+            .get()
+            .expect("GrantRegistry not initialized")
+            .read()
+            .await;
+        locked
+            .pending
+            .get(id)
+            .map(|r| (r.agent_id.clone(), r.guild.clone(), r.tool_name.clone()))
+    };
+    let Some((owner, guild, tool)) = pendiente else {
+        return JudgementOutcome::NotFound;
+    };
+    if !(is_operator || is_mine(&owner)) {
+        return JudgementOutcome::NotOwner { owner };
+    }
+    if remove(id).await {
+        JudgementOutcome::Removed { guild, tool, owner }
+    } else {
+        JudgementOutcome::NotFound
+    }
+}
+
 pub async fn list_pending() -> Vec<serde_json::Value> {
     let locked = GRANT_REGISTRY
         .get()
@@ -731,4 +802,113 @@ mod tests {
         assert!(!hold_plan("no-existe-este-plan", "x").await);
     }
 
+}
+
+/// H-20261116 APPROVE-ACTION-REJECT-SIN-COMPUERTA (P1): el rechazo ya no puede
+/// tocar lo ajeno. Estos tests son el contrato.
+#[cfg(test)]
+mod reject_checked_tests {
+    use super::*;
+    use tokio::sync::oneshot;
+
+    fn grant(id_agent: &str) -> GrantRequest {
+        let (tx, rx) = oneshot::channel();
+        // el receptor no se usa: solo se comprueba si el grant sigue en la lista
+        std::mem::forget(rx);
+        GrantRequest {
+            guild: "bash".to_string(),
+            tool_name: "bash".to_string(),
+            agent_id: id_agent.to_string(),
+            reason: "test".to_string(),
+            arguments: serde_json::Map::new(),
+            tx,
+            expires_at: tokio::time::Instant::now() + tokio::time::Duration::from_secs(300),
+        }
+    }
+
+    async fn alta(agent: &str) -> GrantId {
+        init();
+        init_plan_store();
+        register(grant(agent)).await
+    }
+
+    async fn sigue_pendiente(id: &str) -> bool {
+        list_pending()
+            .await
+            .iter()
+            .any(|v| v.get("id").and_then(|x| x.as_str()) == Some(id))
+    }
+
+    /// MUTACION: quitar la compuerta de autoría en `reject_checked` hace que este
+    /// test reciba `Removed` y que el grant del otro desaparezca.
+    #[tokio::test]
+    async fn otro_agente_no_puede_rechazar_un_grant_ajeno() {
+        let id = alta("autor-rechazo-1").await;
+        let outcome = reject_checked(&id, "intruso", false).await;
+        assert_eq!(
+            outcome,
+            JudgementOutcome::NotOwner { owner: "autor-rechazo-1".to_string() },
+            "un tercero no puede descartar el grant de otro"
+        );
+        assert!(sigue_pendiente(&id).await, "el grant tiene que seguir pendiente");
+    }
+
+    #[tokio::test]
+    async fn el_autor_si_puede_y_devuelve_los_datos_de_auditoria() {
+        let id = alta("autor-rechazo-2").await;
+        let outcome = reject_checked(&id, "autor-rechazo-2", false).await;
+        match outcome {
+            JudgementOutcome::Removed { guild, tool, owner } => {
+                assert_eq!(guild, "bash");
+                assert_eq!(tool, "bash");
+                assert_eq!(owner, "autor-rechazo-2");
+            }
+            otro => panic!("esperaba Removed, salió {otro:?}"),
+        }
+        assert!(!sigue_pendiente(&id).await, "ya no está pendiente");
+    }
+
+    #[tokio::test]
+    async fn el_operador_si_puede_rechazar_lo_ajeno() {
+        let id = alta("autor-rechazo-3").await;
+        let outcome = reject_checked(&id, "operador-humano", true).await;
+        assert!(matches!(outcome, JudgementOutcome::Removed { .. }), "el operador puede: {outcome:?}");
+        assert!(!sigue_pendiente(&id).await);
+    }
+
+    #[tokio::test]
+    async fn un_id_que_no_existe_es_not_found_y_no_toca_nada() {
+        init();
+        init_plan_store();
+        assert_eq!(
+            reject_checked("no-existe-rechazo", "quien-sea", false).await,
+            JudgementOutcome::NotFound
+        );
+    }
+
+    /// Los planes tienen la misma compuerta que los grants (antes `remove_plan`
+    /// se llamaba a secas desde el handler).
+    #[tokio::test]
+    async fn un_plan_ajeno_tampoco_se_rechaza_y_sigue_pendiente() {
+        init_plan_store();
+        store_plan(
+            "plan-rechazo-ajeno",
+            "bash",
+            "bash",
+            &serde_json::json!({"command": "echo hola"}),
+            "autor-plan-1",
+            "probar",
+        )
+        .await;
+        let outcome = reject_checked("plan-rechazo-ajeno", "intruso", false).await;
+        assert_eq!(
+            outcome,
+            JudgementOutcome::NotOwner { owner: "autor-plan-1".to_string() }
+        );
+        assert!(get_plan("plan-rechazo-ajeno").await.is_some(), "el plan sigue ahí");
+
+        let outcome = reject_checked("plan-rechazo-ajeno", "autor-plan-1", false).await;
+        assert!(matches!(outcome, JudgementOutcome::Removed { .. }), "{outcome:?}");
+        assert!(get_plan("plan-rechazo-ajeno").await.is_none());
+    }
 }

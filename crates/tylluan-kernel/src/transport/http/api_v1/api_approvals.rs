@@ -182,36 +182,62 @@ pub async fn reject_handler(
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(req): Json<JudgementRequest>,
 ) -> impl IntoResponse {
-    let plan = crate::security::grants::get_plan(&id).await;
-    let quitado = if plan.is_some() {
-        crate::security::grants::remove_plan(&id).await
-    } else {
-        crate::security::grants::remove(&id).await
-    };
-    if !quitado {
+    // P1 (H-20261116): el rechazo por REST tampoco comprobaba autoría: cualquiera
+    // con credencial descartaba el plan o el grant de otro. Misma compuerta que el
+    // camino MCP: autor o clase operador.
+    let quien = current_bound_agent_id().unwrap_or_default();
+    let operator = operator_gate_allows(current_auth_kind());
+    if quien.is_empty() && !operator {
         return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "not_found", "id": id })),
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "unauthenticated",
+                "detail": "rechazar exige identidad: no hay credencial ligada a esta petición",
+                "id": id,
+            })),
         )
             .into_response();
     }
-    let quien = current_bound_agent_id().unwrap_or_default();
-    let (guild, tool) = match &plan {
-        Some(p) => (p.guild.as_str(), p.tool.as_str()),
-        None => ("grant", "grant"),
+    let outcome = crate::security::grants::reject_checked(&id, &quien, operator).await;
+    let (guild, tool, kind) = match &outcome {
+        crate::security::grants::JudgementOutcome::Removed { guild, tool, .. } => (
+            guild.clone(),
+            tool.clone(),
+            if guild.is_empty() { "grant" } else { "plan" },
+        ),
+        crate::security::grants::JudgementOutcome::NotFound => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "not_found", "id": id })),
+            )
+                .into_response();
+        }
+        crate::security::grants::JudgementOutcome::NotOwner { owner } => {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "not_author",
+                    "id": id,
+                    "author": owner,
+                    "requester": quien,
+                    "detail": "solo su autor (o el token del operador) puede rechazarlo; para el autor existe withdraw",
+                })),
+            )
+                .into_response();
+        }
     };
     auditar_juicio(
         "reject",
-        guild,
-        tool,
+        &guild,
+        &tool,
         &quien,
         &format!("rechazado: {}", req.reason.trim()),
-        operator_gate_allows(current_auth_kind()),
+        operator,
     );
     tracing::info!("approvals: '{id}' rechazado por HTTP — {}", req.reason.trim());
     Json(serde_json::json!({
         "status": "rejected",
-        "kind": if plan.is_some() { "plan" } else { "grant" },
+        "kind": kind,
         "reason": req.reason.trim(),
     }))
     .into_response()
