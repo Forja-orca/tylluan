@@ -21,6 +21,37 @@ pub mod error_prefixes {
     pub const START_FAILED: &str = "START_FAILED:";
     pub const NO_TOOLS: &str = "NO_TOOLS:";
     pub const MISSING_ARGS: &str = "MISSING_ARGS:";
+
+    /// ¿El texto que devolvió el gremio dice que **no hizo** lo pedido, aunque
+    /// el transporte lo entregue como respuesta normal (`is_error = None`)?
+    ///
+    /// H-20261121-COLOQUIO-POST (P2, 2026-11-22): el `ACTION_REPORT` decidía
+    /// `performed_ok` solo con `result.is_error`, y las tools de los gremios
+    /// señalan el fallo **en el texto** (`❌ Specify channel and content…`,
+    /// `🚫 BLOCKED:`, `ACCESS_DENIED:`). Resultado medido: 7 de 12 intentos de
+    /// publicar en el Coloquio no publicaron nada y el informe decía
+    /// `"verified": {"status": "passed"}` — un informe que miente es peor que no
+    /// tenerlo, porque el agente que lo lee cree que la acción ocurrió.
+    ///
+    /// Solo mira el **inicio** del texto (tras espacios): un mensaje correcto
+    /// puede *contener* un ❌ citado dentro y no por eso es un fallo.
+    pub fn looks_like_failure(text: &str) -> bool {
+        let t = text.trim_start();
+        t.starts_with('❌')
+            || t.starts_with('🚫')
+            || t.starts_with("ACCESS_DENIED:")
+            || t.starts_with("GUILD_ERROR|")
+            || t.starts_with("GUILD_TIMEOUT|")
+            || [ROUTING_FAILED, RATE_LIMITED, START_FAILED, NO_TOOLS, MISSING_ARGS]
+                .iter()
+                .any(|p| t.starts_with(p))
+    }
+
+    /// Decisión completa del informe: fallo de transporte **o** texto de fallo.
+    /// Extraída para poder probarla sin montar un gremio.
+    pub fn action_performed_ok(is_error: Option<bool>, text: &str) -> bool {
+        is_error != Some(true) && !looks_like_failure(text)
+    }
 }
 
 use crate::registry::proxy::error_result;
@@ -663,32 +694,25 @@ pub async fn handle_tylluan_do(
                 .iter()
                 .find(|d| d.name == resolved.guild_name)
                 .cloned();
-            let performed_ok = result.is_error != Some(true);
             let result_text: String = result.content.iter()
                 .filter_map(|c| c.as_text())
                 .map(|t| t.text.as_str())
                 .collect::<Vec<_>>()
                 .join(" ");
-            let changed: String = if performed_ok {
-                let preview: String = result_text.chars().take(400).collect();
-                if preview.is_empty() { "ok".to_string() } else { preview }
-            } else {
-                let preview: String = result_text.chars().take(200).collect();
-                format!("call failed: {}", if preview.is_empty() { "unknown error" } else { &preview })
-            };
-
-            let mut report = serde_json::json!({
-                "intended": intent,
-                "performed": format!("guild='{}' tool='{}' ({})", resolved.guild_name, resolved.tool_name, if performed_ok { "ok" } else { "error" }),
-                "changed": changed,
-            });
+            // H-20261121-COLOQUIO-POST: el fallo de una tool de gremio viaja en el
+            // TEXTO («❌ …», «🚫 BLOCKED:»), no en `is_error`.
+            // H-20261121-COLOQUIO-POST: el informe se construye en una función
+            // aparte para poder probarlo con textos REALES de gremio (el
+            // `is_error` del transporte no basta).
+            let (mut report, performed_ok) = build_action_report(
+                &intent,
+                &resolved.guild_name,
+                &resolved.tool_name,
+                result.is_error,
+                &result_text,
+                desc.as_ref().and_then(|d| d.verification.as_deref()),
+            );
             if let Some(d) = &desc {
-                if let Some(verification) = &d.verification {
-                    report["verified"] = serde_json::json!({
-                        "method": verification,
-                        "status": if performed_ok { "passed" } else { "failed" },
-                    });
-                }
                 // Reversible action: register in undo_log for undo_last_action.
                 // Only when the guild declares a real rollback contract AND the
                 // call succeeded — you can only undo something that happened.
@@ -723,6 +747,45 @@ pub async fn handle_tylluan_do(
     let footer = format!("\n\n---\nRouting: guild={} tool={}\nRouting Trace:\n - {}", resolved.guild_name, resolved.tool_name, resolved.routing_trace.join("\n - "));
     result.content.push(rmcp::model::Content::text(footer));
     Ok(result)
+}
+
+/// Construye el `ACTION_REPORT` de una llamada a gremio.
+///
+/// Extraído de `handle_do` (H-20261121-COLOQUIO-POST) para poder probarlo con
+/// textos REALES: el `is_error` del transporte no distingue «el gremio hizo lo
+/// pedido» de «el gremio contestó ❌ Specify channel and content», y el informe
+/// decía `verified.status = "passed"` en los dos casos.
+///
+/// Devuelve el informe y si la acción se considera hecha (para el `undo_log`).
+fn build_action_report(
+    intent: &str,
+    guild: &str,
+    tool: &str,
+    is_error: Option<bool>,
+    result_text: &str,
+    verification: Option<&str>,
+) -> (serde_json::Value, bool) {
+    let performed_ok = error_prefixes::action_performed_ok(is_error, result_text);
+    let changed: String = if performed_ok {
+        let preview: String = result_text.chars().take(400).collect();
+        if preview.is_empty() { "ok".to_string() } else { preview }
+    } else {
+        let preview: String = result_text.chars().take(200).collect();
+        format!("call failed: {}", if preview.is_empty() { "unknown error" } else { &preview })
+    };
+
+    let mut report = serde_json::json!({
+        "intended": intent,
+        "performed": format!("guild='{}' tool='{}' ({})", guild, tool, if performed_ok { "ok" } else { "error" }),
+        "changed": changed,
+    });
+    if let Some(verification) = verification {
+        report["verified"] = serde_json::json!({
+            "method": verification,
+            "status": if performed_ok { "passed" } else { "failed" },
+        });
+    }
+    (report, performed_ok)
 }
 
 /// D-16: extrae el `plan_id` de la instrucción que el modo plan emite al
@@ -781,3 +844,6 @@ pub(crate) async fn base_test_server(silva: std::sync::Arc<crate::memory::silva:
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod action_report_tests;
