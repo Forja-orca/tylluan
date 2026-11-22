@@ -81,9 +81,28 @@ _CHANNEL_PREFIXES = re.compile(
     r'responde\s+en\s+(?:canal\s+)?coloquio|publicar\s+en\s+(?:canal\s+)?coloquio|'
     r'send\s+(?:message\s+)?to\s+(?:(?:coloquio\s+)?channel\s+)?|'
     r'envia\s+al\s+canal|envía\s+al\s+canal|envia\s+a\s+canal|'
+    # H-20261121-COLOQUIO-POST: la forma que usa la flota al escribir de verdad,
+    # «post to coloquio <canal>: <mensaje>», no estaba cubierta (solo
+    # «post to channel»), así que el token «post» quedaba como canal y el guard
+    # de canal existente lo rechazaba. Medido: 7 de 12 intentos de una ronda.
+    r'post\s+to\s+coloquio|postear\s+en\s+(?:el\s+)?(?:canal\s+)?coloquio|'
+    r'publica(?:r)?\s+en\s+el\s+canal|publica(?:r)?\s+(?:un\s+)?mensaje\s+en\s+(?:el\s+|la\s+)?(?:canal\s+)?coloquio|'
+    r'manda(?:r)?\s+(?:un\s+)?mensaje\s+a(?:l)?\s+(?:canal\s+)?coloquio|'
+    r'env[ií]a(?:r)?\s+(?:un\s+)?mensaje\s+a(?:l)?\s+(?:canal\s+)?coloquio|'
+    r'write\s+(?:a\s+)?message\s+to\s+(?:the\s+)?(?:(?:coloquio|channel)\s+)?|'
     r'message\s+(?:coloquio\s+)?|mision-activa\s+)\s*',
     re.IGNORECASE,
 )
+
+# Verbos que declaran la intención de ESCRIBIR. Se usa solo para el caso sin
+# «:» («publica en coloquio general hola a todos»): si el intent empieza por uno
+# de estos, el texto que queda tras el canal es el mensaje, no otra cosa.
+_POST_INTENT = re.compile(
+    r'^\s*(?:post|postea|postear|publica|publicar|escribe|escribir|manda|mandar|'
+    r'env[ií]a|enviar|responde|responder|contesta|contest|send|write|message|comenta|comentar)\b',
+    re.IGNORECASE,
+)
+
 
 # Words that signal the end of the channel slug in a natural-language string
 _STOP_WORDS = re.compile(
@@ -614,6 +633,13 @@ def post_to_channel(channel_id: str = "", content: str = "", author_id: str = ""
             m_content = re.search(r'(?:content\s*[:\-]\s*|:\s*)(.+)$', rest, re.IGNORECASE | re.DOTALL)
             if m_content and not content:
                 content = m_content.group(1).strip()
+            if not content and rest and _POST_INTENT.match(raw):
+                # H-20261121-COLOQUIO-POST: sin «:» no había forma de publicar
+                # («publica en coloquio general hola a todos» -> «Specify channel
+                # and content»). Si el verbo declara que escribe, lo que queda
+                # tras el canal ES el mensaje. Se limita a los verbos de
+                # escritura para no cambiar la semántica de las lecturas.
+                content = rest.strip(" ,:;")
             if not author_id:
                 author_id = _parse_author(rest, default="")
 
