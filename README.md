@@ -175,7 +175,7 @@ Two or more Tylluan instances can sync memories with peers you approve one by on
 
 ## Status
 
-1953 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
+1955 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
 
 - **Latest release:** v0.17.3 (publication date). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
 - **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
