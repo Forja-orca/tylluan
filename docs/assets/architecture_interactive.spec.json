@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Tylluan Kernel Architecture",
-    "subtitle": "v0.17.3 — sovereign memory + tool execution, single Rust binary",
+    "subtitle": "v0.17.4 — sovereign memory + tool execution, single Rust binary",
     "quality_profile": "showcase",
     "legend": {
       "mode": "auto"

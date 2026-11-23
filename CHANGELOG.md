@@ -4,6 +4,56 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [0.17.4] — 2026-11-23 (preparada, sin publicar)
+
+Release de estabilidad del arranque, del instalador en Windows limpio y de la identidad del Coloquio, más el primer binario publicado con el panel embebido. **Plataformas de esta release: solo Windows x86_64 y Linux x86_64.** Los tests del kernel pasan de 1810 a 1875 (1897 → 1962 en total: 1875 + 75 + 12), recuento de `v0.17.3` tomado de su `README.md`.
+
+**Fixes**
+- Las rutas de datos se resuelven contra el `DATA_DIR` de la instancia y no contra el directorio de trabajo (`D4990`, consolida `D4978`-`D4986`) (`afd89817`)
+- `/health` contesta `readiness: failed` en vez de quedarse mudo mientras el registro de guilds está retenido durante el arranque (`D4996`) (`3db4bc72`); el mismo límite de tiempo en los demás consumidores del registro (`D4998`) (`f605244f`) y en los manejadores restantes y el apagado ordenado (`D4999`) (`263bbd49`)
+- `find_python` rechaza el alias de la Tienda de Windows y el supervisor deja de reintentar sin Python (`D4993`) (`a980975d`); el venv se resuelve a través de enlaces y `/health` avisa con el campo opcional `python` cuando falta el intérprete (`D4997`) (`2b80c70c`)
+- `install.ps1` en un Windows limpio: instala el runtime de Visual C++ y Python 3.12 y no cierra la sesión con `exit` dentro de `iex` (`24757883`)
+- La puerta de entrada de ONNX deja de denunciarse a sí misma y los tests del binario corren en CI (`D4994`) (`ff4778a5`)
+- `tylluan-cli start` reconoce al kernel por el cuerpo de `/health` y no por cualquier respuesta HTTP (`D5005`) (`2743a766`); un 200 con `readiness: failed` cuenta como kernel arrancado y no como 503 (`D5000`) (`86d0993a`)
+- Coloquio: la credencial decide el autor, no el texto del mensaje (`D5003`) (`f18dbdd7`); un guard de canal común para los cuatro escritores que falla cerrado (`D233b v3`) (`816861d9`) y se niega a publicar si no puede comprobar el canal (`D229 v3`) (`362bb4aa`); reconoce las formas con que la flota publica (`D4973`) (`7b05e993`) y `post_to_coloquio` delega en `post_to_channel` (`D4976`) (`19ec1c66`)
+- `ACTION_REPORT` ya no dice `passed` cuando el texto del guild dice que falló (`D4974`) (`d606bfa9`); `do` valida contra el esquema de la herramienta que realmente se llama (`D4975`) (`c123ab33`)
+- Todo guild recibe `KERNEL_BASE` y un kernel de prueba no habla con producción (`D230`, `D230 v3`, `D230 v4`) (`4095b446`, `0c1d8bb5`, `e71d2f2d`)
+- La sonda de dependencias pide el import que los guilds hacen de verdad (`D207`) (`e9c0234c`); el paso de clientes de `setup` cuenta sesiones activas (`D228b`) (`2c50c07e`)
+- Dashboard: la Sala de Control deja de sondear cuando está oculta y reutiliza la salud compartida (`D232`) (`d117e9f5`); `HomeostasisWidget` reutiliza la salud compartida (`68448689`)
+- Config: se conservan solo las 3 copias más recientes de `tylluan.toml.bak-*` (`D4900`) (`e7cf9c4c`)
+
+**Security**
+- `file_read` no devuelve tokens, claves ni bases de datos (`D4967`) (`3fd91830`); `find_files` deja de listar nombres sensibles y una sola función de raíz quita el prefijo extendido de Windows (`D4972`, `R1`, `H-HER-A-01`) (`13c5a95a`, `aad6e144`)
+- Rechazar un grant o un plan pendiente exige ser su autor o el operador (`D4977`) (`728d7a1f`)
+- Dependencias: `url` 2.5.9 por `RUSTSEC-2026-0592` (`908c5774`, `c88d0f65`); `cookie` 0.18.3 por `RUSTSEC-2026-0594` (`28fe5398`); `rand` 0.9.3 en el escritorio (`412d358c`)
+- Aviso cuando el fichero del token maestro queda fuera del directorio de configuración o de datos (`D226 v2`) (`d0fe8c3b`)
+- Contadores de la capa 2 del centinela que suman y un campo de política que dice lo que significa (`D215 v3`, `V-06`) (`e3ab42cc`)
+
+**Release / CI**
+- El binario de la release embebe el dashboard (`--features bundled-dashboard`) y el tarball lleva `dashboard/dist` (`D5001`, `D5002`) (`c8202af6`); el smoke de la release exige `GET /` con el panel (`D5004`) (`00991f15`)
+- El verificador post-release limpia su temporal si pasa y lo conserva si falla (`T4960`) (`bd474de1`)
+- Gates de documentación: versiones de `docs/assets`, coherencia spec ↔ HTML, anclas de código y la afirmación sobre `/health` (`D4932 v4`) (`63abcd2b`)
+
+**Added**
+- Guild nativo de PDF de solo lectura con raíces y límites explícitos (`D4966`) (`46ba141e`), con `pypdf` y `pypdfium2` fijados con hashes (`D4962`) (`f3c442e0`)
+- `GET /api/v1/setup/status`, lista de primera instalación de solo lectura (`D228`) (`77ae9d0c`)
+- El esquema de configuración pasa de 24 a 51 campos tipados; privacidad y red quedan fuera de la API (`D227 v2`) (`24e5a3e5`)
+- `POST /api/v1/memory/write` devuelve `content_hash` (`D217`) (`e37d4aff`)
+- ADR-034 propuesto: Docker Engine y NVIDIA Container Toolkit instalados con consentimiento (`481b9e0a`)
+- Sección «Windows, in plain words» en `README.md` y su versión en español (`a7c353c9`, `0855f3c4`)
+
+**Behaviour changes**
+- `/health` ya no queda mudo durante el arranque en frío: puede contestar `readiness: failed` mientras el registro de guilds está retenido (`3db4bc72`).
+- `/health` puede incluir el campo opcional `python`, solo cuando falta un intérprete usable; las instalaciones sanas ven el mismo JSON de antes (`2b80c70c`).
+
+**No verificado en esta release**
+- El flujo completo de `release.yml` con el panel embebido y su smoke nuevo no se ha ejecutado de extremo a extremo (lanzarlo crea un borrador).
+- Los pasos nuevos de npm y pnpm en el runner de Windows.
+- El camino de fallo del instalador de Windows (la ventana que debe quedar abierta y la línea `FAIL`) no se ha ejecutado en una máquina limpia.
+- Que el escritorio compile con `rand` 0.9.3 y `cookie` 0.18.3 (solo se tocó el lock; pasó `cargo deny check advisories`).
+
+---
+
 ## [0.17.3] — 2026-11-19
 
 Release de consolidación del enrutador, las instancias y los instaladores, con los gates de seguridad de la release y de las dependencias. **Plataformas probadas en esta release: solo Windows x86_64 y Linux x86_64 (WSL incluido)**; macOS/Apple Silicon y Linux ARM64 dejan de prometerse desde el 2026-11-07 (los binarios ya publicados siguen descargables).

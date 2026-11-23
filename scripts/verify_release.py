@@ -27,7 +27,7 @@ Reglas de seguridad que el script aplica por si mismo:
 - No toca `E:/tylluan` ni escribe fuera del temporal.
 
 Uso:
-    python scripts/verify_release.py --tag v0.17.3
+    python scripts/verify_release.py --tag v0.17.4
     python scripts/verify_release.py --tag v0.17.2 --port 47931
 
 Salida: una tabla de comprobaciones con PASS/FAIL/WARN y codigo de salida 1 si algo
@@ -157,7 +157,7 @@ def cerrar_temporal(trabajo: Path, fallos: int, conservar: bool) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Verificacion post-publicacion de una release de Tylluan")
-    ap.add_argument("--tag", default="v0.17.3", help="etiqueta a verificar (por defecto v0.17.3)")
+    ap.add_argument("--tag", default="v0.17.4", help="etiqueta a verificar (por defecto v0.17.4)")
     ap.add_argument("--port", type=int, default=47930, help="puerto para el kernel de prueba (nunca 47004)")
     ap.add_argument("--platform", default=None, help="target del tarball (por defecto, el de esta maquina)")
     ap.add_argument("--timeout", type=int, default=90, help="segundos de espera para /health")

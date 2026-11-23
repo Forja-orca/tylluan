@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml"><img src="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.17.3-blue.svg" alt="v0.17.3">
+  <img src="https://img.shields.io/badge/version-0.17.4-blue.svg" alt="v0.17.4">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP native">
 </p>
 
