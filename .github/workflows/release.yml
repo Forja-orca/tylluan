@@ -43,8 +43,26 @@ jobs:
           toolchain: 1.99.1
           target: ${{ matrix.target }}
 
+      # D5001 (P1 INS-LINUX-RELEASE-SIN-DASHBOARD): el binario embebe `dashboard/dist` con
+      # rust-embed AL COMPILAR (`transport/http/mod.rs:85`), y la feature solo estaba activa en
+      # la imagen Docker. Una release publicada sin esto se instala con el panel roto:
+      # `GET /` -> «Dashboard not built. Run: cd dashboard && pnpm build», que pide Node y pnpm.
+      # Los pasos son los mismos que ya usa el job `dashboard` de ci.yml.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: "10"
+      - name: Build shared package (@tylluan/ui-core)
+        working-directory: packages/tylluan-ui-core
+        run: npm ci --ignore-scripts && npm run build
+      - name: Build dashboard (goes embedded into the kernel)
+        working-directory: dashboard
+        run: pnpm install --frozen-lockfile --ignore-scripts && pnpm run build
+
       - name: Build tylluan-nexus (release)
-        run: cargo build --release -p tylluan-kernel --target ${{ matrix.target }}
+        run: cargo build --release -p tylluan-kernel --target ${{ matrix.target }} --features bundled-dashboard
 
       - name: Build tylluan-cli (release)
         run: cargo build --release -p tylluan-cli --target ${{ matrix.target }}
@@ -67,6 +85,17 @@ jobs:
           # guilds/ dir bootstraps the router catalog, catalog.rs:579-600).
           # Measured payload: 185 KB compressed / 821 KB plain (73 .py files).
           cp -r guilds dist/guilds
+          # D5001/D5002: ademas de ir embebido, se publica `dashboard/dist` en el tarball. El
+          # kernel busca `./dashboard/dist` junto a tylluan.toml (`find_workspace_root`,
+          # transport/http/mod.rs:1444/1573), asi que sirve de red si alguien compila sin la
+          # feature o quiere cambiar el panel sin recompilar.
+          # D5002 (TL, T5125): `mkdir -p` OBLIGATORIO. `cp -r a/b dist/dashboard/dist` con
+          # `dist/dashboard` inexistente devuelve rc=1 «cannot create directory» y, con `bash -e`
+          # (que es como corre el paso), tumbaba el job build de las dos plataformas. Reproducido:
+          #   bash -e -c 'cp -r dashboard/dist dist/dashboard/dist'          -> rc=1
+          #   bash -e -c 'mkdir -p dist/dashboard && cp -r dashboard/dist dist/dashboard/dist' -> rc=0
+          mkdir -p dist/dashboard
+          cp -r dashboard/dist dist/dashboard/dist
           # Bytecode caches: clean AFTER the copy so a stale or regenerated
           # `__pycache__`/`*.pyc` can never leak into the shipped artifact.
           find dist/guilds -name '__pycache__' -type d -prune -exec rm -rf {} +
