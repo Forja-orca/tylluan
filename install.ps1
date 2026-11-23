@@ -17,7 +17,10 @@ param(
     # D192: instala una instancia con nombre en vez de `default`.
     [string]$Instance = "default",
     # D192: reinstalar encima de una instancia YA declarada es explicito.
-    [switch]$Upgrade
+    [switch]$Upgrade,
+    # H-20261122-INSTALLPS1-WINDOWS-LIMPIO: si se pasa, NO se intenta instalar el
+    # VC++ Redistributable ni Python (solo se comprueban y se dice como hacerlo).
+    [switch]$SkipPrereqs
 )
 
 # Execution Policy guard - detect Restricted/AllSigned before anything else
@@ -38,9 +41,112 @@ $RegistryFile = if ($env:TYLLUAN_INSTANCES_FILE) { $env:TYLLUAN_INSTANCES_FILE }
 
 function Write-Step($Text) { Write-Host "Tylluan $Text" -ForegroundColor Cyan }
 function Write-OK($Text)   { Write-Host "OK $Text" -ForegroundColor Green }
-function Write-Err($Text)  { Write-Host "FAIL $Text" -ForegroundColor Red; exit 1 }
+# H-20261122-INSTALLPS1-WINDOWS-LIMPIO (B3): con `irm ... | iex` no existe
+# $PSScriptRoot. Dentro de iex, `exit` no sale del script: cierra la SESION de
+# PowerShell del usuario, sin dejar ver el motivo (medido en la VM: la ventana
+# se cerro a los 18 s con solo la linea de inicio).
+$script:EnIex = -not $PSScriptRoot
+
+function Write-Err($Text) {
+    Write-Host "FAIL $Text" -ForegroundColor Red
+    # Dentro de iex no se puede `exit`: se lanza el error para que el mensaje quede
+    # en pantalla. Fuera de iex, `exit 1` es correcto y lo esperan los scripts de CI.
+    if ($script:EnIex) { throw "FAIL $Text" }
+    exit 1
+}
+
+
+# -- Prerrequisitos de Windows (H-20261122-INSTALLPS1-WINDOWS-LIMPIO) --------
+#
+# (B1) Los .exe se enlazan contra el CRT de Visual C++ en modo dinamico: sin
+# vcruntime140.dll Windows NO arranca el proceso (0xC0000135 STATUS_DLL_NOT_FOUND,
+# medido en la VM: `tylluan-cli install` devolvia -1073741515). Se comprueba ANTES
+# de usar el CLI y, si falta, se instala el redistributable con winget.
+#
+# (B2) Sin un Python real >= 3.12 los 45 guilds Python no pueden crear su .venv y el
+# supervisor los reintenta en bucle (readiness=failed). El alias de la Microsoft
+# Store (WindowsApps\python.exe) NO es un Python: se rechaza a proposito.
+function Test-VCRuntime {
+    foreach ($Nombre in @('vcruntime140.dll', 'vcruntime140_1.dll')) {
+        $Ruta = Join-Path $env:SystemRoot ("System32" + [IO.Path]::DirectorySeparatorChar + $Nombre)
+        if (Test-Path -LiteralPath $Ruta -PathType Leaf) { return $true }
+    }
+    return $false
+}
+
+function Get-WingetPath {
+    $Cmd = Get-Command winget -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($Cmd) { return $Cmd.Source }
+    return $null
+}
+
+# Devuelve $true si tras intentarlo hay runtime. NUNCA finge: si no puede, deja
+# el comando exacto en pantalla para que lo ejecute la persona.
+function Install-VCRuntime {
+    $Winget = Get-WingetPath
+    if (-not $Winget) {
+        Write-Host "  No puedo instalar el runtime de Visual C++: no hay winget." -ForegroundColor Yellow
+        Write-Host "  Instalalo a mano (pide permisos de administrador):" -ForegroundColor Yellow
+        Write-Host "    https://aka.ms/vs/17/release/vc_redist.x64.exe" -ForegroundColor Cyan
+        return $false
+    }
+    Write-Host "  Falta el runtime de Visual C++ (vcruntime140.dll): instalando con winget..." -ForegroundColor Yellow
+    & $Winget install --id Microsoft.VCRedist.2015+.x64 --exact --silent `
+        --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
+    $Codigo = $LASTEXITCODE
+    # 0 = instalado, -1978335189 = ya estaba instalado. Cualquier otro codigo es fallo real.
+    if ((Test-VCRuntime)) {
+        Write-OK "Visual C++ runtime presente"
+        return $true
+    }
+    Write-Host "  winget termino con codigo $Codigo y el runtime sigue sin aparecer." -ForegroundColor Yellow
+    Write-Host "  Instalalo a mano: https://aka.ms/vs/17/release/vc_redist.x64.exe" -ForegroundColor Yellow
+    return $false
+}
+
+# Ruta del alias de la Microsoft Store: parece python pero no lo es.
+function Test-EsAliasDeLaTienda([string]$Ruta) {
+    return ($Ruta -match '\\WindowsApps\\')
+}
+
+# Devuelve @{Path=...; Version=...} de un Python REAL >= 3.12, o $null.
+function Resolve-RealPython {
+    $Candidatos = New-Object System.Collections.Generic.List[string]
+    # 1) uno que hubiera instalado winget en el perfil del usuario (no entra en PATH
+    #    de la sesion actual hasta abrir otra consola)
+    foreach ($V in @('312', '313')) {
+        $Candidatos.Add((Join-Path $env:LOCALAPPDATA "Programs\Python\Python$V\python.exe"))
+    }
+    # 2) lo que haya en PATH, saltando el alias de la Tienda
+    foreach ($Nombre in @('python', 'python3')) {
+        $Cmd = Get-Command $Nombre -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($Cmd) { $Candidatos.Add($Cmd.Source) }
+    }
+    foreach ($Ruta in $Candidatos) {
+        if (-not (Test-Path -LiteralPath $Ruta -PathType Leaf)) { continue }
+        if (Test-EsAliasDeLaTienda $Ruta) { continue }
+        $Salida = (& $Ruta --version 2>&1 | Out-String).Trim()
+        if ($Salida -match '^Python (\d+)\.(\d+)') {
+            $Mayor = [int]$Matches[1]; $Menor = [int]$Matches[2]
+            if ($Mayor -gt 3 -or ($Mayor -eq 3 -and $Menor -ge 12)) {
+                return @{ Path = $Ruta; Version = $Salida }
+            }
+        }
+    }
+    return $null
+}
+
+function Install-PythonWinget {
+    $Winget = Get-WingetPath
+    if (-not $Winget) { return $false }
+    Write-Host "  Falta Python 3.12+: instalando con winget (en tu perfil, sin tocar el sistema)..." -ForegroundColor Yellow
+    & $Winget install --id Python.Python.3.12 --exact --scope user --silent `
+        --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
+    return [bool](Resolve-RealPython)
+}
 
 # D-65: strict checksum gate. Throws when the file is empty, has an unexpected
+
 # entry, omits an expected binary, or any SHA-256 does not match. Kept as a
 # standalone function so tests can execute it without running the installer.
 #
@@ -267,8 +373,34 @@ if ($PathEntries -notcontains $BinDir) {
 # `start`). Asi el numero vive en un solo sitio.
 # Se toma la ULTIMA linea (si el CLI escribe un aviso por stdout antes del numero)
 # y se valida el rango: un puerto de 6 cifras no es un puerto.
+# -- Prerrequisitos (B1): ANTES de ejecutar el CLI -------------------------
+# Si falta el runtime de Visual C++, `tylluan-cli` ni siquiera arranca y el
+# instalador moria con un codigo numerico sin explicacion.
+Write-Step "Comprobando el runtime de Visual C++..."
+if (-not (Test-VCRuntime)) {
+    $Instalado = $false
+    if (-not $SkipPrereqs) { $Instalado = Install-VCRuntime }
+    if (-not $Instalado) {
+        Write-Err ("Falta el runtime de Visual C++ (vcruntime140.dll) y sin el los binarios de Tylluan no arrancan. " +
+            "Instalalo con:  winget install --id Microsoft.VCRedist.2015+.x64 --exact    " +
+            "o descarga https://aka.ms/vs/17/release/vc_redist.x64.exe, y vuelve a ejecutar este instalador.")
+    }
+} else {
+    Write-OK "Visual C++ runtime presente"
+}
+
 $CliExe = Join-Path $BinDir "tylluan-cli.exe"
+
+# B1 (verificacion): si Windows no puede cargar el .exe, $LASTEXITCODE queda en
+# -1073741515 (0xC0000135). Se comprueba aqui, con el motivo escrito, en vez de
+# dejar que el fallo aparezca como "exit code -1073741515" tres pasos despues.
+& $CliExe --version 2>$null | Out-Null
+if ($LASTEXITCODE -eq -1073741515) {
+    Write-Err ("tylluan-cli.exe no arranca: falta una DLL (0xC0000135). Suele ser el runtime de Visual C++: " +
+        "winget install --id Microsoft.VCRedist.2015+.x64 --exact  o  https://aka.ms/vs/17/release/vc_redist.x64.exe")
+}
 $DefaultPortLines = @(& $CliExe --print-default-port 2>$null | ForEach-Object { "$_" })
+
 $DefaultInstancePort = if ($DefaultPortLines.Count -gt 0) { $DefaultPortLines[-1].Trim() } else { "" }
 
 # D195 (1): el Install Smoke instala con el CLI **publicado**, que puede ser
@@ -427,10 +559,17 @@ if ($SkipGuildDeps) {
     Write-Host "  Skipped (-SkipGuildDeps)." -ForegroundColor Yellow
     Write-GuildDepsManualHint
 } else {
-    $GuildPy = $null
-    foreach ($Cand in @("python", "python3")) {
-        $Cmd = Get-Command $Cand -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($Cmd) { $GuildPy = $Cmd.Source; break }
+    # B2: solo un Python REAL >= 3.12 sirve. El alias de la Microsoft Store
+    # (WindowsApps\python.exe) responde a `python` y no es un Python: con el, el
+    # `.venv` no se crea y el kernel queda en readiness=failed con los guilds en
+    # bucle de reinicio (medido en la VM).
+    $PyReal = Resolve-RealPython
+    if (-not $PyReal -and -not $SkipPrereqs) {
+        if (Install-PythonWinget) { $PyReal = Resolve-RealPython }
+    }
+    $GuildPy = if ($PyReal) { $PyReal.Path } else { $null }
+    if ($PyReal) {
+        Write-Host "  Python: $($PyReal.Version) ($($PyReal.Path))" -ForegroundColor White
     }
     $VenvReady = $false
     if (Test-Path -LiteralPath $VenvPy -PathType Leaf) {
@@ -440,8 +579,15 @@ if ($SkipGuildDeps) {
     if ($VenvReady) {
         Write-Host "  guild deps OK in $VenvDir" -ForegroundColor Green
     } elseif (-not $GuildPy) {
-        Write-Host "  Python 3.12+ not found - Python guilds won't run (kernel + MCP memory unaffected)." -ForegroundColor Yellow
-        Write-Host "  Install Python 3.12+: https://www.python.org/downloads/" -ForegroundColor Yellow
+        # Sin Python real NO se finge que la instalacion esta completa: el kernel
+        # arranca, pero los 45 guilds Python no van a poder correr.
+        Write-Host "  AVISO: no hay un Python 3.12+ real en esta maquina." -ForegroundColor Yellow
+        Write-Host "  Los guilds Python NO van a funcionar (el kernel y la memoria MCP si)." -ForegroundColor Yellow
+        Write-Host "  Instalalo con UNA de estas:" -ForegroundColor Yellow
+        Write-Host "    winget install --id Python.Python.3.12 --exact --scope user" -ForegroundColor Cyan
+        Write-Host "    https://www.python.org/downloads/release/python-3120/" -ForegroundColor Cyan
+        Write-Host "  (El alias de la Microsoft Store no sirve: no crea .venv.)" -ForegroundColor Yellow
+        Write-Host "  Despues, repite este instalador para completar los guilds." -ForegroundColor Yellow
         if (Test-Path -LiteralPath $VenvPy -PathType Leaf) { Write-GuildDepsManualHint }
     } else {
         $VerOk = $false
