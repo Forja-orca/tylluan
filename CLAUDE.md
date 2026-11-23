@@ -291,7 +291,6 @@ ha producido falsos positivos reales más de una vez.
 | `tylluan-cli` | CLI de gestión, 17 comandos (`tylluan-cli --help`): start, stop, status, doctor, logs, install, update, backup, restore, audit, connect, download-models, new, sandbox, resume, eval, export-examples |
 | `tylluan-evals` | Benchmark harness: Recall@N, Precision@N, latency percentiles |
 | `tylluan-fsrs` | Spaced repetition scheduling for memory decay |
-| `tylluan-gui` | Esqueleto de un futuro shell de escritorio Tauri; sin funcionalidad (el kernel aún no está enlazado) |
 
 ---
 

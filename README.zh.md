@@ -485,8 +485,7 @@ tylluan/
 │   ├── tylluan-link/     联邦网络 —— mesh 身份、DHT、NAT、mDNS、Gossip、Noise
 │   ├── tylluan-cli/      CLI 管理二进制 —— start / stop / status / install
 │   ├── tylluan-evals/    基准测试 —— Recall@N、Precision@N、延迟分位数
-│   ├── tylluan-fsrs/     FSRS-5 间隔重复调度器（每项稳定性、难度、可检索性）
-│   └── tylluan-gui/      未来桌面壳的占位（尚无功能）
+│   └── tylluan-fsrs/     FSRS-5 间隔重复调度器（每项稳定性、难度、可检索性）
 ├── guilds/                Python 工具插件（fastmcp），启动时自动发现
 ├── dashboard/             React 仪表盘（Vite + Tailwind），嵌入二进制内
 ├── docs/                  架构与指南

@@ -4493,10 +4493,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tylluan-gui"
-version = "3.0.0-rc.1"
-
-[[package]]
 name = "tylluan-kernel"
 version = "0.17.4"
 dependencies = [

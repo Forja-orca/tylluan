@@ -259,7 +259,6 @@ cd <raiz-repo> && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 | `tylluan-cli` | CLI de gestión: 17 comandos (`tylluan-cli --help`): start, stop, status, doctor, logs, install, update, backup, restore, audit, connect, download-models, new, sandbox, resume, eval, export-examples |
 | `tylluan-evals` | Benchmark harness: Recall@N, Precision@N, latency percentiles |
 | `tylluan-fsrs` | Planificador de repaso espaciado FSRS-5 |
-| `tylluan-gui` | Marcador de posición para un futuro shell de escritorio (sin funcionalidad) |
 
 ---
 

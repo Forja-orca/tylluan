@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/tylluan-kernel",
     "crates/tylluan-common",
-    "crates/tylluan-gui",
     "crates/tylluan-cli",
     "crates/tylluan-link",
     "crates/tylluan-evals",
