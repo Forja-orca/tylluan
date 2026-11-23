@@ -8,7 +8,13 @@ use std::sync::Arc;
 
 pub async fn metrics_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let uptime_secs = state.start_time.elapsed().as_secs();
-    let (total_guilds, active_guilds) = state.registry.guild_stats().await.unwrap_or((0, 0));
+    let (total_guilds, active_guilds) =
+        crate::transport::http::stats_con_limite(
+            state.registry.guild_stats(),
+            crate::transport::http::REGISTRO_TIMEOUT,
+        )
+        .await
+        .unwrap_or((0, 0));
     let node_count = state.silva.node_count().await.unwrap_or(0);
     let edge_count = state.silva.edge_count().await.unwrap_or(0);
 

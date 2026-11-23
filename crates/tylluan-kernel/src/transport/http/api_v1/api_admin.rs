@@ -1460,7 +1460,13 @@ pub async fn health_detailed_handler(
     let edge_count = state.silva.edge_count().await.unwrap_or(0);
 
     // Guild health
-    let (total_guilds, active_guilds) = state.registry.guild_stats().await.unwrap_or((0, 0));
+    let (total_guilds, active_guilds) =
+        crate::transport::http::stats_con_limite(
+            state.registry.guild_stats(),
+            crate::transport::http::REGISTRO_TIMEOUT,
+        )
+        .await
+        .unwrap_or((0, 0));
 
     // Server capabilities
     let (embeddings_loaded, reranker_loaded, embedding_model) = if let Some(ref srv_arc) = state.server {

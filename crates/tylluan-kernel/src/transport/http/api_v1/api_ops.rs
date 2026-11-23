@@ -176,11 +176,20 @@ pub async fn logs_handler() -> impl IntoResponse {
 }
 
 pub async fn sandbox_sessions_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let guilds: Vec<serde_json::Value> = state.registry.list_guilds(None).await.unwrap_or_default();
+    // D4998 (H-HER-U-01): mismo limite que `/health` (D4996). Antes, durante el arranque,
+    // esta consulta se quedaba colgada detras del `write()` del registro y el
+    // `.unwrap_or_default()` la convertia en «0 sesiones»: colgaba Y mentia (patron NET3).
+    let (registry_ok, guilds) = crate::transport::http::guilds_para_health(
+        state.registry.list_guilds(None),
+        crate::transport::http::REGISTRO_TIMEOUT,
+    )
+    .await;
     let running_guilds: Vec<_> = guilds.into_iter().filter(|g| g["running"].as_bool().unwrap_or(false)).collect();
     Json(serde_json::json!({
         "sessions": running_guilds,
         "count": running_guilds.len(),
+        // D4998: `false` = no se pudo preguntar al registro (lista vacia NO significa cero).
+        "registry_ok": registry_ok,
         "ts": chrono::Utc::now().to_rfc3339()
     }))
 }

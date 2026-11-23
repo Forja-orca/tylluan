@@ -474,7 +474,12 @@ pub async fn canary_handler(State(state): State<Arc<HttpState>>) -> impl IntoRes
     // 3. Guilds probe: at least one guild active
     {
         total += 1;
-        let (_, active) = state.registry.guild_stats().await.unwrap_or((0, 0));
+        let (_, active) = crate::transport::http::stats_con_limite(
+            state.registry.guild_stats(),
+            crate::transport::http::REGISTRO_TIMEOUT,
+        )
+        .await
+        .unwrap_or((0, 0));
         let ok = active > 0;
         if ok { passed += 1; }
         probe_results.push(serde_json::json!({

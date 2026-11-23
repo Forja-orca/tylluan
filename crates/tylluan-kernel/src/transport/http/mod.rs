@@ -1680,6 +1680,12 @@ pub fn always_on_summary(guilds: &[serde_json::Value]) -> (usize, usize, usize, 
 // «no lo se» ya es `Failed` desde NET3: el mapeo es el mismo que un actor muerto.
 //
 // Devuelve `(registro_ok, guilds)`.
+/// Limite comun para **cualquier** consulta al actor del registro desde un handler.
+///
+/// D4996 lo puso en `/health`; D4998 lo extiende a los demas consumidores que se quedaban
+/// colgados durante el arranque (el spawn de gremios retiene el `write()` del registro).
+pub const REGISTRO_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
+
 pub async fn guilds_para_health<F, E>(
     consulta: F,
     limite: std::time::Duration,
@@ -1700,6 +1706,34 @@ where
                 limite.as_millis()
             );
             (false, Vec::new())
+        }
+    }
+}
+
+/// **D4998**: lo mismo que `guilds_para_health` pero para `guild_stats() -> (total, activos)`.
+///
+/// `None` = el registro no contesto (error o limite). El llamante decide el valor por
+/// defecto, igual que antes del parche, pero **sin quedarse colgado**.
+pub async fn stats_con_limite<F, E>(
+    consulta: F,
+    limite: std::time::Duration,
+) -> Option<(usize, usize)>
+where
+    F: std::future::Future<Output = Result<(usize, usize), E>>,
+    E: std::fmt::Display,
+{
+    match tokio::time::timeout(limite, consulta).await {
+        Ok(Ok(v)) => Some(v),
+        Ok(Err(e)) => {
+            tracing::warn!("D4998: el registro de guilds no responde ({e})");
+            None
+        }
+        Err(_) => {
+            tracing::warn!(
+                "D4998: el registro de guilds no contesto en {} ms (cerrojo del registro retenido?)",
+                limite.as_millis()
+            );
+            None
         }
     }
 }
@@ -1775,7 +1809,10 @@ async fn health_handler(
     if query.verbose.unwrap_or(false) {
         let node_count = state.silva.node_count().await.unwrap_or(0);
         let edge_count = state.silva.edge_count().await.unwrap_or(0);
-        let (total_guilds, active_guilds) = state.registry.guild_stats().await.unwrap_or((0, 0));
+        let (total_guilds, active_guilds) =
+            stats_con_limite(state.registry.guild_stats(), REGISTRO_TIMEOUT)
+                .await
+                .unwrap_or((0, 0));
 
         let (embeddings_loaded, embedding_model) = state.server.as_ref()
             .and_then(|s| s.try_read().ok())
@@ -1884,9 +1921,8 @@ async fn health_handler(
     // D4996: y si no contesta *nunca* (cerrojo del registro retenido por el arranque de
     // gremios), el handler se quedaba colgado 79,7 s medidos. Con el límite, contesta 200
     // con `readiness: failed` en vez de no contestar.
-    const HEALTH_GUILDS_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
     let (registro_ok, guilds) =
-        guilds_para_health(state.registry.list_guilds(None), HEALTH_GUILDS_TIMEOUT).await;
+        guilds_para_health(state.registry.list_guilds(None), REGISTRO_TIMEOUT).await;
     let (total, up, en_backoff, caidos) = always_on_summary(&guilds);
     let readiness = readiness_tras_consulta(ready, registro_ok, total, up, en_backoff);
 
@@ -2068,6 +2104,42 @@ mod tests {
         let (total, up, backoff, caidos) = always_on_summary(&guilds);
         assert_eq!((total, up, backoff), (1, 1, 0));
         assert!(caidos.is_empty());
+    }
+
+    /// **D4998 (H-HER-U-01 de Hermes)**: `guild_stats()` pasa por el mismo actor del registro,
+    /// así que se quedaba colgada igual que `/health` y, con `unwrap_or((0, 0))`, además
+    /// mentía («cero guilds» cuando en realidad era «no lo sé», el patrón NET3).
+    ///
+    /// Mutación: cambiar la rama `Err(_)` por `Some((0, 0))` deja este test en rojo.
+    #[tokio::test]
+    async fn d4998_stats_sin_respuesta_no_cuelga_ni_inventa() {
+        let limite = std::time::Duration::from_millis(50);
+        let inicio = std::time::Instant::now();
+        let r = stats_con_limite(
+            async { std::future::pending::<Result<(usize, usize), std::io::Error>>().await },
+            limite,
+        )
+        .await;
+        assert_eq!(r, None, "sin respuesta no hay estadisticas que inventar");
+        assert!(
+            inicio.elapsed() < std::time::Duration::from_secs(2),
+            "el limite tiene que cortar en ~{} ms, tardo {:?}",
+            limite.as_millis(),
+            inicio.elapsed()
+        );
+    }
+
+    /// **D4998 (el otro lado)**: si el registro contesta, las cifras se usan tal cual.
+    ///
+    /// Mutación: invertir las ramas del `match` deja este test en rojo.
+    #[tokio::test]
+    async fn d4998_stats_que_contestan_se_usan() {
+        let r = stats_con_limite(
+            async { Ok::<_, std::io::Error>((50, 20)) },
+            std::time::Duration::from_secs(2),
+        )
+        .await;
+        assert_eq!(r, Some((50, 20)));
     }
 
     /// Construye el JSON de un guild como lo devuelve `list_guilds`.
