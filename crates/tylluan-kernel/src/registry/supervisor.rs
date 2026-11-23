@@ -10,6 +10,22 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 
+/// H-20261122-INSTALLPS1-WINDOWS-LIMPIO: ¿este guild se puede reintentar ahora mismo?
+///
+/// En un Windows 11 limpio no hay Python real (solo el alias de la Tienda): el spawn falla
+/// siempre y el supervisor entraba en un bucle de reintentos con backoff, dejando el kernel
+/// en `readiness: failed` sin decir por qué. Con el intérprete ausente, un `Respawn` se
+/// convierte en **degradado** (no se reintenta) y el log lo dice una vez.
+fn respawn_sin_python(
+    decision: SupervisorDecision,
+    python_disponible: bool,
+) -> SupervisorDecision {
+    match (decision, python_disponible) {
+        (SupervisorDecision::Respawn, false) => SupervisorDecision::Degraded,
+        (d, _) => d,
+    }
+}
+
 /// D-115: número de intentos seguidos antes de dar el guild por degradado.
 const SUPERVISOR_MAX_ATTEMPTS: u32 = 3;
 
@@ -189,12 +205,24 @@ pub fn start_supervisor(
                     .entry(name.clone())
                     .or_insert_with(|| BackoffState::new(Instant::now()));
 
-                match decide(entry, running, Instant::now(), interval) {
+                let decision = respawn_sin_python(
+                    decide(entry, running, Instant::now(), interval),
+                    !super::guild_process::python_no_disponible(),
+                );
+                match decision {
                     SupervisorDecision::Healthy | SupervisorDecision::InBackoff => {}
                     SupervisorDecision::Degraded => {
                         // D-138: solo en la transición (antes salía cada tick).
                         if entry.degraded_just_now {
-                            error!("💀 [Supervisor] Guild '{}' failed {} times in a row — marking as degraded, no further restarts", name, entry.attempts);
+                            if super::guild_process::python_no_disponible() {
+                                error!(
+                                    "💀 [Supervisor] No hay un Python 3 usable (¿alias de la Tienda?): \
+                                     '{}' NO se reintenta. Instala Python 3.12+ y reinicia el kernel.",
+                                    name
+                                );
+                            } else {
+                                error!("💀 [Supervisor] Guild '{}' failed {} times in a row — marking as degraded, no further restarts", name, entry.attempts);
+                            }
                         }
                     }
                     SupervisorDecision::Respawn => {
@@ -226,6 +254,21 @@ pub fn start_supervisor(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// H-20261122-INSTALLPS1-WINDOWS-LIMPIO: sin Python no se reintenta.
+    /// MUTACION: devolver `decision` tal cual deja este test en rojo (bucle de reintentos).
+    #[test]
+    fn sin_python_un_respawn_se_degrada() {
+        assert_eq!(
+            respawn_sin_python(SupervisorDecision::Respawn, false),
+            SupervisorDecision::Degraded,
+            "sin interprete no se puede reintentar: se degrada y se dice"
+        );
+        // Con Python, todo igual que antes.
+        assert_eq!(respawn_sin_python(SupervisorDecision::Respawn, true), SupervisorDecision::Respawn);
+        assert_eq!(respawn_sin_python(SupervisorDecision::Healthy, false), SupervisorDecision::Healthy);
+        assert_eq!(respawn_sin_python(SupervisorDecision::InBackoff, false), SupervisorDecision::InBackoff);
+    }
 
     fn past(secs: u64) -> Instant {
         Instant::now()

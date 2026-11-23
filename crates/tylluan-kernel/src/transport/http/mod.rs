@@ -1723,6 +1723,11 @@ pub struct HealthResponse {
     /// D212 v2: **nombres** de los guilds `always_on` que no están arriba (incluye los que
     /// esperan backoff). Lista vacía = todos los always_on arriba. Los lazy no aparecen.
     pub guilds_down: Vec<String>,
+    /// H-20261122-INSTALLPS1-WINDOWS-LIMPIO: `"missing"` si el kernel no encontró un Python 3
+    /// usable (p. ej. solo el alias de la Tienda). Se omite cuando hay intérprete, para no
+    /// cambiar el JSON de las instalaciones sanas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub python: Option<String>,
 }
 
 async fn health_handler(
@@ -1859,6 +1864,8 @@ async fn health_handler(
         sentinel: Some(crate::security::sentinel::health_json()),
         readiness: readiness.as_str().to_string(),
         guilds_down: caidos,
+        python: crate::registry::guild_process::python_no_disponible()
+            .then(|| "missing".to_string()),
     };
     (readiness.http_status(), Json(resp)).into_response()
 }

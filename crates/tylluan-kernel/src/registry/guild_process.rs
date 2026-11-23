@@ -2413,6 +2413,50 @@ fn find_venv_python_from(start: &std::path::Path, levels: usize) -> Option<PathB
 /// - Linux/macOS: tries `python3` then `python`
 ///
 /// Validates that the found binary is Python 3.x (not 2.x).
+/// H-20261122-INSTALLPS1-WINDOWS-LIMPIO (P1): ¿esta salida es de un Python usable?
+///
+/// En Windows 11 recién instalado **no hay Python real**: hay un *alias* de la Tienda en
+/// `%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe` que imprime
+/// «Python was not found; run without arguments to install from the Microsoft Store…» y
+/// sale con código distinto de 0 (9009). El descubrimiento lo aceptaba porque solo miraba
+/// si el texto contenía «Python 3» — y dejaba a los guilds reintentando para siempre.
+///
+/// Devuelve la versión solo si el proceso **terminó bien** y el texto es de un intérprete.
+/// Es pura para poder probar las cadenas reales del stub sin depender de la máquina.
+fn version_si_es_python_usable(
+    salida_ok: bool,
+    stdout: &str,
+    stderr: &str,
+) -> Option<String> {
+    let texto = format!("{stdout}\n{stderr}");
+    let minus = texto.to_lowercase();
+    // El stub de la Tienda (y su variante en otros idiomas) se reconoce por su aviso.
+    let es_stub = minus.contains("microsoft store")
+        || minus.contains("was not found")
+        || minus.contains("windowsapps");
+    if es_stub || !salida_ok {
+        return None;
+    }
+    if texto.contains("Python 3") {
+        return Some(texto.trim().to_string());
+    }
+    None
+}
+
+/// ¿Se quedó el kernel sin un Python 3 usable en el último intento? Lo consulta el
+/// supervisor para **dejar de reintentar** guilds Python y decirlo en `/health`.
+static PYTHON_UNAVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Marca/limpia el estado. `false` = hay un Python usable.
+pub fn marcar_python_disponible(disponible: bool) {
+    PYTHON_UNAVAILABLE.store(!disponible, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `true` si el último `find_python()` no encontró un intérprete usable.
+pub fn python_no_disponible() -> bool {
+    PYTHON_UNAVAILABLE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub async fn find_python() -> Result<String> {
     // 0. Try local .venv with robust ABSOLUTE check (Sovereign priority)
     //
@@ -2454,21 +2498,28 @@ pub async fn find_python() -> Result<String> {
             .await;
 
         if let Ok(output) = result {
-            let version = String::from_utf8_lossy(&output.stdout);
+            let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let version_str = if version.contains("Python") {
-                version.to_string()
-            } else {
-                stderr.to_string()
-            };
-
-            if version_str.contains("Python 3") {
-                debug!("Found Python: {} → {}", candidate, version_str.trim());
+            if let Some(version) = version_si_es_python_usable(
+                output.status.success(),
+                &stdout,
+                &stderr,
+            ) {
+                debug!("Found Python: {} → {}", candidate, version);
+                marcar_python_disponible(true);
                 return Ok(candidate.to_string());
+            }
+            if !output.status.success() && stderr.to_lowercase().contains("microsoft store") {
+                warn!(
+                    "⚠️ '{}' es el alias de la Tienda de Windows, no un Python: se ignora \
+                     (instala Python 3.12+ de python.org)",
+                    candidate
+                );
             }
         }
     }
 
+    marcar_python_disponible(false);
     bail!(
         "Python 3 not found. Tried: {candidates:?}. \
          Please install Python 3.12+ and ensure it's in your PATH."
@@ -3270,6 +3321,44 @@ mod tests {
         registry.refresh_guild_tools("ext").await.unwrap();
 
         assert_eq!(registry.find_guild_for_tool("ext_echo"), Some("ext"));
+    }
+
+    /// H-20261122-INSTALLPS1-WINDOWS-LIMPIO: el alias de la Tienda NO es un Python.
+    /// MUTACION: quitar la deteccion del stub en `version_si_es_python_usable` deja este
+    /// test en rojo (el stub saldria como interprete valido).
+    #[test]
+    fn el_alias_de_la_tienda_no_cuenta_como_python() {
+        // Cadena real del stub (Win11 es-ES/en-US), salida 9009.
+        let stdout = "";
+        let stderr = "Python was not found; run without arguments to install from the Microsoft Store, \
+                      or disable this shortcut from Settings > Manage App Execution Aliases.";
+        assert_eq!(version_si_es_python_usable(false, stdout, stderr), None);
+
+        // Variante que solo deja la ruta de WindowsApps.
+        assert_eq!(version_si_es_python_usable(false, "", "C:\\Users\\x\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe"), None);
+
+        // Y aunque el stub saliera con codigo 0 y dijera una version, su aviso de la
+        // Tienda lo delata: sin la deteccion del stub esta asercion se pone en rojo
+        // (es la que hace que la mutacion muerda de verdad).
+        assert_eq!(
+            version_si_es_python_usable(
+                true,
+                "Python 3.12.4",
+                "Python was not found; run without arguments to install from the Microsoft Store"
+            ),
+            None,
+            "el aviso de la Tienda manda aunque el proceso salga con 0"
+        );
+
+        // Un Python de verdad: proceso OK y version visible.
+        assert_eq!(
+            version_si_es_python_usable(true, "Python 3.12.4", ""),
+            Some("Python 3.12.4".to_string())
+        );
+        // Termino bien pero no dijo version: no vale.
+        assert_eq!(version_si_es_python_usable(true, "", ""), None);
+        // Dijo «Python 3» pero el proceso fallo: no vale.
+        assert_eq!(version_si_es_python_usable(false, "Python 3.12.4", "boom"), None);
     }
 
     #[tokio::test]
