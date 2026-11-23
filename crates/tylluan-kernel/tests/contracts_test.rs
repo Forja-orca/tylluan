@@ -173,6 +173,8 @@ fn test_real_health_response_struct_matches_schema() {
         // D212 (DEC-20261118-18): campos aditivos del contrato.
         readiness: "ok".to_string(),
         guilds_down: vec![],
+        // D4993: aviso de Python no disponible (None = hay Python usable); es aditivo y opcional.
+        python: None,
     };
 
     // 2. Serialize real struct instance
