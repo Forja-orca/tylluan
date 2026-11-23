@@ -209,6 +209,23 @@ def _parse_offset(text: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+def _resolve_author(author_id: str, header_author: str, agent_id: str) -> str:
+    """D5003 (H-20261118-COLOQUIO-POST-AUTOR, ADR-031/D182): la identidad la decide
+    la CREDENCIAL, no el texto.
+
+    Orden: `author_id` explicito > `agent_id` de la credencial > autor deducido de la
+    cabecera del texto > "agent". Antes, lo deducido del texto se aplicaba ANTES que
+    `agent_id`, asi que un mensaje que dijera «as D206» o «autor cifras» firmaba con
+    esa palabra aunque el kernel mandase `agent_id=claude-code` (medido por el TL el
+    18-nov: turnos 4606/4613/4624/4626/4627).
+    """
+    if author_id:
+        return author_id
+    if agent_id:
+        return agent_id
+    return header_author or "agent"
+
+
 def _parse_author(text: str, default: str = "agent") -> str:
     """Extract 'author X' / 'autor X' / 'as X' from the HEADER of an intent string.
 
@@ -626,7 +643,7 @@ def post_to_channel(channel_id: str = "", content: str = "", author_id: str = ""
             channel_id, _rest = _extract_channel_and_rest(header)
             if not content:
                 content = body.strip()
-            if not author_id:
+            if not author_id and not agent_id:
                 author_id = _parse_author(header, default="")
         else:
             channel_id, rest = _extract_channel_and_rest(raw)
@@ -640,12 +657,13 @@ def post_to_channel(channel_id: str = "", content: str = "", author_id: str = ""
                 # tras el canal ES el mensaje. Se limita a los verbos de
                 # escritura para no cambiar la semántica de las lecturas.
                 content = rest.strip(" ,:;")
-            if not author_id:
+            if not author_id and not agent_id:
                 author_id = _parse_author(rest, default="")
 
     content = content or message or ""
-    if not author_id:
-        author_id = agent_id or "agent"
+    # D5003: una sola regla de decision (`_resolve_author`), para que no haya dos
+    # sitios que puedan volver a divergir.
+    author_id = _resolve_author(author_id, author_id, agent_id)
 
     if not channel_id or not content:
         return "❌ Specify channel and content: 'post to coloquio <channel>: <message>'"
