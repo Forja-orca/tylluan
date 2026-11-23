@@ -1525,11 +1525,18 @@ pub async fn admin_reload_handler(
     let start = std::time::Instant::now();
 
     // Get all active guilds
-    let guild_statuses = match state.registry.status_all().await {
-        Ok(statuses) => statuses,
-        Err(e) => {
+    // D4999: el limite convierte «no contesta» en el mismo 500 que ya se devolvia al fallar el actor.
+    let guild_statuses = match crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "admin/guilds",
+    )
+    .await
+    {
+        Some(statuses) => statuses,
+        None => {
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to get guild status: {}", e)
+                "error": "Failed to get guild status: the registry did not answer (timeout or error)"
             }))).into_response();
         }
     };
@@ -1676,7 +1683,13 @@ pub async fn admin_emergency_kill_handler(
     tracing::warn!("🚨 EMERGENCY KILL requested. Killing all guilds and shutting down.");
 
     let mut killed = 0;
-    if let Ok(statuses) = state.registry.status_all().await {
+    if let Some(statuses) = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "admin/stop-all",
+    )
+    .await
+    {
         for gs in &statuses {
             if let Err(e) = state.registry.kill_guild(&gs.name).await {
                 tracing::error!("Failed to kill guild {}: {}", gs.name, e);

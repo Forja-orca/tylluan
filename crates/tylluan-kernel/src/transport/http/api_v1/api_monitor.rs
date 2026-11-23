@@ -137,7 +137,13 @@ pub async fn dream_status_handler(State(state): State<Arc<HttpState>>) -> impl I
 pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
 
     let diag = state.doctor.diagnose().await;
-    let statuses = state.registry.status_all().await.unwrap_or_default();
+    let statuses = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "monitor",
+    )
+    .await
+    .unwrap_or_default();
 
     let online = statuses.iter().filter(|s| s.running).count();
     let total_tools: usize = statuses.iter().map(|s| s.tools_count).sum();
@@ -369,7 +375,14 @@ pub async fn skill_handler(State(state): State<Arc<HttpState>>) -> impl IntoResp
     let host = config.nexus.host.clone();
     drop(config);
 
-    let guild_count = state.registry.status_all().await.unwrap_or_default().len();
+    let guild_count = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "monitor/status",
+    )
+    .await
+    .unwrap_or_default()
+    .len();
     let sovereign_tools = build_skill_sovereign_tools();
 
     let skill = serde_json::json!({

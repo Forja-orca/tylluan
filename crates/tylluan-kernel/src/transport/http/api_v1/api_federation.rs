@@ -926,7 +926,13 @@ pub async fn federation_ping() -> impl IntoResponse {
 // ── SLO + routing anchors (unchanged) ────────────────────────────────────────
 
 pub async fn slo_summary_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let statuses = state.registry.status_all().await.unwrap_or_default();
+    let statuses = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "federation",
+    )
+    .await
+    .unwrap_or_default();
     let silva = state.silva.clone();
     // TC-03: objetivo SLO desde `[observability]` (era el literal 99.9).
     let slo_target = state.config.read().await.observability.slo_target;

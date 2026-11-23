@@ -13,11 +13,29 @@ use crate::transport::http::{
 use rmcp::model::CallToolRequestParam;
 
 pub async fn guilds_list_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    Json(state.registry.status_all().await.unwrap_or_default())
+    // D4999: el dashboard sondea este endpoint al arrancar; con el registro retenido se quedaba
+    // esperando indefinidamente.
+    Json(
+        crate::transport::http::registro_con_limite(
+            state.registry.status_all(),
+            crate::transport::http::REGISTRO_TIMEOUT,
+            "guilds/list",
+        )
+        .await
+        .unwrap_or_default(),
+    )
 }
 
 pub async fn guilds_health_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    Json(state.registry.status_all().await.unwrap_or_default())
+    Json(
+        crate::transport::http::registro_con_limite(
+            state.registry.status_all(),
+            crate::transport::http::REGISTRO_TIMEOUT,
+            "guilds/health",
+        )
+        .await
+        .unwrap_or_default(),
+    )
 }
 
 pub async fn guild_register_handler(State(state): State<Arc<HttpState>>, Json(req): Json<GuildRegisterRequest>) -> impl IntoResponse {
@@ -178,7 +196,13 @@ pub async fn guild_test_handler(
 }
 
 pub async fn guilds_utilization_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let statuses = state.registry.status_all().await.unwrap_or_default();
+    let statuses = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "guilds/detail",
+    )
+    .await
+    .unwrap_or_default();
     let active = statuses.iter().filter(|s| s.running).count();
     let idle = statuses.iter().filter(|s| !s.running && s.always_on).count();
     let offline = statuses.iter().filter(|s| !s.running && !s.always_on).count();

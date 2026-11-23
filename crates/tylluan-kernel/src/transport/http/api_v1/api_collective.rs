@@ -128,7 +128,13 @@ pub async fn collective_reputation_handler(
     State(state): State<Arc<HttpState>>,
 ) -> impl IntoResponse {
     let stats = state.registry.guild_call_stats().await.unwrap_or_default();
-    let guilds = state.registry.status_all().await.unwrap_or_default();
+    let guilds = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "collective",
+    )
+    .await
+    .unwrap_or_default();
     let running_map: std::collections::HashMap<&str, bool> = guilds.iter().map(|g| (g.name.as_str(), g.running)).collect();
 
     let reputation: Vec<serde_json::Value> = stats.iter().map(|s| {

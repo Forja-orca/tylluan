@@ -1686,6 +1686,36 @@ pub fn always_on_summary(guilds: &[serde_json::Value]) -> (usize, usize, usize, 
 /// colgados durante el arranque (el spawn de gremios retiene el `write()` del registro).
 pub const REGISTRO_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
 
+/// **D4999**: límite para **cualquier** consulta al actor del registro, con forma genérica.
+///
+/// `None` = no contestó (error del actor o límite agotado). Cada llamante decide su valor por
+/// defecto — igual que antes del parche — pero deja de quedarse colgado, que es lo que pasaba
+/// durante el arranque cuando el spawn de gremios retiene el `write()` del registro.
+pub async fn registro_con_limite<F, E, T>(
+    consulta: F,
+    limite: std::time::Duration,
+    que: &str,
+) -> Option<T>
+where
+    F: std::future::Future<Output = Result<T, E>>,
+    E: std::fmt::Display,
+{
+    match tokio::time::timeout(limite, consulta).await {
+        Ok(Ok(v)) => Some(v),
+        Ok(Err(e)) => {
+            tracing::warn!("D4999: el registro no responde en {que} ({e})");
+            None
+        }
+        Err(_) => {
+            tracing::warn!(
+                "D4999: el registro no contesto en {} ms en {que} (cerrojo del registro retenido?)",
+                limite.as_millis()
+            );
+            None
+        }
+    }
+}
+
 pub async fn guilds_para_health<F, E>(
     consulta: F,
     limite: std::time::Duration,
@@ -2140,6 +2170,45 @@ mod tests {
         )
         .await;
         assert_eq!(r, Some((50, 20)));
+    }
+
+    /// **D4999**: el helper genérico que ahora usan los 13 sitios del actor del registro
+    /// (`status_all` en handlers, apagado ordenado, api_inference...). Sin respuesta no
+    /// inventa un valor y corta en el límite.
+    ///
+    /// Mutación: cambiar la rama `Err(_)` por `Some(...)` con un valor por defecto deja este
+    /// test en rojo (sería volver al `unwrap_or_default()` que mentía).
+    #[tokio::test]
+    async fn d4999_registro_con_limite_corta_y_no_inventa() {
+        let limite = std::time::Duration::from_millis(50);
+        let inicio = std::time::Instant::now();
+        let r: Option<u32> = registro_con_limite(
+            async { std::future::pending::<Result<u32, std::io::Error>>().await },
+            limite,
+            "test",
+        )
+        .await;
+        assert_eq!(r, None, "sin respuesta no hay valor que devolver");
+        assert!(
+            inicio.elapsed() < std::time::Duration::from_secs(2),
+            "el límite tiene que cortar en ~{} ms, tardó {:?}",
+            limite.as_millis(),
+            inicio.elapsed()
+        );
+    }
+
+    /// **D4999 (el otro lado)**: si el actor contesta, el valor se usa tal cual.
+    ///
+    /// Mutación: invertir las ramas del `match` deja este test en rojo.
+    #[tokio::test]
+    async fn d4999_registro_con_limite_usa_la_respuesta() {
+        let r = registro_con_limite(
+            async { Ok::<_, std::io::Error>(7u32) },
+            std::time::Duration::from_secs(2),
+            "test",
+        )
+        .await;
+        assert_eq!(r, Some(7));
     }
 
     /// Construye el JSON de un guild como lo devuelve `list_guilds`.

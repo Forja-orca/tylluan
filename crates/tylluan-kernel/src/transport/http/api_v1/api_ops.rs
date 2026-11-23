@@ -110,7 +110,13 @@ pub async fn security_events_handler(State(state): State<Arc<HttpState>>) -> imp
 
 pub async fn golden_signals_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let diag = state.doctor.diagnose().await;
-    let statuses = state.registry.status_all().await.unwrap_or_default();
+    let statuses = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "ops/golden_signals",
+    )
+    .await
+    .unwrap_or_default();
     
     let online = statuses.iter().filter(|s| s.running).count();
     let total_tools: usize = statuses.iter().map(|s| s.tools_count).sum();

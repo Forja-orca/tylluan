@@ -46,14 +46,15 @@ pub fn available_models(
 }
 
 async fn guild_running(state: &Arc<HttpState>) -> bool {
-    state
-        .registry
-        .status_all()
-        .await
-        .ok()
-        .into_iter()
-        .flatten()
-        .any(|g| g.name == GUILD && g.running)
+    crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "inference/guild_running",
+    )
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .any(|g| g.name == GUILD && g.running)
 }
 
 async fn llama_cfg() -> Option<crate::config::InferenceLlamaConfig> {

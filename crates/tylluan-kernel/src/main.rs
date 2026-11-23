@@ -2448,7 +2448,14 @@ async fn main() -> anyhow::Result<()> {
 
     // 1. Kill all active guilds (T-DSH-125/AUD-02: `reap_idle` solo recogia
     // guilds inactivos; aqui se paran EXPLICITAMENTE todos los que sigan vivos).
-    if let Ok(statuses) = registry.status_all().await {
+    // D4999: el apagado no puede quedarse colgado si el registro esta retenido.
+    if let Some(statuses) = tylluan_kernel::transport::http::registro_con_limite(
+        registry.status_all(),
+        tylluan_kernel::transport::http::REGISTRO_TIMEOUT,
+        "shutdown",
+    )
+    .await
+    {
         let mut stopped = 0usize;
         for gs in &statuses {
             match registry.kill_guild(&gs.name).await {

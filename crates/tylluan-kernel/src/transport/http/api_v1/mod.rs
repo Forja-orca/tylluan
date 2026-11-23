@@ -1148,7 +1148,13 @@ async fn capabilities_handler(State(state): State<Arc<HttpState>>) -> Response {
     let sovereign_tools = server.all_tools().await;
 
     // 2. Get registered and running guilds
-    let guilds = state.registry.status_all().await.unwrap_or_default();
+    let guilds = crate::transport::http::registro_con_limite(
+        state.registry.status_all(),
+        crate::transport::http::REGISTRO_TIMEOUT,
+        "registry_snapshot",
+    )
+    .await
+    .unwrap_or_default();
 
     // 3. Get all tools from all guilds
     let (guild_tools, tool_collisions) = {
