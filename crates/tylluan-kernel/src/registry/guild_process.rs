@@ -3361,6 +3361,61 @@ mod tests {
         assert_eq!(version_si_es_python_usable(false, "Python 3.12.4", "boom"), None);
     }
 
+    /// P1 `LINUX-FIND-PYTHON-CANONICALIZE-VENV` (dueño: deep): **`canonicalize()` sigue los
+    /// enlaces**, así que en Linux `.venv/bin/python` (symlink a `/usr/bin/python3.x`) dejaría al
+    /// kernel ejecutando el intérprete del sistema, sin `pyvenv.cfg` y sin las dependencias del
+    /// gremio. `venv_final_path` debe **absolutizar sin resolver**.
+    ///
+    /// MUTACION: si alguien canonicaliza (la ruta o su carpeta), el junction/enlace se resuelve y
+    /// este test se pone rojo. No hace falta ser root: en Windows se usa un junction (`mklink /J`).
+    ///
+    /// El test NO va gateado por SO (REGLA 13): en todas las plataformas crea un enlace y comprueba
+    /// lo mismo; solo la creación del enlace cambia de forma.
+    #[test]
+    fn venv_final_path_no_resuelve_el_enlace_del_interprete() {
+        let base = tempfile::tempdir().expect("tempdir");
+        let real = base.path().join("real_venv");
+        std::fs::create_dir_all(&real).expect("crear real_venv");
+        let enlace = base.path().join("enlace_venv");
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&real, &enlace).expect("symlink");
+        }
+        #[cfg(windows)]
+        {
+            // Junction: no requiere privilegios de administrador (a diferencia de symlink_dir).
+            let salida = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(&enlace)
+                .arg(&real)
+                .output()
+                .expect("ejecutar mklink /J");
+            assert!(
+                salida.status.success(),
+                "no se pudo crear el junction: {}",
+                String::from_utf8_lossy(&salida.stderr)
+            );
+        }
+
+        // La carpeta del interprete tiene que EXISTIR a traves del enlace: si no,
+        // `canonicalize()` falla y una mutacion que canonicalice no se notaria
+        // (el fallback devolveria la ruta del enlace y el test pasaria igual).
+        let interprete = venv_python_for(&enlace);
+        std::fs::create_dir_all(interprete.parent().expect("padre del interprete"))
+            .expect("crear la carpeta del interprete a traves del enlace");
+
+        let elegido = venv_final_path(&interprete);
+        assert!(
+            elegido.contains("enlace_venv"),
+            "venv_final_path tiene que conservar el nombre del enlace (no canonicalizar): {elegido}"
+        );
+        assert!(
+            !elegido.contains("real_venv"),
+            "venv_final_path resolvio el enlace al destino real (eso es canonicalize): {elegido}"
+        );
+    }
+
     #[tokio::test]
     async fn test_find_python() {
         let result = find_python().await;
