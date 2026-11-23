@@ -57,6 +57,23 @@ curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh 
 irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 ```
 
+### Windows, in plain words
+
+If you have never used a terminal, this is the whole of it. Open **PowerShell** (Start menu, type
+`PowerShell`), paste the line above and press Enter. It downloads Tylluan into your user folder
+(`~/.tylluan/bin`) and installs nothing system-wide.
+
+- If your computer is missing the **Visual C++ runtime** or **Python 3.12**, it installs both for
+  you: Python goes inside your user folder and your own Python is never touched. Windows may ask
+  for permission; say yes.
+- It takes about **6 minutes**, and the **first start** needs **up to 5 minutes** more while it
+  prepares local models. The window can look stuck; that is normal.
+- When it works you will see `Tylluan is running at http://127.0.0.1:47004`. Later,
+  `curl http://127.0.0.1:47004/health` answers `"status":"ok"` while it is running.
+- **If something fails**, the window stays open: the last `FAIL` line says what is missing and the
+  exact command that fixes it. Copy that line when you ask for help. If it stopped before printing
+  that line, run the same command again: repeating it is safe.
+
 This puts `tylluan-nexus` (the kernel) and `tylluan-cli` in `~/.tylluan/bin/` and adds them to your `PATH`. Open a new terminal afterwards.
 
 The kernel needs no Rust, Python or Node. The 45 guilds behind `tylluan_do` are Python programs and need **Python 3.12 or newer (CI tests 3.12) and FastMCP**. The installers create `~/.tylluan/.venv` and install those dependencies there from the hash-locked `guilds/requirements-hashes.txt` (one time, needs network, never touches your system Python); the kernel prefers that interpreter on its own. `--skip-guild-deps` / `-SkipGuildDeps` skips the step, and if a release ever ships without the hashes file the installer refuses to pip-install anything. Without the dependencies those guilds fail to start and `/api/v1/doctor` reports `degraded`. Memory and recall work without Python.
