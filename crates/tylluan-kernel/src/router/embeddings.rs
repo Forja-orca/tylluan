@@ -2652,10 +2652,16 @@ mod tests {
         let fuente = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/router/embeddings.rs"))
             .expect("leer la propia fuente de embeddings.rs");
         let lineas: Vec<&str> = fuente.lines().collect();
-        // Marcadores construidos en runtime: si este test los escribiera literales,
-        // sus propias lineas contarian como entradas en fastembed y el gate se
-        // auto-denunciaria (falso positivo clásico de un gate estructural).
-        let motores = ["TextEmbedding::try_new", "SparseTextEmbedding::try_new", "TextRerank::try_new"];
+        // Marcadores construidos en RUNTIME de verdad: si este test los escribiera
+        // como literales, la linea `let motores = [...]` no empieza por `//` ni por `"`,
+        // asi que el gate estructural del BIN (`main.rs::ort_entry_contract_tests`)
+        // la contaba como una entrada en ort sin sonda y se **auto-denunciaba**
+        // (medido: `router\embeddings.rs:2658 enters ort via TextEmbedding::try_new`).
+        // El comentario ya decia «runtime»; el codigo no lo hacia.
+        let motores: Vec<String> = ["TextEmbedding", "SparseTextEmbedding", "TextRerank"]
+            .iter()
+            .map(|m| format!("{m}::try_new"))
+            .collect();
         let sufijo = "(options)";
         let mut entradas = 0usize;
         for (i, linea) in lineas.iter().enumerate() {

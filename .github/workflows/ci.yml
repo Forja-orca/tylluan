@@ -26,6 +26,13 @@ jobs:
 
       - run: cargo check -p tylluan-kernel
       - run: cargo test -p tylluan-kernel --lib
+      # H-20261122-BIN-TESTS-SIN-CABLEAR (TL, 22-nov): los tests del BINARIO no los
+      # corria ningun job, y uno llevaba roto desde que se escribio: el gate
+      # estructural `ort_entry_contract_tests` se auto-denunciaba con la linea de
+      # marcadores de `embeddings.rs:2658` (una linea `let` con los literales de
+      # `TextEmbedding::try_new`, que el comentario decia construir en runtime).
+      # Nadie lo vio porque `--lib` no compila `main.rs`. Este paso lo cierra.
+      - run: cargo test -p tylluan-kernel --bin tylluan-nexus
       - run: cargo clippy -p tylluan-kernel --all-targets -- -D warnings
       # Pilar 2 deterministic contract tests (structs vs schemas/, no network):
       # wired 2026-11-03 (T2590 punto 4) — before this, contracts_test.rs ran
