@@ -4,7 +4,7 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [0.17.4] — 2026-11-23 (preparada, sin publicar)
+## [0.17.4] — 2026-11-23
 
 Release de estabilidad del arranque, del instalador en Windows limpio y de la identidad del Coloquio, más el primer binario publicado con el panel embebido. **Plataformas de esta release: solo Windows x86_64 y Linux x86_64.** Los tests del kernel pasan de 1810 a 1875 (1897 → 1962 en total: 1875 + 75 + 12), recuento de `v0.17.3` tomado de su `README.md`.
 

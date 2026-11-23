@@ -162,7 +162,7 @@ To change profile, stop the kernel first, then run `tylluan-cli install --profil
 
 **Why not**
 
-- Mem0, Letta, Zep, Cognee and others have years of production use and larger communities. Tylluan is young; v0.17.3 is its latest release.
+- Mem0, Letta, Zep, Cognee and others have years of production use and larger communities. Tylluan is young; v0.17.4 is its latest release.
 - It is not a hosted service. There is no team dashboard, no managed backup and no support. A React dashboard exists in `dashboard/`, but the published binaries do not embed it: build from source with `--features bundled-dashboard` to serve it from the kernel.
 - It is not hardened for hostile networks. Keep it on `127.0.0.1`.
 - Several guilds need Python 3.12 or newer, and some (web search, for example) reach the internet when you ask them to.
@@ -194,7 +194,7 @@ Two or more Tylluan instances can sync memories with peers you approve one by on
 
 1962 tests across Rust kernel (lib), `tylluan-link` and `tylluan-fsrs` pass; CI runs them on every push together with clippy, `cargo-deny`, Python lint and the security audit suite.
 
-- **Latest release:** v0.17.3 (publication date). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
+- **Latest release:** v0.17.4 (2026-11-23). Work since then lives on `main`; see [CHANGELOG.md](CHANGELOG.md).
 - **What is planned and what is not:** [ROADMAP.md](ROADMAP.md). Current state of every claim: [STATUS.md](STATUS.md).
 - **Platforms:** Windows x86_64 and Linux x86_64 (WSL included) — the only two we test and support. CI runs the tests on Linux x86_64 and the release workflow still builds the legacy macOS and Linux ARM64 targets as well, until the workflows are cleaned up. The start-up measurement above was taken on Windows x86_64.
 
