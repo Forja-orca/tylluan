@@ -410,6 +410,21 @@ jobs:
             sleep 1
           done
 
+          # D5004: el P1 INS-LINUX-RELEASE-SIN-DASHBOARD no tenia NINGUNA comprobacion en CI
+          # (este smoke solo miraba /health), asi que una release sin panel pasaba verde.
+          # Se exige lo que sirve un binario con `--features bundled-dashboard`: 200 en GET /
+          # y el <title> del panel. Sin dist, el kernel responde 404 con
+          # «Dashboard not built. Run: cd dashboard && pnpm build» (transport/http/mod.rs:1583).
+          PANEL_CODE=$(curl -s -m 5 -o /tmp/panel.html -w '%{http_code}' http://127.0.0.1:47004/ 2>/dev/null || true)
+          PANEL_CODE=${PANEL_CODE:-000}
+          if [ "$PANEL_CODE" != "200" ] || ! grep -q '<title>Tylluan Dashboard</title>' /tmp/panel.html 2>/dev/null; then
+            echo "::error::GET / no sirve el panel (HTTP $PANEL_CODE). El binario se compilo sin --features bundled-dashboard o el tarball no lleva dashboard/dist."
+            head -c 300 /tmp/panel.html 2>/dev/null || true
+            pkill -x tylluan-nexus || true
+            exit 1
+          fi
+          echo "::notice::GET / sirve el panel (HTTP 200, titulo del dashboard)"
+
           # Cleanly stop the background kernel
           pkill -x tylluan-nexus || true
 
@@ -443,6 +458,22 @@ jobs:
               }
             } catch {}
             Start-Sleep -Seconds 1
+          }
+
+          # D5004: mismo control que en Unix, contra el mismo fallo real: una release sin
+          # panel respondia 404 «Dashboard not built. Run: cd dashboard && pnpm build».
+          try {
+            $panel = Invoke-WebRequest -Uri "http://127.0.0.1:47004/" -UseBasicParsing -ErrorAction Stop
+            if ($panel.StatusCode -ne 200 -or $panel.Content -notmatch '<title>Tylluan Dashboard</title>') {
+              Write-Host "::error::GET / no sirve el panel (HTTP $($panel.StatusCode)). Binario sin --features bundled-dashboard o tarball sin dashboard/dist."
+              Stop-Process -Name tylluan-nexus -Force -ErrorAction SilentlyContinue
+              exit 1
+            }
+            Write-Host "::notice::GET / sirve el panel (HTTP 200)"
+          } catch {
+            Write-Host "::error::GET / no responde: $_"
+            Stop-Process -Name tylluan-nexus -Force -ErrorAction SilentlyContinue
+            exit 1
           }
 
           # Cleanly stop the background kernel
