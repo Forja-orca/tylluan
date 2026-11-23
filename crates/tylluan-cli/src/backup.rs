@@ -475,13 +475,14 @@ async fn health_running(port: u16) -> Result<Option<String>> {
         .build()
         .context("building HTTP client")?;
     let url = format!("http://127.0.0.1:{port}/health");
-    // D213/D212: CUALQUIER respuesta HTTP cuenta como "hay kernel en ese puerto".
+    // D213/D212/D5000: CUALQUIER respuesta HTTP cuenta como "hay kernel en ese puerto".
     //
-    // Antes era `resp.status().is_success()`, que valía mientras `/health` siempre
-    // devolvía 200. Con `readiness`, un kernel en `failed` responde **503**: y esta sonda
-    // no pregunta "¿está sano?" sino "¿hay alguien vivo que vaya a escribir en estas
-    // bases?", que es lo que protege el restore in-situ (T-DSH-159). Un 503 NO significa
-    // que el kernel esté muerto, así que no debe desactivar la guarda.
+    // Antes era `resp.status().is_success()`. Hoy el kernel responde **200 siempre** que el
+    // proceso viva (la salud va en el cuerpo, `readiness`), así que el `is_success()` daría lo
+    // mismo; se acepta cualquier código porque esta sonda no pregunta "¿está sano?" sino "¿hay
+    // alguien vivo que vaya a escribir en estas bases?", que es lo que protege el restore
+    // in-situ (T-DSH-159). Un 503 (kernels antiguos con readiness `failed`) NO significa que
+    // el kernel esté muerto, así que tampoco debe desactivar la guarda.
     if let Ok(resp) = client.get(&url).send().await {
         return Ok(Some(format!(
             "health endpoint {url} is responding (HTTP {})",

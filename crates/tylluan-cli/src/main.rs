@@ -343,10 +343,13 @@ async fn wait_for_health(client: &reqwest::Client, url: &str, cap_secs: u64) -> 
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         match client.get(url).send().await {
             Ok(resp) => {
-                // D212: un kernel con `readiness: failed` responde **503** y sigue vivo
-                // (acepta peticiones; solo sus guilds `always_on` no están arriba). `start`
-                // no debe esperar 180 s ni anunciar un fallo de arranque por eso: dice lo
-                // que ve y sigue. "No contesta" sigue contando como no listo.
+                // D212/D5000: el kernel responde **200 SIEMPRE** mientras el proceso vive; la
+                // salud va en el cuerpo (`readiness`: ok | degraded | failed), no en el código
+                // HTTP (`transport/http/mod.rs`: `Readiness::http_status` devuelve OK para los
+                // tres estados). `start` cuenta cualquier respuesta como «arrancado»: un kernel
+                // con `readiness: failed` sigue aceptando peticiones y atendiendo memoria y
+                // recall. Se acepta también un 503 por compatibilidad con kernels antiguos, que
+                // sí lo devolvían. "No contesta" sigue contando como no listo.
                 if !resp.status().is_success() {
                     println!(
                         "   ⚠ /health responde HTTP {} — el kernel está vivo; su readiness no es ok",
@@ -2717,10 +2720,56 @@ mod startup_wait_tests {
         assert!(elapsed.as_secs() >= 1, "first poll happens after the 1s sleep");
         assert!(elapsed.as_secs() <= 3, "ready must be reported on the first 200, got {elapsed:?}");
     }
+    /// **D5000**: el caso que el kernel produce **de verdad** — `200` + `readiness: failed`
+    /// (el kernel devuelve 200 para los tres estados de `readiness`). `start` tiene que darlo
+    /// por arrancado y decir lo que ve, no esperar 180 s.
+    ///
+    /// Mutación: exigir `readiness == "ok"` para darlo por arrancado deja este test en rojo
+    /// (se quedaría esperando hasta el presupuesto ya agotado).
+    #[tokio::test]
+    async fn d5000_un_200_con_readiness_failed_cuenta_como_kernel_arrancado() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            if let Ok((mut sock, _)) = listener.accept() {
+                let mut req_buf = [0u8; 1024];
+                let _ = sock.read(&mut req_buf);
+                let body = r#"{"status":"ok","version":"0.0.0","readiness":"failed","guilds_down":["bash"]}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = sock.write_all(resp.as_bytes());
+                let _ = sock.flush();
+                std::thread::sleep(std::time::Duration::from_millis(400));
+            }
+        });
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let ready = wait_for_health(&client, &format!("http://{addr}/health"), 30).await;
+        assert!(
+            ready,
+            "un 200 con readiness `failed` es un kernel ARRANCADO (vivo, sin guilds siempre-arriba)"
+        );
+        assert!(
+            started.elapsed().as_secs() <= 3,
+            "tiene que decidirlo en la primera respuesta, no esperar el presupuesto: {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// Compatibilidad: kernels antiguos devolvían **503** cuando `readiness` era `failed`.
+    /// Se conserva porque el CLI tiene que entenderse con un kernel ya instalado.
+    ///
+    /// (Su docstring anterior decía que el kernel devuelve 503 con `readiness: failed`; hoy
+    /// no es cierto — ver `d5000_*` — pero el comportamiento se mantiene a propósito.)
     #[tokio::test]
     async fn d212_un_503_cuenta_como_kernel_arrancado() {
-        // D212: `readiness: failed` => `/health` responde 503 con el kernel VIVO.
-        // `start` tiene que darlo por arrancado, no esperar 180 s y anunciar un fallo.
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         std::thread::spawn(move || {
