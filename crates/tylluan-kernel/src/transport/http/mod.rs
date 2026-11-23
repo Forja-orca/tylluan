@@ -1668,6 +1668,42 @@ pub fn always_on_summary(guilds: &[serde_json::Value]) -> (usize, usize, usize, 
 /// `guilds_total == 0` es legítimo (perfil mínimo, sin `always_on`) y da `Ok`; que el actor
 /// del registro esté muerto también da cero guilds, y eso **no** es lo mismo: no saber el
 /// estado de las guilds es `failed`, porque es justo cuando `/health` más se consulta.
+// ─── D4996: el health no puede quedarse mudo esperando al registro ────────────
+//
+// `list_guilds` pasa por el actor del registro. Durante el arranque, el spawn de
+// gremios retiene el guardian `write()` del registro (`main.rs:1667/1691/1744`,
+// `supervisor.rs:177`), asi que ese `await` puede quedarse colgado minutos.
+// Medido el 2026-11-23 en instancia propia: el puerto aceptaba a los 119,8 s y el
+// primer 200 de `/health` no llegaba hasta los 199,5 s (**79,7 s mudo**). El
+// contrato del endpoint dice que contesta SIEMPRE 200 y que la verdad va en
+// `readiness`; un cerrojo retenido no es una excepcion a eso, es «no lo se», y
+// «no lo se» ya es `Failed` desde NET3: el mapeo es el mismo que un actor muerto.
+//
+// Devuelve `(registro_ok, guilds)`.
+pub async fn guilds_para_health<F, E>(
+    consulta: F,
+    limite: std::time::Duration,
+) -> (bool, Vec<serde_json::Value>)
+where
+    F: std::future::Future<Output = Result<Vec<serde_json::Value>, E>>,
+    E: std::fmt::Display,
+{
+    match tokio::time::timeout(limite, consulta).await {
+        Ok(Ok(lista)) => (true, lista),
+        Ok(Err(e)) => {
+            tracing::warn!("D212: el registro de guilds no responde ({e}); readiness = failed");
+            (false, Vec::new())
+        }
+        Err(_) => {
+            tracing::warn!(
+                "D212: el registro de guilds no contesto en {} ms (cerrojo del registro retenido?); readiness = failed",
+                limite.as_millis()
+            );
+            (false, Vec::new())
+        }
+    }
+}
+
 pub fn readiness_tras_consulta(
     boot_ready: bool,
     registro_disponible: bool,
@@ -1845,15 +1881,13 @@ async fn health_handler(
     // El `unwrap_or_default()` de la v4 lo convertía en **cero guilds**, y `readiness_of(..,
     // 0, 0, 0)` responde `Ok` a propósito (perfil mínimo) -> `/health` decía que todo iba bien
     // justo cuando no había forma de saberlo.
-    let consulta = state.registry.list_guilds(None).await;
-    let registro_ok = match &consulta {
-        Ok(_) => true,
-        Err(e) => {
-            tracing::warn!("D212: el registro de guilds no responde ({e}); readiness = failed");
-            false
-        }
-    };
-    let (total, up, en_backoff, caidos) = always_on_summary(&consulta.unwrap_or_default());
+    // D4996: y si no contesta *nunca* (cerrojo del registro retenido por el arranque de
+    // gremios), el handler se quedaba colgado 79,7 s medidos. Con el límite, contesta 200
+    // con `readiness: failed` en vez de no contestar.
+    const HEALTH_GUILDS_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
+    let (registro_ok, guilds) =
+        guilds_para_health(state.registry.list_guilds(None), HEALTH_GUILDS_TIMEOUT).await;
+    let (total, up, en_backoff, caidos) = always_on_summary(&guilds);
     let readiness = readiness_tras_consulta(ready, registro_ok, total, up, en_backoff);
 
     let resp = HealthResponse {
@@ -1980,6 +2014,60 @@ mod tests {
         assert_eq!(readiness_tras_consulta(true, true, 0, 0, 0), Readiness::Ok);
         assert_eq!(readiness_tras_consulta(true, true, 3, 3, 0), Readiness::Ok);
         assert_eq!(readiness_tras_consulta(true, true, 3, 2, 0), Readiness::Degraded);
+    }
+
+    /// **D4996**: un registro que no contesta **no cuelga** `/health`.
+    ///
+    /// Medido el 2026-11-23 en instancia propia: con el spawn de gremios reteniendo el
+    /// `write()` del registro, el puerto aceptaba a los 119,8 s y el primer 200 de
+    /// `/health` llegaba a los 199,5 s (79,7 s mudo). Ningún cliente podía distinguir
+    /// «aún no» de «colgado».
+    ///
+    /// Mutación: cambiar la rama `Err(_)` por `(true, Vec::new())` (decir «el registro
+    /// contestó, sin guilds») deja este test en rojo — es exactamente el fallo NET3 otra
+    /// vez, pero por la puerta del tiempo en vez de por la del `Err`.
+    #[tokio::test]
+    async fn d4996_un_registro_que_no_contesta_no_cuelga_el_health() {
+        let limite = std::time::Duration::from_millis(50);
+        let inicio = std::time::Instant::now();
+        let (ok, guilds) = guilds_para_health(
+            async {
+                std::future::pending::<Result<Vec<serde_json::Value>, std::io::Error>>().await
+            },
+            limite,
+        )
+        .await;
+        assert!(!ok, "un registro que no contesta NO es un registro sano");
+        assert!(guilds.is_empty(), "sin respuesta no hay guilds que resumir");
+        assert!(
+            inicio.elapsed() < std::time::Duration::from_secs(2),
+            "el handler tiene que rendirse en ~{} ms, tardo {:?}",
+            limite.as_millis(),
+            inicio.elapsed()
+        );
+    }
+
+    /// **D4996 (el otro lado)**: si el registro contesta dentro del límite, la lista se usa
+    /// tal cual y `registro_ok` es `true` — el límite no puede degradar un kernel sano.
+    ///
+    /// Mutación: invertir las dos ramas del `match` deja este test en rojo.
+    #[tokio::test]
+    async fn d4996_un_registro_que_contesta_se_usa() {
+        let (ok, guilds) = guilds_para_health(
+            async {
+                Ok::<_, std::io::Error>(vec![
+                    g("bash", true, true, false),
+                    g("lazy", false, false, false),
+                ])
+            },
+            std::time::Duration::from_secs(2),
+        )
+        .await;
+        assert!(ok);
+        assert_eq!(guilds.len(), 2);
+        let (total, up, backoff, caidos) = always_on_summary(&guilds);
+        assert_eq!((total, up, backoff), (1, 1, 0));
+        assert!(caidos.is_empty());
     }
 
     /// Construye el JSON de un guild como lo devuelve `list_guilds`.
