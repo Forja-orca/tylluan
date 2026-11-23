@@ -339,24 +339,44 @@ async fn wait_for_health(client: &reqwest::Client, url: &str, cap_secs: u64) -> 
         + std::time::Duration::from_secs(cap_secs);
     let mut next_report = std::time::Instant::now()
         + std::time::Duration::from_secs(15);
+    // D5005: avisar UNA vez de que hay algo en el puerto que no es el kernel (no cada segundo).
+    let mut avisado = false;
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         match client.get(url).send().await {
             Ok(resp) => {
-                // D212/D5000: el kernel responde **200 SIEMPRE** mientras el proceso vive; la
-                // salud va en el cuerpo (`readiness`: ok | degraded | failed), no en el código
-                // HTTP (`transport/http/mod.rs`: `Readiness::http_status` devuelve OK para los
-                // tres estados). `start` cuenta cualquier respuesta como «arrancado»: un kernel
-                // con `readiness: failed` sigue aceptando peticiones y atendiendo memoria y
-                // recall. Se acepta también un 503 por compatibilidad con kernels antiguos, que
-                // sí lo devolvían. "No contesta" sigue contando como no listo.
-                if !resp.status().is_success() {
-                    println!(
-                        "   ⚠ /health responde HTTP {} — el kernel está vivo; su readiness no es ok",
-                        resp.status().as_u16()
-                    );
+                let st = resp.status();
+                // D5005 (H-HER-I-01 de Hermes): identificamos al kernel por el CUERPO. Un
+                // `HealthResponse` lleva `version` (y `commit`); cualquier otro proceso que
+                // escuche en el puerto —un 200 de otro servicio, un 401, una pagina web— hacia
+                // que `start` anunciara «Kernel is ready» sin que Tylluan hubiera arrancado.
+                let cuerpo = resp.text().await.unwrap_or_default();
+                let es_kernel = cuerpo.contains("\"version\"");
+                if es_kernel {
+                    // D212/D5000: el kernel responde 200 SIEMPRE; la salud va en `readiness`.
+                    if !st.is_success() {
+                        println!(
+                            "   ⚠ /health responde HTTP {} — el kernel está vivo; su readiness no es ok",
+                            st.as_u16()
+                        );
+                    }
+                    return true;
                 }
-                return true;
+                // Compatibilidad: kernels antiguos devolvian 503 (sin cuerpo) cuando
+                // `readiness` era `failed`.
+                if st.as_u16() == 503 {
+                    println!(
+                        "   ⚠ /health responde 503 sin cuerpo: se acepta como kernel antiguo con readiness `failed`"
+                    );
+                    return true;
+                }
+                if !avisado {
+                    println!(
+                        "   ⚠ hay algo escuchando en {url} pero no es el kernel (HTTP {}, sin `version` en el cuerpo): sigo esperando",
+                        st.as_u16()
+                    );
+                    avisado = true;
+                }
             }
             Err(_) => {
                 let now = std::time::Instant::now();
@@ -2696,13 +2716,23 @@ mod startup_wait_tests {
                 // pending makes Windows send RST and the response is lost.
                 let mut req_buf = [0u8; 1024];
                 let _ = sock.read(&mut req_buf);
+                // D5005: el kernel se reconoce por el CUERPO, asi que el fixture sirve un
+                // `/health` de verdad. Antes iba con `content-length: 0`, y ese caso es hoy
+                // justo «hay algo en el puerto pero NO es el kernel».
+                let body = r#"{"status":"ok","version":"0.17.3","commit":"abcdef12","readiness":"ok","guilds_down":[]}"#;
                 let mut resp = Vec::new();
-                for part in [b"HTTP/1.1 200 OK".as_slice(), b"content-length: 0",
-                    b"connection: close", b""]
+                for part in [
+                    b"HTTP/1.1 200 OK".as_slice(),
+                    b"content-type: application/json",
+                    format!("content-length: {}", body.len()).as_bytes(),
+                    b"connection: close",
+                    b"",
+                ]
                 {
                     resp.extend_from_slice(part);
                     resp.extend_from_slice(&[13u8, 10u8]);
                 }
+                resp.extend_from_slice(body.as_bytes());
                 let _ = sock.write_all(&resp);
                 let _ = sock.flush();
                 // Stay alive briefly so the client can read before FIN.
@@ -2720,6 +2750,75 @@ mod startup_wait_tests {
         assert!(elapsed.as_secs() >= 1, "first poll happens after the 1s sleep");
         assert!(elapsed.as_secs() <= 3, "ready must be reported on the first 200, got {elapsed:?}");
     }
+    /// **D5005 (H-HER-I-01)**: un 200 de OTRO proceso en el puerto no es el kernel.
+    ///
+    /// Antes bastaba cualquier respuesta HTTP: `start` anunciaba «Kernel is ready» con el
+    /// puerto ocupado por un servicio ajeno. Se exige `version` en el cuerpo (lo que lleva
+    /// el `HealthResponse` del kernel).
+    ///
+    /// Mutacion: quitar la comprobacion del cuerpo (volver a «cualquier respuesta cuenta»)
+    /// deja este test en rojo.
+    #[tokio::test]
+    async fn d5005_un_200_ajeno_no_es_el_kernel() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for _ in 0..4 {
+                if let Ok((mut sock, _)) = listener.accept() {
+                    let mut req_buf = [0u8; 1024];
+                    let _ = sock.read(&mut req_buf);
+                    let body = r#"{"ok":true,"service":"otra-cosa"}"#;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                        body.len(), body
+                    );
+                    let _ = sock.write_all(resp.as_bytes());
+                    let _ = sock.flush();
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+        });
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let ready = wait_for_health(&client, &format!("http://{addr}/health"), 2).await;
+        assert!(
+            !ready,
+            "un 200 de otro servicio NO es el kernel: la respuesta no trae `version`"
+        );
+    }
+
+    /// **D5005 (el otro lado)**: un 401/4xx tampoco es el kernel arrancado; se sigue esperando.
+    /// Antes daba `true` y ademas avisaba como si fuera un kernel degradado.
+    ///
+    /// Mutacion: devolver `true` en la rama de estado no-2xx deja este test en rojo.
+    #[tokio::test]
+    async fn d5005_un_401_no_es_el_kernel() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for _ in 0..4 {
+                if let Ok((mut sock, _)) = listener.accept() {
+                    let mut req_buf = [0u8; 1024];
+                    let _ = sock.read(&mut req_buf);
+                    let resp = "HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+                    let _ = sock.write_all(resp.as_bytes());
+                    let _ = sock.flush();
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+        });
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let ready = wait_for_health(&client, &format!("http://{addr}/health"), 2).await;
+        assert!(!ready, "un 401 de otro servicio no es el kernel arrancado");
+    }
+
     /// **D5000**: el caso que el kernel produce **de verdad** — `200` + `readiness: failed`
     /// (el kernel devuelve 200 para los tres estados de `readiness`). `start` tiene que darlo
     /// por arrancado y decir lo que ve, no esperar 180 s.
