@@ -57,6 +57,23 @@ curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh 
 irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 ```
 
+### Windows, explicado sin tecnicismos
+
+Si nunca has usado una terminal, esto es todo lo que hay. Abre **PowerShell** (menú Inicio, escribe
+`PowerShell`), pega la línea de arriba y pulsa Intro. Descarga Tylluan en tu carpeta de usuario
+(`~/.tylluan/bin`) y no instala nada en todo el sistema.
+
+- Si a tu equipo le falta el **runtime de Visual C++** o **Python 3.12**, instala los dos por ti:
+  Python queda dentro de tu carpeta de usuario y tu propio Python no se toca. Windows puede pedirte
+  permiso; di que sí.
+- Tarda unos **6 minutos**, y el **primer arranque** necesita **hasta 5 minutos** más mientras
+  prepara los modelos locales. La ventana puede parecer colgada; es normal.
+- Cuando funcione verás el mensaje literal `Tylluan ... is running at http://127.0.0.1:47004`. Más
+  tarde, `curl http://127.0.0.1:47004/health` responde `"status":"ok"` mientras está en marcha.
+- **Si algo falla**, la ventana se queda abierta: la última línea `FAIL` dice qué falta y el comando
+  exacto que lo arregla. Copia esa línea cuando pidas ayuda. Si se paró antes de imprimirla, vuelve
+  a ejecutar el mismo comando: repetirlo es seguro.
+
 Esto deja `tylluan-nexus` (el kernel) y `tylluan-cli` en `~/.tylluan/bin/` y los añade al `PATH`. Abre una terminal nueva después.
 
 El kernel no necesita Rust, Python ni Node. Los 45 guilds que hay detrás de `tylluan_do` son programas Python y necesitan **Python 3.12 o posterior (CI prueba 3.12) y FastMCP** instalados aparte (`pip install -r guilds/requirements.txt`; el fichero viene en el archivo de la release y en este repositorio); sin ellos esos guilds no arrancan y `/api/v1/doctor` informa `degraded`. La memoria y la búsqueda funcionan sin Python.
