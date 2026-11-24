@@ -3399,14 +3399,7 @@ pub fn write_secret_file(path: &Path, contents: &str) -> std::io::Result<()> {
         let nuevo = !path.exists();
         std::fs::write(path, contents)?;
         if nuevo {
-            match harden_secret_windows(path) {
-                Ok(msg) => info!("ACL del fichero de secreto: {msg}"),
-                Err(e) => warn!(
-                    "No pude endurecer la ACL de {}: {e}. El fichero queda con la ACL heredada; \
-                     arreglalo con `icacls` (ver aviso del doctor)",
-                    path.display()
-                ),
-            }
+            harden_new_secret(path);
         }
         Ok(())
     }
@@ -3414,6 +3407,24 @@ pub fn write_secret_file(path: &Path, contents: &str) -> std::io::Result<()> {
     {
         std::fs::write(path, contents)
     }
+}
+
+/// AH-01 (P0, T5253): corta la herencia de un secreto RECIEN creado (en Windows; no-op en el
+/// resto). Para ficheros que escribe otro codigo (`identity.key` lo crea `tylluan-link`,
+/// `oauth_jwt_secret` pasa por `write_secret_file`). Solo para ficheros nuevos: uno que ya
+/// existe no se toca (ni se rota) sin orden de Jose. Nunca falla el arranque: avisa.
+pub fn harden_new_secret(path: &Path) {
+    #[cfg(windows)]
+    match harden_secret_windows(path) {
+        Ok(msg) => info!("ACL del fichero de secreto: {msg}"),
+        Err(e) => warn!(
+            "No pude endurecer la ACL de {}: {e}. El fichero queda con la ACL heredada; \
+             arreglalo con `icacls` (ver aviso del doctor)",
+            path.display()
+        ),
+    }
+    #[cfg(not(windows))]
+    let _ = path;
 }
 
 /// Y-01 (P0, T5222): esta DACL deja el fichero al alcance de otros usuarios?
@@ -5104,6 +5115,41 @@ mod y01_tests {
         // el test existe siempre y solo su cuerpo es de Windows.
         #[cfg(windows)]
         y01_endurece_cuerpo();
+    }
+
+    #[test]
+    fn ah01_un_secreto_creado_por_otro_codigo_tambien_se_cierra() {
+        // Misma cuenta de tests en Linux y Windows: solo el cuerpo es de Windows.
+        #[cfg(windows)]
+        ah01_cuerpo();
+    }
+
+    #[cfg(windows)]
+    fn ah01_cuerpo() {
+        // identity.key lo escribe tylluan-link con std::fs: hereda la ACE abierta de la carpeta.
+        let dir = std::env::temp_dir().join("tylluan_ah01_identidad_abierta");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear carpeta de prueba");
+        let concedido = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(&dir)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(concedido.status.success(), "no pude abrir la carpeta de prueba");
+        let p = dir.join("identity.key");
+        std::fs::write(&p, "semilla-de-prueba").expect("escribir como lo hace tylluan-link");
+        let antes = sddl_of(&p).expect("Get-Acl funciona en esta maquina");
+        assert!(
+            sddl_is_too_open(&antes),
+            "control: el fichero creado por otro codigo debe nacer abierto, SDDL: {antes}"
+        );
+        harden_new_secret(&p);
+        let despues = sddl_of(&p).expect("Get-Acl funciona en esta maquina");
+        assert!(
+            !sddl_is_too_open(&despues),
+            "harden_new_secret debe cerrar el fichero, SDDL: {despues}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[cfg(windows)]

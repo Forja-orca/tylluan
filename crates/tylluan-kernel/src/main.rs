@@ -692,9 +692,14 @@ async fn main() -> anyhow::Result<()> {
 
     // ─── Initialize Cryptographic Node Identity (M12-A) ───────────
     let identity_path = data_dir.join("identity.key");
+    // AH-01: el fichero lo crea tylluan-link; si es nuevo, se cierra su ACL en Windows.
+    let identity_nueva = !identity_path.exists();
     info!("🔑 Loading cryptographic node identity: {}", identity_path.display());
     let node_identity = match tylluan_link::identity::NodeIdentity::load_or_create(&identity_path) {
         Ok(id) => {
+            if identity_nueva {
+                tylluan_kernel::config::harden_new_secret(&identity_path);
+            }
             info!("🔑 Node public key (Ed25519): {}", id.public_key_hex());
             Arc::new(id)
         }

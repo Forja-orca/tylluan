@@ -304,12 +304,8 @@ fn load_or_create_jwt_secret(dir: &std::path::Path) -> std::io::Result<Vec<u8>> 
     }
     std::fs::create_dir_all(dir)?;
     let secret: Vec<u8> = rand::random::<[u8; 32]>().to_vec();
-    std::fs::write(&path, hex_encode(&secret))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-    }
+    // AH-01: 0600 en Unix y ACL cerrada en Windows (antes solo Unix).
+    crate::config::write_secret_file(&path, &hex_encode(&secret))?;
     tracing::info!("oauth: secreto JWT persistente creado en {}", path.display());
     Ok(secret)
 }
