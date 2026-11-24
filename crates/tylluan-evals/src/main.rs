@@ -261,7 +261,11 @@ async fn main() {
             println!("  Suite: SYNTHETIC CORPUS (25 nodes, 10 queries)");
             println!();
             let corpus = corpus::build_synthetic_corpus();
-            let report = runner::run_synthetic_benchmark(&corpus, engine.as_ref()).await;
+            let report = metrics::with_models(
+                runner::run_synthetic_benchmark(&corpus, engine.as_ref()).await,
+                &embed_model,
+                false,
+            );
             metrics::print_report(&report);
             metrics::print_comparison(&report);
             if let Some(ref path) = save_path {
@@ -272,7 +276,11 @@ async fn main() {
             println!("  Suite: REAL SilvaDB — {}", db_path);
             println!("  (read-only via WAL — kernel can stay running)");
             println!();
-            let report = runner::run_real_benchmark(&db_path, engine.as_ref()).await;
+            let report = metrics::with_models(
+                runner::run_real_benchmark(&db_path, engine.as_ref()).await,
+                &embed_model,
+                false,
+            );
             metrics::print_report(&report);
             metrics::print_comparison(&report);
             if let Some(ref path) = save_path {
@@ -295,7 +303,11 @@ async fn main() {
             println!();
             let bench = longmemeval::LongMemEvalBench::load(data_path)
                 .expect("Failed to load LongMemEval dataset");
-            let report = bench.run_limit(engine.as_ref(), limit).await;
+            let report = metrics::with_models(
+                bench.run_limit(engine.as_ref(), limit).await,
+                &embed_model,
+                false,
+            );
             metrics::print_report(&report);
             metrics::print_comparison(&report);
             if let Some(ref path) = save_path {
@@ -323,7 +335,11 @@ async fn main() {
             println!();
             let bench = longmemeval::LongMemEvalBench::load(data_path)
                 .expect("Failed to load LongMemEval dataset");
-            let report = bench.run_limit_reranked(engine.as_ref(), &reranker, limit).await;
+            let report = metrics::with_models(
+                bench.run_limit_reranked(engine.as_ref(), &reranker, limit).await,
+                &embed_model,
+                true,
+            );
             metrics::print_report(&report);
             metrics::print_comparison(&report);
             if let Some(ref path) = save_path {

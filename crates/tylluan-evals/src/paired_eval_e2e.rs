@@ -100,6 +100,8 @@ fn route_request(risk: f64) -> DecideRequest {
         questions: BTreeMap::from([("route".to_string(), route_spec())]),
         contract: Some("scheduler_routing".to_string()),
         max_latency_ms: None,
+        // T-DSH-122: el campo es aditivo (`None` = sensibilidad desconocida).
+        sensitivity: None,
     }
 }
 
@@ -136,6 +138,7 @@ async fn rows_written_by_the_real_service_are_read_by_the_paired_harness() {
         )]),
         contract: None,
         max_latency_ms: None,
+        sensitivity: None
     };
     let free_resp = service.decide(free, "mcp").await;
     assert!(free_resp.answers["should_i"].abstained);
