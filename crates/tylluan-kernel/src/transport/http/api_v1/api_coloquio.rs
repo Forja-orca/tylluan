@@ -66,6 +66,9 @@ fn canonical_author_for(auth_kind: AclAuthKind) -> &'static str {
         AclAuthKind::GuildToken => "guild",
         AclAuthKind::OAuthJwt => "oauth",
         AclAuthKind::MasterTokenQuery => "operator-query",
+        // D225: un token de agente sin binding publica como "agent"; con binding
+        // (M31-P1) publica como su agente, nunca con el nombre que pida.
+        AclAuthKind::AgentToken => "agent",
         // PublicBypass autentica en el propio endpoint; aquí no hay endpoint
         // federado todavía, así que se trata como no identificado.
         AclAuthKind::PublicBypass => "anonymous",

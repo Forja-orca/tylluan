@@ -71,6 +71,12 @@ pub enum AclAuthKind {
     /// class (`operator_gate_allows`); the single audited exception is
     /// `POST /api/v1/silva/edge` (`guild_operator_exception`).
     GuildToken,
+    /// D225 (opcion (a) del TL): bearer que aparece en `[security.acl.tokens]`,
+    /// por hash (`sha256:<hex>`, lo que emite `operator/tokens`) o en claro (así
+    /// siguen valiendo las instalaciones antiguas). Autentica la clase agente y
+    /// **nunca** la clase operador (`operator_gate_allows`); el rol lo gobierna
+    /// el mapeo del propio token, no un rol fijo de la clase.
+    AgentToken,
     /// dev_mode=true local bypass.
     DevBypass,
     /// Endpoint with internal verification (federation peers, mcp probe…).
@@ -132,16 +138,55 @@ pub fn acl_can_access(role: &str, guild: &str, acl: &AclConfig) -> bool {
     }
 }
 
+/// D225: forma canonica del hash de un token de agente (`sha256:<hex>`), la
+/// misma que `operator/tokens` escribe en `[security.acl.tokens]` (D213d).
+pub fn acl_token_sha256(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("sha256:{:x}", Sha256::digest(token.as_bytes()))
+}
+
+/// D225: clave con la que un token aparece en un mapa de la ACL. Acepta la forma
+/// hasheada (la actual) y la clave en claro (compatibilidad).
+///
+/// Si el bearer **ya empieza por `sha256:`** devuelve `None`: presentar el valor
+/// guardado en la config no puede autenticar a nadie — si autenticara, quien
+/// pueda leer `tylluan.toml` entraria sin conocer el token.
+fn lookup_acl_entry<'a, V>(token: &str, map: &'a std::collections::HashMap<String, V>) -> Option<&'a V> {
+    if token.trim().starts_with("sha256:") {
+        return None;
+    }
+    let hashed = acl_token_sha256(token.trim());
+    map.get(&hashed).or_else(|| map.get(token.trim()))
+}
+
+/// D225 (opcion (a) del TL): que medio de autenticacion es este bearer.
+///
+/// Funcion **pura** (no toca estado ni marca uso de nada):
+/// 1. vacio → `None`;
+/// 2. empieza por `sha256:` → `None` (ver `lookup_acl_entry`);
+/// 3. mapeado por hash o en claro en `[security.acl.tokens]` → `Some(AgentToken)`;
+/// 4. cualquier otra cosa → `None`.
+pub fn agent_token_kind(bearer: &str, acl: &AclConfig) -> Option<AclAuthKind> {
+    lookup_acl_entry(bearer, &acl.tokens).map(|_| AclAuthKind::AgentToken)
+}
+
 /// Resolve the ACL role for a token based on ACL config.
+/// Acepta tokens en claro (compatibilidad) y hasheados (`sha256:<hex>`, D225;
+/// es la misma semantica que `lookup_ac_token` de D213d paso1c: si los dos
+/// llegan a main, este cuerpo se sustituye por una llamada a ese).
 /// If the token is not listed, returns the default_role.
 pub fn resolve_role_for_token(token: &str, acl: &AclConfig) -> String {
-    acl.tokens.get(token).cloned().unwrap_or_else(|| acl.default_role.clone())
+    lookup_acl_entry(token, &acl.tokens)
+        .cloned()
+        .unwrap_or_else(|| acl.default_role.clone())
 }
 
 /// M31-P1: Resolve the bound agent_id for a token from ACL config.
 /// Returns empty string if no binding exists (backwards compatible).
 pub fn resolve_agent_id_for_token(token: &str, acl: &AclConfig) -> String {
-    acl.token_agent_bindings.get(token).cloned().unwrap_or_default()
+    lookup_acl_entry(token, &acl.token_agent_bindings)
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// M31-P1: Check if an agent_id is allowed to call a specific tool.
@@ -574,8 +619,17 @@ pub async fn bearer_auth_middleware(
             // resolved from the header only (never the query string) so a guild
             // can never ride the master token or the OAuth `mcp` scope.
             let mut guild_identity: Option<String> = None;
+            // D225: un token de `[security.acl.tokens]` es una credencial de
+            // agente que el operador emite (principio abuela: el cliente no pega
+            // nada a mano). Se resuelve aqui, del bearer, y **nunca** satisface
+            // la clase operador: solo autentica.
+            let mut agent_bearer_kind: Option<AclAuthKind> = None;
             let (has_master_bearer, has_oauth_bearer) = if let Some(bearer) = auth_header.strip_prefix("Bearer ") {
                 guild_identity = crate::security::guild_credential::authenticate(bearer);
+                agent_bearer_kind = {
+                    let config = state.config.read().await;
+                    agent_token_kind(bearer, &config.security.acl)
+                };
                 (
                     ExecutionGuard::secure_compare(bearer, expected),
                     state.oauth.validate_bearer(bearer),
@@ -607,6 +661,9 @@ pub async fn bearer_auth_middleware(
                 // E1 (turno 1237): el token por query-string autentica, pero
                 // el MEDIO no satisface la clase operador (solo cabecera).
                 (true, AclAuthKind::MasterTokenQuery)
+            } else if let Some(kind) = agent_bearer_kind {
+                // D225: despues del maestro y de la query, antes de guild/OAuth.
+                (true, kind)
             } else if guild_identity.is_some() {
                 (true, AclAuthKind::GuildToken)
             } else if has_oauth_bearer {
@@ -1376,6 +1433,74 @@ mod fase1_operator_tests {
         assert!(
             !operator_gate_allows(Some(AclAuthKind::GuildToken)),
             "D-34: a guild credential never satisfies the operator class"
+        );
+    }
+
+
+    // ── D225: tokens de agente de `[security.acl.tokens]` ──────────────────
+
+    fn acl_con_token(clave: &str, rol: &str) -> AclConfig {
+        let mut acl = AclConfig::default();
+        acl.tokens.insert(clave.to_string(), rol.to_string());
+        acl
+    }
+
+    #[test]
+    fn d225_token_hasheado_mapeado_autentica() {
+        let token = "agente-deep-2026";
+        let acl = acl_con_token(&acl_token_sha256(token), "contributor");
+        assert_eq!(
+            agent_token_kind(token, &acl),
+            Some(AclAuthKind::AgentToken),
+            "un token mapeado por hash es credencial de agente"
+        );
+        assert_eq!(
+            resolve_role_for_token(token, &acl),
+            "contributor",
+            "el rol lo gobierna el mapeo del token, no la clase"
+        );
+    }
+
+    #[test]
+    fn d225_el_hash_guardado_no_autentica() {
+        let token = "agente-deep-2026";
+        let guardado = acl_token_sha256(token);
+        let acl = acl_con_token(&guardado, "contributor");
+        assert_eq!(
+            agent_token_kind(&guardado, &acl),
+            None,
+            "presentar el valor guardado en la config no puede autenticar"
+        );
+    }
+
+    #[test]
+    fn d225_token_en_claro_mapeado_autentica() {
+        let acl = acl_con_token("token-viejo-en-claro", "contributor");
+        assert_eq!(
+            agent_token_kind("token-viejo-en-claro", &acl),
+            Some(AclAuthKind::AgentToken),
+            "compatibilidad: las instalaciones antiguas mapean el token en claro"
+        );
+    }
+
+    #[test]
+    fn d225_token_desconocido_no_autentica() {
+        let acl = acl_con_token("token-de-otro", "contributor");
+        assert_eq!(agent_token_kind("token-que-no-existe", &acl), None);
+        assert_eq!(agent_token_kind("", &acl), None, "vacio es fail-closed");
+        assert_eq!(agent_token_kind("   ", &acl), None, "espacios son fail-closed");
+    }
+
+    #[test]
+    fn d225_agent_token_no_es_clase_operador() {
+        assert!(
+            !operator_gate_allows(Some(AclAuthKind::AgentToken)),
+            "un token de agente no puede configurar ni emitir tokens"
+        );
+        assert_eq!(
+            acl_role_for_auth_kind(AclAuthKind::AgentToken),
+            None,
+            "sin rol fijo: gobierna `[security.acl.tokens]`"
         );
     }
 
