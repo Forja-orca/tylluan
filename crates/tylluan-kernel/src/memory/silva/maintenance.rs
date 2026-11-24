@@ -324,6 +324,47 @@ impl super::SilvaDB {
         info!("🌲 SilvaDB: Loaded {} persistent sessions.", result.len());
         Ok(result)
     }
+
+    /// D5009b (H-HER-H-01): variante de [`Self::load_sessions`] que **no espera nunca**.
+    ///
+    /// `load_sessions` hace `blocking_lock()` sobre la conexión SQLite **compartida**: si otro
+    /// task del arranque la tiene tomada, el arranque se queda ahí (el hueco de 88-95 s medido).
+    /// Envolverla en `tokio::time::timeout` **no** lo arregla: `spawn_blocking` no es cancelable,
+    /// así que al vencer el plazo la tarea sigue viva esperando el candado y compitiendo por la
+    /// conexión con los demás consumidores (H-HER-H-01). Esta variante intenta el candado **una
+    /// vez**; si está ocupado devuelve error al instante y **no deja ninguna tarea detrás**.
+    pub async fn load_sessions_if_free(&self) -> Result<HashMap<String, McpSession>> {
+        let conn = self.conn.try_lock().map_err(|_| {
+            anyhow::anyhow!("conexión SQLite ocupada: arranco sin las sesiones persistidas")
+        })?;
+        let mut stmt = conn.prepare(
+            "SELECT id, agent_id, client_name, last_active_unix, tool_count, last_intent, last_guild, created_unix FROM mcp_sessions"
+        )?;
+        let rows: Vec<McpSession> = stmt
+            .query_map([], |row: &rusqlite::Row| {
+                Ok(McpSession {
+                    id: row.get(0)?,
+                    agent_id: row.get::<_, Option<String>>(1)?,
+                    client_name: row.get(2)?,
+                    last_active_unix: row.get::<_, i64>(3)? as u64,
+                    tool_count: row.get::<_, i64>(4)? as u64,
+                    last_intent: row.get(5)?,
+                    last_guild: row.get(6)?,
+                    mcp_apps: false,
+                    created_unix: row.get::<_, i64>(7)? as u64,
+                    created_at: std::time::Instant::now(),
+                    last_active: std::time::Instant::now(),
+                })
+            })?
+            .filter_map(|r: Result<McpSession, rusqlite::Error>| r.ok())
+            .collect();
+        let mut sessions = HashMap::new();
+        for s in rows {
+            sessions.insert(s.id.clone(), s);
+        }
+        info!("🌲 SilvaDB: Loaded {} persistent sessions (sin espera).", sessions.len());
+        Ok(sessions)
+    }
     pub async fn get_detailed_stats(&self) -> Result<serde_json::Value> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
@@ -816,5 +857,54 @@ impl super::SilvaDB {
             )?;
             Ok(count)
         })
+    }
+}
+
+#[cfg(test)]
+mod d5009b_tests {
+    use crate::memory::silva::SilvaDB;
+    use std::time::{Duration, Instant};
+
+    /// D5009b / H-HER-H-01: con la conexión compartida tomada (como la tendría otro task del
+    /// arranque), la variante "if_free" debe **contestar ya**, no esperar. Si alguien la
+    /// "arregla" volviendo a `blocking_lock()`, este test se cae (timeout de 500 ms).
+    #[tokio::test]
+    async fn d5009b_no_espera_si_la_conexion_esta_ocupada() {
+        let db = std::sync::Arc::new(SilvaDB::open(":memory:").expect("db en memoria"));
+        let candado = std::sync::Arc::clone(&db.conn).lock_owned().await; // lo tiene "otro task"
+        let t0 = Instant::now();
+        let r = tokio::time::timeout(Duration::from_millis(500), db.load_sessions_if_free()).await;
+        let ms = t0.elapsed().as_millis();
+        drop(candado);
+        assert!(
+            r.is_ok(),
+            "load_sessions_if_free esperó {ms} ms: no puede bloquearse (H-HER-H-01)"
+        );
+        assert!(
+            r.expect("timeout").is_err(),
+            "con la conexión ocupada debe devolver error, no una lista vacía silenciosa"
+        );
+        assert!(ms < 500, "tardó {ms} ms");
+    }
+
+    /// Y cuando está libre, carga (vacío en una base recién creada) sin error.
+    #[tokio::test]
+    async fn d5009b_carga_cuando_esta_libre() {
+        let db = SilvaDB::open(":memory:").expect("db en memoria");
+        {
+            // `SilvaDB::open` no crea la tabla (la crea el inicializador de esquema del kernel),
+            // así que la creo aquí con las columnas que lee el SELECT.
+            let c = db.conn.lock().await;
+            c.execute_batch(
+                "CREATE TABLE mcp_sessions (id TEXT PRIMARY KEY, agent_id TEXT, client_name TEXT, \
+                 last_active_unix INTEGER, tool_count INTEGER, last_intent TEXT, last_guild TEXT, created_unix INTEGER)",
+            )
+            .expect("crear mcp_sessions");
+        }
+        let r = db.load_sessions_if_free().await;
+        match r {
+            Ok(s) => assert!(s.is_empty(), "una base nueva no tiene sesiones"),
+            Err(e) => panic!("con la conexión libre no debe fallar: {e}"),
+        }
     }
 }

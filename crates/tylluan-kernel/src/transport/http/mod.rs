@@ -632,7 +632,19 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         broadcast_tx: broadcast_tx.clone(),
         download_progress_tx: download_tx,
         sessions: Arc::new(RwLock::new({
-            let mut s = silva.load_sessions().await.unwrap_or_default();
+            // D5009b (H-HER-H-01): `load_sessions` hace `blocking_lock()` sobre la conexión
+            // SQLite compartida; si otro task del arranque la tiene, el arranque se queda ahí
+            // (hueco de 88-95 s medido). Un `timeout` NO lo arregla: `spawn_blocking` no es
+            // cancelable y la tarea quedaría huérfana compitiendo por la conexión. La variante
+            // `load_sessions_if_free` no espera NUNCA (un intento de candado), y las sesiones
+            // MCP son una caché de 24 h: mejor arrancar sin ellas que no abrir el puerto.
+            let mut s = match silva.load_sessions_if_free().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("🌲 SilvaDB: {e}; arranco sin las sesiones persistidas");
+                    Default::default()
+                }
+            };
             let now_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
             // Keep sessions for 24 hours of inactivity (sovereign persistence)
             s.retain(|_, sess| now_unix - sess.last_active_unix < 86400);
