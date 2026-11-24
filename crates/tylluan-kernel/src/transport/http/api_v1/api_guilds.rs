@@ -314,6 +314,9 @@ mod c3_tests {
                 Some(AclAuthKind::PublicBypass),
                 Some(AclAuthKind::GuildToken),
                 Some(AclAuthKind::MasterTokenQuery),
+                // D225b: un token de agente NO es clase operador, asi que bash y
+                // filesystem siguen cerrados para el (C3 intacto).
+                Some(AclAuthKind::AgentToken),
                 None,
             ] {
                 assert!(
@@ -343,6 +346,10 @@ mod c3_tests {
                 Some(AclAuthKind::OAuthJwt),
                 Some(AclAuthKind::PublicBypass),
                 Some(AclAuthKind::GuildToken),
+                // D225b: y en el resto de gremios el token de agente entra
+                // (clase agente, como guild/OAuth): si no, D225 autenticaria
+                // para nada.
+                Some(AclAuthKind::AgentToken),
                 None,
             ] {
                 assert!(
