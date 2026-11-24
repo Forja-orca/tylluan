@@ -123,7 +123,7 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/transport/http/auth.rs",
-          "line": 258,
+          "line": 303,
           "symbol": "operator_class_required",
           "label": "operator vs agent class"
         }
@@ -203,7 +203,7 @@
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/transport/http/api_v1/api_coloquio.rs",
-          "line": 266,
+          "line": 269,
           "symbol": "coloquio_list_channels",
           "label": "coloquio_list_channels"
         }
