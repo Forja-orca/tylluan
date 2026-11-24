@@ -3337,14 +3337,8 @@ impl TylluanConfig {
             // D206 (P1 del TL): un token existente con permisos de más se AVISA, no se rota
             // (rotarlo dejaría fuera a los clientes ya configurados). En Windows no hay
             // permisos POSIX: la ACL heredada del directorio es la que manda y esto es no-op.
-            if let Some(modo) = permissions_too_open(token_path) {
-                warn!(
-                    "⚠️ {} tiene permisos {:o}: el token maestro es legible por otros usuarios. \
-                     Arréglalo con `chmod 600 {}` (no se rota nada)",
-                    token_path.display(),
-                    modo,
-                    token_path.display()
-                );
+            if let Some(aviso) = secret_file_exposure(token_path) {
+                warn!("⚠️ {aviso}");
             }
             let content = std::fs::read_to_string(token_path)?;
             let trimmed = content.trim();
@@ -3397,9 +3391,144 @@ pub fn write_secret_file(path: &Path, contents: &str) -> std::io::Result<()> {
         f.write_all(contents.as_bytes())?;
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        // Y-01 (P0, T5222): la ACL heredada del directorio deja el token legible **y
+        // sobrescribible** por «Usuarios autentificados». Se corta la herencia SOLO al crear el
+        // fichero: un token que ya existe no se toca (ni se rota) por decision de Jose.
+        let nuevo = !path.exists();
+        std::fs::write(path, contents)?;
+        if nuevo {
+            match harden_secret_windows(path) {
+                Ok(msg) => info!("ACL del fichero de secreto: {msg}"),
+                Err(e) => warn!(
+                    "No pude endurecer la ACL de {}: {e}. El fichero queda con la ACL heredada; \
+                     arreglalo con `icacls` (ver aviso del doctor)",
+                    path.display()
+                ),
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         std::fs::write(path, contents)
+    }
+}
+
+/// Y-01 (P0, T5222): esta DACL deja el fichero al alcance de otros usuarios?
+///
+/// **Puro y sin Windows delante**: se testea con SDDL reales (`(Get-Acl).Sddl`). Marca como
+/// abierta cualquier ACE de **permitir** para los grupos amplios de Windows:
+/// `AU` Usuarios autentificados, `BU` Usuarios, `WD` Todos, `GU` Invitados (y sus SIDs).
+///
+/// En la maquina del operador el token traia `(A;ID;0x1301bf;;;AU)` y `(A;ID;0x1200a9;;;BU)`:
+/// el primero es **MODIFY** — no solo lee, puede **sobrescribir** el maestro.
+pub fn sddl_is_too_open(sddl: &str) -> bool {
+    let Some(dacl) = sddl.split("D:").nth(1) else {
+        return true; // sin DACL legible = no podemos afirmar que este cerrado
+    };
+    [
+        ";;;AU)",
+        ";;;BU)",
+        ";;;WD)",
+        ";;;GU)",
+        ";;;S-1-5-11)",
+        ";;;S-1-5-32-545)",
+        ";;;S-1-1-0)",
+        ";;;S-1-5-32-546)",
+        // D5011c (Hermes T5237): TODAS LAS APLICACIONES (AppContainer) y SID de capacidad.
+        ";;;AC)",
+        ";;;S-1-15-",
+    ]
+    .iter()
+    .any(|marca| dacl.contains(marca))
+}
+
+/// D5011b (T5230): literal de PowerShell entre comillas simples, con las comillas internas
+/// duplicadas (`'` -> `''`). Sin esto, una ruta con `'` rompe el comando y permite inyectar
+/// texto en el script (por ejemplo un `TYLLUAN_DATA_DIR` malicioso).
+pub fn ps_single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
+/// Y-01: SDDL del fichero via `Get-Acl` (independiente del idioma del sistema, que si rompe el
+/// parseo de nombres de grupo de `icacls`).
+#[cfg(windows)]
+fn sddl_of(path: &Path) -> Option<String> {
+    let script = format!("(Get-Acl -LiteralPath {}).Sddl", ps_single_quote(&path.to_string_lossy()));
+    let salida = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .output()
+        .ok()?;
+    if !salida.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&salida.stdout).trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
+}
+
+/// Y-01: corta la herencia y deja el fichero para el usuario que lo crea y SYSTEM.
+///
+/// `icacls` es de Windows y vive en `System32` (ruta absoluta: el `PATH` no decide que binario
+/// ejecuta una operacion de seguridad). `SYSTEM:F` sin el prefijo `NT AUTHORITY\`: con el
+/// prefijo largo `icacls` responde «procesado correctamente» y **no aplica el grant** (medido).
+#[cfg(windows)]
+fn harden_secret_windows(path: &Path) -> std::io::Result<String> {
+    let usuario = match (std::env::var("USERDOMAIN"), std::env::var("USERNAME")) {
+        (Ok(d), Ok(u)) if !d.trim().is_empty() && !u.trim().is_empty() => format!("{d}\\{u}:F"),
+        (_, Ok(u)) if !u.trim().is_empty() => format!("{u}:F"),
+        _ => return Ok("no pude resolver el usuario actual: no endurezco".to_string()),
+    };
+    let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+        .arg(path)
+        .args(["/inheritance:r", "/grant:r"])
+        .arg(&usuario)
+        .arg("SYSTEM:F")
+        .output()?;
+    if !salida.status.success() {
+        return Ok(format!(
+            "icacls devolvio {}: el fichero queda con la ACL heredada",
+            salida.status
+        ));
+    }
+    Ok(format!("solo {usuario} y SYSTEM, sin herencia"))
+}
+
+/// Y-01/D206: mensaje de exposicion del secreto, o `None` si esta bien.
+///
+/// Existe para que el aviso diga la verdad en cada plataforma: en Unix habla de modo octal
+/// (`chmod 600`), en Windows de ACL (`icacls`), porque alli no hay modo que imprimir.
+pub fn secret_file_exposure(path: &Path) -> Option<String> {
+    #[cfg(unix)]
+    {
+        permissions_too_open(path).map(|modo| {
+            format!(
+                "{} tiene permisos {modo:o}: el token maestro es legible por otros usuarios. \
+                 Arreglalo con `chmod 600 {}` (no se rota nada)",
+                path.display(),
+                path.display()
+            )
+        })
+    }
+    #[cfg(windows)]
+    {
+        let sddl = sddl_of(path)?;
+        if !sddl_is_too_open(&sddl) {
+            return None;
+        }
+        Some(format!(
+            "{} tiene una ACL abierta ({}): «Usuarios autentificados» puede LEERLO y SOBRESCRIBIRLO. \
+             Arreglalo con: icacls \"{}\" /inheritance:r /grant:r \"%USERDOMAIN%\\%USERNAME%:F\" \"SYSTEM:F\" (no se rota nada)",
+            path.display(),
+            sddl,
+            path.display()
+        ))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = path;
+        None
     }
 }
 
@@ -4916,3 +5045,151 @@ mod t138_reindex_config_tests {
             .map(|(_, v)| v);
         assert_eq!(base.as_deref(), Some("http://127.0.0.1:49000"));
     }
+
+/// Y-01 (P0, T5222): la exposicion del token en Windows.
+///
+/// Los dos SDDL de abajo son **reales**, capturados en la maquina del operador el 24-nov:
+/// uno de un fichero recien creado (ACL heredada) y otro tras `icacls /inheritance:r`.
+#[cfg(test)]
+mod y01_tests {
+    use super::*;
+
+    const SDDL_HEREDADO: &str = concat!(
+        "O:S-1-5-21-2358370107-639506486-1284138689-1001",
+        "G:S-1-5-21-2358370107-639506486-1284138689-1001",
+        "D:(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1301bf;;;AU)(A;ID;0x1200a9;;;BU)"
+    );
+
+    const SDDL_ENDURE_CIDO: &str = concat!(
+        "O:S-1-5-21-2358370107-639506486-1284138689-1001",
+        "G:S-1-5-21-2358370107-639506486-1284138689-1001",
+        "D:PAI(A;;FA;;;SY)(A;;FA;;;S-1-5-21-2358370107-639506486-1284138689-1001)"
+    );
+
+    #[test]
+    fn y01_la_acl_heredada_es_abierta() {
+        assert!(
+            sddl_is_too_open(SDDL_HEREDADO),
+            "AU/BU en la DACL = cualquiera con sesion puede leer y sobrescribir"
+        );
+    }
+
+    #[test]
+    fn y01_la_acl_endurecida_no_es_abierta() {
+        assert!(
+            !sddl_is_too_open(SDDL_ENDURE_CIDO),
+            "solo SYSTEM y el usuario: no debe avisar"
+        );
+    }
+
+    #[test]
+    fn y01_todas_las_aplicaciones_y_capacidades_son_abiertas() {
+        // D5011c: SDDL sintetico pero con la forma exacta de Windows. AC = ALL APPLICATION PACKAGES.
+        assert!(sddl_is_too_open("D:PAI(A;;FA;;;SY)(A;;0x1200a9;;;AC)"));
+        assert!(sddl_is_too_open(
+            "D:PAI(A;;FA;;;SY)(A;;0x1200a9;;;S-1-15-3-1024-1065365936-1281604716)"
+        ));
+    }
+
+    #[test]
+    fn y01_sin_dacl_no_se_da_por_buena() {
+        assert!(sddl_is_too_open("O:S-1-5-21-1G:S-1-5-21-1"));
+        assert!(sddl_is_too_open(""));
+    }
+
+    /// Integracion real (solo Windows): un fichero nuevo queda con DACL cerrada.
+    #[test]
+    fn y01_endurece_lo_que_crea() {
+        // Misma cuenta de tests en Linux y en Windows (el gate de recuentos lo exige):
+        // el test existe siempre y solo su cuerpo es de Windows.
+        #[cfg(windows)]
+        y01_endurece_cuerpo();
+    }
+
+    #[cfg(windows)]
+    fn y01_endurece_cuerpo() {
+        // D5011c (TL): el test anterior creaba el fichero en una carpeta temporal cuya ACL ya era
+        // cerrada, asi que daba igual cortar o no la herencia (la mutacion /inheritance:r ->
+        // /inheritance:e sobrevivia). Aqui la carpeta lleva una ACE HEREDABLE abierta para
+        // BUILTIN\Usuarios (S-1-5-32-545), que es lo que tiene la raiz de E: hoy.
+        let dir = std::env::temp_dir().join("tylluan_y01_endurece_abierta");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("crear carpeta de prueba");
+        let concedido = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(&dir)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(concedido.status.success(), "no pude abrir la carpeta de prueba");
+
+        // CONTROL: un fichero normal creado dentro hereda la ACE abierta. Si esto no es "abierto"
+        // el escenario no representa el problema y el test no probaria nada.
+        let normal = dir.join("normal.txt");
+        std::fs::write(&normal, "x").expect("escribir fichero normal");
+        let sddl_normal = sddl_of(&normal).expect("Get-Acl funciona en esta maquina");
+        assert!(
+            sddl_is_too_open(&sddl_normal),
+            "control: un fichero normal debe heredar la ACE abierta, SDDL: {sddl_normal}"
+        );
+
+        // EL SECRETO, en la misma carpeta, debe quedar cerrado.
+        let p = dir.join("token_nuevo.txt");
+        write_secret_file(&p, "token-de-prueba").expect("escribir secreto");
+        let sddl = sddl_of(&p).expect("Get-Acl funciona en esta maquina");
+        assert!(
+            !sddl_is_too_open(&sddl),
+            "el secreto debe quedar cerrado aunque la carpeta herede una ACE abierta, SDDL: {sddl}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// D5011b (T5230): una ruta con `'` o `;` no puede convertirse en codigo de PowerShell.
+#[cfg(test)]
+mod d5011b_tests {
+    use super::*;
+
+    #[test]
+    fn d5011b_las_comillas_simples_se_duplican() {
+        let malo = "O'Brien; Remove-Item C:/x -Recurse";
+        let citado = ps_single_quote(malo);
+        assert!(citado.starts_with('\'') && citado.ends_with('\''), "{citado}");
+        let dentro = &citado[1..citado.len() - 1];
+        let mut it = dentro.chars().peekable();
+        while let Some(c) = it.next() {
+            if c == '\'' {
+                assert_eq!(it.next(), Some('\''), "comilla sin duplicar en {dentro:?}");
+            }
+        }
+        assert!(dentro.contains("O''Brien"), "{dentro}");
+    }
+
+    #[test]
+    fn d5011b_una_ruta_normal_no_cambia() {
+        assert_eq!(ps_single_quote("E:/tylluan/data"), "'E:/tylluan/data'");
+        assert_eq!(ps_single_quote(""), "''");
+    }
+
+    /// Prueba real (solo Windows): PowerShell devuelve el literal, no lo ejecuta.
+    #[test]
+    fn d5011b_powershell_no_ejecuta_lo_que_hay_en_la_ruta() {
+        #[cfg(windows)]
+        d5011b_powershell_cuerpo();
+    }
+
+    #[cfg(windows)]
+    fn d5011b_powershell_cuerpo() {
+        let malo = "a'; Write-Output PWNED-SI-SE-EJECUTA; $x = 'b";
+        let script = format!("Write-Output {}", ps_single_quote(malo));
+        let salida = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .expect("powershell disponible");
+        let txt = String::from_utf8_lossy(&salida.stdout);
+        assert_eq!(
+            txt.trim(),
+            malo,
+            "PowerShell debe tratar la ruta como DATO; si ejecuto algo, esto no cuadra"
+        );
+    }
+}
