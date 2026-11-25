@@ -3506,6 +3506,84 @@ fn harden_secret_windows(path: &Path) -> std::io::Result<String> {
     Ok(format!("solo {usuario} y SYSTEM, sin herencia"))
 }
 
+/// D5012 / H-HER-AB-05 (P0, T5266): crea el DATA_DIR con ACL cerrada **y heredable**.
+///
+/// Por que: el directorio de datos se creaba con `create_dir_all`, que arrastra la ACL del padre.
+/// En la maquina del operador la raiz de `E:` concede lectura a `BUILTIN\Usuarios` y escritura a
+/// `Usuarios autentificados`, asi que **las 23 bases que nacen dentro** (`silva.db`, `mailbox.db`,
+/// `episodes.db`, `jobs.db`...) salian abiertas. Y-01 y AH-01 cerraron ficheros concretos; esto
+/// cierra la carpeta, que es lo que hace que lo nuevo de dentro nazca cerrado sin tocarlo uno a uno.
+///
+/// **Solo actua si el directorio NO existia** (decision de Jose, T5266): un DATA_DIR con datos ya
+/// creados no se toca — ni se reescriben ACLs ni se rota nada. Nunca falla el arranque: avisa.
+pub fn ensure_private_data_dir(path: &Path) -> std::io::Result<()> {
+    let nuevo = !path.exists();
+    std::fs::create_dir_all(path)?;
+    if !nuevo {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    {
+        match harden_dir_windows(path) {
+            Ok(msg) => info!("ACL del DATA_DIR: {msg}"),
+            Err(e) => warn!(
+                "No pude endurecer la ACL del DATA_DIR {}: {e}. Las bases que se creen dentro \
+                 heredaran la ACL del padre; arreglalo con `icacls` (ver aviso del doctor)",
+                path.display()
+            ),
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)) {
+            warn!("No pude poner 0700 en {}: {e}", path.display());
+        }
+    }
+    Ok(())
+}
+
+/// D5012: corta la herencia del directorio y concede al usuario actual y a SYSTEM con **(OI)(CI)**.
+///
+/// El `(OI)(CI)` es el punto del hallazgo: sin el, el directorio queda cerrado pero las bases que
+/// nazcan dentro **no heredan nada del padre** y acaban con el DACL por defecto del token. Se
+/// comprueba despues con [`sddl_of`] + [`sddl_is_too_open`] — las mismas comprobaciones del doctor —
+/// para que el aviso no declare cerrado un directorio que `icacls` no cerró.
+///
+/// La ruta va como **argumento** de `icacls` (argv), no interpolada en un shell, asi que aqui no
+/// hace falta [`ps_single_quote`]: esa funcion protege el `-Command` de PowerShell de [`sddl_of`].
+/// `SYSTEM:F` sin prefijo `NT AUTHORITY\` por lo medido en Y-01 (con prefijo dice «procesado
+/// correctamente» y no aplica el grant).
+#[cfg(windows)]
+fn harden_dir_windows(path: &Path) -> std::io::Result<String> {
+    let usuario = match (std::env::var("USERDOMAIN"), std::env::var("USERNAME")) {
+        (Ok(d), Ok(u)) if !d.trim().is_empty() && !u.trim().is_empty() => format!("{d}\\{u}"),
+        (_, Ok(u)) if !u.trim().is_empty() => u,
+        _ => return Ok("no pude resolver el usuario actual: no endurezco".to_string()),
+    };
+    let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+        .arg(path)
+        .args(["/inheritance:r", "/grant:r"])
+        .arg(format!("{usuario}:(OI)(CI)F"))
+        .arg("SYSTEM:(OI)(CI)F")
+        .output()?;
+    if !salida.status.success() {
+        return Ok(format!(
+            "icacls devolvio {}: el directorio queda con la ACL heredada",
+            salida.status
+        ));
+    }
+    match sddl_of(path) {
+        Some(sddl) if sddl_is_too_open(&sddl) => {
+            Ok(format!("AVISO: icacls devolvio ok pero la DACL sigue abierta: {sddl}"))
+        }
+        Some(_) => Ok(format!(
+            "solo {usuario} y SYSTEM, con (OI)(CI), sin herencia del padre"
+        )),
+        None => Ok("icacls devolvio ok; no pude leer la ACL para confirmarlo".to_string()),
+    }
+}
+
 /// Y-01/D206: mensaje de exposicion del secreto, o `None` si esta bien.
 ///
 /// Existe para que el aviso diga la verdad en cada plataforma: en Unix habla de modo octal
@@ -5237,5 +5315,102 @@ mod d5011b_tests {
             malo,
             "PowerShell debe tratar la ruta como DATO; si ejecuto algo, esto no cuadra"
         );
+    }
+}
+
+/// D5012 / H-HER-AB-05 (P0, T5266): el DATA_DIR **nuevo** nace cerrado y **sus hijos heredan el
+/// cierre** (`(OI)(CI)`), y uno que ya existe **no se toca**.
+///
+/// El escenario **abre a proposito** el padre con la ACE heredable que tiene la raiz de `E:` hoy
+/// (`*S-1-5-32-545:(OI)(CI)R`, BUILTIN\Usuarios por SID para no depender del idioma). En `%TEMP%`
+/// a secas no serviria: su ACL ya es cerrada, el test pasaria sin probar nada y las mutaciones
+/// sobrevivia — el error exacto que se corrigio en `y01_endurece_lo_que_crea` (D5011c).
+#[cfg(test)]
+mod d5012_tests {
+    use super::*;
+
+    /// Abre un directorio de prueba con la ACE heredable de BUILTIN\Usuarios (lo que hereda `E:`).
+    #[cfg(windows)]
+    fn abrir_padre(dir: &Path) {
+        let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(dir)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(salida.status.success(), "no pude abrir el directorio de prueba");
+    }
+
+    #[test]
+    fn d5012_un_dir_nuevo_cierra_y_sus_hijos_heredan() {
+        // El test existe siempre; solo el cuerpo es de Windows (paridad de recuentos, gate CI).
+        #[cfg(windows)]
+        d5012_cuerpo_nuevo();
+    }
+
+    #[cfg(windows)]
+    fn d5012_cuerpo_nuevo() {
+        let base = std::env::temp_dir().join(format!("tylluan_d5012_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        abrir_padre(&base);
+
+        // CONTROL: un directorio normal creado dentro hereda lo abierto. Si esto no estuviera
+        // abierto el escenario no representa el problema y el test no probaria nada.
+        let normal = base.join("normal");
+        std::fs::create_dir_all(&normal).expect("crear dir normal");
+        let sddl_normal = sddl_of(&normal).expect("Get-Acl funciona en esta maquina");
+        assert!(
+            sddl_is_too_open(&sddl_normal),
+            "control: un dir normal debe heredar la ACE abierta, SDDL: {sddl_normal}"
+        );
+
+        // EL DATA_DIR, creado por la funcion, debe quedar cerrado pese al padre abierto.
+        let dir = base.join("data");
+        ensure_private_data_dir(&dir).expect("crear el DATA_DIR");
+        let sddl_dir = sddl_of(&dir).expect("Get-Acl del DATA_DIR");
+        assert!(
+            !sddl_is_too_open(&sddl_dir),
+            "el DATA_DIR nuevo debe quedar cerrado aunque el padre este abierto, SDDL: {sddl_dir}"
+        );
+        // Y el cierre tiene que ser HEREDABLE: sin (OI)(CI) las bases de dentro no lo heredan.
+        assert!(
+            sddl_dir.contains("OICI"),
+            "la DACL del DATA_DIR debe llevar (OI)(CI) para que las bases hereden el cierre: {sddl_dir}"
+        );
+
+        // Esto es H-HER-AB-05 en lo que es: una base creada DENTRO nace cerrada.
+        let db = dir.join("silva.db");
+        std::fs::write(&db, "x").expect("crear la base");
+        let sddl_db = sddl_of(&db).expect("Get-Acl de la base");
+        assert!(
+            !sddl_is_too_open(&sddl_db),
+            "la base creada dentro debe heredar el cierre, SDDL: {sddl_db}"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn d5012_un_dir_existente_no_se_toca() {
+        // Decis de Jose (T5266): nada de reescribir ACLs de lo que ya existe.
+        #[cfg(windows)]
+        d5012_cuerpo_existente();
+    }
+
+    #[cfg(windows)]
+    fn d5012_cuerpo_existente() {
+        let base = std::env::temp_dir().join(format!("tylluan_d5012_b_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        abrir_padre(&base);
+        let antes = sddl_of(&base).expect("Get-Acl antes");
+        assert!(
+            sddl_is_too_open(&antes),
+            "precondicion: el dir existente debe estar abierto: {antes}"
+        );
+        ensure_private_data_dir(&base).expect("no debe fallar con un dir existente");
+        let despues = sddl_of(&base).expect("Get-Acl despues");
+        assert_eq!(antes, despues, "un DATA_DIR que ya existia no cambia de ACL");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

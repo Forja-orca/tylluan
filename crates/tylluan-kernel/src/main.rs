@@ -376,7 +376,12 @@ fn anti_orphan_protection_and_gc(args: &[String], effective_port: Option<u16>) {
         .and_then(|p| p.parse::<u16>().ok());
     let data_dir = resolve_pid_data_dir(port_override.or(effective_port));
     let pid_file = data_dir.join("tylluan-nexus.pid");
-    let _ = std::fs::create_dir_all(&data_dir);
+    // D5012 (H-HER-AB-05, T5266): este es el PRIMER sitio que crea el DATA_DIR al arrancar, asi que
+    // el cierre va aqui (mas abajo el directorio ya existiria y no se toca). Si es nuevo nace
+    // cerrado y heredable: las bases que se crean dentro heredan el cierre, no la ACL del padre.
+    if let Err(e) = tylluan_kernel::config::ensure_private_data_dir(&data_dir) {
+        tracing::warn!("DATA_DIR {}: {e}", data_dir.display());
+    }
 
     // S1/S2: decide what to do with any pre-existing PID file BEFORE writing.
     let pid_file_for_decide = pid_file.clone();
@@ -669,7 +674,12 @@ async fn main() -> anyhow::Result<()> {
     }
     let db_path = Path::new(&config.memory.db_path);
     let data_dir = db_path.parent().unwrap_or_else(|| Path::new("data"));
-    std::fs::create_dir_all(data_dir).ok();
+    // D5012 (H-HER-AB-05, T5266): si el DATA_DIR es nuevo nace cerrado y heredable, para que las
+    // bases que se abren justo debajo (jobs.db, identity.key, silva.db...) hereden el cierre.
+    // Si ya existia no se toca: Jose no quiere permisos reescritos sin orden (T5266).
+    if let Err(e) = tylluan_kernel::config::ensure_private_data_dir(data_dir) {
+        tracing::warn!("DATA_DIR {}: {e}", data_dir.display());
+    }
 
     // T-DSH-169: si la cadena de auditoria quedo en una ubicacion heredada
     // (./data/audit.db o crates/tylluan-kernel/data/audit.db), copiarla a
