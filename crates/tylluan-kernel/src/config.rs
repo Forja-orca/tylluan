@@ -5327,6 +5327,8 @@ mod d5011b_tests {
 /// sobrevivia — el error exacto que se corrigio en `y01_endurece_lo_que_crea` (D5011c).
 #[cfg(test)]
 mod d5012_tests {
+    // Solo se usa en los cuerpos #[cfg(windows)]: en Linux sobraria y CI (-Dwarnings) lo rechaza.
+    #[cfg(windows)]
     use super::*;
 
     /// Abre un directorio de prueba con la ACE heredable de BUILTIN\Usuarios (lo que hereda `E:`).
