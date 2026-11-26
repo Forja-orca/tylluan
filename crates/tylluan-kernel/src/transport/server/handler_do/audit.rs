@@ -1012,6 +1012,10 @@ mod tests {
     /// endpoint test share `AUDIT_ENV_TEST_LOCK` so they cannot race.
     #[test]
     fn audit_store_seam_write_and_read_land_on_same_file() {
+        // D5029 (`TEST-ENV-LOCK-SISTEMICO`): cerradura GLOBAL de entorno del crate. La
+        // cerradura privada de este modulo (o la ausencia de ella) no excluye a los demas
+        // usuarios del seam de entorno: confusion, outputs, audit/task-context/dispatch db.
+        let _cerradura_global = crate::test_env::serial();
         use super::{audit_db_path, log_audit_entry, AUDIT_ENV_TEST_LOCK};
         let _env_guard = AUDIT_ENV_TEST_LOCK
             .lock()
@@ -1072,6 +1076,10 @@ mod tests {
     /// `TYLLUAN_AUDIT_DB` a un directorio (SQLite no puede abrirlo como DB).
     #[test]
     fn audit_or_warn_preserves_call_site_value_when_audit_fails() {
+        // D5029 (`TEST-ENV-LOCK-SISTEMICO`): cerradura GLOBAL de entorno del crate. La
+        // cerradura privada de este modulo (o la ausencia de ella) no excluye a los demas
+        // usuarios del seam de entorno: confusion, outputs, audit/task-context/dispatch db.
+        let _cerradura_global = crate::test_env::serial();
         use super::AUDIT_ENV_TEST_LOCK;
         use super::audit_or_warn;
         let _env_guard = AUDIT_ENV_TEST_LOCK

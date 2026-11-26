@@ -462,17 +462,23 @@ mod tests {
     /// both directions: the writer (`record_dispatch_pair`) and the reader
     /// (`tallies`) must land on the same file when `TYLLUAN_CONFUSION_DB` is
     /// set, and the resolver's unset default is byte-identical to the
-    /// historical hardcoded path. Env is process-global — a static guard
-    /// panics in development if a second test in this binary ever races it.
+    /// historical hardcoded path.
+    ///
+    /// D5027 — the guard is the CRATE-WIDE env lock (`crate::test_env::serial`,
+    /// introduced in D4984), not a private one. A private guard only excluded
+    /// tests that used the same private guard: `security::data_dir_follows_env_tests`
+    /// holds the shared lock (through `con_data_dir`/`sin_data_dir`) and calls
+    /// `remove_var("TYLLUAN_CONFUSION_DB")` from inside it, so a private flag here
+    /// let that test clear the seam's env mid-flight. Measured: the seam came back
+    /// with `{"agrees":0,"total":0}` in 3/3 runs of `cargo test --lib confusion`,
+    /// on `7b632444` with no patches applied. `quien_muta_el_seam_de_confusion_usa_la_cerradura_global`
+    /// below keeps that discipline pinned deterministically.
     /// SAFETY (set_var): edition-2024 unsafe op, guarded single-user section.
     #[test]
     fn confusion_seam_write_and_read_land_on_same_file() {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static SEAM_TEST_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
-        assert!(
-            !SEAM_TEST_IN_FLIGHT.swap(true, Ordering::SeqCst),
-            "a second test in this binary is using TYLLUAN_CONFUSION_DB concurrently — env is process-global"
-        );
+        // Cerradura global de entorno: se toma ANTES de tocar la variable y se sostiene
+        // hasta el final del test (el MutexGuard vive hasta el cierre del bloque).
+        let _guard_env = crate::test_env::serial();
 
         let db = std::env::temp_dir().join(format!("confusion_env_rt_{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db);
@@ -499,6 +505,84 @@ mod tests {
 
         unsafe { std::env::remove_var("TYLLUAN_CONFUSION_DB") };
         let _ = std::fs::remove_file(&db);
-        SEAM_TEST_IN_FLIGHT.store(false, Ordering::SeqCst);
+    }
+
+    /// D5027: la disciplina de la cerradura, fijada de forma DETERMINISTA (sin depender de que
+    /// salga el scheduling malo). El gate tiene dos niveles:
+    ///
+    /// 1. a nivel de fichero: todo fichero del crate que muta `TYLLUAN_CONFUSION_DB` debe
+    ///    contener la cerradura global de entorno de D4984 (`test_env`, en `lib.rs`);
+    /// 2. a nivel de funcion: el cuerpo del test del seam debe tomarla DENTRO de su propio
+    ///    bloque. Mencionarla en otra funcion del mismo fichero no excluye al
+    ///    `set_var`/`remove_var` del seam.
+    ///
+    /// Las agujas se construyen por concatenacion a proposito: escrita la aguja literal, el
+    /// fichero que se analiza (este) la contendria siempre y el gate quedaria vacio. Medido con
+    /// mutaciones: con la aguja literal, quitar la cerradura del seam dejaba este test VERDE.
+    #[test]
+    fn quien_muta_el_seam_de_confusion_usa_la_cerradura_global() {
+        let cierra = ["test_env::", "serial()"].concat();
+        let pone_seam = ["set_var(\"TYLLUAN_CONFUSION_DB\""].concat();
+        let quita_seam = ["remove_var(\"TYLLUAN_CONFUSION_DB\""].concat();
+        let fn_seam = ["fn ", "confusion_seam_write_and_read_land_on_same_file"].concat();
+
+        let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        fn recorrer(dir: &std::path::Path, salida: &mut Vec<std::path::PathBuf>) {
+            if let Ok(entrada) = std::fs::read_dir(dir) {
+                for e in entrada.flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        recorrer(&p, salida);
+                    } else if p.extension().map(|x| x == "rs").unwrap_or(false) {
+                        salida.push(p);
+                    }
+                }
+            }
+        }
+        let mut ficheros = Vec::new();
+        recorrer(&raiz, &mut ficheros);
+        assert!(
+            !ficheros.is_empty(),
+            "no hay fuentes bajo {}: el gate no puede juzgar nada",
+            raiz.display()
+        );
+
+        let mut mutantes = 0usize;
+        let mut sin_cerradura: Vec<String> = Vec::new();
+        for f in &ficheros {
+            let texto = match std::fs::read_to_string(f) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            if !texto.contains(&pone_seam) && !texto.contains(&quita_seam) {
+                continue;
+            }
+            mutantes += 1;
+            if !texto.contains(&cierra) {
+                sin_cerradura.push(format!("{}: el fichero muta la variable sin cerradura global", f.display()));
+                continue;
+            }
+            if let Some(ini) = texto.find(&fn_seam) {
+                let despues = ini + fn_seam.len();
+                let fin = texto[despues..]
+                    .find("\n    fn ")
+                    .map(|d| despues + d)
+                    .unwrap_or_else(|| texto.len());
+                if !texto[ini..fin].contains(&cierra) {
+                    sin_cerradura.push(format!(
+                        "{}: el cuerpo del test del seam no toma la cerradura global (moverla a otra funcion no vale)",
+                        f.display()
+                    ));
+                }
+            }
+        }
+        assert!(
+            mutantes > 0,
+            "ningun fichero muta TYLLUAN_CONFUSION_DB: el seam quedo sin cobertura y este gate perdio sus dientes"
+        );
+        assert!(
+            sin_cerradura.is_empty(),
+            "tests que mutan TYLLUAN_CONFUSION_DB sin la cerradura global de entorno (D4984): {sin_cerradura:?}"
+        );
     }
 }

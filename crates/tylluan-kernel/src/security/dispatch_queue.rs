@@ -856,6 +856,10 @@ mod tests {
 
     #[test]
     fn dispatch_db_path_seam_unset_is_default_and_set_is_honored() {
+        // D5029 (`TEST-ENV-LOCK-SISTEMICO`): cerradura GLOBAL de entorno del crate. La
+        // cerradura privada de este modulo (o la ausencia de ella) no excluye a los demas
+        // usuarios del seam de entorno: confusion, outputs, audit/task-context/dispatch db.
+        let _cerradura_global = crate::test_env::serial();
         // Seam contract pinned in both directions (audit/confusion
         // precedent): unset → historical default; set → the env path wins.
         // Env is process-global — a static guard panics in development if a

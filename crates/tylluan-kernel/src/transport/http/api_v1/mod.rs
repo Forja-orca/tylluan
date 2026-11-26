@@ -2160,6 +2160,10 @@ mod d53_audit_read_path_tests {
     /// `handler_do::audit` (env es global al proceso).
     #[test]
     fn audit_read_path_uses_env_seam() {
+        // D5029 (`TEST-ENV-LOCK-SISTEMICO`): cerradura GLOBAL de entorno del crate. La
+        // cerradura privada de este modulo (o la ausencia de ella) no excluye a los demas
+        // usuarios del seam de entorno: confusion, outputs, audit/task-context/dispatch db.
+        let _cerradura_global = crate::test_env::serial();
         let _guard = crate::transport::server::handler_do::audit::AUDIT_ENV_TEST_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());

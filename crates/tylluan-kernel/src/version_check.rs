@@ -190,9 +190,12 @@ mod tests {
     #[test]
     fn marker_roundtrip_then_missing_is_honest_unknown() {
         // TYLLUAN_LLAMA_CACHE_DIR override keeps the test hermetic (no $HOME writes).
-        // Single test (not two) because env vars are process-global and the Rust
-        // test harness runs tests in parallel, so two tests mutating the same
-        // var would race. set_var/remove_var are unsafe in edition 2024.
+        // D5028: el comentario explicaba por que hay UN solo test (dos mutando la misma
+        // variable se pisarian), pero no habia exclusion real con el resto del crate.
+        // Ahora se toma la cerradura global de entorno (D4984) y el motivo "solo puede
+        // haber un test" deja de ser una condicion implicita.
+        // SAFETY (set_var/remove_var): edition-2024 unsafe ops, seccion corta.
+        let _guard_env = crate::test_env::serial();
         let tmp = std::env::temp_dir().join(format!("tylluan_vc_test_{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let path = tmp.join(LLAMA_MARKER_FILE);

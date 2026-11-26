@@ -664,6 +664,14 @@ mod tests {
         // single-user section — the lib test harness runs one test at a time
         // and no other test in this binary touches this variable (same
         // pattern as dispatch_queue.rs and confusion.rs).
+        // D5028: esa frase describe el presente, no una exclusion. Medido hoy
+        // (`D:/Temp/cadena_dos_seams.py`): `outputs_root()` solo se llama desde
+        // produccion y desde este seam, asi que no hay carrera abierta; pero nada
+        // impediria que manana otro test lea la ruta con la variable puesta. Con la
+        // cerradura global del crate (D4984) queda excluido por construccion, y el gate
+        // `mutaciones_de_entorno_sin_cerradura_no_crecen` obliga a declarar cualquier
+        // mutacion nueva.
+        let _guard_env = crate::test_env::serial();
         let old = std::env::var("TYLLUAN_OUTPUTS_DIR").ok();
         unsafe { std::env::set_var("TYLLUAN_OUTPUTS_DIR", "/tmp/tylluan_outputs_seam_probe") };
         assert_eq!(outputs_root(), PathBuf::from("/tmp/tylluan_outputs_seam_probe"));

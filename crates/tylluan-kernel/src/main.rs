@@ -2638,6 +2638,25 @@ fn fastembed_model_cached(model_name: &str) -> bool {
 
 
 #[cfg(test)]
+/// D5028 (`TEST-ENV-LOCK-SISTEMICO`): UNA cerradura para los tests de este binario que
+/// mutan entorno. `d166b_fastembed_model_cached_sees_acoplado_models_dir` y
+/// `t3853_empty_models_dir_does_not_count_as_cached` guardaban el valor previo de
+/// `TYLLUAN_MODELS_DIR` y `HF_HOME`, lo sobrescribian y lo restauraban sin
+/// excluyente alguno, dentro del mismo `mod anti_orphan_tests` y del mismo
+/// binario de test (que corre en paralelo): cada uno podia ver el `models/` del
+/// otro. La cerradura privada de `onnx_probe_tests` (`ENV_LOCK`, main.rs:2856)
+/// es de ese modulo y no alcanza desde aqui, y la del lib
+/// (`crate::test_env::serial`) es de otro crate y de otro proceso de test.
+mod env_lock {
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    pub(crate) fn serial() -> MutexGuard<'static, ()> {
+        static L: OnceLock<Mutex<()>> = OnceLock::new();
+        L.get_or_init(|| Mutex::new(())).lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+#[cfg(test)]
 mod anti_orphan_tests {
     use super::*;
 
@@ -2777,6 +2796,9 @@ mod anti_orphan_tests {
 
     #[test]
     fn d166b_fastembed_model_cached_sees_acoplado_models_dir() {
+        // D5028: la seccion que muta TYLLUAN_MODELS_DIR/HF_HOME va bajo la cerradura
+        // del binario; sin ella este test y `t3853_...` se pisan el valor del entorno.
+        let _guard_env = crate::env_lock::serial();
         use std::env;
         let tmp = tempfile::tempdir().unwrap();
         let models_dir = tmp.path().join("models");
@@ -2816,6 +2838,8 @@ mod anti_orphan_tests {
         // T3853: an empty `models--*` directory (no snapshot/onnx) must NOT
         // report as cached. Mutation: revert has_onnx_content to .exists()
         // -> this test fails.
+        // D5028: misma cerradura que `d166b_...` (comparten TYLLUAN_MODELS_DIR y HF_HOME).
+        let _guard_env = crate::env_lock::serial();
         use std::env;
         let tmp = tempfile::tempdir().unwrap();
         let models_dir = tmp.path().join("models");
