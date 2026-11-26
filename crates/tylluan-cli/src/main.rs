@@ -2465,8 +2465,11 @@ mod installer_flag_tests {
         // ejemplo verbatim (solo cambiado el puerto) y stdin cerrado: el kernel escucha y se
         // autocierra rc=0 ~1,3 s despues; con `["http","sse"]` sigue vivo 45 s. Mutación: volver
         // a poner "stdio" en el ejemplo hace caer este test.
-        const EJEMPLO: &str = include_str!("../../../tylluan.example.toml");
-        let linea = EJEMPLO
+        // Lectura en tiempo de ejecucion y no `include_str!`: el gate check_build_inputs exige que un
+        // include fuera del crate lo copie el Dockerfile, y la imagen no compila tests.
+        let ejemplo = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tylluan.example.toml"))
+            .expect("leer tylluan.example.toml de la raiz del repo");
+        let linea = ejemplo
             .lines()
             .find(|l| l.trim_start().starts_with("transport"))
             .expect("tylluan.example.toml debe declarar transport");
