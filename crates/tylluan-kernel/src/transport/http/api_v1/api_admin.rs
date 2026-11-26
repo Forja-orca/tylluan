@@ -808,6 +808,114 @@ fn protected_config_changes(
     changed
 }
 
+/// D5018 (b): lo que se sigue de que NO hubiera `tylluan.toml`, separado del handler para poder
+/// afirmarse en tests. Las dos salidas nacen del mismo hecho: el fichero se creó (hay que decirlo
+/// en la respuesta) y nace con ACL/herencia sin cerrar (hay que endurecerlo). Medido en la revisión
+/// del TL (turno 5287): sin aquí, las mutaciones `created: true` fijo y quitar el endurecido del
+/// fichero nuevo **sobrevivían** a los tests.
+#[derive(Debug, PartialEq, Eq)]
+struct ConfigWriteOutcome {
+    creado: bool,
+    endurecer: bool,
+}
+
+fn config_write_outcome(habia_config: bool) -> ConfigWriteOutcome {
+    ConfigWriteOutcome { creado: !habia_config, endurecer: !habia_config }
+}
+
+/// D5026: cómo está de abierto el config **antes** de escribirlo. `Some(true)` = demasiado abierto;
+/// `Some(false)` = cerrado; `None` = no pude leerlo (y entonces no adivino: dejo el comportamiento
+/// que hay hoy en `main`).
+///
+/// El lector de SDDL es local a propósito: `config::sddl_of` es privado y tocar su visibilidad choca
+/// con el parche D5013 v2, que reescribe esa misma función (colisión medida el 2026-11-26). Es la
+/// segunda copia de este lector en el crate — el detector SDDL compartido sigue siendo una decisión
+/// pendiente del TL.
+#[cfg(windows)]
+fn config_abierto_antes(path: &std::path::Path) -> Option<bool> {
+    let script = format!(
+        "(Get-Acl -LiteralPath {}).Sddl",
+        crate::config::ps_single_quote(&path.to_string_lossy())
+    );
+    let salida = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .output()
+        .ok()?;
+    if !salida.status.success() {
+        return None;
+    }
+    let texto = String::from_utf8_lossy(&salida.stdout).trim().to_string();
+    if texto.is_empty() {
+        return None;
+    }
+    Some(crate::config::sddl_is_too_open(&texto))
+}
+
+#[cfg(unix)]
+fn config_abierto_antes(path: &std::path::Path) -> Option<bool> {
+    use std::os::unix::fs::PermissionsExt;
+    let modo = fs::metadata(path).ok()?.permissions().mode() & 0o777;
+    Some(crate::config::mode_is_too_open(modo))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn config_abierto_antes(_path: &std::path::Path) -> Option<bool> {
+    None
+}
+
+/// D5018c: la secuencia completa «decidir → escribir → endurecer» del `tylluan.toml`, en un solo
+/// sitio y fuera del handler, para poder **ejercitarla** en tests sin montar un `HttpState`.
+///
+/// Por qué no bastaba el helper: la re-verificación del TL (turno 5292) sustituyó en el handler la
+/// línea `crate::config::harden_new_secret(&config_path);` por `let _ = &config_path;` y los 21
+/// tests de D5018/D5022 siguieron en verde — los tests afirmaban `config_write_outcome`, no que el
+/// handler llegara a endurecer. Aquí el endurecido vive dentro de la única ruta que escribe el
+/// fichero, y el handler necesita el [`ConfigWriteOutcome`] que devuelve para responder `created`,
+/// así que ya no tiene forma de escribir el config por otro camino.
+///
+/// Orden deliberado y medido (D5026): se escribe el temporal, se le baja el modo y se le corta la
+/// herencia de Windows **antes** del `rename`, y solo cuando toca. El `rename` conserva el modo
+/// (Unix) y la ACL (Windows) del origen, así que endurecer después dejaría una ventana con el
+/// fichero definitivo abierto — y endurecer siempre cambiaría la política de Y-01/AH-01 sobre un
+/// config preexistente que el operador dejó abierto a propósito.
+fn commit_config_write(
+    config_path: &std::path::Path,
+    habia_config: bool,
+    contenido: &str,
+) -> std::io::Result<ConfigWriteOutcome> {
+    let outcome = config_write_outcome(habia_config);
+    // D5026 (CFG-POST-REABRE-ACL-PREEXISTENTE, medido): `fs::rename` es `MoveFileEx` con
+    // REPLACE_EXISTING y conserva la ACL del ORIGEN. El temporal nace con la ACL heredada de la
+    // carpeta, así que guardar el config REABRÍA un `tylluan.toml` que estaba cerrado — medido:
+    // de `D:PAI(A;;FA;;;SY)(A;;FA;;;<usuario>)` a `...(A;ID;0x1301bf;;;AU)...`, o sea
+    // «Usuarios autenticados» en MODIFY, el patrón que Y-01 encontró en el token maestro.
+    // Política: nunca dejar el config MÁS abierto de lo que estaba. Solo endurecemos el temporal
+    // cuando LEÍMOS su estado y el preexistente estaba CERRADO. Si estaba abierto, o no pude leer
+    // la ACL, no tocamos nada: sigue el comportamiento de `main`, que es lo que respeta Y-01/AH-01
+    // (un secreto que el operador dejó abierto no se cierra sin orden de José).
+    let endurecer = outcome.endurecer
+        || (habia_config && matches!(config_abierto_antes(config_path), Some(false)));
+    let tmp_path = config_path.with_extension("toml.tmp");
+    fs::write(&tmp_path, contenido)?;
+    // D5018 (a): en Unix el fichero nuevo nace con el umask del proceso (tipicamente 0644: legible
+    // por cualquier usuario de la máquina) y ahí es donde `harden_new_secret` no llega, porque su
+    // endurecido es la ACL de Windows. Se fija 0600 sobre el temporal ANTES del rename: así no hay
+    // ventana en la que el `tylluan.toml` definitivo esté abierto, y el rename conserva el modo.
+    // Best-effort: avisa y no descarta un cambio ya escrito en disco.
+    if endurecer {
+        super::config_safe::set_private_mode(&tmp_path);
+    }
+    // D5026: el endurecido de Windows va sobre el TEMPORAL, antes del rename. Endurecer después
+    // dejaría una ventana con el destino abierto (el rename se trajo la ACL abierta del origen);
+    // así el nombre definitivo nace ya cerrado, y medido (2026-11-26) que el rename conserva el
+    // SDDL del origen. Best-effort igual que AH-01: `harden_new_secret` avisa y no falla la petición.
+    if endurecer {
+        crate::config::harden_new_secret(&tmp_path);
+    }
+    fs::rename(&tmp_path, config_path)?;
+    Ok(outcome)
+}
+
 pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req): Json<SaveConfigRequest>) -> impl IntoResponse {
     // Guard: never write content that doesn't parse as our config TOML.
     // (A dashboard bug once wrote JSON here and bricked the kernel config on restart.)
@@ -847,25 +955,61 @@ pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req):
     }
     let old_embedding = old_config.memory.embedding_model.clone();
 
-    let config_path = crate::config::TylluanConfig::find_config_file()
-        .unwrap_or_else(|| std::path::PathBuf::from("tylluan.toml"));
+    let config_path = super::config_safe::config_path();
+    let habia_config = config_path.is_file();
+    // D5018c: `outcome` ya no se calcula aquí: lo devuelve `commit_config_write`, la única ruta que
+    // escribe el fichero, para que el endurecido del config nuevo no pueda saltarse.
     // A0: copia previa antes de cualquier escritura (la vía nueva es
     // /config/edit; este POST se conserva por compatibilidad).
-    let backup = match super::config_safe::backup_and_prune(&config_path) {
+    // D5018: si no hay `tylluan.toml` que copiar esto NO es un error. El POST recibe el TOML
+    // completo, así que crear el config es un caso válido; antes devolvía
+    // `500 no se pudo hacer copia previa: … (os error 2)` sin escribir nada.
+    let backup = match super::config_safe::backup_and_prune_if_exists(&config_path) {
         Ok(path) => path,
         Err(e) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e }))).into_response();
         }
     };
     let diff = super::config_safe::config_diff(&old_value, &new_value);
-    let tmp_path = config_path.with_extension("toml.tmp");
-    if let Err(e) = fs::write(&tmp_path, &req.content) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
-    }
-    if let Err(e) = fs::rename(&tmp_path, &config_path) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
-    }
-    super::config_safe::audit_change(&diff, &backup, "POST /api/v1/config", "config_api");
+    // D5022: `diff` se calcula entre el config EN MEMORIA y el contenido parseado a `TylluanConfig`,
+    // así que no ve nada de lo que el esquema no modela (secciones desconocidas, erratas, claves en
+    // la tabla equivocada). Medido: un POST con `embedding_model` escrito en `[nexus]` dejaba en la
+    // auditoría `"keys": []` y `"diff": []` mientras el fichero se creaba. Estas son las claves
+    // literales del fichero (solo nombres: los valores no van al registro ni a la respuesta).
+    let old_raw = if habia_config {
+        match fs::read_to_string(&config_path) {
+            Ok(raw) => Some(raw),
+            Err(e) => {
+                tracing::warn!(path = %config_path.display(), "no se pudo leer el tylluan.toml anterior para la auditoría de fichero: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let (file_keys, file_audit_error) = match super::config_safe::file_change_keys(
+        old_raw.as_deref(),
+        &req.content,
+    ) {
+        Ok(keys) => (keys, None),
+        Err(e) => {
+            tracing::warn!(path = %config_path.display(), "auditoría de fichero no disponible: {e}");
+            (Vec::new(), Some(e))
+        }
+    };
+    let outcome = match commit_config_write(&config_path, habia_config, &req.content) {
+        Ok(o) => o,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
+        }
+    };
+    super::config_safe::audit_change_with_backup(
+        &diff,
+        backup.as_deref(),
+        &file_keys,
+        "POST /api/v1/config",
+        "config_api",
+    );
 
     let new_embedding = new_config.memory.embedding_model.clone();
     if new_embedding != old_embedding {
@@ -879,7 +1023,22 @@ pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req):
             "ts": chrono::Utc::now().timestamp_millis()
         }));
     }
-    (StatusCode::OK, Json(serde_json::json!({ "status": "saved" }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "saved",
+            // D5018: decir DÓNDE se escribió y si se creó. Sin esto, el cliente no tenía forma de
+            // saber que el kernel iba sin config descubierta y que el POST la acababa de crear.
+            "config_path": config_path.display().to_string(),
+            "created": outcome.creado,
+            "backup": backup.map(|p| p.display().to_string()),
+            // D5022: lo que el diff semántico no puede ver. Solo nombres de clave; si el TOML
+            // anterior no parseaba, `file_audit_error` lo dice en vez de fingir "nada cambió".
+            "file_keys": file_keys,
+            "file_audit_error": file_audit_error,
+        })),
+    )
+        .into_response()
 }
 
 // --- SYSTEM ---
@@ -2684,6 +2843,375 @@ mod tests {
         let old: toml::Value = toml::from_str("[memory]\nembedding_model = \"a\"\n").unwrap();
         let new: toml::Value = toml::from_str("[memory]\nembedding_model = \"b\"\n").unwrap();
         assert!(protected_config_changes(&old, &new).is_empty());
+    }
+
+    // ── D5018: lo que se sigue de que no hubiera `tylluan.toml` ────────────────────────────
+    //
+    // Revisión del TL (turno 5287): sin estas aserciones sobrevivían a los tests las mutaciones
+    // `created: true` fijo, quitar el endurecido del fichero nuevo, y escribir la auditoría con
+    // cadena vacía en lugar de `null`.
+
+    #[test]
+    fn d5018_sin_config_previa_el_fichero_nace_creado_y_hay_que_endurecerlo() {
+        assert_eq!(
+            config_write_outcome(false),
+            ConfigWriteOutcome { creado: true, endurecer: true },
+            "un tylluan.toml que nace debe declararse creado y cerrarse"
+        );
+    }
+
+    #[test]
+    fn d5018_con_config_preexistente_no_se_dice_creado_ni_se_endurecer() {
+        assert_eq!(
+            config_write_outcome(true),
+            ConfigWriteOutcome { creado: false, endurecer: false },
+            "el POST que pisa un tylluan.toml que ya estaba no debe decir `created: true`"
+        );
+    }
+
+    // ── D5018c: el CABLEADO del endurecido, no solo el helper ─────────────────────────────────
+    //
+    // Re-verificación del TL (turno 5292): sustituye en el handler la línea
+    // `crate::config::harden_new_secret(&config_path);` por `let _ = &config_path;` y los 21 tests de
+    // D5018/D5022 siguen en verde — afirmaban `config_write_outcome`, no que el handler endureciera.
+    // Por eso la secuencia «decidir → escribir → endurecer» vive en `commit_config_write`, única ruta
+    // con la que este POST escribe el fichero, y estos dos tests la ejercitan con config real.
+
+    /// Carpeta de prueba propia por test (`cargo test` corre en paralelo).
+    fn d5018c_dir(pieza: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("tylluan_d5018c_{}_{}", pieza, std::process::id()))
+    }
+
+    /// Deja la carpeta con una ACE **heredable** abierta para `BUILTIN\Usuarios` (`S-1-5-32-545`), que
+    /// es lo que tiene hoy la raíz de E:. Sin esto el test no tiene dientes: en una carpeta ya cerrada
+    /// daría igual cortar la herencia (así sobrevivía la mutación en `y01_endurece_cuerpo`, config.rs:5235).
+    #[cfg(windows)]
+    fn d5018c_carpeta_abierta(dir: &std::path::Path) {
+        let _ = fs::remove_dir_all(dir);
+        fs::create_dir_all(dir).expect("crear carpeta de prueba");
+        let concedido = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(dir)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(concedido.status.success(), "no pude abrir la carpeta de prueba");
+    }
+
+    /// SDDL del fichero leido con `Get-Acl` (independiente del idioma del sistema, que si rompe el
+    /// parseo de nombres de grupo de `icacls`). Copia local del lector privado de `config.rs`: asi
+    /// este test no necesita cambiar la visibilidad alla, donde otros parches tambien tocan.
+    #[cfg(windows)]
+    fn d5018c_sddl_of(path: &std::path::Path) -> Option<String> {
+        let script = format!(
+            "(Get-Acl -LiteralPath {}).Sddl",
+            crate::config::ps_single_quote(&path.to_string_lossy())
+        );
+        let salida = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .ok()?;
+        if !salida.status.success() {
+            return None;
+        }
+        let texto = String::from_utf8_lossy(&salida.stdout).trim().to_string();
+        if texto.is_empty() {
+            None
+        } else {
+            Some(texto)
+        }
+    }
+
+    /// Un `tylluan.toml` que nace por este POST acaba cerrado: ACL sin herencia amplia en Windows,
+    /// modo 0600 en Unix. Misma cuenta de tests en los dos sistemas: el test existe siempre y solo el
+    /// cuerpo cambia (el gate de recuentos lo exige).
+    #[test]
+    fn d5018c_commit_config_write_cierra_un_config_que_nace() {
+        #[cfg(windows)]
+        {
+            let dir = d5018c_dir("nuevo");
+            d5018c_carpeta_abierta(&dir);
+
+            // CONTROL: un fichero normal de la misma carpeta hereda la ACE abierta. Si esto no
+            // estuviera abierto el escenario no representa el problema y el test no probaría nada.
+            let normal = dir.join("normal.txt");
+            fs::write(&normal, "x").expect("escribir fichero normal");
+            let sddl_normal = d5018c_sddl_of(&normal).expect("Get-Acl funciona en esta máquina");
+            assert!(
+                crate::config::sddl_is_too_open(&sddl_normal),
+                "control: un fichero normal debe heredar la ACE abierta, SDDL: {sddl_normal}"
+            );
+
+            let config = dir.join("tylluan.toml");
+            let contenido = "[nexus]\nport = 47999\n";
+            let outcome = commit_config_write(&config, false, contenido).expect("escribir el config nuevo");
+            assert_eq!(outcome, ConfigWriteOutcome { creado: true, endurecer: true });
+            assert_eq!(
+                fs::read_to_string(&config).expect("el config debe quedar en la ruta definitiva"),
+                contenido
+            );
+            assert!(
+                !config.with_extension("toml.tmp").exists(),
+                "no debe quedar el temporal despues del rename"
+            );
+            let sddl = d5018c_sddl_of(&config).expect("Get-Acl funciona en esta máquina");
+            assert!(
+                !crate::config::sddl_is_too_open(&sddl),
+                "un tylluan.toml que nace por este POST debe quedar con la ACL cerrada, SDDL: {sddl}"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir = d5018c_dir("nuevo_unix");
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).expect("crear carpeta de prueba");
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o777))
+                .expect("abrir la carpeta de prueba");
+
+            let normal = dir.join("normal.txt");
+            fs::write(&normal, "x").expect("escribir fichero normal");
+            let modo_normal = fs::metadata(&normal).expect("stat del fichero normal").permissions().mode();
+            assert!(
+                crate::config::mode_is_too_open(modo_normal),
+                "control: en Unix un fichero normal de esta carpeta nace abierto, modo: {:#o}",
+                modo_normal & 0o777
+            );
+
+            let config = dir.join("tylluan.toml");
+            commit_config_write(&config, false, "[nexus]\nport = 47999\n").expect("escribir el config nuevo");
+            assert_eq!(
+                fs::metadata(&config).expect("stat del config").permissions().mode() & 0o777,
+                super::super::config_safe::PRIVATE_CONFIG_MODE,
+                "el rename se comio el 0600 del config nuevo"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// Estado actual fijado, no un aval: un `tylluan.toml` que **ya estaba** se sobrescribe en contenido
+    /// pero su ACL no se toca (política Y-01/AH-01: un secreto que ya existe no se endurece ni se rota
+    /// sin orden de José). Se afirma aquí para que un cambio de esa política se note.
+    #[test]
+    fn d5018c_commit_config_write_no_toca_la_acl_de_un_config_que_ya_estaba() {
+        #[cfg(windows)]
+        {
+            let dir = d5018c_dir("preexistente");
+            d5018c_carpeta_abierta(&dir);
+            let config = dir.join("tylluan.toml");
+            fs::write(&config, "[nexus]\nport = 47001\n").expect("crear el config previo");
+            let antes = d5018c_sddl_of(&config).expect("Get-Acl funciona en esta máquina");
+            assert!(
+                crate::config::sddl_is_too_open(&antes),
+                "control: el config previo debe estar abierto, SDDL: {antes}"
+            );
+
+            let outcome = commit_config_write(&config, true, "[nexus]\nport = 47002\n")
+                .expect("sobrescribir un config que ya estaba");
+            assert_eq!(outcome, ConfigWriteOutcome { creado: false, endurecer: false });
+            assert_eq!(
+                fs::read_to_string(&config).expect("el contenido SI cambia"),
+                "[nexus]\nport = 47002\n"
+            );
+            let despues = d5018c_sddl_of(&config).expect("Get-Acl funciona en esta máquina");
+            assert!(
+                crate::config::sddl_is_too_open(&despues),
+                "el config preexistente no se endurece por esta via, SDDL: {despues}"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir = d5018c_dir("preexistente_unix");
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).expect("crear carpeta de prueba");
+            let config = dir.join("tylluan.toml");
+            fs::write(&config, "[nexus]\nport = 47001\n").expect("crear el config previo");
+            std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o644))
+                .expect("dejar el config previo en 0644");
+
+            commit_config_write(&config, true, "[nexus]\nport = 47002\n").expect("sobrescribir el config");
+            assert_eq!(
+                fs::metadata(&config).expect("stat del config").permissions().mode() & 0o777,
+                0o644,
+                "la politica dice que un config que ya existia no se re-permisa"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// D5026 (CFG-POST-REABRE-ACL-PREEXISTENTE): guardar un config que **estaba cerrado** no puede
+    /// dejarlo abierto. El hueco no era la política de Y-01, era el `rename`: `fs::rename` es
+    /// `MoveFileEx(REPLACE_EXISTING)` y se queda con la ACL del origen, y el origen era un temporal
+    /// que acababa de nacer con la ACL heredada de la carpeta.
+    #[test]
+    fn d5026_gardar_un_config_cerrado_no_lo_reabre() {
+        #[cfg(windows)]
+        {
+            let dir = d5018c_dir("no_worse");
+            d5018c_carpeta_abierta(&dir);
+
+            // CONTROL: si en esta carpeta un fichero normal no naciera abierto, el escenario no
+            // tendría dientes y el rename no reabriría nada.
+            let normal = dir.join("normal.txt");
+            fs::write(&normal, "x").expect("escribir fichero normal");
+            let sddl_normal = d5018c_sddl_of(&normal).expect("Get-Acl funciona en esta máquina");
+            assert!(
+                crate::config::sddl_is_too_open(&sddl_normal),
+                "control: un fichero normal debe heredar la ACE abierta, SDDL: {sddl_normal}"
+            );
+
+            let config = dir.join("tylluan.toml");
+            fs::write(&config, "[nexus]\nport = 47001\n").expect("crear el config previo");
+            crate::config::harden_new_secret(&config);
+            let cerrado = d5018c_sddl_of(&config).expect("Get-Acl funciona en esta máquina");
+            assert!(
+                !crate::config::sddl_is_too_open(&cerrado),
+                "control: el config debe partir CERRADO, SDDL: {cerrado}"
+            );
+
+            let outcome = commit_config_write(&config, true, "[nexus]\nport = 47002\n")
+                .expect("sobrescribir un config cerrado que ya estaba");
+            assert_eq!(outcome, ConfigWriteOutcome { creado: false, endurecer: false });
+            assert_eq!(
+                fs::read_to_string(&config).expect("el contenido SI cambia"),
+                "[nexus]\nport = 47002\n"
+            );
+            let despues = d5018c_sddl_of(&config).expect("Get-Acl funciona en esta máquina");
+            assert!(
+                !crate::config::sddl_is_too_open(&despues),
+                "guardar reabrió un config que estaba cerrado: el rename se trajo la ACL del                  temporal. Antes: {cerrado} | Despues: {despues}"
+            );
+            assert!(
+                !config.with_extension("toml.tmp").exists(),
+                "no debe quedar el temporal despues del rename"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir = d5018c_dir("no_worse_unix");
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).expect("crear carpeta de prueba");
+            let config = dir.join("tylluan.toml");
+            fs::write(&config, "[nexus]\nport = 47001\n").expect("crear el config previo");
+            std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600))
+                .expect("dejar el config previo en 0600");
+
+            commit_config_write(&config, true, "[nexus]\nport = 47002\n")
+                .expect("sobrescribir un config cerrado que ya estaba");
+            let modo = fs::metadata(&config).expect("stat del config").permissions().mode() & 0o777;
+            assert_eq!(
+                modo, 0o600,
+                "guardar un config que estaba en 0600 no puede dejarlo en {modo:o} (el temporal                  nace con el umask y el rename conserva el modo del origen)"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// D5026: la semantica de `config_abierto_antes`. `None` significa «no pude leerlo», y entonces
+    /// no se adivina cerrado: se deja el comportamiento de `main`.
+    #[test]
+    fn d5026_config_abierto_antes_lee_el_estado_real_no_adivina() {
+        #[cfg(windows)]
+        {
+            let dir = d5018c_dir("estado_antes");
+            d5018c_carpeta_abierta(&dir);
+            let fichero = dir.join("abierto.toml");
+            fs::write(&fichero, "x").expect("crear el fichero de prueba");
+            assert_eq!(
+                config_abierto_antes(&fichero),
+                Some(true),
+                "con la ACE heredada de la carpeta debe leerse abierto"
+            );
+            crate::config::harden_new_secret(&fichero);
+            assert_eq!(
+                config_abierto_antes(&fichero),
+                Some(false),
+                "tras endurecerlo debe leerse cerrado"
+            );
+            assert_eq!(
+                config_abierto_antes(&dir.join("no-existe.toml")),
+                None,
+                "no puedo leer el estado: None, nunca Some"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+        #[cfg(unix)]
+        {
+            let dir = d5018c_dir("estado_antes_unix");
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).expect("crear carpeta de prueba");
+            let fichero = dir.join("abierto.toml");
+            fs::write(&fichero, "x").expect("crear el fichero de prueba");
+            std::fs::set_permissions(&fichero, std::fs::Permissions::from_mode(0o644))
+                .expect("chmod 644");
+            assert_eq!(config_abierto_antes(&fichero), Some(true), "0644 está abierto");
+            std::fs::set_permissions(&fichero, std::fs::Permissions::from_mode(0o600))
+                .expect("chmod 600");
+            assert_eq!(config_abierto_antes(&fichero), Some(false), "0600 está cerrado");
+            assert_eq!(
+                config_abierto_antes(&dir.join("no-existe.toml")),
+                None,
+                "no puedo leer el estado: None, nunca Some"
+            );
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[test]
+    fn d5018_sin_copia_previa_la_auditoria_registra_backup_nulo_no_una_cadena() {
+        let registro = super::super::config_safe::audit_record(
+            &[],
+            None,
+            &["nexus.port".to_string()],
+            "POST /api/v1/config",
+            "config_api",
+        );
+
+        assert!(registro["backup"].is_null(), "backup debe ser null, no cadena vacia: {registro}");
+        assert_eq!(
+            registro["keys"].as_array().map(|a| a.len()),
+            Some(0),
+            "el diff semantico sigue vacio: {registro}"
+        );
+        assert_eq!(
+            registro["file_keys"].as_array().map(|a| a.len()),
+            Some(1),
+            "las claves literales del fichero deben constar aunque keys este vacio: {registro}"
+        );
+    }
+
+    #[test]
+    fn d5018_con_copia_previa_la_auditoria_registra_su_ruta() {
+        let registro = super::super::config_safe::audit_record(
+            &[],
+            Some(std::path::Path::new("tylluan.toml.bak-1795625887394")),
+            &[],
+            "POST /api/v1/config",
+            "config_api",
+        );
+
+        assert_eq!(registro["backup"].as_str(), Some("tylluan.toml.bak-1795625887394"));
+    }
+
+    /// Estado actual, no un aval: la guarda B1 de este POST solo vigila `external_mcp`,
+    /// `services`, `security.external_acl` y `wake.command`. `dev_mode` y `nexus.host` SÍ cambian
+    /// por aquí (medido en vivo 2026-11-25), mientras `/config/edit` los rechaza por `editable:
+    /// false` en el esquema. Hueco pre-existente: si el TL decide cerrarlo, este test se invierte.
+    #[test]
+    fn d5018_hueco_conocido_la_guarda_b1_no_cubre_dev_mode_ni_nexus_host() {
+        let old: toml::Value =
+            toml::from_str("[nexus]\ndev_mode = false\nhost = \"127.0.0.1\"\n").unwrap();
+        let new: toml::Value =
+            toml::from_str("[nexus]\ndev_mode = true\nhost = \"0.0.0.0\"\n").unwrap();
+
+        assert!(
+            protected_config_changes(&old, &new).is_empty(),
+            "si se cierra el hueco, actualizar este test a la lista de claves bloqueadas"
+        );
     }
 
     // ── D-157: la clave no puede salir por ninguna superficie serializada ────

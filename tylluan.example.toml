@@ -10,7 +10,15 @@ port = 47004  # canonical default (CONTRACT-01) -- matches config.rs's default_p
 # D-38: si el puerto está ocupado, reintenta hasta N s y luego falla con error
 # claro; nunca arranca en otro puerto en silencio. 0 = fallar de inmediato.
 port_retry_secs = 10
-transport = ["stdio", "http"]
+# D5015 (medido 2026-11-25): el ejemplo NO enciende stdio. Un kernel arrancado sin stdin util
+# (instalador, servicio, sesion desprendida) ve EOF en la tarea stdio y `wait_for_shutdown`
+# apaga el proceso entero: escucha en el puerto y se cierra rc=0 ~1,3 s despues
+# (main.rs:1890-1903 y transport/http/mod.rs:316-331, donde con stdio activo la escucha de
+# Ctrl+C pasa a `pending()`). `generate_config` ya estaba protegido por
+# `test_generated_config_never_enables_stdio_transport`; este ejemplo era el hueco que quedaba:
+# CONTRIBUTING.md manda `cp tylluan.example.toml tylluan.toml`. MCP por stdio se anade a
+# proposito con `--stdio`, con una consola detras.
+transport = ["http", "sse"]
 
 # allow_hf_download (D-159): `false` por defecto. Ni el kernel ni ningun guild
 # descargan modelos de Hugging Face; los modelos se copian a `models/` a mano y

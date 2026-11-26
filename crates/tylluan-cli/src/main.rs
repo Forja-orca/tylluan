@@ -507,6 +507,9 @@ async fn main() -> Result<()> {
                 models_env.as_deref(),
                 inst.data_dir.as_deref(),
                 &inst.name,
+                // D5017: el cwd del proceso que lanza la CLI. Es el criterio de la regla:
+                // si ahi hay `tylluan.toml`, manda ese y no se añade `--config`.
+                &std::env::current_dir().unwrap_or_default(),
             );
 
             let child = cmd.spawn()
@@ -1767,6 +1770,40 @@ fn models_dir_override(current: Option<&std::ffi::OsStr>, install_dir: &Path) ->
     Some(install_dir.join("models"))
 }
 
+/// D5017: el config de la instalación no debe perderse por lanzar la CLI desde otro
+/// directorio. `install` escribe `tylluan.toml` en `--dir` (main.rs:922-937) y
+/// `find_kernel_exe()` encuentra el binario ahí, pero el kernel solo descubre config en
+/// el **cwd** o en `dirs::config_dir()/tylluan-nexus` (kernel `config.rs:3284`). Medido
+/// 2026-11-25: `tylluan-cli --instance <x> start` desde un cwd ajeno arrancó el kernel con
+/// `📄 No tylluan.toml found, using defaults.` — el config de la instalación (puerto,
+/// `transport`, `embedding_model`) quedó ignorado. Mismo criterio que D-169 hizo para los
+/// modelos: el cwd sigue mandando; solo cuando ahí no hay config se le pasa al kernel el
+/// de la instalación por `--config`, que el kernel registra antes de `load_cached()`
+/// (kernel `main.rs:539-544`), así que el arranque y la caché ven el mismo fichero.
+///
+/// **Solo el config hermano del binario que se va a lanzar.** La primera versión ofrecía
+/// también `<install_dir>/tylluan.toml`; medido 2026-11-25 con el CLI del target de cargo,
+/// esa rama elegía `~/.tylluan/tylluan.toml` — el config de OTRA instancia (la del
+/// operador) — y el kernel de prueba arrancaba con él:
+/// `📄 Loading config from: C:\Users\<user>\.tylluan\tylluan.toml`. Un config viaja con el
+/// binario que lo acompañó al instalar, no con el registro de instancias.
+fn kernel_config_override(exe: &Path, cwd: &Path) -> Option<PathBuf> {
+    if cwd.join("tylluan.toml").is_file() {
+        return None;
+    }
+    let side = exe.parent()?;
+    if side.as_os_str().is_empty() {
+        return None;
+    }
+    let candidate = side.join("tylluan.toml");
+    candidate.is_file().then_some(candidate)
+}
+
+// D5017: el cwd del operador entro como parametro para poder afirmar las dos ramas del
+// descubrimiento de config en un test con tempdirs propias (turno 5287 del TL, punto b).
+// Son 8 argumentos; el repo ya usa este allow cuando la firma refleja un conjunto de flags
+// (vease `crates/tylluan-kernel/src/main.rs:2528`).
+#[allow(clippy::too_many_arguments)]
 /// Construye el comando del kernel con lo que la CLI decide por él.
 ///
 /// Separado del arranque para poder afirmarlo en un test: el kernel recibe
@@ -1780,6 +1817,11 @@ fn kernel_command(
     models_env: Option<&std::ffi::OsStr>,
     data_dir: Option<&Path>,
     instance: &str,
+    // D5017: el cwd entra como parametro para poder afirmar las dos ramas en un test con
+    // tempdirs propias. Antes `kernel_command` leia `std::env::current_dir()` y el test
+    // correspondiente tenia que saltarse (con un `return` silencioso) cuando el cwd del
+    // proceso tenia config: pasaba en verde sin probar nada (turno 5287 del TL, punto b).
+    operator_cwd: &Path,
 ) -> Command {
     let mut cmd = Command::new(exe);
     if headless {
@@ -1799,6 +1841,12 @@ fn kernel_command(
     // instancias en la misma máquina compartirían base de datos.
     if let Some(dir) = data_dir {
         cmd.env("TYLLUAN_DATA_DIR", dir);
+    }
+    // D5017: sin `tylluan.toml` en el cwd del operador, el kernel se quedaba en defaults y
+    // el config que escribió `install` (junto al exe) no se leía nunca. Se le pasa por
+    // `--config`; si el cwd sí tiene config, no se añade nada y manda el cwd como siempre.
+    if let Some(cfg) = kernel_config_override(exe, operator_cwd) {
+        cmd.args(["--config", &cfg.display().to_string()]);
     }
     // C-17 (TL): el kernel escribe su instancia en el PID file, y para saberlo hay
     // que decírselo al arrancar. Sin esto el PID file siempre diría `default`.
@@ -2408,6 +2456,25 @@ mod installer_flag_tests {
             );
             assert!(line.contains("http"), "generated config must serve http, got: {line}");
         }
+    }
+
+    #[test]
+    fn d5015_el_ejemplo_de_config_tampoco_enciende_stdio() {
+        // El otro test cubre el config GENERADO; este cubre el que se copia a mano:
+        // CONTRIBUTING.md manda `cp tylluan.example.toml tylluan.toml`. Medido 2026-11-25 con el
+        // ejemplo verbatim (solo cambiado el puerto) y stdin cerrado: el kernel escucha y se
+        // autocierra rc=0 ~1,3 s despues; con `["http","sse"]` sigue vivo 45 s. Mutación: volver
+        // a poner "stdio" en el ejemplo hace caer este test.
+        const EJEMPLO: &str = include_str!("../../../tylluan.example.toml");
+        let linea = EJEMPLO
+            .lines()
+            .find(|l| l.trim_start().starts_with("transport"))
+            .expect("tylluan.example.toml debe declarar transport");
+        assert!(
+            !linea.contains("stdio"),
+            "el ejemplo no puede encender stdio (EOF = autocierre), got: {linea}"
+        );
+        assert!(linea.contains("http"), "el ejemplo debe servir http, got: {linea}");
     }
 
     /// D192: el config de una instancia declara SU puerto. Mutación: volver a
@@ -3300,6 +3367,11 @@ mod doctor_guilds_root_tests {
 #[cfg(test)]
 mod d169_models_dir_tests {
     use super::*;
+
+    // En los tests de este modulo el cwd se pasa como `Path::new("/")`: una ruta absoluta
+    // donde no hay `tylluan.toml`. Existe solo para cumplir el parametro D5017 de
+    // `kernel_command`; ninguno de estos tests mira los argumentos `--config`, que son los
+    // que afirma `d5017_config_discovery_tests`.
     use std::ffi::OsStr;
 
     fn envs(cmd: &Command) -> Vec<(String, Option<String>)> {
@@ -3333,6 +3405,7 @@ mod d169_models_dir_tests {
             None,
             Some(instancia),
             "default",
+            Path::new("/"),
         );
         let envs: Vec<(String, Option<String>)> = cmd
             .get_envs()
@@ -3364,6 +3437,7 @@ mod d169_models_dir_tests {
             None,
             None,
             "lab",
+            Path::new("/"),
         );
         let encontrado = envs(&cmd)
             .into_iter()
@@ -3387,6 +3461,7 @@ mod d169_models_dir_tests {
             None,
             None,
             "default",
+            Path::new("/"),
         );
         let entry = models_entry(&cmd).expect("D-169: el kernel debe recibir TYLLUAN_MODELS_DIR");
         assert_eq!(
@@ -3409,6 +3484,7 @@ mod d169_models_dir_tests {
             Some(operator),
             None,
             "default",
+            Path::new("/"),
         );
         assert!(
             models_entry(&cmd).is_none(),
@@ -3434,6 +3510,7 @@ mod d169_models_dir_tests {
             None,
             None,
             "default",
+            Path::new("/"),
         );
         assert!(
             cmd.get_current_dir().is_none(),
@@ -3452,7 +3529,152 @@ mod d169_models_dir_tests {
     /// el comportamiento anterior (el kernel decide, como hasta ahora).
     #[test]
     fn d169_sin_install_dir_no_exporta_nada() {
-        let cmd = kernel_command(Path::new("tylluan-nexus"), false, None, None, None, None, "default");
+        let cmd =
+            kernel_command(Path::new("tylluan-nexus"), false, None, None, None, None, "default", Path::new("/"));
         assert!(models_entry(&cmd).is_none(), "sin install dir no hay export");
+    }
+}
+
+/// D5017: `install` deja `tylluan.toml` junto al binario, pero el kernel solo mira el cwd
+/// del proceso y `dirs::config_dir()/tylluan-nexus`. Estos tests fijan la regla: manda el
+/// cwd; si ahí no hay config, se pasa el de la instalación por `--config`.
+#[cfg(test)]
+mod d5017_config_discovery_tests {
+    use super::*;
+
+    fn args_of(cmd: &Command) -> Vec<String> {
+        cmd.get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect()
+    }
+
+    /// Con config en el cwd no se añade `--config`: el cwd manda como hasta ahora.
+    #[test]
+    fn d5017_el_cwd_manda_cuando_tiene_config() {
+        let raiz = tempfile::tempdir().unwrap();
+        let cwd = raiz.path().join("cwd");
+        let instalacion = raiz.path().join("instalacion");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&instalacion).unwrap();
+        std::fs::write(cwd.join("tylluan.toml"), "[nexus]\nport = 47203\n").unwrap();
+        std::fs::write(instalacion.join("tylluan.toml"), "[nexus]\nport = 47204\n").unwrap();
+        let exe = instalacion.join("tylluan-nexus.exe");
+        assert_eq!(
+            kernel_config_override(&exe, &cwd),
+            None,
+            "el config del cwd no debe pisarse"
+        );
+    }
+
+    /// Sin config en el cwd se usa el que está junto al binario (donde lo escribe `install`).
+    #[test]
+    fn d5017_sin_config_en_el_cwd_usa_el_del_binario() {
+        let raiz = tempfile::tempdir().unwrap();
+        let cwd = raiz.path().join("cwd");
+        let instalacion = raiz.path().join("instalacion");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&instalacion).unwrap();
+        std::fs::write(instalacion.join("tylluan.toml"), "[nexus]\nport = 47204\n").unwrap();
+        let exe = instalacion.join("tylluan-nexus.exe");
+        assert_eq!(kernel_config_override(&exe, &cwd), Some(instalacion.join("tylluan.toml")));
+    }
+
+    /// Regresión de la primera versión del parche: el config de `install_dir` (p.ej.
+    /// `~/.tylluan/tylluan.toml`, el de OTRA instancia) NO se presta nunca si el binario que
+    /// se va a lanzar vive en otro sitio. Medido 2026-11-25: esa rama arrancaba un kernel de
+    /// prueba con el config del operador (`Loading config from: C:\\Users\\…\\.tylluan\\tylluan.toml`).
+    #[test]
+    fn d5017_no_presta_el_config_de_otra_instalacion() {
+        let raiz = tempfile::tempdir().unwrap();
+        let cwd = raiz.path().join("cwd");
+        let instalacion = raiz.path().join("instalacion");
+        let exe_sueltos = raiz.path().join("path");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&instalacion).unwrap();
+        std::fs::create_dir_all(&exe_sueltos).unwrap();
+        std::fs::write(instalacion.join("tylluan.toml"), "[nexus]\nport = 47204\n").unwrap();
+        assert_eq!(
+            kernel_config_override(&exe_sueltos.join("tylluan-nexus.exe"), &cwd),
+            None,
+            "el config de otra instalación no viaja con este binario"
+        );
+    }
+
+    /// Un binario invocado por nombre suelto tiene `parent() == Some("")`: de ahí no puede
+    /// salir una ruta relativa vacía.
+    #[test]
+    fn d5017_binario_por_nombre_no_produce_ruta_vacia() {
+        let raiz = tempfile::tempdir().unwrap();
+        assert_eq!(kernel_config_override(Path::new("tylluan-nexus"), raiz.path()), None);
+    }
+
+    /// Cableado, rama 1: con un cwd **sin** config, `kernel_command` añade
+    /// `--config <instalacion/tylluan.toml>`. El cwd es una tempdir propia del test, no el
+    /// cwd del proceso: ya no hay `return` silencioso (turno 5287 del TL, punto b).
+    /// Mutación: quitar el `cmd.args(["--config", …])` de `kernel_command` tumba este test.
+    #[test]
+    fn d5017_kernel_command_pasa_el_config_de_la_instalacion() {
+        let raiz = tempfile::tempdir().unwrap();
+        let cwd = raiz.path().join("cwd_sin_config");
+        let instalacion = raiz.path().join("instalacion");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&instalacion).unwrap();
+        std::fs::write(instalacion.join("tylluan.toml"), "[nexus]\nport = 47204\n").unwrap();
+        assert!(
+            !cwd.join("tylluan.toml").is_file(),
+            "precondición: el cwd de prueba no puede tener config"
+        );
+
+        let cmd = kernel_command(
+            &instalacion.join("tylluan-nexus.exe"),
+            false,
+            Some(47204),
+            Some(&instalacion),
+            None,
+            None,
+            "deepcfg",
+            &cwd,
+        );
+        let args = args_of(&cmd);
+        let pos = args
+            .iter()
+            .position(|arg| arg == "--config")
+            .unwrap_or_else(|| panic!("falta --config en {args:?}"));
+        assert_eq!(
+            args.get(pos + 1).map(String::as_str),
+            Some(instalacion.join("tylluan.toml").to_str().unwrap()),
+            "el --config debe apuntar al de la instalación: {args:?}"
+        );
+    }
+
+    /// Cableado, rama 2: con un cwd **con** config no se añade ningún `--config`, aunque el
+    /// binario traiga el suyo. El cwd manda, como hasta D5017. Mutación: hacer que
+    /// `kernel_config_override` ignore el cwd (devolver siempre el hermano del binario)
+    /// tumba este test.
+    #[test]
+    fn d5017_kernel_command_no_pisa_el_config_del_cwd() {
+        let raiz = tempfile::tempdir().unwrap();
+        let cwd = raiz.path().join("cwd_con_config");
+        let instalacion = raiz.path().join("instalacion");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&instalacion).unwrap();
+        std::fs::write(cwd.join("tylluan.toml"), "[nexus]\nport = 47203\n").unwrap();
+        std::fs::write(instalacion.join("tylluan.toml"), "[nexus]\nport = 47204\n").unwrap();
+
+        let cmd = kernel_command(
+            &instalacion.join("tylluan-nexus.exe"),
+            false,
+            Some(47203),
+            Some(&instalacion),
+            None,
+            None,
+            "deepcfg",
+            &cwd,
+        );
+        let args = args_of(&cmd);
+        assert!(
+            !args.iter().any(|arg| arg == "--config"),
+            "el config del cwd no debe pisarse con --config: {args:?}"
+        );
     }
 }

@@ -521,6 +521,46 @@ fn flatten(value: &toml::Value, prefix: &str, out: &mut std::collections::BTreeM
     }
 }
 
+/// D5022: claves que cambian **entre el `tylluan.toml` que había en disco y el texto que se va a
+/// escribir**, calculadas sobre el TOML crudo, no sobre el config ya parseado a `TylluanConfig`.
+///
+/// `config_diff` compara el config **en memoria** contra el contenido **parseado a `TylluanConfig`**,
+/// así que todo lo que `TylluanConfig` no modela es invisible: secciones desconocidas, erratas y
+/// claves escritas en la tabla equivocada. Medido 2026-11-25: un `POST /api/v1/config` con
+/// `embedding_model` dentro de `[nexus]` (ese campo vive en `[memory]`, `config.rs:851`) escribía el
+/// fichero y dejaba en `config_audit.jsonl` `"keys": []` y `"diff": []`, o sea la auditoría decía
+/// "no cambió nada" mientras el fichero acababa de nacer.
+///
+/// Devuelve **solo nombres de clave**, nunca valores: por esta vía pasan claves que el kernel no
+/// modela y que pueden contener secretos, y la lista va al registro de auditoría y a la respuesta.
+/// `Err` cuando algún lado no parsea como TOML (un fichero previo corrupto también es un hecho que
+/// la auditoría debe poder nombrar). `old_raw = None` significa que no había fichero: entonces todas
+/// las claves del contenido nuevo son cambios.
+pub fn file_change_keys(old_raw: Option<&str>, new_raw: &str) -> Result<Vec<String>, String> {
+    let old: toml::Value = match old_raw {
+        Some(raw) => toml::from_str(raw).map_err(|e| format!("el tylluan.toml anterior no parsea: {e}"))?,
+        None => toml::Value::Table(toml::map::Map::new()),
+    };
+    let new: toml::Value =
+        toml::from_str(new_raw).map_err(|e| format!("el contenido nuevo no parsea: {e}"))?;
+
+    let mut a = std::collections::BTreeMap::new();
+    let mut b = std::collections::BTreeMap::new();
+    flatten(&old, "", &mut a);
+    flatten(&new, "", &mut b);
+
+    let mut union: Vec<&String> = a.keys().chain(b.keys()).collect();
+    union.sort();
+    union.dedup();
+    let mut changed = Vec::new();
+    for key in union {
+        if a.get(key) != b.get(key) {
+            changed.push(key.clone());
+        }
+    }
+    Ok(changed)
+}
+
 pub fn config_diff(old: &toml::Value, new: &toml::Value) -> Vec<serde_json::Value> {
     let mut a = std::collections::BTreeMap::new();
     let mut b = std::collections::BTreeMap::new();
@@ -688,19 +728,102 @@ pub fn backup_and_prune(path: &Path) -> Result<PathBuf, String> {
     Ok(backup)
 }
 
-pub fn audit_change(diff: &[serde_json::Value], backup: &Path, source: &str, actor: &str) {
+/// D5018: copia previa **solo si hay fichero que copiar**.
+///
+/// `save_config_handler` (el POST de compatibilidad de `/api/v1/config`) llamaba siempre a
+/// `backup_and_prune`, que falla cuando el fichero no existe. En un kernel arrancado **sin config
+/// descubierta** (medido 2026-11-25, kernel propio en puerto propio) eso devolvía
+/// `500 {"error":"no se pudo hacer copia previa: … (os error 2)"}` sin escribir nada y sin decir
+/// que lo que faltaba era el propio `tylluan.toml`. Este POST no edita: recibe el TOML completo,
+/// así que **crear** el config es un caso válido, y el fichero creado es el que el kernel
+/// descubrirá al reiniciar (carril `<cwd>/tylluan.toml` de `find_config_file`, `config.rs:3284`).
+///
+/// Devuelve `None` cuando no había nada que respaldar; un fallo real al copiar un fichero que sí
+/// existe sigue siendo `Err`.
+pub fn backup_and_prune_if_exists(path: &Path) -> Result<Option<PathBuf>, String> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    backup_and_prune(path).map(Some)
+}
+
+/// D5018 (a): modo que debe quedar en un `tylluan.toml` **recien creado** en Unix. `harden_new_secret`
+/// endurece la ACL de Windows y es no-op fuera, asi que sin esto el fichero nace con el umask del
+/// proceso (tipico 0644) y por aqui pueden escribirse `token_agent_bindings`.
+pub const PRIVATE_CONFIG_MODE: u32 = 0o600;
+
+/// D5018 (a): aplica [`PRIVATE_CONFIG_MODE`] a un fichero recien escrito. Se llama **antes** del
+/// rename, asi no hay ninguna ventana en la que el `tylluan.toml` definitivo este abierto y el
+/// rename conserva el modo. Best-effort: si falla avisa y devuelve `false`; no se descarta un
+/// cambio que ya esta en disco. En Windows devuelve `false` a proposito: alli endurece
+/// `harden_new_secret` (ACL), no el modo POSIX.
+pub fn set_private_mode(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        match std::fs::set_permissions(path, std::fs::Permissions::from_mode(PRIVATE_CONFIG_MODE)) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::warn!("no se pudo poner 0600 en {}: {e}", path.display());
+                false
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        false
+    }
+}
+
+/// Forma del asiento de auditoría, separada de su escritura en disco para poder **afirmar**
+/// contenido en los tests: `backup` debe ser `null` (no `""`, no una ruta inventada) cuando el
+/// `tylluan.toml` se acababa de crear, y `file_keys` debe estar aunque `keys` esté vacío.
+pub fn audit_record(
+    diff: &[serde_json::Value],
+    backup: Option<&Path>,
+    file_keys: &[String],
+    source: &str,
+    actor: &str,
+) -> serde_json::Value {
     let keys: Vec<&str> = diff
         .iter()
         .filter_map(|d| d.get("key").and_then(|k| k.as_str()))
         .collect();
-    let record = json!({
+    json!({
         "ts": chrono::Utc::now().timestamp_millis(),
         "actor": actor,
         "source": source,
         "keys": keys,
         "diff": diff,
-        "backup": backup.display().to_string(),
-    });
+        "file_keys": file_keys,
+        "backup": backup.map(|p| p.display().to_string()),
+    })
+}
+
+pub fn audit_change(diff: &[serde_json::Value], backup: &Path, source: &str, actor: &str) {
+    audit_change_with_backup(diff, Some(backup), &[], source, actor);
+}
+
+/// D5018: la misma auditoría con copia previa **opcional**. Cuando el `tylluan.toml` se acaba de
+/// crear no existe copia que registrar: el asiento deja `"backup": null` en vez de una ruta que no
+/// existe.
+///
+/// `file_keys` (D5022) son las claves literales que cambiaron en el fichero, calculadas con
+/// `file_change_keys`: muestran lo que `config_diff` no puede ver. Vacío en las vías que ya difieran
+/// clave por clave (`/config/edit`), donde el diff semántico es completo.
+pub fn audit_change_with_backup(
+    diff: &[serde_json::Value],
+    backup: Option<&Path>,
+    file_keys: &[String],
+    source: &str,
+    actor: &str,
+) {
+    let keys: Vec<&str> = diff
+        .iter()
+        .filter_map(|d| d.get("key").and_then(|k| k.as_str()))
+        .collect();
+    let record = audit_record(diff, backup, file_keys, source, actor);
     let path = crate::config::data_file("config_audit.jsonl");
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -713,7 +836,15 @@ pub fn audit_change(diff: &[serde_json::Value], backup: &Path, source: &str, act
         Err(e) => tracing::warn!("no se pudo escribir {}: {e}", path.display()),
     }
     // Los valores sensibles no van al log: solo claves y backup.
-    tracing::info!(keys = ?keys, backup = %backup.display(), source, "config editada");
+    match backup {
+        Some(p) => tracing::info!(keys = ?keys, backup = %p.display(), source, "config editada"),
+        None => tracing::info!(
+            keys = ?keys,
+            backup = "ninguna (config creada)",
+            source,
+            "config editada"
+        ),
+    }
 }
 
 pub async fn config_schema_handler() -> impl IntoResponse {
@@ -1668,6 +1799,113 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
         assert!(cfg.exists(), "la config viva no se toca");
     }
 
+    // ── D5018: POST /api/v1/config sobre un kernel sin config descubierta ──────────────
+    //
+    // Medido 2026-11-25: `save_config_handler` llamaba a `backup_and_prune` sin comprobar si el
+    // fichero existia, y `std::fs::copy` devolvia `os error 2` → HTTP 500 `no se pudo hacer copia
+    // previa: … (os error 2)` sin escribir nada y sin decir que faltaba el propio tylluan.toml.
+    // El POST recibe el TOML completo, asi que CREAR el config es el caso valido.
+
+    #[test]
+    fn d5018_sin_fichero_no_hay_nada_que_respaldar_y_no_es_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+        assert!(!cfg.exists());
+
+        assert_eq!(
+            backup_and_prune_if_exists(&cfg),
+            Ok(None),
+            "sin config no hay copia que hacer: None, no un 500"
+        );
+        assert!(!cfg.exists(), "preparar la escritura no debe crear el config por su cuenta");
+        assert!(copias_en(dir.path()).is_empty(), "ni copias fantasma");
+    }
+
+    #[test]
+    fn d5018_con_fichero_si_hace_copia() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+        std::fs::write(&cfg, "[memory]\nvector_dimensions = 1024\n").unwrap();
+
+        let backup = backup_and_prune_if_exists(&cfg)
+            .expect("sin error")
+            .expect("con fichero si hay copia");
+
+        assert!(backup.exists(), "la copia debe existir");
+        assert_eq!(copias_en(dir.path()).len(), 1, "una sola copia");
+        assert!(cfg.exists(), "la config viva no se toca");
+    }
+
+    #[test]
+    fn d5018_la_variante_estricta_sigue_fallando_sin_fichero() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+
+        let err = backup_and_prune(&cfg).expect_err("la variante estricta no se relaja");
+
+        assert!(err.contains("copia previa"), "mensaje esperado, salio: {err}");
+    }
+
+    // ── D5022: la auditoría del POST no puede quedarse muda cuando el fichero sí cambió ──────
+    //
+    // `config_diff` compara el config EN MEMORIA contra el contenido parseado a `TylluanConfig`, asi
+    // que las claves que el esquema no modela son invisibles. Medido 2026-11-25: un POST con
+    // `embedding_model` escrito en `[nexus]` (ese campo vive en `[memory]`, config.rs:851) dejo en
+    // `config_audit.jsonl` `"keys": []` y `"diff": []` mientras el fichero acababa de crearse.
+
+    #[test]
+    fn d5022_sin_fichero_previo_toda_clave_cuenta_aunque_el_esquema_no_la_conozca() {
+        let nuevo = "[nexus]\nhost = \"127.0.0.1\"\nport = 47228\nembedding_model = \"none\"\n";
+
+        let claves = file_change_keys(None, nuevo).expect("sin fichero previo: todo es nuevo");
+
+        assert!(
+            claves.contains(&"nexus.embedding_model".to_string()),
+            "la clave fuera del esquema debe aparecer, salio: {claves:?}"
+        );
+        assert!(claves.contains(&"nexus.port".to_string()), "salio: {claves:?}");
+    }
+
+    #[test]
+    fn d5022_una_clave_movida_de_tabla_deja_de_ser_invisible() {
+        let viejo = "[memory]\nembedding_model = \"none\"\n";
+        let nuevo = "[nexus]\nembedding_model = \"none\"\n";
+
+        let claves = file_change_keys(Some(viejo), nuevo).expect("los dos parsean");
+
+        assert!(claves.contains(&"memory.embedding_model".to_string()), "salio: {claves:?}");
+        assert!(claves.contains(&"nexus.embedding_model".to_string()), "salio: {claves:?}");
+    }
+
+    #[test]
+    fn d5022_la_lista_de_claves_nunca_lleva_valores() {
+        let nuevo = "[security]\ntoken_secreto = \"SUPERSECRETO_9f3a\"\n";
+
+        let claves = file_change_keys(None, nuevo).expect("sin fichero previo");
+        let junta = claves.join(",");
+
+        assert!(claves.contains(&"security.token_secreto".to_string()), "salio: {claves:?}");
+        assert!(
+            !junta.contains("SUPERSECRETO_9f3a"),
+            "el valor sensible se colo en la lista: {junta}"
+        );
+    }
+
+    #[test]
+    fn d5022_fichero_previo_corrupto_se_nombra_en_lugar_de_fingir_que_no_cambio_nada() {
+        let err = file_change_keys(Some("esto [ no es toml"), "[nexus]\nport = 1\n")
+            .expect_err("el TOML previo corrupto debe ser Err");
+
+        assert!(err.contains("anterior no parsea"), "mensaje inesperado: {err}");
+    }
+
+    #[test]
+    fn d5022_contenido_identico_no_inventa_cambios() {
+        let crudo = "[nexus]\nport = 47004\n";
+
+        assert!(file_change_keys(Some(crudo), crudo).expect("identico").is_empty());
+    }
+
     #[test]
     fn backup_and_prune_no_toca_otros_nombres() {
         let dir = tempfile::tempdir().unwrap();
@@ -1729,5 +1967,32 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
         ] {
             assert_eq!(backup_mark(malo, "tylluan.toml"), None, "{malo} no es copia podable");
         }
+    }
+    /// D5018 (a): el 0600 del config nuevo. El test se compila en **ambas** plataformas para no
+    /// romper el recuento que valida `check_test_count.sh` (paridad Windows/Linux, convencion de
+    /// D206 en config.rs:3654). En Unix se comprueba el modo real DEL FICHERO DEFINITIVO tras el
+    /// rename; en Windows se comprueba que la via del modo no se aplica, que es donde manda la ACL.
+    #[test]
+    fn d5018_el_config_nuevo_toma_modo_privado_antes_del_rename() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = dir.path().join("tylluan.toml.tmp");
+        let destino = dir.path().join("tylluan.toml");
+        std::fs::write(&tmp, "[nexus]\nlog_level = \"warn\"\n").unwrap();
+        let aplicado = set_private_mode(&tmp);
+        std::fs::rename(&tmp, &destino).unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let modo = std::fs::metadata(&destino).unwrap().permissions().mode() & 0o777;
+            assert!(aplicado, "en Unix el 0600 tenia que aplicarse");
+            assert_eq!(modo, PRIVATE_CONFIG_MODE, "el rename perdio el modo del config");
+            assert!(!crate::config::mode_is_too_open(modo));
+        }
+        #[cfg(not(unix))]
+        {
+            assert!(!aplicado, "en Windows endurece la ACL, no el modo POSIX");
+        }
+        assert!(!crate::config::mode_is_too_open(PRIVATE_CONFIG_MODE));
     }
 }

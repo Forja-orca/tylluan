@@ -286,7 +286,11 @@ fn read_map(dir: &Path, key: &[u8; 32]) -> Result<BTreeMap<String, String>> {
 }
 
 fn write_map(dir: &Path, key: &[u8; 32], map: &BTreeMap<String, String>) -> Result<()> {
-    std::fs::create_dir_all(dir).with_context(|| format!("no se pudo crear {}", dir.display()))?;
+    // D5013 (AH01-R4, T5275): la carpeta se creaba con `create_dir_all`, que arrastra la ACL del
+    // padre. `ensure_private_data_dir` es la misma maquinaria de D5012: crea y, **solo si la
+    // carpeta no existia**, le corta la herencia con (OI)(CI). Un almacen que ya existe no se toca.
+    crate::config::ensure_private_data_dir(dir)
+        .with_context(|| format!("no se pudo crear {}", dir.display()))?;
     let mut stored = BTreeMap::new();
     for (name, value) in map {
         stored.insert(name.clone(), encrypt_value(key, name, value)?);
@@ -295,17 +299,36 @@ fn write_map(dir: &Path, key: &[u8; 32], map: &BTreeMap<String, String>) -> Resu
     let path = data_path(dir);
     let tmp = path.with_extension("enc.tmp");
     write_private_file(&tmp, raw.as_bytes())?;
+    // El `rename` se lleva el DACL del temporal, asi que cerrar el temporal cierra el destino.
+    // Se corta tambien sobre el destino cuando es nuevo: cubre el caso de un `.enc.tmp` viejo
+    // (de un proceso reventado) que ya existia y por tanto no se endurecio al escribirlo.
+    let destino_nuevo = !path.exists();
     std::fs::rename(&tmp, &path)
         .with_context(|| format!("no se pudo reemplazar {}", path.display()))?;
+    if destino_nuevo {
+        crate::config::harden_new_secret(&path);
+    }
     restrict_permissions(&path);
     Ok(())
 }
 
 fn write_private_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    // D5013 (AH01-R4): se escribe y DESPUES se corta la herencia. La ventana crear->endurecer
+    // existe (medida en ~40 ms, AH01-R2); esta cerrada por D5012 cuando la carpeta ya esta
+    // cerrada, que es el caso de `secrets_dir()` bajo un DATA_DIR nuevo.
+    //
+    // D5013b-2 (turno 5287 del TL, punto 1): el cierre **ya no depende de que el fichero sea
+    // nuevo**. Este fichero se renombra encima de `providers.enc` y el `rename` se lleva su DACL,
+    // asi que la ACL del temporal es la que acaba teniendo el almacen. Con el `if nuevo` de antes,
+    // un `.enc.tmp` huerfano de un proceso reventado (`nuevo = false`) no se cerraba y el
+    // `rename` dejaba abierto hasta un `providers.enc` que ya estaba cerrado. Medido: los dos
+    // tests `d5013b_2_*` de este modulo fallaban contra el codigo sin arreglar.
+    // En Unix es el mismo defecto por otra via: `OpenOptions::mode` solo rige al CREAR, un huesped
+    // conserva su 0644 — por eso ahi se fija el modo tambien despues de escribir.
     #[cfg(unix)]
     {
         use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -315,11 +338,23 @@ fn write_private_file(path: &Path, bytes: &[u8]) -> Result<()> {
             .with_context(|| format!("no se pudo crear {}", path.display()))?;
         file.write_all(bytes)
             .with_context(|| format!("no se pudo escribir {}", path.display()))?;
+        drop(file);
+        // Sobre un huesped esto es lo unico que cierra: `mode()` anterior no toco sus permisos.
+        if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
+            tracing::warn!(
+                "No pude fijar 0600 en {}: {e}. El temporal va a ser el almacen de claves.",
+                path.display()
+            );
+        }
     }
     #[cfg(not(unix))]
     {
         std::fs::write(path, bytes).with_context(|| format!("no se pudo escribir {}", path.display()))?;
     }
+    // No-op fuera de Windows; en Windows corta la herencia y auto-verifica (D5013/AH01-R3). Se
+    // llama siempre: aqui no hay una ACL «del operador» que preservar (politica de Jose, T5266),
+    // hay un temporal que dentro de dos lineas va a ser el almacen de claves de proveedores.
+    crate::config::harden_new_secret(path);
     Ok(())
 }
 
@@ -335,8 +370,11 @@ fn restrict_permissions(path: &Path) {
     }
     #[cfg(not(unix))]
     {
-        // En Windows el fichero vive en %APPDATA% (ACL del perfil del usuario);
-        // endurecer la ACL requiere API nativa y no se hace a mano.
+        // D5013 (AH01-R4): el comentario de aqui decia que «endurecer la ACL requiere API nativa
+        // y no se hace a mano». Falso desde AH-01: `config::harden_new_secret` la corta con
+        // `icacls`, y ya se llama sobre el fichero NUEVO en `write_private_file` y sobre el
+        // destino despues del `rename`. Aqui no se repite la llamada a proposito: sobre un
+        // almacen que ya existia no se reescribe ninguna ACL (politica de Jose, T5266).
         let _ = path;
     }
 }
@@ -501,5 +539,324 @@ mod tests {
             let mode = metadata.permissions().mode() & 0o777;
             assert_eq!(mode, 0o600, "modo real: {mode:o}");
         }
+    }
+
+    /// D5013 (AH01-R4, T5275): el almacén de claves de proveedores —`providers.enc`, su
+    /// `.enc.tmp` y la carpeta cuando es nueva— no pasaba por ninguna maquinaria de endurecido:
+    /// `create_dir_all` + `fs::write` + un `restrict_permissions` que en Windows era un no-op
+    /// con un comentario falso. Aquí se comprueba con SDDL real que **nace cerrado** aunque el
+    /// padre esté abierto, y que el `rename` del temporal se lleva ese cierre.
+    #[test]
+    fn d5013_el_almacen_nace_cerrado_aunque_el_padre_esta_abierto() {
+        // El test existe siempre; solo el cuerpo es de Windows (paridad de recuentos, gate CI).
+        #[cfg(windows)]
+        d5013_cuerpo_almacen_cerrado();
+    }
+
+    #[cfg(windows)]
+    fn d5013_cuerpo_almacen_cerrado() {
+        use crate::config::{sddl_is_too_open, sddl_of};
+
+        let base = std::env::temp_dir().join(format!("tylluan_d5013_ps_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        let padre = base.join("padre");
+        std::fs::create_dir_all(&padre).expect("crear el padre");
+        // La ACE heredable de BUILTIN\Usuarios por SID (lo que hereda la raiz de `E:`), igual
+        // que en `d5012_tests`: por SID para no depender del idioma del sistema.
+        let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(&padre)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(salida.status.success(), "no pude abrir el padre de prueba");
+
+        // CONTROL: otro directorio del MISMO padre, escrito a pelo, sí queda abierto. Sin esto
+        // el escenario no representa el problema y el test pasaría sin probar nada (D5011c).
+        let control = padre.join("a-pelo");
+        std::fs::create_dir_all(&control).expect("crear el dir de control");
+        std::fs::write(control.join("providers.enc"), "x").expect("crear el fichero de control");
+        let sddl_ctl = sddl_of(&control.join("providers.enc")).expect("Get-Acl del control");
+        assert!(
+            sddl_is_too_open(&sddl_ctl),
+            "control: escrito a pelo bajo este padre debe quedar abierto, SDDL: {sddl_ctl}"
+        );
+
+        // Lo que crea el código: carpeta NUEVA + almacén NUEVO, con la misma maquinaria del DATA_DIR.
+        let dir = padre.join("secrets");
+        let mut mapa = BTreeMap::new();
+        mapa.insert("openai".to_string(), "sk-secreto-de-prueba".to_string());
+        write_map(&dir, &KEY, &mapa).expect("escribir el almacen");
+
+        let sddl_dir = sddl_of(&dir).expect("Get-Acl de la carpeta");
+        assert!(
+            !sddl_is_too_open(&sddl_dir),
+            "R4: la carpeta de secretos nueva no puede heredar el padre abierto, SDDL: {sddl_dir}"
+        );
+        assert!(
+            sddl_dir.contains("OICI"),
+            "el cierre de la carpeta debe ser heredable para que `providers.enc` lo herede: {sddl_dir}"
+        );
+
+        let enc = data_path(&dir);
+        let sddl_enc = sddl_of(&enc).expect("Get-Acl de providers.enc");
+        assert!(
+            !sddl_is_too_open(&sddl_enc),
+            "R4: providers.enc no puede quedar con la ACL heredada, SDDL: {sddl_enc}"
+        );
+        assert!(
+            !dir.join("providers.enc.tmp").exists(),
+            "el temporal no puede quedar suelto despues del rename"
+        );
+
+        // El round-trip sigue funcionando: endurecer no rompió la escritura ni el rename.
+        let leido = read_map(&dir, &KEY).expect("releer el almacen");
+        assert_eq!(leido.get("openai").map(String::as_str), Some("sk-secreto-de-prueba"));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// D5013b (T5278, mutacion J del TL): el test de arriba crea la carpeta con
+    /// `ensure_private_data_dir`, asi que nace cerrada y `providers.enc` hereda ese cierre — la
+    /// llamada a `harden_new_secret` **sobre el destino del `rename`** (`:309`) no se ejercita y
+    /// la mutacion J sobrevive. Aqui la carpeta de secretos **ya existe y esta abierta** (ACE
+    /// heredable `*S-1-5-32-545:(OI)(CI)R`, creada a pelo, sin pasar por `ensure_private_data_dir`)
+    /// y hay un `providers.enc.tmp` **huerfano y abierto** de un proceso reventado: al existir,
+    /// `write_private_file` no lo endurece (`nuevo = false`) y el `rename` se lleva esa ACL
+    /// abierta. Lo unico que cierra el almacen es la llamada sobre el destino nuevo.
+    #[test]
+    fn d5013b_almacen_nuevo_sobre_carpeta_abierta_se_cierra_por_el_fichero() {
+        // El test existe siempre; solo el cuerpo es de Windows (paridad de recuentos, gate CI).
+        #[cfg(windows)]
+        d5013b_cuerpo_carpeta_abierta();
+    }
+
+    #[cfg(windows)]
+    fn d5013b_cuerpo_carpeta_abierta() {
+        use crate::config::{sddl_is_too_open, sddl_of};
+
+        let base = std::env::temp_dir().join(format!("tylluan_d5013b_ps_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        let padre = base.join("padre");
+        std::fs::create_dir_all(&padre).expect("crear el padre");
+        let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(&padre)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(salida.status.success(), "no pude abrir el padre de prueba");
+
+        // La carpeta de secretos YA EXISTE y se crea A PELO: no pasa por `ensure_private_data_dir`,
+        // y `write_map` no reescribe la ACL de un almacen que ya existe (politica de Jose, T5266).
+        let dir = padre.join("secrets");
+        std::fs::create_dir_all(&dir).expect("crear la carpeta de secretos a pelo");
+
+        // CONTROL: un fichero normal en ESA carpeta hereda lo abierto. Sin esto el escenario no
+        // representa el problema y el test pasaria sin probar nada (D5011c).
+        let control = dir.join("a-pelo.txt");
+        std::fs::write(&control, "x").expect("crear el fichero de control");
+        let sddl_ctl = sddl_of(&control).expect("Get-Acl del control");
+        assert!(
+            sddl_is_too_open(&sddl_ctl),
+            "control: escrito a pelo en esa carpeta debe quedar abierto, SDDL: {sddl_ctl}"
+        );
+        let sddl_dir = sddl_of(&dir).expect("Get-Acl de la carpeta");
+        assert!(
+            sddl_is_too_open(&sddl_dir),
+            "precondicion: la carpeta de secretos debe estar abierta para que el test valga, SDDL: {sddl_dir}"
+        );
+
+        // Temporal huerfano: existe ANTES y esta abierto, asi que `write_private_file` no lo
+        // endurece (`nuevo = false`) y el `rename` arrastra esa ACL al destino.
+        let tmp = dir.join("providers.enc.tmp");
+        std::fs::write(&tmp, "{\"huerfano\":1}").expect("crear el .enc.tmp huerfano");
+        let sddl_tmp = sddl_of(&tmp).expect("Get-Acl del .enc.tmp");
+        assert!(
+            sddl_is_too_open(&sddl_tmp),
+            "precondicion: el .enc.tmp huerfano debe nacer abierto, SDDL: {sddl_tmp}"
+        );
+        assert!(!data_path(&dir).exists(), "precondicion: providers.enc debe ser nuevo");
+
+        // Y ahi se escribe un almacen NUEVO.
+        let mut mapa = BTreeMap::new();
+        mapa.insert("openai".to_string(), "sk-secreto-de-prueba".to_string());
+        write_map(&dir, &KEY, &mapa).expect("escribir el almacen");
+
+        let enc = data_path(&dir);
+        assert!(enc.exists(), "el almacen nuevo debe quedar escrito");
+        let sddl_enc = sddl_of(&enc).expect("Get-Acl de providers.enc");
+        assert!(
+            !sddl_is_too_open(&sddl_enc),
+            "D5013b (mutacion J): providers.enc nuevo sobre una carpeta abierta y con un .enc.tmp \
+             huerfano debe cerrarse por `harden_new_secret` sobre el destino del rename, SDDL: {sddl_enc}"
+        );
+        assert!(
+            !tmp.exists(),
+            "el temporal huerfano no puede quedar suelto despues del rename"
+        );
+
+        // Endurecer el destino no rompió el round-trip.
+        let leido = read_map(&dir, &KEY).expect("releer el almacen");
+        assert_eq!(leido.get("openai").map(String::as_str), Some("sk-secreto-de-prueba"));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+    // ── D5013b-2 (turno 5287 del TL, punto 1) ───────────────────────────────────────────
+    // `write_private_file` endurece el temporal **solo si es nuevo** y en Unix `OpenOptions::mode`
+    // solo rige al CREAR. Si queda un `providers.enc.tmp` huerfano de un proceso reventado, el
+    // huesped NO se cierra y el `rename` se lleva esa ACL/modo al almacen: un `providers.enc` que
+    // ya estaba cerrado pasa a quedar abierto, y el endurecido del destino tampoco lo cubre porque
+    // `destino_nuevo` es `false`. Los dos tests de abajo fallan sin el arreglo de esta ronda.
+
+    /// Windows: el padre abierto con la ACE heredable por SID (no depende del idioma), igual que
+    /// en `d5013_tests` y `d5012_tests`.
+    #[cfg(windows)]
+    fn d5013b2_padre_abierto(dir: &std::path::Path) {
+        let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(dir)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(salida.status.success(), "no pude abrir el padre de prueba");
+    }
+
+    #[cfg(unix)]
+    fn d5013b2_modo(p: &std::path::Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(p).expect("metadata").permissions().mode() & 0o777
+    }
+
+    /// Unidad: escribir sobre un huesped ABIERTO tiene que dejar el fichero CERRADO. Hoy no lo
+    /// hace: `nuevo = false` salta el endurecido y el huesped conserva su ACL/modo abierto.
+    #[test]
+    fn d5013b_2_escribir_sobre_un_huesped_abierto_lo_deja_cerrado() {
+        let base = std::env::temp_dir().join(format!("tylluan_d5013b2a_ps_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        let huesped = base.join("providers.enc.tmp");
+
+        #[cfg(windows)]
+        {
+            use crate::config::{sddl_is_too_open, sddl_of};
+            d5013b2_padre_abierto(&base);
+            std::fs::write(&huesped, "{\"huerfano\":1}").expect("crear el huesped");
+            let sddl = sddl_of(&huesped).expect("Get-Acl del huesped");
+            assert!(
+                sddl_is_too_open(&sddl),
+                "precondicion: el huesped debe nacer abierto, SDDL: {sddl}"
+            );
+
+            write_private_file(&huesped, b"{\"openai\":\"sk-secreto-de-prueba\"}").expect("escribir");
+
+            let sddl2 = sddl_of(&huesped).expect("Get-Acl tras escribir");
+            assert!(
+                !sddl_is_too_open(&sddl2),
+                "D5013b-2: escribir sobre un .enc.tmp huerfano y abierto debe cerrarlo antes de \
+                 que el rename se lleve esa ACL al almacen, SDDL: {sddl2}"
+            );
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::write(&huesped, "{\"huerfano\":1}").expect("crear el huesped");
+            std::fs::set_permissions(&huesped, std::fs::Permissions::from_mode(0o644))
+                .expect("abrir el huesped");
+            assert_eq!(d5013b2_modo(&huesped), 0o644, "precondicion: el huesped esta 0644");
+
+            write_private_file(&huesped, b"contenido").expect("escribir");
+
+            let modo = d5013b2_modo(&huesped);
+            assert_eq!(
+                modo, 0o600,
+                "D5013b-2: `mode(0o600)` solo rige al crear; hay que fijar el modo tambien sobre \
+                 un huesped, modo real: {modo:o}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// Extremo: almacen **ya existente y cerrado** + `.enc.tmp` huerfano abierto. Es el caso que
+    /// no cubria ninguno de los dos tests de D5013: el destino no es nuevo, asi que alli no se
+    /// llama a `harden_new_secret`, y el `rename` sustituye la DACL cerrada por la del huesped.
+    #[test]
+    fn d5013b_2_almacen_existente_con_tmp_huerfanoabierto_sigue_cerrado() {
+        let base = std::env::temp_dir().join(format!("tylluan_d5013b2b_ps_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+
+        #[cfg(windows)]
+        {
+            use crate::config::{sddl_is_too_open, sddl_of};
+            d5013b2_padre_abierto(&base);
+            // carpeta de secretos ya existente, creada a pelo (abierta): DATA_DIR anterior a D5012
+            let dir = base.join("secrets");
+            std::fs::create_dir_all(&dir).expect("crear la carpeta de secretos a pelo");
+
+            // (1) el almacen se escribe con la maquinaria de D5013 y nace CERRADO
+            let mut mapa = BTreeMap::new();
+            mapa.insert("openai".to_string(), "sk-primera".to_string());
+            write_map(&dir, &KEY, &mapa).expect("crear el almacen");
+            let enc = data_path(&dir);
+            let sddl_antes = sddl_of(&enc).expect("Get-Acl de providers.enc");
+            assert!(
+                !sddl_is_too_open(&sddl_antes),
+                "precondicion: el almacen recien creado debe estar cerrado, SDDL: {sddl_antes}"
+            );
+
+            // (2) aparece el huesped abierto de un proceso reventado
+            let tmp = dir.join("providers.enc.tmp");
+            std::fs::write(&tmp, "{\"huerfano\":1}").expect("crear el .enc.tmp huerfano");
+            let sddl_tmp = sddl_of(&tmp).expect("Get-Acl del huesped");
+            assert!(
+                sddl_is_too_open(&sddl_tmp),
+                "precondicion: el .enc.tmp huerfano debe nacer abierto, SDDL: {sddl_tmp}"
+            );
+            assert!(enc.exists(), "precondicion: el almacen ya existe");
+
+            // (3) sobrescritura normal (set_secret / delete_secret sobre almacen existente)
+            mapa.insert("openai".to_string(), "sk-segunda".to_string());
+            write_map(&dir, &KEY, &mapa).expect("sobrescribir el almacen");
+
+            let sddl_ahora = sddl_of(&enc).expect("Get-Acl tras el rename");
+            assert!(
+                !sddl_is_too_open(&sddl_ahora),
+                "D5013b-2: un .enc.tmp huerfano y abierto no puede dejar abierto un almacen que \
+                 ya estaba cerrado. Antes: {sddl_antes} | ahora: {sddl_ahora}"
+            );
+            assert!(!tmp.exists(), "el temporal huerfano no puede quedar suelto");
+            let leido = read_map(&dir, &KEY).expect("releer el almacen");
+            assert_eq!(leido.get("openai").map(String::as_str), Some("sk-segunda"));
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir = base.join("secrets");
+            std::fs::create_dir_all(&dir).expect("crear la carpeta de secretos");
+            let mut mapa = BTreeMap::new();
+            mapa.insert("openai".to_string(), "sk-primera".to_string());
+            write_map(&dir, &KEY, &mapa).expect("crear el almacen");
+            let enc = data_path(&dir);
+            assert_eq!(d5013b2_modo(&enc), 0o600, "precondicion: el almacen nace 0600");
+
+            let tmp = dir.join("providers.enc.tmp");
+            std::fs::write(&tmp, "{\"huerfano\":1}").expect("crear el .enc.tmp huerfano");
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644))
+                .expect("abrir el huesped");
+            assert_eq!(d5013b2_modo(&tmp), 0o644, "precondicion: el huesped esta 0644");
+
+            mapa.insert("openai".to_string(), "sk-segunda".to_string());
+            write_map(&dir, &KEY, &mapa).expect("sobrescribir el almacen");
+            // En Unix el `restrict_permissions` del destino cubre el descanso; lo que abre el
+            // hueco es la ventana del huesped, que se cierra con el arreglo de esta ronda.
+            assert_eq!(
+                d5013b2_modo(&enc), 0o600,
+                "el 0644 del huesped se colo por el rename hasta el almacen"
+            );
+            assert!(!tmp.exists(), "el temporal huerfano no puede quedar suelto");
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

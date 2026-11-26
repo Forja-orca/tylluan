@@ -4,6 +4,18 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [Unreleased]
+
+**Changed**
+- `tylluan-cli start` pasa al kernel el `tylluan.toml` que `install` escribe **junto al binario**
+  cuando el directorio de trabajo del operador no tiene config: antes el kernel arrancaba en
+  `📄 No tylluan.toml found, using defaults.` y el config de la instalacion (puerto, `transport`,
+  `embedding_model`) no se leia nunca. Manda el cwd como siempre; el config hermano solo entra por
+  `--config` si en el cwd no hay ninguno, y solo viaja con el binario que lo acompano al instalar
+  (no se toma el de otra instancia). No cierra el hueco del `data/` huerfano en el cwd: el
+  `DATA_DIR` del kernel sigue siendo `TYLLUAN_DATA_DIR` o `./data` respecto al cwd, y el config
+  generado no fija esa ruta (`D5017`) (sin commitear, Deep)
+
 ## [0.17.4] — 2026-11-23
 
 Release de estabilidad del arranque, del instalador en Windows limpio y de la identidad del Coloquio, más el primer binario publicado con el panel embebido. **Plataformas de esta release: solo Windows x86_64 y Linux x86_64.** Los tests del kernel pasan de 1810 a 1875 (1897 → 1962 en total: 1875 + 75 + 12), recuento de `v0.17.3` tomado de su `README.md`.

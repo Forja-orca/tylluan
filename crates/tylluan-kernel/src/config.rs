@@ -2536,8 +2536,33 @@ fn file_based_key_fallback(data_dir: &Path) -> anyhow::Result<String> {
 
     let mut seed = [0u8; 32];
     OsRng.fill_bytes(&mut seed);
+    // D5013 (AH01-R1, T5275): de esta semilla sale, vía `derive_key_argon2`, la clave de
+    // **todas** las bases cifradas, y nacia con `fs::write` pelado — en Windows con la ACL
+    // heredada del padre (`Usuarios autentificados` puede leerla y sobrescribirla) y en Unix
+    // con el modo por defecto. Se escribe ya cerrada y, si es NUEVA, se le corta la herencia.
+    // Una `.tylluan-db-key` que ya existe no se toca: la rama de lectura de arriba no cambia.
+    let nueva = !key_path.exists();
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        // `mode` solo aplica al crear; es justo el caso de aquí (no existía).
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&key_path)
+            .map_err(|e| anyhow::anyhow!("Cannot write {}: {}", key_path.display(), e))?;
+        f.write_all(&seed)
+            .map_err(|e| anyhow::anyhow!("Cannot write {}: {}", key_path.display(), e))?;
+    }
+    #[cfg(not(unix))]
     fs::write(&key_path, seed)
         .map_err(|e| anyhow::anyhow!("Cannot write {}: {}", key_path.display(), e))?;
+    if nueva {
+        harden_new_secret(&key_path);
+    }
     tracing::info!("🔑 Generated file-based DB encryption key at {} (no keychain available)", key_path.display());
 
     derive_key_argon2(&seed, data_dir)
@@ -3465,8 +3490,11 @@ pub fn ps_single_quote(s: &str) -> String {
 
 /// Y-01: SDDL del fichero via `Get-Acl` (independiente del idioma del sistema, que si rompe el
 /// parseo de nombres de grupo de `icacls`).
+///
+/// Es `pub` desde D5013: lo necesitan los tests de otros modulos (`security::provider_secrets`)
+/// y la fila `doc.data_perms` del doctor.
 #[cfg(windows)]
-fn sddl_of(path: &Path) -> Option<String> {
+pub fn sddl_of(path: &Path) -> Option<String> {
     let script = format!("(Get-Acl -LiteralPath {}).Sddl", ps_single_quote(&path.to_string_lossy()));
     let salida = std::process::Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
@@ -3484,12 +3512,23 @@ fn sddl_of(path: &Path) -> Option<String> {
 /// `icacls` es de Windows y vive en `System32` (ruta absoluta: el `PATH` no decide que binario
 /// ejecuta una operacion de seguridad). `SYSTEM:F` sin el prefijo `NT AUTHORITY\`: con el
 /// prefijo largo `icacls` responde «procesado correctamente» y **no aplica el grant** (medido).
+///
+/// D5013 (AH01-R3, T5275): los tres caminos de fallo devuelven **`Err`**, no un `Ok` explicativo.
+/// Antes `Ok("…el fichero queda con la ACL heredada")` se imprimia con `info!` en
+/// [`harden_new_secret`], asi que un arranque que **no** endurecio nada se leia como un OK.
+/// Y se **auto-verifica** con [`verificar_dacl_cerrada`]: `icacls` puede decir «procesado
+/// correctamente» sin haber cerrado (medido con una ACE explicita de `BUILTIN\Usuarios`).
 #[cfg(windows)]
 fn harden_secret_windows(path: &Path) -> std::io::Result<String> {
     let usuario = match (std::env::var("USERDOMAIN"), std::env::var("USERNAME")) {
         (Ok(d), Ok(u)) if !d.trim().is_empty() && !u.trim().is_empty() => format!("{d}\\{u}:F"),
         (_, Ok(u)) if !u.trim().is_empty() => format!("{u}:F"),
-        _ => return Ok("no pude resolver el usuario actual: no endurezco".to_string()),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "no pude resolver el usuario actual: no endurezco",
+            ));
+        }
     };
     let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
         .arg(path)
@@ -3498,12 +3537,34 @@ fn harden_secret_windows(path: &Path) -> std::io::Result<String> {
         .arg("SYSTEM:F")
         .output()?;
     if !salida.status.success() {
-        return Ok(format!(
+        return Err(std::io::Error::other(format!(
             "icacls devolvio {}: el fichero queda con la ACL heredada",
             salida.status
-        ));
+        )));
     }
-    Ok(format!("solo {usuario} y SYSTEM, sin herencia"))
+    verificar_dacl_cerrada(path, "fichero de secreto")
+        .map(|_| format!("solo {usuario} y SYSTEM, sin herencia"))
+}
+
+/// D5013 (AH01-R3): comprueba de verdad que la DACL quedo cerrada.
+///
+/// Devuelve `Err` cuando la DACL **sigue abierta** o cuando **no se puede leer**: en los dos
+/// casos el llamador debe avisar (`warn!`), no dar el endurecido por bueno. Es la comprobacion
+/// que [`harden_dir_windows`] ya hacia y que faltaba en el camino de los ficheros de secreto;
+/// por eso esta compartida. `sddl_of` + `sddl_is_too_open` son las mismas piezas que usara el
+/// doctor (fila `doc.data_perms`), asi que el aviso y el diagnostico no pueden discrepar.
+#[cfg(windows)]
+fn verificar_dacl_cerrada(path: &Path, que: &str) -> std::io::Result<String> {
+    match sddl_of(path) {
+        Some(sddl) if sddl_is_too_open(&sddl) => Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("la DACL de la {que} sigue abierta: {sddl}"),
+        )),
+        Some(_) => Ok("DACL cerrada, verificada con Get-Acl".to_string()),
+        None => Err(std::io::Error::other(
+            "no pude leer la ACL para confirmar el cierre (Get-Acl fallo)".to_string(),
+        )),
+    }
 }
 
 /// D5012 / H-HER-AB-05 (P0, T5266): crea el DATA_DIR con ACL cerrada **y heredable**.
@@ -3554,12 +3615,21 @@ pub fn ensure_private_data_dir(path: &Path) -> std::io::Result<()> {
 /// hace falta [`ps_single_quote`]: esa funcion protege el `-Command` de PowerShell de [`sddl_of`].
 /// `SYSTEM:F` sin prefijo `NT AUTHORITY\` por lo medido en Y-01 (con prefijo dice «procesado
 /// correctamente» y no aplica el grant).
+///
+/// D5013 (AH01-R3, T5275): los caminos de fallo devuelven **`Err`** — antes devolvian un `Ok` con
+/// el aviso dentro («AVISO: icacls devolvio ok pero la DACL sigue abierta: …») y el llamador lo
+/// imprimia con `info!`, igual que un cierre correcto. Ahora el llamador lo saca con `warn!`.
 #[cfg(windows)]
 fn harden_dir_windows(path: &Path) -> std::io::Result<String> {
     let usuario = match (std::env::var("USERDOMAIN"), std::env::var("USERNAME")) {
         (Ok(d), Ok(u)) if !d.trim().is_empty() && !u.trim().is_empty() => format!("{d}\\{u}"),
         (_, Ok(u)) if !u.trim().is_empty() => u,
-        _ => return Ok("no pude resolver el usuario actual: no endurezco".to_string()),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "no pude resolver el usuario actual: no endurezco",
+            ));
+        }
     };
     let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
         .arg(path)
@@ -3568,20 +3638,16 @@ fn harden_dir_windows(path: &Path) -> std::io::Result<String> {
         .arg("SYSTEM:(OI)(CI)F")
         .output()?;
     if !salida.status.success() {
-        return Ok(format!(
+        return Err(std::io::Error::other(format!(
             "icacls devolvio {}: el directorio queda con la ACL heredada",
             salida.status
-        ));
+        )));
     }
-    match sddl_of(path) {
-        Some(sddl) if sddl_is_too_open(&sddl) => {
-            Ok(format!("AVISO: icacls devolvio ok pero la DACL sigue abierta: {sddl}"))
-        }
-        Some(_) => Ok(format!(
-            "solo {usuario} y SYSTEM, con (OI)(CI), sin herencia del padre"
-        )),
-        None => Ok("icacls devolvio ok; no pude leer la ACL para confirmarlo".to_string()),
-    }
+    // D5013: la auto-verificacion compartida con los ficheros de secreto. Si icacls salio con 0
+    // y la DACL sigue abierta, esto es `Err` -> `warn!` en `ensure_private_data_dir`. Sigue sin
+    // tumbar el arranque: la politica de Jose (T5266) es avisar, no fallar.
+    verificar_dacl_cerrada(path, "directorio de datos")
+        .map(|_| format!("solo {usuario} y SYSTEM, con (OI)(CI), sin herencia del padre"))
 }
 
 /// Y-01/D206: mensaje de exposicion del secreto, o `None` si esta bien.
@@ -5413,6 +5479,155 @@ mod d5012_tests {
         ensure_private_data_dir(&base).expect("no debe fallar con un dir existente");
         let despues = sddl_of(&base).expect("Get-Acl despues");
         assert_eq!(antes, despues, "un DATA_DIR que ya existia no cambia de ACL");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
+/// D5013 (AH01-R1 y AH01-R3 del informe `REVISION_AH01_2026-11-25.md`, T5275):
+///
+/// - **R1**: la semilla de `.tylluan-db-key` (de la que sale, vía `derive_key_argon2`, la clave
+///   de TODAS las bases cifradas) se escribía con `fs::write` pelada: bajo un padre abierto nacía
+///   legible/escribible para `Usuarios` y `Autenticados`.
+/// - **R3**: `harden_secret_windows` devolvía `Ok(...)` en los dos caminos de fallo, así que
+///   `harden_new_secret` imprimía el aviso con `info!` y un arranque que **no** endureció nada
+///   se leía como un OK. Además no se auto-verificaba.
+///
+/// Escenario igual que `d5012_tests`: el padre se **abre a propósito** con la ACE heredable de
+/// BUILTIN\Usuarios por SID (independiente del idioma). Sin ese padre abierto el test pasaría
+/// sin probar nada — el error que se corrigió en `y01_endurece_lo_que_crea` (D5011c).
+#[cfg(test)]
+mod d5013_tests {
+    // Solo se usa en los cuerpos #[cfg(windows)]: en Linux sobraria y CI (-Dwarnings) lo rechaza.
+    #[cfg(windows)]
+    use super::*;
+
+    /// Abre un directorio de prueba con la ACE heredable de BUILTIN\Usuarios (lo que hereda `E:`).
+    #[cfg(windows)]
+    fn abrir_padre(dir: &Path) {
+        let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(dir)
+            .args(["/grant", "*S-1-5-32-545:(OI)(CI)R"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(salida.status.success(), "no pude abrir el directorio de prueba");
+    }
+
+    #[test]
+    fn d5013_la_db_key_nace_cerrada_aunque_el_padre_esta_abierto() {
+        // El test existe siempre; solo el cuerpo es de Windows (paridad de recuentos, gate CI).
+        #[cfg(windows)]
+        d5013_cuerpo_db_key();
+    }
+
+    #[cfg(windows)]
+    fn d5013_cuerpo_db_key() {
+        let base = std::env::temp_dir().join(format!("tylluan_d5013_a_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        abrir_padre(&base);
+
+        // Un DATA_DIR creado con el mkdir pelado (el caso real de quien ya tenia la carpeta
+        // antes de D5012) debe quedar ABIERTO: sin esta precondicion el test no prueba nada.
+        let dir = base.join("data");
+        std::fs::create_dir_all(&dir).expect("crear el data dir a pelo");
+        let sddl_dir = sddl_of(&dir).expect("Get-Acl del data dir");
+        assert!(
+            sddl_is_too_open(&sddl_dir),
+            "precondicion: el data dir debe partir abierto, SDDL: {sddl_dir}"
+        );
+
+        let clave = file_based_key_fallback(&dir).expect("generar la clave de la base");
+        assert_eq!(clave.len(), 64, "la clave derivada son 32 bytes en hexadecimal");
+
+        let key_path = dir.join(".tylluan-db-key");
+        let sddl_key = sddl_of(&key_path).expect("Get-Acl de la db-key");
+        assert!(
+            !sddl_is_too_open(&sddl_key),
+            "R1: la semilla de la clave de todas las bases no puede heredar el padre abierto, SDDL: {sddl_key}"
+        );
+
+        // El formato en disco NO cambia: sigue los 32 bytes crudos que lee la rama de arriba.
+        let seed = std::fs::read(&key_path).expect("leer la semilla");
+        assert_eq!(seed.len(), 32, "la semilla sigue siendo 32 bytes crudos");
+
+        // Y reejecutar no puede tocar la ACL de una clave que ya existe (decisión de José T5266).
+        let antes = sddl_of(&key_path).expect("Get-Acl antes");
+        let _ = file_based_key_fallback(&dir).expect("releer la clave existente");
+        assert_eq!(
+            antes,
+            sddl_of(&key_path).expect("Get-Acl despues"),
+            "una db-key que ya existia no se re-endurece"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn d5013_endurecer_que_no_cierra_devuelve_err() {
+        #[cfg(windows)]
+        d5013_cuerpo_icacls_miente();
+    }
+
+    #[cfg(windows)]
+    fn d5013_cuerpo_icacls_miente() {
+        // Medido en esta maquina: `icacls /inheritance:r /grant:r ...` corta la HERENCIA pero
+        // respeta una ACE **explicita** de `Autenticados` (S-1-5-11) y sale con codigo 0 diciendo
+        // «procesado correctamente». Es el caso por el que R3 existe: el codigo viejo lo daba
+        // por bueno y lo imprimia con `info!`.
+        let base = std::env::temp_dir().join(format!("tylluan_d5013_b_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        let fichero = base.join("secreto.txt");
+        fs::write(&fichero, "semilla").expect("crear el fichero");
+
+        let salida = std::process::Command::new(r"C:\Windows\System32\icacls.exe")
+            .arg(&fichero)
+            .args(["/grant", "*S-1-5-11:F"])
+            .output()
+            .expect("ejecutar icacls");
+        assert!(salida.status.success(), "no pude abrir el fichero de prueba");
+        let antes = sddl_of(&fichero).expect("Get-Acl antes");
+        assert!(sddl_is_too_open(&antes), "precondicion: {antes}");
+
+        let r = harden_secret_windows(&fichero);
+        match r {
+            Ok(msg) => panic!(
+                "R3: icacls salio con 0 y la DACL sigue abierta; no puede ser un Ok: {msg}"
+            ),
+            Err(e) => {
+                let txt = e.to_string();
+                assert!(
+                    txt.contains("sigue abierta"),
+                    "el error debe decir que la DACL sigue abierta: {txt}"
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn d5013_endurecer_cuando_icacls_falla_devuelve_err() {
+        #[cfg(windows)]
+        d5013_cuerpo_icacls_falla();
+    }
+
+    #[cfg(windows)]
+    fn d5013_cuerpo_icacls_falla() {
+        // Ruta que no existe: icacls sale con codigo 2 (medido). Antes devolvia Ok con el
+        // texto «icacls devolvio …: el fichero queda con la ACL heredada» y el arranque lo
+        // imprimia como un mensaje normal.
+        let base = std::env::temp_dir().join(format!("tylluan_d5013_c_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("crear carpeta de prueba");
+        let inexistente = base.join("no-hay-fichero.txt");
+
+        let e = harden_secret_windows(&inexistente)
+            .expect_err("R3: si icacls falla, endurecer tiene que devolver Err");
+        let txt = e.to_string();
+        assert!(
+            txt.contains("icacls devolvio") && txt.contains("ACL heredada"),
+            "el error debe explicar que icacls fallo y el fichero queda heredado: {txt}"
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 }
