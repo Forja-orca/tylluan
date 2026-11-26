@@ -3141,6 +3141,7 @@ mod tests {
         }
         #[cfg(unix)]
         {
+            use std::os::unix::fs::PermissionsExt;
             let dir = d5018c_dir("estado_antes_unix");
             let _ = fs::remove_dir_all(&dir);
             fs::create_dir_all(&dir).expect("crear carpeta de prueba");
