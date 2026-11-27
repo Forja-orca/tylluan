@@ -724,8 +724,42 @@ pub fn prune_backups(config: &Path, keep: usize) -> usize {
 pub fn backup_and_prune(path: &Path) -> Result<PathBuf, String> {
     let backup = backup_path_for(path)?;
     std::fs::copy(path, &backup).map_err(|e| format!("no se pudo hacer copia previa: {e}"))?;
+    cerrar_acl_de_copia(&backup);
     prune_backups(path, KEEP_CONFIG_BACKUPS);
     Ok(backup)
+}
+
+/// D5032d (H-HER-AI-01, P2, hallazgo de @hermes T5335): la copia previa nacía con la **ACL
+/// heredada del directorio**. Medido en la máquina del operador: `tylluan.toml` lleva
+/// `BUILTIN\Usuarios:(I)(RX)` y `NT AUTHORITY\Usuarios autentificados:(I)(M)`, así que las hasta
+/// 3 copias `tylluan.toml.bak-<millis>` que deja `backup_and_prune` quedaban legibles (y la del
+/// `Usuarios autentificados`, escribibles) para cualquier usuario local. Desde D5032 esas copias
+/// pueden contener `[security.acl.token_agent_bindings]` y los hashes de los tokens, y la vía ya
+/// existía antes de D5032 (`api_admin.rs:967`, `config_safe.rs:1816` y `:1830`).
+///
+/// El remedio es el que ya usa el resto de secretos: [`crate::config::harden_new_secret`] corta la
+/// herencia en Windows (`icacls /inheritance:r /grant:r <cuenta>:F SYSTEM:F`) y se auto-verifica
+/// con `verificar_dacl_cerrada`; **no-op fuera de Windows**, por eso el modo 0600 explícito de
+/// Unix (mismo valor que `PRIVATE_CONFIG_MODE`, y `std::fs::copy` solo conserva el modo del padre,
+/// que no siempre es 0600). Como `harden_new_secret`, nunca convierte un 200 en un 500: si el
+/// cierre falla, avisa y la copia queda como estaba.
+fn cerrar_acl_de_copia(copia: &Path) {
+    crate::config::harden_new_secret(copia);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) =
+            std::fs::set_permissions(copia, std::fs::Permissions::from_mode(PRIVATE_CONFIG_MODE))
+        {
+            tracing::warn!(
+                "no se pudo poner {:#o} en la copia {}: {e}",
+                PRIVATE_CONFIG_MODE,
+                copia.display()
+            );
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    let _ = copia;
 }
 
 /// D5018: copia previa **solo si hay fichero que copiar**.
@@ -1834,6 +1868,76 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
         assert!(backup.exists(), "la copia debe existir");
         assert_eq!(copias_en(dir.path()).len(), 1, "una sola copia");
         assert!(cfg.exists(), "la config viva no se toca");
+    }
+
+    // ── D5032d (H-HER-AI-01, P2, @hermes T5335): la copia previa no puede heredar una ACL abierta ──
+    //
+    // Medido 2026-11-27: `E:\tylluan\tylluan.toml` tiene `BUILTIN\Usuarios:(I)(RX)` y
+    // `NT AUTHORITY\Usuarios autentificados:(I)(M)`; `std::fs::copy` nace con la ACL heredada del
+    // directorio, asi que las copias `tylluan.toml.bak-<millis>` quedaban al alcance de cualquier
+    // usuario local. Hoy no hay `.bak` en disco (0 ficheros), pero el primer `POST /api/v1/config`
+    // o `/api/v1/acl/tokens` los crea.
+
+    #[cfg(windows)]
+    #[test]
+    fn d5032d_copia_previa_nace_con_dacl_cerrada() {
+        use crate::config::{sddl_is_too_open, sddl_of};
+
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+        std::fs::write(
+            &cfg,
+            "[security.acl]\ndefault_role = \"reader\"\n\n[security.acl.token_agent_bindings]\n\"sha256:abc\" = \"deep\"\n",
+        )
+        .unwrap();
+
+        // Precondicion: un fichero normal en este mismo directorio SI esta abierto. Sin esto el
+        // test no prueba nada (una carpeta ya cerrada daria verde sin el arreglo).
+        let normal = dir.path().join("normal.txt");
+        std::fs::write(&normal, b"abierto").unwrap();
+        let sddl_normal = sddl_of(&normal).expect("Get-Acl funciona en esta maquina");
+        assert!(
+            sddl_is_too_open(&sddl_normal),
+            "precondicion: el directorio de prueba deberia herir una DACL abierta, y no: {sddl_normal}"
+        );
+
+        let backup = backup_and_prune(&cfg).expect("copia previa");
+        let sddl = sddl_of(&backup).expect("Get-Acl de la copia");
+        assert!(
+            !sddl_is_too_open(&sddl),
+            "la copia de la config sigue abierta a grupos amplios: {sddl}"
+        );
+
+        // Y el endurecimiento no rompe lo que ya hacia `backup_and_prune`.
+        assert!(backup.is_file(), "la copia sigue existiendo");
+        assert!(cfg.is_file(), "la config viva no se toca");
+        assert_eq!(
+            std::fs::read_to_string(&backup).expect("la copia se lee"),
+            std::fs::read_to_string(&cfg).expect("la config se lee"),
+            "la copia conserva el contenido"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn d5032d_copia_previa_nace_con_modo_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("tylluan.toml");
+        std::fs::write(&cfg, "[security.acl]\ndefault_role = \"reader\"\n").unwrap();
+        // El padre adrede en 0644: `std::fs::copy` conservaria ese modo si no se cierra la copia.
+        std::fs::set_permissions(&cfg, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let backup = backup_and_prune(&cfg).expect("copia previa");
+        let modo = std::fs::metadata(&backup).expect("metadata").permissions().mode();
+        assert_eq!(
+            modo & 0o777,
+            PRIVATE_CONFIG_MODE,
+            "la copia debe nacer en {:o}, no {:o}",
+            PRIVATE_CONFIG_MODE,
+            modo & 0o777
+        );
     }
 
     #[test]
