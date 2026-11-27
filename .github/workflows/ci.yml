@@ -539,7 +539,8 @@ jobs:
             --test approve_audit_matrix \
             --test layer1_corpus_acceptance \
             --test asi06_layer1_ingest_memory_write \
-            --test d163_external_providers_hot_refresh
+            --test d163_external_providers_hot_refresh \
+            --test d5032_agent_token_issuance
 
   desktop-tauri-check:
     name: Desktop — Tauri shell check
