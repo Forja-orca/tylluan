@@ -1878,9 +1878,15 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
     // usuario local. Hoy no hay `.bak` en disco (0 ficheros), pero el primer `POST /api/v1/config`
     // o `/api/v1/acl/tokens` los crea.
 
-    #[cfg(windows)]
+    // REGLA 13: el `#[test]` se compila en todos los SO; solo el cuerpo lleva `cfg`.
     #[test]
     fn d5032d_copia_previa_nace_con_dacl_cerrada() {
+        #[cfg(windows)]
+        d5032d_dacl_cuerpo();
+    }
+
+    #[cfg(windows)]
+    fn d5032d_dacl_cuerpo() {
         use crate::config::{sddl_is_too_open, sddl_of};
 
         let dir = tempfile::tempdir().unwrap();
@@ -1918,9 +1924,14 @@ token_agent_bindings = { "TOKEN_SECRETO_123" = "a1" }
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn d5032d_copia_previa_nace_con_modo_0600() {
+        #[cfg(unix)]
+        d5032d_modo_cuerpo();
+    }
+
+    #[cfg(unix)]
+    fn d5032d_modo_cuerpo() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempfile::tempdir().unwrap();
