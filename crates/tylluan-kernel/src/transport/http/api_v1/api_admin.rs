@@ -3347,3 +3347,476 @@ mod tests {
     }
 
 }
+
+// ===========================================================================
+// D5032 (F1 de D5014): emision de tokens por agente.
+//
+// El resolutor ya estaba (D225, dsh): `acl_token_sha256`, `lookup_acl_entry`,
+// `agent_token_kind` y `resolve_agent_id_for_token` en `auth.rs`. Lo que faltaba
+// era el **emisor**: medido el 2026-11-27, `git grep -i 'operator/tokens'` solo
+// daba dos comentarios y `tylluan-cli` no tenia ningun subcomando de tokens. O
+// sea, la unica forma de dar un token de agente era editar a mano `tylluan.toml`
+// y pegar alli el valor en claro — el mismo patron de secreto en un fichero
+// legible que Y-01 encontro en el token maestro.
+//
+// Invariantes, cada una con su test (aqui y en
+// `tests/d5032_agent_token_issuance.rs`):
+//  1. Al disco solo va `sha256:<hex>`. `upsert_acl_token_toml` aborta si el TOML
+//     generado contuviera el token en claro, y aborta tambien si el diff que va a
+//     `config_audit.jsonl` lo contuviera.
+//  2. Se escriben las DOS tablas: `[security.acl.tokens]` (hash -> rol) y
+//     `[security.acl.token_agent_bindings]` (hash -> agent_id). Sin la segunda el
+//     token autentica pero no identifica, y la suplantacion entre agentes (M31-P1)
+//     vuelve a estar abierta.
+//  3. El rol tiene que existir en `[security.acl.roles]`. En produccion
+//     `default_role = "admin"`, asi que un token sin rol mapeado seria un token de
+//     administrador: se rechaza en vez de heredar el default.
+//  4. La ruta es clase Operador (`auth::operator_class_required`): un token de
+//     agente no puede emitir tokens.
+//  5. El token se devuelve **una sola vez**; lo que queda en el repo es la huella.
+//
+// Lo que NO hace este parche, dicho en el informe y no tapado: `ttl` no se
+// aplica. El resolutor no tiene concepto de expiracion, y anadirlo toca el
+// codigo de D225 (fase F2 de D5014). Por eso un cuerpo con `ttl`/`ttl_days` se
+// rechaza con 400 en lugar de emitir un token con una caducidad falsa.
+// ===========================================================================
+
+/// Ambitos que entiende `auth::check_agent_id_tool_allowed`.
+pub const AGENT_SCOPES: [&str; 3] = ["read-only", "read-write", "admin"];
+
+/// Cuerpo de `POST /api/v1/acl/tokens`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct IssueAgentTokenBody {
+    /// Agente al que se vincula el token (obligatorio).
+    #[serde(default)]
+    pub agent_id: String,
+    /// Rol de `[security.acl.roles]` (obligatorio: heredar `default_role` seria
+    /// regalar `admin` en produccion).
+    #[serde(default)]
+    pub role: Option<String>,
+    /// Ambito de herramientas del agente; si viene, se escribe en
+    /// `[security.acl.agent_permissions.<agent_id>].scope`.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// ETag del `tylluan.toml` leido. Obligatorio: dos emisiones seguidas sin ETag
+    /// se pisarian la escritura.
+    #[serde(default)]
+    pub etag: Option<String>,
+    /// Expiracion: **todavia no la aplica el resolutor** (F2 de D5014). Se acepta
+    /// en el contrato solo para poder rechazarla explicitamente.
+    #[serde(default)]
+    pub ttl_days: Option<i64>,
+    #[serde(default)]
+    pub ttl: Option<i64>,
+}
+
+/// Token nuevo: 32 bytes del CSPRNG del sistema (`OsRng`, el mismo generador con
+/// el que `config.rs` crea el token maestro) en hex minuscula, con prefijo
+/// reconocible. El prefijo no es un secreto: lo que autentica son los 256 bits.
+pub fn new_agent_token() -> String {
+    use rand::RngCore;
+    let mut raw = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut raw);
+    let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+    format!("tyll-agent-{hex}")
+}
+
+/// `agent_id` sin espacios ni separadores de ruta. Los ids reales de la flota son
+/// `deep`, `claude-code`, `qwen-desktop`.
+fn validate_agent_id(agent_id: &str) -> Result<String, String> {
+    let id = agent_id.trim();
+    if id.is_empty() {
+        return Err("falta 'agent_id'".to_string());
+    }
+    if id.len() > 64 {
+        return Err(format!("'agent_id' de {} caracteres, maximo 64", id.len()));
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err(format!(
+            "'agent_id' {id} lleva caracteres no permitidos (letras, digitos, '-', '_', '.')"
+        ));
+    }
+    Ok(id.to_string())
+}
+
+/// El rol tiene que existir en `[security.acl.roles]`. Fail-closed a proposito:
+/// `resolve_role_for_token` devuelve `acl.default_role` para un token sin mapear,
+/// y en `tylluan.toml` de produccion eso es `"admin"`.
+fn validate_acl_role(role: Option<&str>, acl: &crate::config::AclConfig) -> Result<String, String> {
+    let mut conocidos: Vec<&str> = acl.roles.keys().map(String::as_str).collect();
+    conocidos.sort_unstable();
+    let rol = role.unwrap_or("").trim();
+    if rol.is_empty() {
+        return Err(format!(
+            "falta 'role' (roles de [security.acl.roles]: {})",
+            conocidos.join(", ")
+        ));
+    }
+    if !acl.roles.contains_key(rol) {
+        return Err(format!(
+            "el rol '{rol}' no existe en [security.acl.roles] (conocidos: {})",
+            conocidos.join(", ")
+        ));
+    }
+    Ok(rol.to_string())
+}
+
+fn validate_scope(scope: Option<&str>) -> Result<Option<String>, String> {
+    match scope.map(str::trim).filter(|s| !s.is_empty()) {
+        None => Ok(None),
+        Some(s) if AGENT_SCOPES.contains(&s) => Ok(Some(s.to_string())),
+        Some(s) => Err(format!(
+            "scope '{s}' no valido (validos: {})",
+            AGENT_SCOPES.join(", ")
+        )),
+    }
+}
+
+/// Baja (o crea) una tabla dentro de otra. Error explicito si la clave existe
+/// pero no es una tabla: no se sustituye a ciegas una clave que ya esta en uso.
+fn table_child<'a>(
+    parent: &'a mut toml::value::Table,
+    key: &str,
+) -> Result<&'a mut toml::value::Table, (axum::http::StatusCode, String)> {
+    use axum::http::StatusCode;
+    if !parent.contains_key(key) {
+        parent.insert(key.to_string(), toml::Value::Table(toml::value::Table::new()));
+    }
+    parent
+        .get_mut(key)
+        .and_then(|v| v.as_table_mut())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("la clave '{key}' existe en tylluan.toml y no es una tabla"),
+            )
+        })
+}
+
+/// Calcula el `tylluan.toml` con el token ya insertado en la ACL. Pureza
+/// deliberada: entra el TOML actual y sale el nuevo, asi la bateria de mutaciones
+/// puede probarlo sin levantar el kernel.
+///
+/// Devuelve `(nuevo_raw, diff_para_auditoria, huella)`. El diff sale de
+/// `config_diff`, que nunca ve el token en claro porque el token nunca entra en el
+/// arbol: la clave es su hash. Aun asi se comprueba (mutaciones: guardar en claro,
+/// o escribir la huella en el valor).
+pub fn upsert_acl_token_toml(
+    raw: &str,
+    token: &str,
+    agent_id: &str,
+    role: &str,
+    scope: Option<&str>,
+) -> Result<(String, Vec<serde_json::Value>, String), (axum::http::StatusCode, String)> {
+    use axum::http::StatusCode;
+    let huella = crate::transport::http::auth::acl_token_sha256(token);
+    let old = raw
+        .parse::<toml::Value>()
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("tylluan.toml no se puede parsear: {e}")))?;
+    let mut doc = old.clone();
+    let root = doc
+        .as_table_mut()
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "tylluan.toml no es una tabla".to_string()))?;
+    let security = table_child(root, "security")?;
+    let acl = table_child(security, "acl")?;
+    let tokens = table_child(acl, "tokens")?;
+    if tokens.contains_key(&huella) {
+        return Err((
+            StatusCode::CONFLICT,
+            "la huella del token ya estaba en [security.acl.tokens]".to_string(),
+        ));
+    }
+    tokens.insert(huella.clone(), toml::Value::String(role.to_string()));
+    table_child(acl, "token_agent_bindings")?
+        .insert(huella.clone(), toml::Value::String(agent_id.to_string()));
+    if let Some(sc) = scope {
+        table_child(acl, "agent_permissions")?
+            .entry(agent_id.to_string())
+            .or_insert_with(|| toml::Value::Table(toml::value::Table::new()));
+        let perms = table_child(acl, "agent_permissions")?;
+        let entrada = perms
+            .get_mut(agent_id)
+            .and_then(|v| v.as_table_mut())
+            .ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("'security.acl.agent_permissions.{agent_id}' no es una tabla"),
+                )
+            })?;
+        entrada.insert("scope".to_string(), toml::Value::String(sc.to_string()));
+    }
+
+    let nuevo_raw = toml::to_string(&doc)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("no se pudo serializar el config: {e}")))?;
+    // Guardia dura (1): si el TOML saliera con el token en claro, no se escribe.
+    if nuevo_raw.contains(token) {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "el config generado contenia el token en claro: escritura abortada".to_string(),
+        ));
+    }
+    let diff = super::config_safe::config_diff(&old, &doc);
+    // Guardia dura (1b): la auditoria tampoco puede llevar el secreto.
+    if serde_json::to_string(&diff)
+        .map(|json| json.contains(token))
+        .unwrap_or(true)
+    {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "la auditoria contendria el token en claro: escritura abortada".to_string(),
+        ));
+    }
+    Ok((nuevo_raw, diff, huella))
+}
+
+/// POST /api/v1/acl/tokens — emitir un token de agente. Clase Operador.
+///
+/// Orden igual que `create_external_provider_handler` (D-157): validar, calcular y
+/// guardar en memoria el TOML nuevo **antes** de tocar disco; copia previa;
+/// `commit_config_write` (el camino endurecido de D5026: modo privado y ACL sobre
+/// el temporal, antes del `rename`); auditoria; y `reload()` para que el token
+/// sirva en el acto sin reiniciar.
+pub async fn issue_acl_token_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(body): Json<IssueAgentTokenBody>,
+) -> impl IntoResponse {
+    use axum::http::StatusCode;
+
+    if body.ttl_days.is_some() || body.ttl.is_some() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "ttl_not_supported",
+            "la expiracion de tokens aun no la aplica el resolutor (F2 de D5014): no se emite con una caducidad falsa".to_string(),
+        );
+    }
+    let agent_id = match validate_agent_id(&body.agent_id) {
+        Ok(v) => v,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, "invalid_agent_id", e),
+    };
+    let acl = state.config.read().await.security.acl.clone();
+    let role = match validate_acl_role(body.role.as_deref(), &acl) {
+        Ok(v) => v,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, "unknown_role", e),
+    };
+    let scope = match validate_scope(body.scope.as_deref()) {
+        Ok(v) => v,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, "invalid_scope", e),
+    };
+
+    let path = super::config_safe::config_path();
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(r) => r,
+        Err(e) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "config_read_failed",
+                format!("no se pudo leer {}: {e}", path.display()),
+            )
+        }
+    };
+    let etag_actual = super::config_safe::etag_of(&raw);
+    match body.etag.as_deref().map(str::trim) {
+        None => {
+            return api_error(
+                StatusCode::PRECONDITION_REQUIRED,
+                "etag_required",
+                "envia en 'etag' el ETag de GET /api/v1/config para no pisar otra escritura".to_string(),
+            )
+        }
+        Some(client) if client != etag_actual => {
+            return api_error(
+                StatusCode::PRECONDITION_FAILED,
+                "etag_mismatch",
+                format!("tylluan.toml cambio desde que lo leiste (esperado {client}, actual {etag_actual})"),
+            )
+        }
+        Some(_) => {}
+    }
+
+    let token = new_agent_token();
+    let (nuevo_raw, diff, huella) = match upsert_acl_token_toml(
+        &raw,
+        &token,
+        &agent_id,
+        &role,
+        scope.as_deref(),
+    ) {
+        Ok(v) => v,
+        Err((status, msg)) => return api_error(status, "acl_token_upsert_failed", msg),
+    };
+
+    let backup = match super::config_safe::backup_and_prune_if_exists(&path) {
+        Ok(b) => b,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, "backup_failed", e),
+    };
+    // `habia_config = true`: acabamos de leerlo. Es lo que hace que
+    // `commit_config_write` aplique la politica de D5026 (no dejar el config mas
+    // abierto de lo que estaba) en vez de tratarlo como fichero nuevo.
+    if let Err(e) = commit_config_write(&path, true, &nuevo_raw) {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "write_failed",
+            format!("no se pudo escribir tylluan.toml: {e}"),
+        );
+    }
+    let claves_fichero = super::config_safe::file_change_keys(Some(&raw), &nuevo_raw).unwrap_or_default();
+    super::config_safe::audit_change_with_backup(
+        &diff,
+        backup.as_deref(),
+        &claves_fichero,
+        "POST /api/v1/acl/tokens",
+        "acl_token_api",
+    );
+    if let Err(e) = crate::config::TylluanConfig::reload().await {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "saved_reload_failed",
+            format!("token guardado pero el reload fallo: {e}"),
+        );
+    }
+
+    let ya_emitidos = acl.token_agent_bindings.values().filter(|a| **a == agent_id).count();
+    (
+        StatusCode::CREATED,
+        crate::transport::http::Utf8Json(serde_json::json!({
+            "ok": true,
+            "status": "issued",
+            "agent_id": agent_id,
+            "role": role,
+            "scope": scope,
+            "permissions_written": scope.is_some(),
+            "fingerprint": huella,
+            "token": token,
+            "token_shown_once": true,
+            "tokens_previos_de_este_agente": ya_emitidos,
+            "revocar": format!(
+                "quitar la clave {huella} de [security.acl.tokens] y de [security.acl.token_agent_bindings]"
+            ),
+            "etag": super::config_safe::etag_of(&nuevo_raw),
+            "requires_restart": false,
+            "dev_mode": state.dev_mode.unwrap_or(false),
+        })),
+    )
+        .into_response()
+}
+
+#[cfg(test)]
+mod d5032_acl_token_tests {
+    use super::*;
+
+    fn acl_fixture() -> crate::config::AclConfig {
+        // clippy::field_reassign_with_default: el rol va en el literal, no reasignado
+        // despues de `default()` (pedido del TL en T5333, `clippy --all-targets -D warnings`).
+        let mut acl = crate::config::AclConfig {
+            default_role: "admin".to_string(),
+            ..Default::default()
+        };
+        acl.roles.insert("admin".to_string(), vec!["*".to_string()]);
+        acl.roles.insert("writer".to_string(), vec!["knowledge".to_string()]);
+        acl
+    }
+
+    fn raw_fixture() -> String {
+        r#"
+dev_mode = false
+
+[security]
+intent_filter = true
+
+[security.acl]
+default_role = "admin"
+
+[security.acl.roles]
+admin = ["*"]
+writer = ["knowledge"]
+
+[security.acl.agent_permissions.deep]
+denied_tools = ["tylluan_graph"]
+memory_isolation = true
+
+[security.sandbox]
+enabled = false
+"#
+        .to_string()
+    }
+
+    /// Invariante 1+2: al TOML solo va la huella; las dos tablas quedan escritas;
+    /// lo demas del fichero no se pierde. Mutaciones: guardar el token en claro,
+    /// o no escribir `token_agent_bindings`, caen aqui.
+    #[test]
+    fn d5032_solo_la_huella_llega_al_toml_y_entran_las_dos_tablas() {
+        let token = "tyll-agent-00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+        let (nuevo, diff, huella) =
+            upsert_acl_token_toml(&raw_fixture(), token, "deep", "writer", Some("read-only"))
+                .expect("el upsert debe funcionar");
+        let esperado = crate::transport::http::auth::acl_token_sha256(token);
+        assert_eq!(huella, esperado, "la huella devuelta es sha256 del token");
+        assert!(nuevo.contains(&format!("\"{esperado}\" = \"writer\"")), "tokens: {nuevo}");
+        assert!(
+            nuevo.contains(&format!("\"{esperado}\" = \"deep\"")),
+            "token_agent_bindings: {nuevo}"
+        );
+        assert!(!nuevo.contains(token), "el token en claro NO puede estar en el TOML");
+        assert!(!serde_json::to_string(&diff).unwrap().contains(token), "ni en la auditoria");
+        // Nada de lo que habia se pierde por el camino (el TOML se re-serializa).
+        let releido: toml::Value = nuevo.parse().expect("el TOML nuevo debe parsear");
+        let perms = releido["security"]["acl"]["agent_permissions"]["deep"].as_table().unwrap();
+        assert_eq!(perms["scope"].as_str(), Some("read-only"), "scope escrito");
+        assert_eq!(
+            perms["denied_tools"].as_array().map(|a| a.len()),
+            Some(1),
+            "los denied_tools que ya estaban se conservan"
+        );
+        assert!(perms["memory_isolation"].as_bool() == Some(true), "y memory_isolation");
+        assert_eq!(releido["security"]["sandbox"]["enabled"].as_bool(), Some(false), "y el resto del config");
+    }
+
+    /// Invariante 3: sin rol no se emite (heredar `default_role = "admin"` seria
+    /// un token de administrador), y un rol que no existe tampoco.
+    #[test]
+    fn d5032_el_rol_debe_existir_en_la_acl() {
+        let acl = acl_fixture();
+        assert!(validate_acl_role(None, &acl).is_err());
+        assert!(validate_acl_role(Some(""), &acl).is_err());
+        assert!(validate_acl_role(Some("adminx"), &acl).is_err());
+        assert_eq!(validate_acl_role(Some(" writer "), &acl).ok().as_deref(), Some("writer"));
+    }
+
+    /// `agent_id` es la clave de `agent_permissions` y de las metricas por agente:
+    /// espacios o separadores de ruta romperian ambas cosas.
+    #[test]
+    fn d5032_el_agent_id_no_admite_rutas_ni_espacios() {
+        assert!(validate_agent_id("").is_err());
+        assert!(validate_agent_id("   ").is_err());
+        assert!(validate_agent_id("../../etc").is_err());
+        assert!(validate_agent_id("deep agent").is_err());
+        assert_eq!(validate_agent_id(" claude-code ").ok().as_deref(), Some("claude-code"));
+    }
+
+    /// Los ambitos son los tres que lee `check_agent_id_tool_allowed`.
+    #[test]
+    fn d5032_los_scopes_son_los_que_entiende_la_acl() {
+        assert_eq!(validate_scope(None).ok().flatten(), None);
+        for s in AGENT_SCOPES {
+            assert_eq!(validate_scope(Some(s)).ok().flatten().as_deref(), Some(s));
+        }
+        assert!(validate_scope(Some("read_write")).is_err());
+    }
+
+    /// Los tokens emitidos no se repiten ni son predecibles.
+    #[test]
+    fn d5032_los_tokens_son_distintos_y_de_256_bits() {
+        let a = new_agent_token();
+        let b = new_agent_token();
+        assert_ne!(a, b);
+        assert!(a.starts_with("tyll-agent-"));
+        assert_eq!(a.len(), "tyll-agent-".len() + 64, "32 bytes en hex: {a}");
+        assert!(
+            a["tyll-agent-".len()..].chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+            "el cuerpo del token es hex en minuscula: {a}"
+        );
+    }
+}

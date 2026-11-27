@@ -334,6 +334,10 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
         || path == "/api/v1/runtime/tasks"
         // D228: absolute local paths + which inference points go to the cloud
         || path == "/api/v1/setup/status"
+        // D5032 (F1 de D5014): emitir un token de agente es dar credencial. Si
+        // esto faltara, cualquier token de agente podria mintirse otro a si mismo
+        // y escalar de rol con el paso siguiente.
+        || path == "/api/v1/acl/tokens"
     {
         return true;
     }
@@ -423,6 +427,32 @@ mod approvals_operator_class_tests {
         assert!(!operator_class_required("GET", "/api/v1/approvals/abc-123"));
         // Y una ruta con prefijo parecido no se cuela por el `starts_with`.
         assert!(!operator_class_required("POST", "/api/v1/approvalsXYZ"));
+    }
+}
+
+#[cfg(test)]
+mod d5032_acl_token_operator_tests {
+    use super::*;
+
+    /// D5032 (F1 de D5014): emitir un token de agente es dar credencial, asi que
+    /// es clase Operador. Mutacion: quitar `path == "/api/v1/acl/tokens"` de la
+    /// tabla deja la ruta nacida sin proteger y cae este test; el inventario
+    /// empirico `tests/b20_auth_route_matrix.rs` tambien (sondea todas las rutas
+    /// de `routes.rs` contra el router real).
+    #[test]
+    fn d5032_emitir_un_token_es_clase_operador() {
+        assert!(
+            operator_class_required("POST", "/api/v1/acl/tokens"),
+            "POST /api/v1/acl/tokens debe ser clase Operador"
+        );
+        // No se cuela nada por prefijo: solo la ruta exacta registrada.
+        assert!(!operator_class_required("POST", "/api/v1/acl/tokensXYZ"));
+        // Y el gate solo lo satisface el maestro por cabecera (o el bypass local
+        // de dev_mode): un token de agente, jamas.
+        assert!(!operator_gate_allows(Some(AclAuthKind::AgentToken)));
+        assert!(!operator_gate_allows(Some(AclAuthKind::MasterTokenQuery)));
+        assert!(!operator_gate_allows(None));
+        assert!(operator_gate_allows(Some(AclAuthKind::MasterToken)));
     }
 }
 

@@ -361,5 +361,11 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // T-DSH-140 (ADR-025 R2): vista de solo lectura del TaskRegistry.
         // Clase operador (auth::operator_class_required), sin tool MCP nueva.
         .route("/api/v1/runtime/tasks", get(api_runtime::runtime_tasks_handler))
+
+        // D5032 (F1 de D5014, 2026-11-27): emision de tokens por agente.
+        // Clase Operador obligatoria: un token de agente no puede emitirse a si
+        // mismo. El valor en claro sale UNA vez en la respuesta; al config solo
+        // va su hash (`sha256:<hex>`).
+        .route("/api/v1/acl/tokens", post(issue_acl_token_handler))
 }
 
