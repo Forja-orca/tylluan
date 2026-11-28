@@ -1456,13 +1456,17 @@ mod tests {
         );
     }
 
-    /// Caso 3 de dsh (T5372): un camino que NO pasa por el middleware de auth
-    /// (stdio, dispatch interno) no tiene binding y `current_bound_agent_id()`
-    /// devuelve `None`. Este test fija el límite REAL del parche: ahí la identidad
-    /// sigue siendo la del payload, y cerrarlo exige decisión de José (binding
-    /// token->agente para stdio/dev_mode), no un parche en esta capa.
+    /// Caso 3 de dsh (T5372), reformulado tras T5377/T5375: por HTTP no hay camino
+    /// sin middleware (`http/mod.rs:1432-1447` mete `/mcp`, `/messages`,
+    /// `/api/v1/mcp`, `sse_routes` y `/a2a` en `protected_routes` con
+    /// `bearer_auth_middleware`, y este scopea `ACL_AGENT_ID` siempre — con
+    /// `String::new()` si no traes bearer, que `auth.rs:126` convierte en `None`).
+    /// O sea: `None` sale de la CREDENCIAL (sin binding o sin token), no del camino.
+    /// Este test fija ese limite en el harness: sin credencial vinculada la guarda
+    /// no dispara y manda el payload. Cerrar eso es decision de José (D-A y D5032b),
+    /// no de esta capa.
     #[tokio::test(flavor = "multi_thread")]
-    async fn d5033b_sin_binding_del_middleware_gana_el_payload() {
+    async fn d5033b_sin_vinculo_en_la_credencial_gana_el_payload() {
         let server = test_server().await;
         let identity = resolucion_de_identidad(&server).await;
         assert_eq!(
@@ -1477,6 +1481,84 @@ mod tests {
             .await
             .expect("no debe fallar a nivel de transporte");
         assert_eq!(result.is_error, Some(false), "sin binding la guarda no se aplica: {}", tool_text(&result));
+    }
+
+    /// Caso que añade @hermes (T5375, H-HER-AO-02): con credencial de gremio la
+    /// identidad autenticada tiene forma `guild:<nombre>` (`auth.rs:823`). Un gremio
+    /// no puede reclamar la identidad de un agente humano, y si no declara ninguna
+    /// se le aplica la suya. MUTACION: con la excepcion `anonymous` sola, la segunda
+    /// peticiona sale `anonymous` y la primera no se rechaza por credencial.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d5033b_credencial_de_gremio_no_deja_reclamar_otro_agente() {
+        let server = test_server().await;
+
+        let mut args = serde_json::Map::new();
+        args.insert("agent_id".to_string(), serde_json::json!("claude-code"));
+        let resultado = crate::transport::http::auth::ACL_AGENT_ID
+            .scope(
+                "guild:vision".to_string(),
+                server.handle_kernel_tool("whoami", Some(args)),
+            )
+            .await
+            .expect("no debe fallar a nivel de transporte");
+        assert_eq!(resultado.is_error, Some(true), "un gremio no puede ser otro agente: {}", tool_text(&resultado));
+        assert!(
+            tool_text(&resultado).contains("this token is bound to agent 'guild:vision'"),
+            "el rechazo debe nombrar la identidad de la credencial: {}",
+            tool_text(&resultado)
+        );
+
+        let identity = crate::transport::http::auth::ACL_AGENT_ID
+            .scope(
+                "guild:vision".to_string(),
+                resolucion_de_identidad(&server),
+            )
+            .await;
+        assert_eq!(
+            identity.as_str(),
+            "guild:vision",
+            "el gremio que no declara agent_id se resuelve por su propia credencial"
+        );
+    }
+
+    /// AVISO 1 de @dsh (T5381): el caso intermedio, que es EXACTAMENTE el estado vivo
+    /// de produccion. `bearer_auth_middleware` scopea `ACL_AGENT_ID` siempre
+    /// (`auth.rs:833-839`); con un bearer valido pero SIN entrada en
+    /// `token_agent_bindings` lo que instala es `String::new()` (`auth.rs:829`), y
+    /// `current_bound_agent_id()` lo traduce a `None` (`auth.rs:126`). El 4º test de
+    /// este modulo modela el harness sin scope; este modela la tarea autenticada con
+    /// el task-local vacio, que es el camino real de los 32 tokens que hoy hay en
+    /// `tylluan.toml` con 0 vinculos (AL-02 de @hermes).
+    ///
+    /// Fija el comportamiento tal cual es hoy y lo deja escrito: una credencial sin
+    /// vinculacion no tiene identidad autenticada, asi que la resolucion D5033b no
+    /// dispara y el dispatch queda en `anonymous`. Que esto Cambie (tokens con
+    /// vinculacion automatica) es el enrolamiento de Jose (T5383), no esta capa.
+    /// MUTACION M2 (`resolve_agent_id_for_token` devolviendo siempre `""`, o sea el
+    /// estado vivo): la primera asercion sigue verde; la segunda solo se sostiene
+    /// porque D5033b no mira la autenticidad del token.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d5033b_token_autenticado_sin_vincular_no_tiene_identidad() {
+        let vacio = crate::transport::http::auth::ACL_AGENT_ID
+            .scope(String::new(), async {
+                crate::transport::http::auth::current_bound_agent_id()
+            })
+            .await;
+        assert_eq!(
+            vacio,
+            None,
+            "`auth.rs:829` scopea cadena vacia sin binding y `auth.rs:126` la hace None"
+        );
+
+        let server = test_server().await;
+        let identity = crate::transport::http::auth::ACL_AGENT_ID
+            .scope(String::new(), resolucion_de_identidad(&server))
+            .await;
+        assert_eq!(
+            identity.as_str(),
+            "anonymous",
+            "credencial autenticada pero sin vinculo: hoy no hay identidad que aplicar"
+        );
     }
 
 }
