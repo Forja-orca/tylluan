@@ -128,6 +128,8 @@ El binario nativo sigue siendo el camino principal. Los install scripts se reesc
 
 ### Fase P2 — Docker imagen oficial
 
+> **Aplazada (decisión de José, 2026-11-28):** la publicación de la imagen en ghcr queda en pausa hasta cerrar `dev_mode`. Condiciones para reabrirla: (1) el kernel se niega a arrancar con `dev_mode=false` y host no loopback; (2) enrolamiento automático de tokens en `main`; (3) un smoke de la imagen que demuestre 401 sin credencial.
+
 **Imagen:** `ghcr.io/forja-orca/tylluan:latest` y `ghcr.io/forja-orca/tylluan:v0.12.0` _(nota 2026-10-16: nombre previsto; ningún workflow del repo publica en ghcr y la existencia de la imagen no está verificada)_
 
 **Flujo de uso:**
