@@ -20,11 +20,38 @@ impl TylluanServer {
         mut arguments: Option<JsonObject>,
     ) -> Result<CallToolResult, McpError> {
         // Auto-checkin to crash-safe journal
-        let agent_id: String = arguments.as_ref()
+        let mut agent_id: String = arguments.as_ref()
             .and_then(|a| a.get("agent_id"))
             .and_then(|v| v.as_str())
             .unwrap_or("anonymous")
             .to_string();
+
+        // D5033b: identity of a tool call comes from the credential when the
+        // transport carries one. `current_bound_agent_id()` is the task-local the
+        // HTTP bearer middleware installs from `[security.acl.token_agent_bindings]`
+        // (see `bearer_auth_middleware` / `resolve_agent_id_for_token` in
+        // `transport/http/auth.rs`). A caller that declares no `agent_id`
+        // landed on `"anonymous"`, and BOTH gates below explicitly except
+        // `"anonymous"` — so a bound credential gained freedom by staying silent:
+        // it skipped the impersonation guard and the per-agent tool permissions of
+        // its own agent. When the transport knows who is calling, the credential
+        // decides; the payload can only narrow, never rename. A path with no
+        // middleware (stdio, internal) has no binding and is unchanged — that
+        // boundary is pinned by `d5033b_sin_binding_del_middleware_gana_el_payload`.
+        if agent_id == "anonymous"
+            && let Some(bound) = crate::transport::http::auth::current_bound_agent_id()
+        {
+            agent_id = bound;
+            // Los handlers vuelven a leer `agent_id` del payload (`whoami` y
+            // `register_identity` en este mismo fichero, `handler_recall`,
+            // `handler_remember`, `handler_graph`, `handler_do/prepare.rs`). Sin
+            // escribir la identidad resuelta de vuelta en los argumentos, la
+            // resolución de arriba sería decorativa para ellos.
+            arguments
+                .get_or_insert_with(JsonObject::new)
+                .insert("agent_id".to_string(), serde_json::Value::String(agent_id.clone()));
+        }
+
         if let Some(ref journal) = self.journal {
             let _ = journal.checkin(&agent_id, &format!("tool:{name}"));
         }
@@ -1337,6 +1364,119 @@ mod tests {
             "el plan del otro tiene que seguir pendiente"
         );
         crate::security::grants::remove_plan("reject-plan-ajeno").await;
+    }
+
+    // ── D5033b: identidad de la tool call MCP ligada a la credencial ─────────
+    // El TL pidió (T5370) el camino real del lane MCP. `resolve_acl_role` NUNCA se
+    // llama desde `transport/server/` (0 callers medidos en 8dea5e12): lo único que
+    // llega del lane HTTP es el task-local `ACL_AGENT_ID` que instala
+    // `bearer_auth_middleware` desde `[security.acl.token_agent_bindings]`. Aquí se
+    // prueba ese hilo de identidad en la entrada real (`handle_kernel_tool`), con
+    // `whoami` como observable: devuelve en `agent_id` la identidad con la que se
+    // resolvió la llamada (read-only, sin efectos en disco).
+
+    /// Utilidad: qué identidad resolvió el dispatch para esta llamada.
+    async fn resolucion_de_identidad(server: &TylluanServer) -> String {
+        let result = server
+            .handle_kernel_tool("whoami", None)
+            .await
+            .expect("whoami no debe fallar a nivel de transporte");
+        let text = tool_text(&result);
+        let value: serde_json::Value =
+            serde_json::from_str(&text).expect("whoami responde JSON");
+        value["agent_id"].as_str().unwrap_or_default().to_string()
+    }
+
+    /// Caso 1 de dsh (T5372): token vinculado + `agent_id` de OTRO agente.
+    /// La guarda ya existía; se fija como regresión.
+    /// MUTACION: sin la guarda, `whoami` responde la identidad suplantada.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d5033b_token_vinculado_no_deja_suplantar_a_otro_agente() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("agent_id".to_string(), serde_json::json!("otro-agente"));
+        let result = crate::transport::http::auth::ACL_AGENT_ID
+            .scope(
+                "agente-vinculado".to_string(),
+                server.handle_kernel_tool("whoami", Some(args)),
+            )
+            .await
+            .expect("no debe fallar a nivel de transporte");
+        assert_eq!(result.is_error, Some(true), "suplantar debe rechazarse: {}", tool_text(&result));
+        assert!(
+            tool_text(&result).contains("this token is bound to agent 'agente-vinculado'"),
+            "el rechazo debe decir que la credencial está vinculada: {}",
+            tool_text(&result)
+        );
+    }
+
+    /// Caso 2 de dsh (T5372): token vinculado SIN `agent_id` en el payload.
+    /// Antes de D5033b esto caía en `"anonymous"`, que está exceptuado de las dos
+    /// puertas (`handlers.rs:34` y `:44`): el token silencioso se quitaba las
+    /// restricciones en vez de aplicarse las de su agente.
+    /// MUTACION: sin la resolución por credencial, `whoami` responde `anonymous`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d5033b_token_vinculado_sin_agent_id_resuelve_por_la_credencial() {
+        let server = test_server().await;
+        let identity = crate::transport::http::auth::ACL_AGENT_ID
+            .scope(
+                "agente-vinculado".to_string(),
+                resolucion_de_identidad(&server),
+            )
+            .await;
+        assert_eq!(
+            identity.as_str(),
+            "agente-vinculado",
+            "sin agent_id en el payload, la identidad la pone la credencial vinculada"
+        );
+    }
+
+    /// Caso 2b: declararse explícitamente `"anonymous"` no puede usarse para
+    /// evadir las puertas del propio token.
+    /// MUTACION: con la excepción `agent_id != "anonymous"` sola, sale `anonymous`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d5033b_declarse_anonymous_no_evade_la_credencial_vinculada() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("agent_id".to_string(), serde_json::json!("anonymous"));
+        let result = crate::transport::http::auth::ACL_AGENT_ID
+            .scope(
+                "agente-vinculado".to_string(),
+                server.handle_kernel_tool("whoami", Some(args)),
+            )
+            .await
+            .expect("no debe fallar a nivel de transporte");
+        assert_eq!(result.is_error, Some(false), "declararse anonymous no es suplantar: {}", tool_text(&result));
+        let value: serde_json::Value =
+            serde_json::from_str(&tool_text(&result)).expect("whoami responde JSON");
+        assert_eq!(
+            value["agent_id"].as_str(),
+            Some("agente-vinculado"),
+            "`anonymous` no puede borrar la identidad de la credencial"
+        );
+    }
+
+    /// Caso 3 de dsh (T5372): un camino que NO pasa por el middleware de auth
+    /// (stdio, dispatch interno) no tiene binding y `current_bound_agent_id()`
+    /// devuelve `None`. Este test fija el límite REAL del parche: ahí la identidad
+    /// sigue siendo la del payload, y cerrarlo exige decisión de José (binding
+    /// token->agente para stdio/dev_mode), no un parche en esta capa.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d5033b_sin_binding_del_middleware_gana_el_payload() {
+        let server = test_server().await;
+        let identity = resolucion_de_identidad(&server).await;
+        assert_eq!(
+            identity.as_str(),
+            "anonymous",
+            "sin credencial ni binding, el dispatch no tiene identidad autenticada"
+        );
+        let mut args = serde_json::Map::new();
+        args.insert("agent_id".to_string(), serde_json::json!("cualquiera"));
+        let result = server
+            .handle_kernel_tool("whoami", Some(args))
+            .await
+            .expect("no debe fallar a nivel de transporte");
+        assert_eq!(result.is_error, Some(false), "sin binding la guarda no se aplica: {}", tool_text(&result));
     }
 
 }
