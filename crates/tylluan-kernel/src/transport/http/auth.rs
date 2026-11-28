@@ -213,8 +213,12 @@ pub fn agent_has_memory_isolation(agent_id: &str, acl: &AclConfig) -> bool {
 ///
 /// Resolution order:
 /// 1. Explicit token mapping in `acl.tokens` → use that role (always wins).
-/// 2. Token resolves to `default_role` AND agent_id is supplied → consult
+/// 2. Token resolves to `default_role` AND there is a bearer token → consult
 ///    `agents_contract` for the agent's declared role if valid in `acl.roles`.
+///    The agent identity is the one the CREDENTIAL is bound to
+///    (`token_agent_bindings`); the client-supplied `X-Agent-Id` is only used
+///    when that credential carries no binding (D5033). Without a credential the
+///    contract is not consulted at all.
 /// 3. Otherwise → `acl.default_role` (unchanged fallback).
 pub fn resolve_acl_role_inner(
     token: Option<&str>,
@@ -233,15 +237,35 @@ pub fn resolve_acl_role_inner(
             return base_role;
         }
 
-    // Step 2: If we hit default_role AND have an agent_id, check the contract
-    if base_role == acl.default_role
-        && let Some(aid) = agent_id {
-            let contract_role = contract.get_role(aid);
-            if let Some(declared_role) = contract_role
-                && (acl.roles.contains_key(declared_role) || declared_role == "admin") {
-                    return declared_role.to_string();
-                }
-        }
+    // ── Step 2 (D5033): la identidad la fija la CREDENCIAL, no una cabecera ──
+    // Antes, con un token que cae a `default_role`, el `X-Agent-Id` que el propio
+    // cliente manda era suficiente para consultar `.tylluan/agents.toml` y subir
+    // al rol declarado ahí. Como la cabecera la controla quien llama, cualquier
+    // agente con una credencial floja podia nombrarse `claude-code` (role =
+    // "admin" en agents.toml) y obtener ese rol. Dos endurecimientos:
+    //   (b) si la credencial esta VINCULADA a un agente (`token_agent_bindings`),
+    //       ese vinculo manda: una cabecera que nombra a OTRO agente se ignora;
+    //   (c) sin credencial no se consulta el contrato: un `X-Agent-Id` suelto en
+    //       una ruta de bypass (dev_mode) no puede otorgar un rol.
+    // Se MANTIENE la aceptacion literal de "admin" (`|| declared_role == "admin"`)
+    // porque `acl_can_access` (linea 133) ya trata "admin" como rol implicito y
+    // el contrato real de la flota lo usa (agents.toml:18 claude-code = admin);
+    // exigir que estuviera en `[security.acl.roles]` seria un cambio funcional
+    // sin ganancia de seguridad una vez que la identidad viene de la credencial.
+    if base_role == acl.default_role && token.is_some() {
+        let bound: Option<String> = token
+            .map(|tok| resolve_agent_id_for_token(tok, acl))
+            .filter(|s| !s.is_empty());
+        let identity: Option<&str> = match bound.as_deref() {
+            Some(b) => Some(b),
+            None => agent_id,
+        };
+        if let Some(aid) = identity
+            && let Some(declared_role) = contract.get_role(aid)
+            && (acl.roles.contains_key(declared_role) || declared_role == "admin") {
+                return declared_role.to_string();
+            }
+    }
 
     base_role
 }
@@ -1303,13 +1327,93 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_acl_role_inner_contract_applied_with_no_token() {
-        // No bearer token at all + agent_id with contract entry → use contract role.
+    fn d5033_sin_credencial_no_aplica_el_contrato() {
+        // (c) de la DoD. Antes se llamaba
+        // `test_resolve_acl_role_inner_contract_applied_with_no_token` y afirmaba
+        // lo contrario (era el agujero escrito como expectativa).
+        // El nombre empieza por `d5033_` a proposito: la mutacion que pide el TL
+        // (quitar `&& token.is_some()` del paso 2) se comprueba corriendo
+        // `cargo test -p tylluan-kernel --lib d5033`, y este test tiene que entrar
+        // en esa corrida para que el rojo sea visible.
         let contract = contract_with_entry("ci-bot", "contributor");
         let acl = acl_with_role("contributor", vec!["bash"]);
+        assert!(acl.token_agent_bindings.is_empty());
 
         let role = resolve_acl_role_inner(None, Some("ci-bot"), &acl, &contract);
-        assert_eq!(role, "contributor", "contract must apply even without a bearer token");
+        assert_eq!(role, "viewer", "sin credencial el contrato no otorga rol (D5033)");
+    }
+
+    #[test]
+    fn d5033_sin_credencial_un_admin_del_contrato_no_otorga_rol() {
+        // Pedido explicito del TL (T5361): `resolve_acl_role_inner(None, Some(<agente
+        // con rol admin en el contrato>), acl con bindings vacios, contrato)` y
+        // exigir `default_role`. El rol `admin` si esta declarado en `acl.roles`
+        // (como en el tylluan.toml real, linea 184 `admin = ["*"]`), asi que la
+        // unica barrera que queda es que no hay credencial.
+        // Con la mutacion 2 (quitar `&& token.is_some()`) esto queda en ROJO:
+        // identity pasa a ser la cabecera y el contrato contesta "admin".
+        let contract = contract_with_entry("claude-code", "admin");
+        let mut acl = acl_with_role("writer", vec!["bash"]);
+        acl.roles.insert("admin".to_string(), vec!["*".to_string()]);
+        assert!(acl.token_agent_bindings.is_empty());
+
+        let role = resolve_acl_role_inner(None, Some("claude-code"), &acl, &contract);
+        assert_eq!(role, acl.default_role.clone(), "sin credencial el contrato no puede dar admin");
+    }
+
+    // ── D5033: la identidad la pone la credencial, no la cabecera ────────────
+
+    #[test]
+    fn d5033_el_vinculo_de_la_credencial_manda_sobre_la_cabecera() {
+        // (b) Token vinculado a `deep` + cabecera `X-Agent-Id: claude-code`.
+        // El vinculo de la credencial es la identidad; la cabecera se ignora.
+        // ANTES de D5033 esto devolvia "admin" (el rol de agents.toml del agente
+        // que la cabecera nombra).
+        let mut contract = contract_with_entry("deep", "writer");
+        contract.agents.insert(
+            "claude-code".to_string(),
+            AgentContractEntry { role: "admin".to_string(), description: String::new(), wake: None },
+        );
+        let mut acl = acl_with_role("writer", vec!["bash"]);
+        acl.roles.insert("admin".to_string(), vec!["*".to_string()]);
+        acl.default_role = "guest".to_string();
+        acl.token_agent_bindings.insert("tok-deep".to_string(), "deep".to_string());
+
+        let role = resolve_acl_role_inner(Some("tok-deep"), Some("claude-code"), &acl, &contract);
+        assert_eq!(role, "writer", "la cabecera no puede subir de rol a un token vinculado");
+    }
+
+    #[test]
+    fn d5033_sin_vinculos_la_cabecera_sigue_decidiendo_y_eso_obliga_a_vincular() {
+        // (dsh) Caso `bindings` vacios: la cabecera sigue siendo la unica senal
+        // de identidad, asi que D5033 NO protege nada si ningun token esta
+        // vinculado. Test que documenta la condicion de despliegue: D5032
+        // (emisor de tokens por agente) tiene que estar activo y usado.
+        let mut contract = contract_with_entry("claude-code", "admin");
+        contract.agents.insert(
+            "deep".to_string(),
+            AgentContractEntry { role: "writer".to_string(), description: String::new(), wake: None },
+        );
+        let mut acl = acl_with_role("writer", vec!["bash"]);
+        acl.roles.insert("admin".to_string(), vec!["*".to_string()]);
+        acl.default_role = "guest".to_string();
+        assert!(acl.token_agent_bindings.is_empty());
+
+        let role = resolve_acl_role_inner(Some("token-sin-vincular"), Some("claude-code"), &acl, &contract);
+        assert_eq!(role, "admin", "sin bindings la cabecera manda: por eso D5032 es prerequisite");
+    }
+
+    #[test]
+    fn d5033_cabecera_forjada_con_rol_inexistente_sigue_a_default() {
+        // Un agente no declarado en el contrato, o con rol inexistente, sigue
+        // cayendo a default_role tambien despues del cambio.
+        let contract = contract_with_entry("deep", "no-existe-ese-rol");
+        let mut acl = acl_with_role("writer", vec!["bash"]);
+        acl.default_role = "guest".to_string();
+        acl.token_agent_bindings.insert("tok-deep".to_string(), "deep".to_string());
+
+        let role = resolve_acl_role_inner(Some("tok-deep"), Some("claude-code"), &acl, &contract);
+        assert_eq!(role, "guest", "rol inexistente en el contrato -> default_role");
     }
 
     #[test]
