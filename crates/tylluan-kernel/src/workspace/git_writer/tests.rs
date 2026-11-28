@@ -5,8 +5,25 @@ use super::*;
 use crate::workspace::{TaskSpec, WorkspaceStore};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// `Command` de git para los tests, SIN el entorno git del proceso que lanza
+/// `cargo test`. Sin esto, cuando la suite corre dentro de un gancho de git
+/// (`pre-push`) o con `GIT_DIR` exportado, los `git init`/`git config` de los
+/// repos temporales escriben en el gitdir del PADRE: el 2026-11-27 el TL
+/// encontró `core.bare = true` en el checkout real por esta vía. Medido el
+/// 2026-11-28 04:5x: con `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` de un repo
+/// padre exportados, 8 tests de este módulo fallan y el `.git/config` del padre
+/// acaba con `[user]` y `[commit]` de los tests.
+fn git_cmd() -> Command {
+    let mut cmd = Command::new("git");
+    cmd.env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE");
+    cmd
+}
+
 fn run_git(repo: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
+    let out = git_cmd()
         .args(args)
         .current_dir(repo)
         .output()
@@ -210,7 +227,7 @@ fn recovery_patch_applies_on_a_clean_clone_and_does_not_touch_the_tree() {
         &["clone", "-q", repo.to_str().unwrap(), clone.to_str().unwrap()],
     );
     run_git(&clone, &["config", "user.email", "f91@example.invalid"]);
-    let check = Command::new("git")
+    let check = git_cmd()
         .args(["apply", "--check", patch.to_str().unwrap()])
         .current_dir(&clone)
         .output()

@@ -57,6 +57,15 @@ fn git(repo: &Path, args: &[&str]) -> Result<String> {
         .args(args)
         .current_dir(repo)
         .env("GIT_TERMINAL_PROMPT", "0")
+        // GIT_WRITER-ENV (2026-11-28): el kernel puede arrancar con el entorno
+        // de un gancho de git (`pre-push`/`post-commit`), que pone `GIT_DIR`,
+        // `GIT_WORK_TREE` e `GIT_INDEX_FILE` apuntando al repositorio padre.
+        // `git()` siempre recibe `repo` como `current_dir`, asi que heredarse
+        // ese entorno hace que la operacion apunte al gitdir del padre en vez
+        // del repo que se le pidio. Se limpia el entorno; no se hereda.
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .output()
         .with_context(|| format!("ejecutando git {args:?} en {}", repo.display()))?;
     if !out.status.success() {
